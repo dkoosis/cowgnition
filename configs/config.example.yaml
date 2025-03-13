@@ -1,0 +1,10 @@
+server:
+  name: "CowGnition RTM"
+  port: 8080
+
+rtm:
+  api_key: "your_api_key"
+  shared_secret: "your_shared_secret"
+
+auth:
+  token_path: "~/.config/rtm-mcp/tokens"
