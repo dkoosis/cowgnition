@@ -1,6 +1,6 @@
 # CowGnition - Remember The Milk MCP Server
 
-![CowGnition Logo](/media/cowgnition_logo.png)
+![CowGnition Logo](/assets/cowgnition_logo.png)
 
 ## Overview
 
