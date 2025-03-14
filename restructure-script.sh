@@ -30,7 +30,7 @@ fi
 # 3. Initialize Go module (if it doesn't exist)
 echo "Setting up Go module..."
 if [ ! -f go.mod ]; then
-  go mod init github.com/cowgnition/rtm-mcp
+  go mod init github.com/cowgnition/cowgnition
 fi
 
 # 4. Create example config file
@@ -46,7 +46,7 @@ rtm:
   shared_secret: "your_shared_secret"
 
 auth:
-  token_path: "~/.config/rtm-mcp/tokens"
+  token_path: "~/.config/cowgnition/tokens"
 EOF
 
 # 5. Create main.go
@@ -77,11 +77,11 @@ func main() {
 
 	// Print version and exit if requested
 	if *showVersion {
-		fmt.Printf("rtm-mcp version %s\n", version)
+		fmt.Printf("cowgnition version %s\n", version)
 		return
 	}
 
-	log.Printf("CowGnition RTM-MCP Server version %s", version)
+	log.Printf("CowGnition cowgnition Server version %s", version)
 	log.Println("This is a placeholder. Implement the server functionality.")
 
 	// Set up signal handling for graceful shutdown
@@ -99,7 +99,7 @@ cat > Makefile << 'EOF'
 .PHONY: build clean test
 
 # Variables
-BINARY_NAME=rtm-mcp
+BINARY_NAME=cowgnition
 MAIN_PACKAGE=./cmd/server
 GO_FILES=$(shell find . -name "*.go" -not -path "./vendor/*")
 VERSION=$(shell git describe --tags --always --dirty || echo "dev")
@@ -133,7 +133,7 @@ cat > .gitignore << 'EOF'
 *.dll
 *.so
 *.dylib
-rtm-mcp
+cowgnition
 
 # Test binary, built with `go test -c`
 *.test
@@ -181,7 +181,7 @@ if [ ! -f configs/config.yaml ]; then
 fi
 
 # Create token directory
-mkdir -p ~/.config/rtm-mcp/tokens
+mkdir -p ~/.config/cowgnition/tokens
 
 # Install development tools
 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -209,4 +209,4 @@ echo "1. Run './scripts/setup.sh' to set up your development environment"
 echo "2. Create a config file: cp configs/config.example.yaml configs/config.yaml"
 echo "3. Edit the config file with your RTM API credentials"
 echo "4. Build the project: make build"
-echo "5. Run it: ./rtm-mcp --config configs/config.yaml"
+echo "5. Run it: ./cowgnition --config configs/config.yaml"

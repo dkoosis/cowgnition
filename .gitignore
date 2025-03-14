@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-rtm-mcp
+cowgnition
 
 # Test binary, built with `go test -c`
 *.test

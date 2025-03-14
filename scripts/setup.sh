@@ -9,7 +9,7 @@ if [ ! -f configs/config.yaml ]; then
 fi
 
 # Create token directory
-mkdir -p ~/.config/rtm-mcp/tokens
+mkdir -p ~/.config/cowgnition/tokens
 
 # Install development tools
 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest

@@ -22,11 +22,11 @@ func main() {
 
 	// Print version and exit if requested
 	if *showVersion {
-		fmt.Printf("rtm-mcp version %s\n", version)
+		fmt.Printf("cowgnition version %s\n", version)
 		return
 	}
 
-	log.Printf("CowGnition RTM-MCP Server version %s", version)
+	log.Printf("CowGnition cowgnition Server version %s", version)
 	log.Println("This is a placeholder. Implement the server functionality.")
 
 	// Set up signal handling for graceful shutdown

@@ -7,4 +7,4 @@ rtm:
   shared_secret: "your_shared_secret"
 
 auth:
-  token_path: "~/.config/rtm-mcp/tokens"
+  token_path: "~/.config/cowgnition/tokens"

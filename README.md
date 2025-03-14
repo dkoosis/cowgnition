@@ -1,4 +1,4 @@
-# CowGnition - Remember The Milk MCP Server
+# CowGnition
 
 ![CowGnition Logo](/assets/cowgnition_logo.png)
 
@@ -20,12 +20,12 @@ CowGnition is an MCP (Model Context Protocol) server implementation written in G
 
 ```bash
 # Install the server
-go install github.com/cowgnition/rtm-mcp@latest
+go install github.com/cowgnition/cowgnition@latest
 
 # Or build from source
-git clone https://github.com/cowgnition/rtm-mcp.git
-cd rtm-mcp
-go build -o rtm-mcp ./cmd/server
+git clone https://github.com/cowgnition/cowgnition.git
+cd cowgnition
+make build
 ```
 
 ## Quickstart
@@ -41,7 +41,7 @@ Create a `config.yaml` file:
 
 ```yaml
 server:
-  name: "Remember The Milk Tasks"
+  name: "CowGnition"
   port: 8080
 
 rtm:
@@ -49,33 +49,86 @@ rtm:
   shared_secret: "your_shared_secret"
 
 auth:
-  token_path: "~/.config/rtm-mcp/tokens"
+  token_path: "~/.config/cowgnition/tokens"
 ```
 
 ### 3. Run the server
 
 ```bash
-rtm-mcp serve --config config.yaml
+./cowgnition serve --config configs/config.yaml
 ```
 
 ### 4. Install in Claude Desktop
 
 ```bash
-mcp install --name "Remember The Milk" --command rtm-mcp --args "serve --config config.yaml"
+mcp install --name "Remember The Milk" --command cowgnition --args "serve --config configs/config.yaml"
 ```
 
 Or use the development mode to test:
 
 ```bash
-mcp dev --command ./rtm-mcp --args "serve --config config.yaml"
+mcp dev --command ./cowgnition --args "serve --config configs/config.yaml"
 ```
+
+## What Can CowGnition Do?
+
+With CowGnition installed in Claude Desktop, you can interact with your Remember The Milk tasks in natural language:
+
+- "Add milk to my shopping list"
+- "Show me all tasks due today"
+- "Mark the dentist appointment as completed"
+- "Remind me to pay rent on the 1st of each month"
+- "What tasks are tagged as 'important'?"
+- "Move the project deadline to next Friday"
+
+## Authentication Flow
+
+The CowGnition server handles the RTM authentication flow:
+
+1. When first accessing RTM resources, Claude will prompt the user to authenticate
+2. The server will generate an authentication URL for the user to visit
+3. After authorizing access on the Remember The Milk website, the user will receive a verification code
+4. The user enters this code in Claude, and the server exchanges it for an auth token
+5. The server securely stores the token for future sessions
+
+## Development
+
+### Prerequisites
+
+- Go 1.18 or higher
+- Make (optional, for build automation)
+- Remember The Milk API key
+
+### Setup Development Environment
+
+```bash
+# Clone the repository
+git clone https://github.com/cowgnition/cowgnition.git
+cd cowgnition
+
+# Run the setup script
+./scripts/setup.sh
+
+# Build the project
+make build
+```
+
+### Development with Hot Reload
+
+For faster development, you can use hot reload:
+
+```bash
+make dev
+```
+
+This will automatically rebuild and restart the application whenever Go files are changed.
 
 ## Architecture
 
 The server is built using a clean architecture approach with several key components:
 
 ```
-rtm-mcp/
+cowgnition/
 ├── cmd/                      # Command-line entry points
 │   └── server/               # Main server application
 ├── internal/                 # Private application code
@@ -90,90 +143,63 @@ rtm-mcp/
 └── docs/                     # Documentation
 ```
 
-## Authentication Flow
+## MCP Tools
 
-The CowGnition server handles the RTM authentication flow:
+CowGnition implements the following MCP tools:
 
-1. When first accessing RTM resources, Claude will prompt the user to authenticate
-2. The server will generate an authentication URL for the user to visit
-3. After authorizing access on the Remember The Milk website, the user will receive a verification code
-4. The user enters this code in Claude, and the server exchanges it for an auth token
-5. The server securely stores the token for future sessions
+### Task Management
 
-## Available MCP Tools
+- `add_task`: Create a new task
+- `complete_task`: Mark a task as completed
+- `uncomplete_task`: Mark a completed task as incomplete
+- `delete_task`: Delete a task
+- `set_due_date`: Set or update a task's due date
+- `set_priority`: Set a task's priority level
+- `add_tags`: Add tags to a task
+- `remove_tags`: Remove tags from a task
+- `add_note`: Add a note to a task
 
-The server exposes several tools through the MCP interface:
+### List Management
 
-```go
-// Add a new task
-func (s *Server) AddTask(ctx context.Context, name string, listID string, dueDate string) (string, error) {
-    // Implementation
-}
+- `get_lists`: Retrieve all lists
+- `create_list`: Create a new list
+- `set_list_name`: Rename a list
+- `delete_list`: Delete a list
+- `move_task`: Move a task to a different list
 
-// Complete a task
-func (s *Server) CompleteTask(ctx context.Context, listID string, taskseriesID string, taskID string) (string, error) {
-    // Implementation
-}
+### Query Tools
 
-// Add tags to a task
-func (s *Server) AddTags(ctx context.Context, listID string, taskseriesID string, taskID string, tags []string) (string, error) {
-    // Implementation
-}
-```
+- `get_tasks`: Get all tasks
+- `get_tasks_due_today`: Get tasks due today
+- `get_tasks_overdue`: Get overdue tasks
+- `get_tasks_by_list`: Get tasks in a specific list
+- `get_tasks_by_tag`: Get tasks with specific tags
+- `get_tasks_by_priority`: Get tasks by priority level
+- `search_tasks`: Search tasks using RTM's query syntax
 
 ## MCP Resources
 
-The server exposes several resources through the MCP interface:
+CowGnition exposes the following MCP resources:
 
-```go
-// Get all tasks
-func (s *Server) GetAllTasks(ctx context.Context) (string, error) {
-    // Implementation
-}
-
-// Get tasks due today
-func (s *Server) GetTasksDueToday(ctx context.Context) (string, error) {
-    // Implementation
-}
-
-// Get tasks in a list
-func (s *Server) GetTasksInList(ctx context.Context, listID string) (string, error) {
-    // Implementation
-}
-```
-
-## Advanced Usage
-
-### Custom Filtering
-
-The server supports RTM's powerful filtering syntax:
-
-```go
-// Get filtered tasks
-func (s *Server) GetFilteredTasks(ctx context.Context, filter string) (string, error) {
-    // Implementation using RTM search syntax
-}
-```
-
-### Timeline Management
-
-For operations that support undo functionality:
-
-```go
-// Create a new timeline
-func (s *Server) CreateTimeline(ctx context.Context) (string, error) {
-    // Implementation
-}
-
-// Undo an operation
-func (s *Server) UndoOperation(ctx context.Context, transactionID string) (string, error) {
-    // Implementation
-}
-```
+- `tasks://all`: All tasks across all lists
+- `tasks://today`: Tasks due today
+- `tasks://tomorrow`: Tasks due tomorrow
+- `tasks://week`: Tasks due within the next 7 days
+- `tasks://list/{list_id}`: Tasks within a specific list
+- `lists://all`: All task lists
+- `tags://all`: All tags used in the system
 
 ## Contributing
 
-We welcome contributions to the CowGnition project! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions to the CowGnition project! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+Before submitting, please make sure your code passes the existing tests and linting.
 
 ## License
 
@@ -183,3 +209,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [Model Context Protocol](https://modelcontextprotocol.io/) - For establishing the protocol standard
 - [Remember The Milk API](https://www.rememberthemilk.com/services/api/) - For their task management platform
+- The open source community for various libraries and tools that made this project possible

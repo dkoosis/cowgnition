@@ -1,7 +1,7 @@
 .PHONY: build clean test
 
 # Variables
-BINARY_NAME=rtm-mcp
+BINARY_NAME=cowgnition
 MAIN_PACKAGE=./cmd/server
 GO_FILES=$(shell find . -name "*.go" -not -path "./vendor/*")
 VERSION=$(shell git describe --tags --always --dirty || echo "dev")
