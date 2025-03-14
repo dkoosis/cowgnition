@@ -123,6 +123,10 @@ make dev
 
 This will automatically rebuild and restart the application whenever Go files are changed.
 
+### Implementation Roadmap
+
+For contributors looking to help implement features, check out our [development roadmap](TODO.md) which contains structured guides and prompts for building out the MCP server functionality.
+
 ## Architecture
 
 The server is built using a clean architecture approach with several key components:

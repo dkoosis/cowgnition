@@ -1,12 +1,10 @@
+// Package main implements the CowGnition CLI application.
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
 )
 
 // Version information (populated at build time)
@@ -14,25 +12,35 @@ var (
 	version = "dev"
 )
 
+// main is the entry point for the CowGnition CLI application.
+// It parses command line arguments and dispatches to the appropriate command.
 func main() {
-	// Parse command line flags
-	configPath := flag.String("config", "configs/config.yaml", "Path to configuration file")
-	showVersion := flag.Bool("version", false, "Show version information")
-	flag.Parse()
+	// Get available commands
+	commands := RegisterCommands()
 
-	// Print version and exit if requested
-	if *showVersion {
-		fmt.Printf("cowgnition version %s\n", version)
+	// If no arguments, show help
+	if len(os.Args) < 2 {
+		if err := commands["help"].Run([]string{}); err != nil {
+			log.Fatalf("Error: %v", err)
+		}
 		return
 	}
 
-	log.Printf("CowGnition cowgnition Server version %s", version)
-	log.Println("This is a placeholder. Implement the server functionality.")
+	// Get command name
+	cmdName := os.Args[1]
 
-	// Set up signal handling for graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
+	// Look up command
+	cmd, ok := commands[cmdName]
+	if !ok {
+		fmt.Printf("Unknown command: %s\n\n", cmdName)
+		if err := commands["help"].Run([]string{}); err != nil {
+			log.Fatalf("Error: %v", err)
+		}
+		os.Exit(1)
+	}
 
-	log.Println("Shutting down...")
+	// Run command with arguments
+	if err := cmd.Run(os.Args[2:]); err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 }
