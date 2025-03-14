@@ -4,7 +4,7 @@
 
 ## Overview
 
-CowGnition is an MCP (Model Context Protocol) server implementation written in Go that connects Claude and other AI assistants to the Remember The Milk (RTM) task management service. This server enables AI assistants to interact with your tasks, lists, and reminders through a secure, standardized interface.
+CowGnition is an MCP (Model Context Protocol) server implementation written in Go that connects Claude Desktop and other MCP clients to the Remember The Milk (RTM) task management service. This server enables AI assistants to interact with your tasks, lists, and reminders through a secure, standardized interface.
 
 ## Key Features
 
