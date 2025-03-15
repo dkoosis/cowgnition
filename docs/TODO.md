@@ -1,71 +1,155 @@
 # CowGnition - MCP Server Implementation Roadmap
 
-This document outlines the implementation steps for the CowGnition MCP server, which connects Claude Desktop to Remember The Milk through the Model Context Protocol. It's structured as a series of prompts optimized for efficient collaboration with an AI coding assistant.
+## Implementation Priorities
 
-## Optimal Work Session Format
+### 1. Testing Infrastructure and Quality Assurance (CURRENT FOCUS)
 
-1. **Review**: Begin by reviewing this TODO document and the current state of the repository
-2. **Plan**: Identify the next task and break it down into smaller components
-3. **Implement**: Write code for one component at a time, following Go best practices
-4. **Test**: Verify the implementation works as expected
-5. **Document**: Update comments, README, and this TODO document
-6. **Commit**: Save changes with descriptive commit messages
+#### 1.1 Testing Framework Setup (NEXT TASK)
+```
+Establish a comprehensive testing framework to ensure server quality:
+1. Set up structured test directories for unit, integration, and conformance tests
+2. Create test helpers and utilities for common testing patterns
+3. Implement test fixtures for RTM API responses
+4. Set up GitHub Actions workflow for automated testing
+5. Configure test coverage reporting
+```
 
-## Collaboration Guidelines
+#### 1.2 MCP Protocol Conformance Testing
+```
+Implement tests to verify compliance with the MCP specification:
+1. Create test suite verifying all required MCP endpoints
+2. Test protocol initialization and capability negotiation
+3. Test resource listing and retrieval flows
+4. Test tool discovery and execution
+5. Validate all response formats against the MCP schema
+6. Test error handling and recovery scenarios
+```
 
-When working with AI on this project:
+#### 1.3 RTM API Integration Testing
+```
+Test integration with Remember The Milk API:
+1. Create mock RTM server for testing without real API credentials
+2. Implement tests for authentication flow
+3. Test task listing with various filters
+4. Test list operations and pagination handling
+5. Test all supported RTM API operations
+6. Validate error handling for API rate limits and failures
+```
 
-1. Always start by reviewing this TODO document to identify the next tasks
-2. Ensure you're working with the current repository state
-3. Follow Go best practices:
-   - Use comprehensive comments (with function documentation)
-   - Implement thorough error handling with wrapping
-   - Write idiomatic Go code (using standard libraries when possible)
-   - Use consistent naming conventions
-   - Create small, focused functions with clear responsibilities
-4. Update this TODO document after completing each section
-5. Commit changes in logical units with descriptive messages
+#### 1.4 Performance and Load Testing
+```
+Verify server performance characteristics:
+1. Set up benchmarking tools for response times
+2. Test memory usage under load
+3. Measure and optimize connection handling
+4. Test with large datasets to ensure pagination works correctly
+5. Measure and optimize startup and shutdown times
+```
 
-## Development Workflow
+### 2. Build Environment Optimization
 
-1. Use MCP Inspector for rapid testing:
+#### 2.1 Dependency Management
+```
+Improve dependency management and build process:
+1. Update Go module dependencies
+2. Set up versioning strategy
+3. Configure reproducible builds
+4. Document build requirements and development setup
+5. Create isolated build environments
+```
 
-   ```
-   mcp dev --command ./cowgnition --args "serve --config configs/config.yaml"
-   ```
+#### 2.2 Release Pipeline
+```
+Establish automated release process:
+1. Configure semantic versioning
+2. Set up automated builds for multiple platforms
+3. Implement build artifact signing
+4. Create release notes generation
+5. Establish distribution channels
+```
 
-2. Monitor logs during development:
-
-   ```
-   tail -n 20 -F ~/Library/Logs/Claude/mcp*.log
-   ```
-
-3. Test with Claude Desktop:
-
-   - Create `~/Library/Application Support/Claude/developer_settings.json` with `{"allowDevTools": true}`
-   - Install server via `mcp install --name "RTM" --command ./cowgnition --args "serve --config configs/config.yaml"`
-   - Use Command-Option-Shift-i to open DevTools for debugging
-   - Restart Claude Desktop after configuration changes
-
-4. Debugging cycle:
-   - Make code changes
-   - Run tests (when implemented)
-   - Test with Inspector
-   - Check logs
-   - Verify in Claude Desktop
-
-## Implementation Roadmap
+#### 2.3 Development Tooling
+```
+Enhance development experience:
+1. Configure comprehensive linting with golangci-lint
+2. Set up pre-commit hooks for quality checks
+3. Create developer documentation
+4. Implement debugging tools
+5. Create tooling for easy local testing of MCP server
+```
 
 ### 3. Task Resources Implementation
 
+#### 3.1 Pagination Implementation
 ```
-Implement resources for tasks. This includes task listing with filtering (all, today, tomorrow, week), individual task retrieval, and proper formatting for MCP context exposure. Use proper pagination for large task lists.
+Implement pagination support for task resources to handle large task lists efficiently:
+1. Add pagination parameters to resource handlers
+2. Implement cursor-based pagination mechanism
+3. Add pagination metadata to resource responses
+4. Update formatters to indicate pagination status
+5. Create helpers for navigating through paginated results
+```
+
+#### 3.2 Advanced Task Filtering
+```
+Enhance task filtering capabilities:
+1. Add priority filtering (high, medium, low)
+2. Add completion status filtering
+3. Add date range filtering (beyond the basic today/tomorrow/week)
+4. Add sorting options (due date, priority, name)
+5. Implement proper query parameter parsing for filters
+```
+
+#### 3.3 Individual Task View Resource
+```
+Create a detailed view resource for individual tasks:
+1. Implement task://details/{taskseries_id}/{task_id} resource
+2. Include full task details (due date, priority, tags, notes)
+3. Show task history and modifications
+4. Add related tasks information
+5. Format response for optimal readability in Claude
+```
+
+#### 3.4 Performance Optimization and Rate Limiting
+```
+Optimize task resources for performance and handle RTM API rate limits:
+1. Implement response caching with appropriate cache invalidation
+2. Add conditional requests support with ETags
+3. Implement rate limit detection and handling
+4. Add backoff strategies for API failures
+5. Include rate limit information in error responses
 ```
 
 ### 4. List Resources Implementation
 
+#### 4.1 Basic List Resources
 ```
-Implement resources for RTM lists. This includes listing all lists, filtering by type (smart lists, regular lists), and retrieving list metadata. Include list statistics like task counts.
+Implement basic list resource functionality:
+1. Create lists://all resource with proper formatting
+2. Add list metadata (task counts, creation date)
+3. Create lists://details/{list_id} resource
+4. Format list information for optimal Claude presentation
+5. Handle system lists vs. user-created lists differently
+```
+
+#### 4.2 Smart Lists and List Filtering
+```
+Enhance list resources with smart list support and filtering:
+1. Add detection and special handling for smart lists
+2. Expose smart list filter criteria in resource output
+3. Implement filtering by list type (smart, system, user-created)
+4. Add sorting options (name, task count, creation date)
+5. Create a lists://smart resource specifically for smart lists
+```
+
+#### 4.3 List Statistics and Insights
+```
+Add rich statistics and insights to list resources:
+1. Calculate and include completion statistics
+2. Add due date distribution information
+3. Include tag frequency within lists
+4. Add prioritization statistics
+5. Format insights for useful presentation in Claude
 ```
 
 ### 5. Tag Resources Implementation
@@ -104,44 +188,13 @@ Implement tools for note management: adding, editing, and deleting notes on task
 Implement search and filter tools using RTM's query syntax. Support complex filters (priority, date ranges, text search) with proper formatting of results.
 ```
 
-### 11. Testing and Documentation
-
-```
-Implement comprehensive testing at multiple levels:
-
-1. Unit testing:
-   - Create unit tests for core components using Go's testing package
-   - Implement mocks for RTM API client
-   - Test error handling and edge cases
-   - Verify authentication flows
-   - Test resource and tool handlers independently
-
-2. Integration testing:
-   - Create end-to-end tests using actual MCP protocol
-   - Test server initialization and shutdown
-   - Verify protocol compliance
-   - Test with mock RTM responses
-
-3. MCP Inspector testing:
-   - Create test scripts for Inspector
-   - Document manual testing procedures
-   - Create test cases covering key functionality
-
-4. Documentation:
-   - Update README with complete usage examples
-   - Create troubleshooting guide
-   - Document authentication workflow with screenshots
-   - Provide example prompts for Claude to use with RTM
-   - Document API status and limitations
-```
-
-### 12. Client Integration Support
+### 11. Client Integration Support
 
 ```
 Add specific support for Claude Desktop integration. This includes installation instructions, usage examples, and troubleshooting tips. Create example prompts for common RTM operations.
 ```
 
-### 13. Security and Performance Optimization
+### 12. Security and Performance Optimization
 
 ```
 Enhance security, reliability, and performance:
@@ -197,21 +250,3 @@ Enhance security, reliability, and performance:
 - Implemented logout functionality
 - Created comprehensive authentication status tool
 - Added detailed documentation in README.md
-
-### 3. Task Resources Implementation
-
-```
-Implement resources for tasks. This includes task listing with filtering (all, today, tomorrow, week), individual task retrieval, and proper formatting for MCP context exposure. Use proper pagination for large task lists.
-
-Current progress:
-- Basic task resource implementation complete and functional
-- Initial filters implemented (all, today, tomorrow, week)
-- Resource rendering with formatting for due dates, priorities, and tags
-
-Remaining items:
-- Implement pagination for large task lists
-- Add additional filter options (priority, completion status)
-- Optimize performance for large datasets
-- Add detailed individual task view resource
-- Enhance error handling for API rate limits
-```

@@ -1,5 +1,4 @@
-.PHONY: build clean test lint fmt vet sec ver help doc dev check-tools install-tools all-checks check-size
-
+.PHONY: build clean test lint fmt vet sec ver help doc dev check-tools install-tools test-unit test-integration test-conformance test-coverage
 # Colors for better output
 GREEN := \033[0;32m
 RED := \033[0;31m
@@ -126,6 +125,28 @@ install-tools:
 	@go install github.com/securego/gosec/v2/cmd/gosec@latest
 	@printf "${GREEN}✓ Development tools installed${NC}\n"
 
+# Run only unit tests
+test-unit:
+	@echo "Running unit tests..."
+	go test -v ./test/unit/...
+
+# Run only integration tests
+test-integration:
+	@echo "Running integration tests..."
+	go test -v ./test/integration/...
+
+# Run only conformance tests
+test-conformance:
+	@echo "Running conformance tests..."
+	go test -v ./test/conformance/...
+
+# Run tests with code coverage
+test-coverage:
+	@echo "Running tests with coverage..."
+	go test -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated at coverage.html"
+Remember to add the new target names to your existing .PHONY declaration at the top of the file.RetryClaude can make mistakes. Please double-check responses.
 # Help target
 help:
 	@printf "${BLUE}CowGnition Make Targets${NC}\n"

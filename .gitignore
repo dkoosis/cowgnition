@@ -35,3 +35,7 @@ configs/config.yaml
 !configs/config.example.yaml
 .env
 *_token*
+# Test artifacts
+test/coverage.out
+test/reports/
+
