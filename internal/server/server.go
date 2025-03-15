@@ -3,9 +3,11 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/cowgnition/cowgnition/internal/auth"
@@ -20,7 +22,11 @@ type MCPServer struct {
 	httpServer   *http.Server
 	tokenManager *auth.TokenManager
 	// Add version information
-	version string
+	version      string
+	// Add startup time for uptime tracking
+	startTime    time.Time
+	// Add server instance ID for debugging
+	instanceID   string
 }
 
 // NewServer creates a new MCP server with the provided configuration.
@@ -44,11 +50,16 @@ func NewServer(cfg *config.Config) (*MCPServer, error) {
 		return nil, fmt.Errorf("error initializing RTM service: %w", err)
 	}
 
+	// Generate unique instance ID
+	instanceID := fmt.Sprintf("%s-%d", cfg.Server.Name, time.Now().UnixNano())
+
 	return &MCPServer{
 		config:       cfg,
 		rtmService:   rtmService,
 		tokenManager: tokenManager,
-		version:      "1.0.0", // This should be injected from build information
+		version:      "2.0.0", // This should be injected from build information
+		startTime:    time.Now(),
+		instanceID:   instanceID,
 	}, nil
 }
 
@@ -69,6 +80,9 @@ func (s *MCPServer) Start() error {
 
 	// Add health check endpoint
 	mux.HandleFunc("/health", s.handleHealthCheck)
+	
+	// Add status endpoint for monitoring
+	mux.HandleFunc("/status", s.handleStatusCheck)
 
 	// Add middleware
 	handler := logMiddleware(recoveryMiddleware(corsMiddleware(mux)))
@@ -98,6 +112,11 @@ func (s *MCPServer) Stop(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
+// GetUptime returns the server's uptime duration.
+func (s *MCPServer) GetUptime() time.Duration {
+	return time.Since(s.startTime)
+}
+
 // handleHealthCheck provides a simple health check endpoint.
 func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
 	// Check if RTM service is healthy
@@ -113,6 +132,39 @@ func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
 	// Check the Write error to satisfy linter
 	if _, err := w.Write([]byte(`{"status":"healthy"}`)); err != nil {
 		log.Printf("Error writing health check response: %v", err)
+	}
+}
+
+// handleStatusCheck provides detailed status information for monitoring.
+func (s *MCPServer) handleStatusCheck(w http.ResponseWriter, r *http.Request) {
+	// Only allow access from localhost or if a special header is present
+	clientIP := r.RemoteAddr
+	if !strings.HasPrefix(clientIP, "127.0.0.1") && !strings.HasPrefix(clientIP, "[::1]") && 
+	   r.Header.Get("X-Status-Secret") != s.config.Server.StatusSecret {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	// Gather status information
+	status := map[string]interface{}{
+		"server": map[string]interface{}{
+			"name":       s.config.Server.Name,
+			"version":    s.version,
+			"uptime":     s.GetUptime().String(),
+			"started_at": s.startTime.Format(time.RFC3339),
+			"instance_id": s.instanceID,
+		},
+		"auth": map[string]interface{}{
+			"status": s.rtmService.GetAuthStatus(),
+			"authenticated": s.rtmService.IsAuthenticated(),
+			"pending_flows": s.rtmService.GetActiveAuthFlows(),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(status); err != nil {
+		log.Printf("Error encoding status response: %v", err)
+		http.Error(w, "Error encoding response", http.StatusInternalServerError)
 	}
 }
 

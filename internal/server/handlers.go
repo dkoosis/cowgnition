@@ -229,44 +229,6 @@ func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
 	writeJSONResponse(w, http.StatusOK, response)
 }
 
-// handleAuthResource handles the auth://rtm resource.
-// This is extracted from handleReadResource to reduce complexity.
-func (s *MCPServer) handleAuthResource(w http.ResponseWriter) {
-	if s.rtmService.IsAuthenticated() {
-		// Already authenticated
-		response := mcp.ResourceResponse{
-			Content:  "Authentication successful. You are already authenticated with Remember The Milk.",
-			MimeType: "text/plain",
-		}
-		writeJSONResponse(w, http.StatusOK, response)
-		return
-	}
-
-	// Start authentication flow
-	authURL, frob, err := s.rtmService.StartAuthFlow()
-	if err != nil {
-		log.Printf("Error starting auth flow: %v", err)
-		writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Error starting authentication flow: %v", err))
-		return
-	}
-
-	// Return auth URL
-	content := fmt.Sprintf(
-		"Please authorize CowGnition to access your Remember The Milk account by visiting the following URL:\n\n%s\n\n"+
-			"After authorizing, you will be given a frob. Use the 'authenticate' tool with this frob to complete the authentication.\n\n"+
-			"Frob: %s\n\n"+
-			"You can use this command to authenticate: 'Use the authenticate tool with frob %s'",
-		authURL, frob, frob,
-	)
-
-	response := mcp.ResourceResponse{
-		Content:  content,
-		MimeType: "text/plain",
-	}
-
-	writeJSONResponse(w, http.StatusOK, response)
-}
-
 // handleListTools handles the MCP list_tools request.
 // It returns a list of available tools based on authentication status.
 func (s *MCPServer) handleListTools(w http.ResponseWriter, r *http.Request) {
@@ -476,6 +438,22 @@ func getAuthenticatedTools() []mcp.ToolDefinition {
 				},
 			},
 		},
+		{
+			Name:        "auth_status",
+			Description: "Check authentication status with Remember The Milk",
+			Arguments:   []mcp.ToolArgument{},
+		},
+		{
+			Name:        "logout",
+			Description: "Log out from Remember The Milk",
+			Arguments: []mcp.ToolArgument{
+				{
+					Name:        "confirm",
+					Description: "Confirm logout to prevent accidental disconnection",
+					Required:    true,
+				},
+			},
+		},
 	}
 }
 
@@ -527,35 +505,6 @@ func (s *MCPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleAuthenticationTool handles the authenticate tool.
-// This is extracted from handleCallTool to reduce complexity.
-func (s *MCPServer) handleAuthenticationTool(w http.ResponseWriter, args map[string]interface{}) {
-	if s.rtmService.IsAuthenticated() {
-		writeJSONResponse(w, http.StatusOK, mcp.ToolResponse{
-			Result: "Already authenticated with Remember The Milk.",
-		})
-		return
-	}
-
-	// Get frob from arguments
-	frob, ok := args["frob"].(string)
-	if !ok || frob == "" {
-		writeErrorResponse(w, http.StatusBadRequest, "Missing or invalid 'frob' argument")
-		return
-	}
-
-	// Complete authentication flow
-	if err := s.rtmService.CompleteAuthFlow(frob); err != nil {
-		log.Printf("Error completing auth flow: %v", err)
-		writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Error completing authentication: %v", err))
-		return
-	}
-
-	writeJSONResponse(w, http.StatusOK, mcp.ToolResponse{
-		Result: "Authentication successful! You can now use all features of Remember The Milk.",
-	})
-}
-
 // dispatchToolRequest routes the tool request to the appropriate handler.
 // This is extracted from handleCallTool to reduce complexity.
 func (s *MCPServer) dispatchToolRequest(toolName string, args map[string]interface{}) (string, error) {
@@ -574,6 +523,10 @@ func (s *MCPServer) dispatchToolRequest(toolName string, args map[string]interfa
 		return s.handleSetPriorityTool(args)
 	case "add_tags":
 		return s.handleAddTagsTool(args)
+	case "logout":
+		return s.handleLogoutTool(args)
+	case "auth_status":
+		return s.handleAuthStatusTool(args)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", toolName)
 	}

@@ -17,6 +17,8 @@ const (
 	StatusPending
 	// StatusAuthenticated indicates that the user is authenticated.
 	StatusAuthenticated
+	// StatusExpired indicates that the authentication has expired.
+	StatusExpired
 )
 
 // String returns a string representation of the auth status.
@@ -30,6 +32,8 @@ func (s Status) String() string {
 		return "Authentication Pending"
 	case StatusAuthenticated:
 		return "Authenticated"
+	case StatusExpired:
+		return "Authentication Expired"
 	default:
 		return "Invalid Status"
 	}
@@ -47,6 +51,11 @@ const (
 	PermDelete Permission = "delete"
 )
 
+// String returns a string representation of the permission level.
+func (p Permission) String() string {
+	return string(p)
+}
+
 // Flow represents an ongoing authentication flow.
 type Flow struct {
 	Frob       string
@@ -54,4 +63,18 @@ type Flow struct {
 	Permission Permission
 	AuthURL    string
 	ExpiresAt  time.Time
+	CallerInfo string // Optional information about who initiated the flow
+}
+
+// IsExpired checks if the authentication flow has expired.
+func (f *Flow) IsExpired() bool {
+	return time.Now().After(f.ExpiresAt)
+}
+
+// TimeRemaining returns the time remaining before the flow expires.
+func (f *Flow) TimeRemaining() time.Duration {
+	if f.IsExpired() {
+		return 0
+	}
+	return f.ExpiresAt.Sub(time.Now())
 }

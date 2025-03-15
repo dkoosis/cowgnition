@@ -21,15 +21,23 @@ type Service struct {
 	lastSyncTime time.Time
 	authStatus   Status
 	authFlows    map[string]*Flow
+	// Add permission level
+	permission   Permission
+	// Add refresh interval
+	tokenRefresh time.Duration
+	// Add last refresh time
+	lastRefresh  time.Time
 }
 
 // NewService creates a new RTM service with the specified credentials.
 func NewService(apiKey, sharedSecret, tokenPath string) *Service {
 	return &Service{
-		client:     NewClient(apiKey, sharedSecret),
-		tokenPath:  tokenPath,
-		authStatus: StatusUnknown,
-		authFlows:  make(map[string]*Flow),
+		client:       NewClient(apiKey, sharedSecret),
+		tokenPath:    tokenPath,
+		authStatus:   StatusUnknown,
+		authFlows:    make(map[string]*Flow),
+		permission:   PermDelete, // Default to full access
+		tokenRefresh: 24 * time.Hour, // Check token daily
 	}
 }
 
@@ -65,6 +73,7 @@ func (s *Service) Initialize() error {
 			} else {
 				// Token is valid
 				s.authStatus = StatusAuthenticated
+				s.lastRefresh = time.Now()
 				log.Println("Successfully authenticated with stored token")
 			}
 		}
@@ -73,17 +82,67 @@ func (s *Service) Initialize() error {
 		s.authStatus = StatusNotAuthenticated
 	}
 
-	// Start a background cleanup routine for expired auth flows
-	go func() {
-		ticker := time.NewTicker(1 * time.Hour)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			s.CleanupExpiredFlows()
-		}
-	}()
+	// Start a background cleanup routine for expired auth flows and token refresh
+	go s.startBackgroundTasks()
 
 	return nil
+}
+
+// startBackgroundTasks starts background routines for token refresh and flow cleanup
+func (s *Service) startBackgroundTasks() {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		s.CleanupExpiredFlows()
+		s.refreshTokenIfNeeded()
+	}
+}
+
+// refreshTokenIfNeeded checks and refreshes the auth token if necessary
+func (s *Service) refreshTokenIfNeeded() {
+	s.mu.RLock()
+	shouldRefresh := s.authStatus == StatusAuthenticated &&
+		time.Since(s.lastRefresh) > s.tokenRefresh
+	s.mu.RUnlock()
+
+	if shouldRefresh {
+		log.Println("Refreshing auth token")
+		
+		// Just validate the current token again
+		valid, err := s.client.CheckToken()
+		
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		
+		if err != nil || !valid {
+			log.Printf("Error refreshing token: %v", err)
+			s.authStatus = StatusNotAuthenticated
+			// Clear the invalid token
+			s.client.SetAuthToken("")
+			if err := s.tokenManager.DeleteToken(); err != nil {
+				log.Printf("Warning: Failed to delete invalid token: %v", err)
+			}
+		} else {
+			// Token is still valid, update refresh time
+			s.lastRefresh = time.Now()
+		}
+	}
+}
+
+// SetPermission changes the permission level for new auth flows.
+// This doesn't affect existing tokens, only new authentication flows.
+func (s *Service) SetPermission(perm Permission) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.permission = perm
+}
+
+// GetPermission returns the current permission level.
+func (s *Service) GetPermission() Permission {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.permission
 }
 
 // GetAuthStatus returns the current authentication status.
@@ -277,52 +336,6 @@ func (s *Service) DeleteTask(timeline, listID, taskseriesID, taskID string) erro
 	return nil
 }
 
-// AddTags adds tags to a task.
-func (s *Service) AddTags(timeline, listID, taskseriesID, taskID string, tags []string) error {
-	// Ensure we're authenticated
-	if !s.IsAuthenticated() {
-		return fmt.Errorf("not authenticated with RTM")
-	}
-
-	params := url.Values{}
-	params.Set("method", "rtm.tasks.addTags")
-	params.Set("timeline", timeline)
-	params.Set("list_id", listID)
-	params.Set("taskseries_id", taskseriesID)
-	params.Set("task_id", taskID)
-	params.Set("tags", combineTagsForAPI(tags))
-
-	var resp Response
-	if err := s.client.doRequest(params, &resp); err != nil {
-		return fmt.Errorf("error adding tags: %w", err)
-	}
-
-	return nil
-}
-
-// RemoveTags removes tags from a task.
-func (s *Service) RemoveTags(timeline, listID, taskseriesID, taskID string, tags []string) error {
-	// Ensure we're authenticated
-	if !s.IsAuthenticated() {
-		return fmt.Errorf("not authenticated with RTM")
-	}
-
-	params := url.Values{}
-	params.Set("method", "rtm.tasks.removeTags")
-	params.Set("timeline", timeline)
-	params.Set("list_id", listID)
-	params.Set("taskseries_id", taskseriesID)
-	params.Set("task_id", taskID)
-	params.Set("tags", combineTagsForAPI(tags))
-
-	var resp Response
-	if err := s.client.doRequest(params, &resp); err != nil {
-		return fmt.Errorf("error removing tags: %w", err)
-	}
-
-	return nil
-}
-
 // SetDueDate sets or updates a task's due date.
 func (s *Service) SetDueDate(timeline, listID, taskseriesID, taskID, dueDate string, hasDueTime bool) error {
 	// Ensure we're authenticated
@@ -380,60 +393,50 @@ func (s *Service) SetPriority(timeline, listID, taskseriesID, taskID, priority s
 	return nil
 }
 
-// SetName renames a task.
-func (s *Service) SetName(timeline, listID, taskseriesID, taskID, name string) error {
+// AddTags adds tags to a task.
+func (s *Service) AddTags(timeline, listID, taskseriesID, taskID string, tags []string) error {
 	// Ensure we're authenticated
 	if !s.IsAuthenticated() {
 		return fmt.Errorf("not authenticated with RTM")
 	}
 
 	params := url.Values{}
-	params.Set("method", "rtm.tasks.setName")
+	params.Set("method", "rtm.tasks.addTags")
 	params.Set("timeline", timeline)
 	params.Set("list_id", listID)
 	params.Set("taskseries_id", taskseriesID)
 	params.Set("task_id", taskID)
-	params.Set("name", name)
+	params.Set("tags", combineTagsForAPI(tags))
 
 	var resp Response
 	if err := s.client.doRequest(params, &resp); err != nil {
-		return fmt.Errorf("error setting name: %w", err)
+		return fmt.Errorf("error adding tags: %w", err)
 	}
 
 	return nil
 }
 
-// AddNote adds a note to a task.
-func (s *Service) AddNote(timeline, listID, taskseriesID, taskID, title, text string) error {
+// RemoveTags removes tags from a task.
+func (s *Service) RemoveTags(timeline, listID, taskseriesID, taskID string, tags []string) error {
 	// Ensure we're authenticated
 	if !s.IsAuthenticated() {
 		return fmt.Errorf("not authenticated with RTM")
 	}
 
 	params := url.Values{}
-	params.Set("method", "rtm.tasks.notes.add")
+	params.Set("method", "rtm.tasks.removeTags")
 	params.Set("timeline", timeline)
 	params.Set("list_id", listID)
 	params.Set("taskseries_id", taskseriesID)
 	params.Set("task_id", taskID)
-	params.Set("note_title", title)
-	params.Set("note_text", text)
+	params.Set("tags", combineTagsForAPI(tags))
 
 	var resp Response
 	if err := s.client.doRequest(params, &resp); err != nil {
-		return fmt.Errorf("error adding note: %w", err)
+		return fmt.Errorf("error removing tags: %w", err)
 	}
 
 	return nil
-}
-
-// combineTagsForAPI combines tags for the API.
-func combineTagsForAPI(tags []string) string {
-	// URL encode each tag and combine with commas
-	for i, tag := range tags {
-		tags[i] = url.QueryEscape(tag)
-	}
-	return fmt.Sprintf("\"%s\"", url.QueryEscape(fmt.Sprintf("%s", tags)))
 }
 
 // IsAuthenticated checks if the service has a valid authentication token.
@@ -441,10 +444,11 @@ func (s *Service) IsAuthenticated() bool {
 	// Check current auth status
 	s.mu.RLock()
 	status := s.authStatus
+	timeSinceRefresh := time.Since(s.lastRefresh)
 	s.mu.RUnlock()
 
-	// If we know we're authenticated, return true
-	if status == StatusAuthenticated {
+	// If we know we're authenticated and token is still fresh, return true
+	if status == StatusAuthenticated && timeSinceRefresh < s.tokenRefresh {
 		return true
 	}
 
@@ -484,9 +488,10 @@ func (s *Service) IsAuthenticated() bool {
 		return false
 	}
 
-	// Token is valid
+	// Token is valid, update refresh time
 	s.mu.Lock()
 	s.authStatus = StatusAuthenticated
+	s.lastRefresh = time.Now()
 	s.mu.Unlock()
 	return true
 }
@@ -498,9 +503,10 @@ func (s *Service) CleanupExpiredFlows() {
 
 	now := time.Now()
 	for frob, flow := range s.authFlows {
-		// Check if flow has expired (24 hours)
-		if now.Sub(flow.StartTime) > 24*time.Hour {
+		// Check if flow has expired
+		if now.After(flow.ExpiresAt) {
 			delete(s.authFlows, frob)
+			log.Printf("Cleared expired auth flow for frob: %s", frob)
 		}
 	}
 }
@@ -514,14 +520,19 @@ func (s *Service) StartAuthFlow() (string, string, error) {
 		return "", "", fmt.Errorf("error getting frob: %w", err)
 	}
 
-	// Generate auth URL
-	authURL := s.client.GetAuthURL(frob, string(PermDelete))
+	// Get current permission level
+	s.mu.RLock()
+	perm := s.permission
+	s.mu.RUnlock()
 
-	// Create auth flow
+	// Generate auth URL
+	authURL := s.client.GetAuthURL(frob, string(perm))
+
+	// Create auth flow with expiration
 	flow := &Flow{
 		Frob:       frob,
 		StartTime:  time.Now(),
-		Permission: PermDelete,
+		Permission: perm,
 		AuthURL:    authURL,
 		ExpiresAt:  time.Now().Add(24 * time.Hour),
 	}
@@ -573,7 +584,35 @@ func (s *Service) CompleteAuthFlow(frob string) error {
 	s.mu.Lock()
 	delete(s.authFlows, frob)
 	s.authStatus = StatusAuthenticated
+	s.lastRefresh = time.Now()
 	s.mu.Unlock()
 
 	return nil
+}
+
+// ClearAuthentication removes all authentication data.
+func (s *Service) ClearAuthentication() error {
+	// Remove token
+	if err := s.tokenManager.DeleteToken(); err != nil {
+		return fmt.Errorf("error removing token: %w", err)
+	}
+
+	// Reset status and clear flows
+	s.mu.Lock()
+	s.authStatus = StatusNotAuthenticated
+	s.authFlows = make(map[string]*Flow)
+	s.client.SetAuthToken("")
+	s.mu.Unlock()
+
+	log.Println("Authentication cleared")
+	return nil
+}
+
+// combineTagsForAPI combines tags for the API.
+func combineTagsForAPI(tags []string) string {
+	// URL encode each tag and combine with commas
+	for i, tag := range tags {
+		tags[i] = url.QueryEscape(tag)
+	}
+	return fmt.Sprintf("\"%s\"", url.QueryEscape(fmt.Sprintf("%s", tags)))
 }

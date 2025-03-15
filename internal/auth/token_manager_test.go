@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestTokenManager(t *testing.T) {
@@ -22,6 +23,9 @@ func TestTokenManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create token manager: %v", err)
 	}
+
+	// Disable encryption for predictable test results
+	tm.DisableEncryption()
 
 	// Test initial state - should have no token
 	if tm.HasToken() {
@@ -46,6 +50,20 @@ func TestTokenManager(t *testing.T) {
 	}
 	if loadedToken != testToken {
 		t.Errorf("Loaded token does not match saved token: got %s, want %s", loadedToken, testToken)
+	}
+
+	// Test file info
+	fileInfo, infoErr := tm.GetTokenFileInfo()
+	if infoErr != nil {
+		t.Errorf("Failed to get token file info: %v", infoErr)
+	}
+	if fileInfo.Size() == 0 {
+		t.Errorf("Token file size should not be zero")
+	}
+	
+	// Verify file mod time is recent
+	if time.Since(fileInfo.ModTime()) > time.Minute {
+		t.Errorf("Token file modification time is too old")
 	}
 
 	// Test deleting token
@@ -85,6 +103,9 @@ func TestTokenManagerCreateDirectory(t *testing.T) {
 		t.Fatalf("Failed to create token manager with nested path: %v", createTmErr)
 	}
 
+	// Disable encryption for testing
+	tm.DisableEncryption()
+
 	// Check that directory was created
 	if _, statErr := os.Stat(subDir); os.IsNotExist(statErr) {
 		t.Errorf("Token manager failed to create directory structure")
@@ -103,5 +124,81 @@ func TestTokenManagerCreateDirectory(t *testing.T) {
 	}
 	if loadedToken != testToken {
 		t.Errorf("Loaded token from nested directory does not match: got %s, want %s", loadedToken, testToken)
+	}
+}
+
+func TestTokenEncryption(t *testing.T) {
+	// Skip if running in CI environment
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping encryption test in CI environment")
+	}
+
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "token_encryption_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	tokenPath := filepath.Join(tempDir, "encrypted_token")
+	
+	// Create token manager with encryption enabled
+	tm, err := NewTokenManager(tokenPath)
+	if err != nil {
+		t.Fatalf("Failed to create token manager: %v", err)
+	}
+	
+	// Test saving and loading encrypted token
+	testToken := "super_secret_token_12345"
+	if err := tm.SaveToken(testToken); err != nil {
+		t.Fatalf("Failed to save encrypted token: %v", err)
+	}
+	
+	// Read the raw file to verify it's encrypted
+	rawData, err := os.ReadFile(tokenPath)
+	if err != nil {
+		t.Fatalf("Failed to read token file: %v", err)
+	}
+	
+	// The encrypted data should not contain the plain token
+	if string(rawData) == testToken {
+		t.Errorf("Token appears to be stored unencrypted")
+	}
+	
+	// Load the token and verify decryption works
+	loadedToken, err := tm.LoadToken()
+	if err != nil {
+		t.Fatalf("Failed to load encrypted token: %v", err)
+	}
+	
+	if loadedToken != testToken {
+		t.Errorf("Loaded encrypted token does not match: got %s, want %s", loadedToken, testToken)
+	}
+}
+
+func TestGenerateTokenFilename(t *testing.T) {
+	testCases := []struct {
+		apiKey string
+		wantPrefix string
+	}{
+		{"abcdef1234567890", "rtm_token_abcdef12"},
+		{"short", "rtm_token_short"},
+		{"", "rtm_token_"},
+	}
+	
+	for _, tc := range testCases {
+		filename := GenerateTokenFilename(tc.apiKey)
+		
+		// Check that filename starts with expected prefix
+		if len(filename) < len(tc.wantPrefix) || filename[:len(tc.wantPrefix)] != tc.wantPrefix {
+			t.Errorf("GenerateTokenFilename(%q) = %q, want prefix %q", 
+				tc.apiKey, filename, tc.wantPrefix)
+		}
+		
+		// Check that filename contains a hash component
+		if len(tc.apiKey) > 0 && len(filename) <= len(tc.wantPrefix)+1 {
+			t.Errorf("GenerateTokenFilename(%q) = %q, expected hash component after prefix", 
+				tc.apiKey, filename)
+		}
 	}
 }
