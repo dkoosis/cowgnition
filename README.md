@@ -6,13 +6,23 @@
 
 CowGnition is an MCP (Model Context Protocol) server implementation written in Go that connects Claude Desktop and other MCP clients to the Remember The Milk (RTM) task management service. This server enables AI assistants to interact with your tasks, lists, and reminders through a secure, standardized interface.
 
+## Quick Links
+
+- [Installation](#installation) - How to install CowGnition
+- [Configuration](#configure-the-server) - Setting up your config file
+- [Usage Guide](#what-can-cowgnition-do) - Example commands and queries
+- [Development Guide](GO_PRACTICES.md) - Development practices and guidelines
+- [Project Roadmap](TODO.md) - Current development status and future plans
+- [MCP Resources](#mcp-resources) - Available data resources
+- [MCP Tools](#mcp-tools) - Available tools and actions
+
 ## Key Features
 
 - 🔄 **Bi-directional sync** between Claude and RTM
 - 🔐 **Secure authentication** using RTM's OAuth flow
 - 📋 **Task management** - create, read, update, and delete tasks
-- 📝 **Note handling** - add and edit notes on tasks
-- 🏷️ **Tag support** - manage tags on tasks
+- 📝 **Note handling** - add notes to tasks
+- 🏷️ **Tag support** - add and remove tags on tasks
 - ⏰ **Due date management** - set and modify due dates
 - 📊 **List organization** - work with multiple lists
 
@@ -28,6 +38,8 @@ cd cowgnition
 make build
 ```
 
+For detailed build instructions and development environment setup, see the [Development section](#development) below or the [development practices guide](GO_PRACTICES.md).
+
 ## Quickstart
 
 ### 1. Get Remember The Milk API credentials
@@ -41,7 +53,7 @@ Create a `config.yaml` file:
 
 ```yaml
 server:
-  name: "CowGnition"
+  name: "CowGnition RTM"
   port: 8080
 
 rtm:
@@ -79,7 +91,6 @@ With CowGnition installed in Claude Desktop, you can interact with your Remember
 - "Mark the dentist appointment as completed"
 - "Remind me to pay rent on the 1st of each month"
 - "What tasks are tagged as 'important'?"
-- "Move the project deadline to next Friday"
 
 ## Authentication Flow
 
@@ -87,17 +98,19 @@ The CowGnition server handles the RTM authentication flow:
 
 1. When first accessing RTM resources, Claude will prompt the user to authenticate
 2. The server will generate an authentication URL for the user to visit
-3. After authorizing access on the Remember The Milk website, the user will receive a verification code
-4. The user enters this code in Claude, and the server exchanges it for an auth token
+3. After authorizing access on the Remember The Milk website, the user will receive a frob
+4. The user enters this frob in Claude, and the server exchanges it for an auth token
 5. The server securely stores the token for future sessions
 
 ## Development
+
+CowGnition follows standard Go development practices as outlined in our [Go Practices Guide](GO_PRACTICES.md). If you're looking to contribute, please review our [Project Roadmap](TODO.md) to see what features need implementation.
 
 ### Prerequisites
 
 - Go 1.18 or higher
 - Make (optional, for build automation)
-- Remember The Milk API key
+- Remember The Milk API key ([register here](https://www.rememberthemilk.com/services/api/keys.rtm))
 
 ### Setup Development Environment
 
@@ -123,10 +136,6 @@ make dev
 
 This will automatically rebuild and restart the application whenever Go files are changed.
 
-### Implementation Roadmap
-
-For contributors looking to help implement features, check out our [development roadmap](TODO.md) which contains structured guides and prompts for building out the MCP server functionality.
-
 ## Architecture
 
 The server is built using a clean architecture approach with several key components:
@@ -138,21 +147,40 @@ cowgnition/
 ├── internal/                 # Private application code
 │   ├── auth/                 # RTM authentication 
 │   ├── config/               # Configuration handling
-│   ├── handler/              # MCP protocol handlers
-│   ├── rtm/                  # RTM API client
-│   └── server/               # MCP server implementation
+│   ├── server/               # MCP server implementation
+│   └── rtm/                  # RTM API client
 ├── pkg/                      # Shareable libraries
-│   ├── mcp/                  # MCP protocol utilities
-│   └── rtmapi/               # RTM API Go client
-└── docs/                     # Documentation
+│   └── mcp/                  # MCP protocol utilities
+└── configs/                  # Configuration files
 ```
+
+For a more detailed explanation of the project organization, see the [Project Organization](docs/PROJECT_ORGANIZATION.md) document.
+
+## Protocol Implementation
+
+CowGnition implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) to enable secure communication between Claude and Remember The Milk. For information about how MCP works, see the [MCP documentation in this repo](https://github.com/modelcontextprotocol/python-sdk/tree/main).
+
+### MCP Resources
+
+CowGnition exposes the following MCP resources:
+
+- `auth://rtm`: Authentication for Remember The Milk
+- `tasks://all`: All tasks across all lists
+- `tasks://today`: Tasks due today
+- `tasks://tomorrow`: Tasks due tomorrow
+- `tasks://week`: Tasks due within the next 7 days
+- `tasks://list/{list_id}`: Tasks within a specific list
+- `lists://all`: All task lists
+- `tags://all`: All tags used in the system
 
 ## MCP Tools
 
 CowGnition implements the following MCP tools:
 
-### Task Management
+### Authentication
+- `authenticate`: Complete authentication with Remember The Milk
 
+### Task Management
 - `add_task`: Create a new task
 - `complete_task`: Mark a task as completed
 - `uncomplete_task`: Mark a completed task as incomplete
@@ -163,47 +191,13 @@ CowGnition implements the following MCP tools:
 - `remove_tags`: Remove tags from a task
 - `add_note`: Add a note to a task
 
-### List Management
+## API Documentation
 
-- `get_lists`: Retrieve all lists
-- `create_list`: Create a new list
-- `set_list_name`: Rename a list
-- `delete_list`: Delete a list
-- `move_task`: Move a task to a different list
+CowGnition integrates with the Remember The Milk API. For detailed information on the API endpoints and authentication flow, see:
 
-### Query Tools
-
-- `get_tasks`: Get all tasks
-- `get_tasks_due_today`: Get tasks due today
-- `get_tasks_overdue`: Get overdue tasks
-- `get_tasks_by_list`: Get tasks in a specific list
-- `get_tasks_by_tag`: Get tasks with specific tags
-- `get_tasks_by_priority`: Get tasks by priority level
-- `search_tasks`: Search tasks using RTM's query syntax
-
-## MCP Resources
-
-CowGnition exposes the following MCP resources:
-
-- `tasks://all`: All tasks across all lists
-- `tasks://today`: Tasks due today
-- `tasks://tomorrow`: Tasks due tomorrow
-- `tasks://week`: Tasks due within the next 7 days
-- `tasks://list/{list_id}`: Tasks within a specific list
-- `lists://all`: All task lists
-- `tags://all`: All tags used in the system
-
-## Contributing
-
-We welcome contributions to the CowGnition project! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-Before submitting, please make sure your code passes the existing tests and linting.
+- [Authentication Process](https://docs.google.com/document/d/drive:///1slmdAa8yBZfDwpSP0ZQlsn1cB11BCpULg_50mPzsjEM?fields=name%2Cowners%2CcreatedTime%2CmodifiedTime%2CmimeType%2CwebViewLink%2Ccapabilities%2FcanDownload%2Csize&includeContent=True#authentication)
+- [RTM Tasks Structure](https://docs.google.com/document/d/drive:///1slmdAa8yBZfDwpSP0ZQlsn1cB11BCpULg_50mPzsjEM?fields=name%2Cowners%2CcreatedTime%2CmodifiedTime%2CmimeType%2CwebViewLink%2Ccapabilities%2FcanDownload%2Csize&includeContent=True#tasks)
+- [Response Formats](https://docs.google.com/document/d/drive:///1slmdAa8yBZfDwpSP0ZQlsn1cB11BCpULg_50mPzsjEM?fields=name%2Cowners%2CcreatedTime%2CmodifiedTime%2CmimeType%2CwebViewLink%2Ccapabilities%2FcanDownload%2Csize&includeContent=True#response-formats)
 
 ## License
 
