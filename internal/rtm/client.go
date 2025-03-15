@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -44,14 +45,44 @@ type Response struct {
 
 // NewClient creates a new RTM API client
 func NewClient(apiKey, sharedSecret string) *Client {
+	// Check for environment variable to override the API endpoint
+	baseURL := defaultBaseURL
+	if envBaseURL := os.Getenv("RTM_API_ENDPOINT"); envBaseURL != "" {
+		baseURL = envBaseURL
+	}
+
 	return &Client{
 		apiKey:       apiKey,
 		sharedSecret: sharedSecret,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-		baseURL: defaultBaseURL,
+		baseURL: baseURL,
 	}
+}
+
+// generateSignature generates an API signature
+// #nosec G401 - MD5 is required by RTM API specification
+func (c *Client) generateSignature(params url.Values) string {
+	// Sort parameters by key
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Concatenate parameters
+	var sb strings.Builder
+	sb.WriteString(c.sharedSecret)
+	for _, k := range keys {
+		sb.WriteString(k)
+		sb.WriteString(params.Get(k))
+	}
+
+	// Calculate MD5 hash - Required by RTM API
+	h := md5.New() // #nosec G401 - MD5 is required by RTM API specification
+	h.Write([]byte(sb.String()))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // SetAuthToken sets the authentication token
@@ -232,28 +263,4 @@ func (r Response) GetError() (string, string) {
 		return r.Error.Code, r.Error.Message
 	}
 	return "", ""
-}
-
-// generateSignature generates an API signature
-// #nosec G401 - MD5 is required by RTM API specification
-func (c *Client) generateSignature(params url.Values) string {
-	// Sort parameters by key
-	keys := make([]string, 0, len(params))
-	for k := range params {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	// Concatenate parameters
-	var sb strings.Builder
-	sb.WriteString(c.sharedSecret)
-	for _, k := range keys {
-		sb.WriteString(k)
-		sb.WriteString(params.Get(k))
-	}
-
-	// Calculate MD5 hash - Required by RTM API
-	h := md5.New() // #nosec G401 - MD5 is required by RTM API specification
-	h.Write([]byte(sb.String()))
-	return hex.EncodeToString(h.Sum(nil))
 }

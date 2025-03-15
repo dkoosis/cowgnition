@@ -214,7 +214,7 @@ func RunServer(handler http.Handler) (*httptest.Server, string) {
 
 // CreateMCPTestServer creates a test server with the MCP server handler.
 // The returned function should be called to close the server when done.
-func CreateMCPTestServer(t *testing.T, s *server.MCPServer) (*httptest.Server, func()) {
+func CreateMCPTestServer(_ *testing.T, s *server.MCPServer) (*httptest.Server, func()) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/mcp/initialize", s.HandleInitialize)
 	mux.HandleFunc("/mcp/list_resources", s.HandleListResources)

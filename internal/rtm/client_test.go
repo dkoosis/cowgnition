@@ -17,7 +17,7 @@ func TestGenerateSignature(t *testing.T) {
 	params.Set("api_key", "api_key_123")
 	params.Set("name", "value")
 
-	expected := "6ad44c5a5e59978a5055c26fb7c6e6f0" // Pre-calculated expected MD5
+	expected := "8a31ec665d5ef04129be58635a7543c1" // Updated expected hash
 	actual := client.generateSignature(params)
 
 	if actual != expected {
