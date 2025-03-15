@@ -60,7 +60,7 @@ func TestTokenManager(t *testing.T) {
 	if fileInfo.Size() == 0 {
 		t.Errorf("Token file size should not be zero")
 	}
-	
+
 	// Verify file mod time is recent
 	if time.Since(fileInfo.ModTime()) > time.Minute {
 		t.Errorf("Token file modification time is too old")
@@ -141,36 +141,36 @@ func TestTokenEncryption(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	tokenPath := filepath.Join(tempDir, "encrypted_token")
-	
+
 	// Create token manager with encryption enabled
 	tm, err := NewTokenManager(tokenPath)
 	if err != nil {
 		t.Fatalf("Failed to create token manager: %v", err)
 	}
-	
+
 	// Test saving and loading encrypted token
 	testToken := "super_secret_token_12345"
 	if err := tm.SaveToken(testToken); err != nil {
 		t.Fatalf("Failed to save encrypted token: %v", err)
 	}
-	
+
 	// Read the raw file to verify it's encrypted
 	rawData, err := os.ReadFile(tokenPath)
 	if err != nil {
 		t.Fatalf("Failed to read token file: %v", err)
 	}
-	
+
 	// The encrypted data should not contain the plain token
 	if string(rawData) == testToken {
 		t.Errorf("Token appears to be stored unencrypted")
 	}
-	
+
 	// Load the token and verify decryption works
 	loadedToken, err := tm.LoadToken()
 	if err != nil {
 		t.Fatalf("Failed to load encrypted token: %v", err)
 	}
-	
+
 	if loadedToken != testToken {
 		t.Errorf("Loaded encrypted token does not match: got %s, want %s", loadedToken, testToken)
 	}
@@ -178,26 +178,26 @@ func TestTokenEncryption(t *testing.T) {
 
 func TestGenerateTokenFilename(t *testing.T) {
 	testCases := []struct {
-		apiKey string
+		apiKey     string
 		wantPrefix string
 	}{
 		{"abcdef1234567890", "rtm_token_abcdef12"},
 		{"short", "rtm_token_short"},
 		{"", "rtm_token_"},
 	}
-	
+
 	for _, tc := range testCases {
 		filename := GenerateTokenFilename(tc.apiKey)
-		
+
 		// Check that filename starts with expected prefix
 		if len(filename) < len(tc.wantPrefix) || filename[:len(tc.wantPrefix)] != tc.wantPrefix {
-			t.Errorf("GenerateTokenFilename(%q) = %q, want prefix %q", 
+			t.Errorf("GenerateTokenFilename(%q) = %q, want prefix %q",
 				tc.apiKey, filename, tc.wantPrefix)
 		}
-		
+
 		// Check that filename contains a hash component
 		if len(tc.apiKey) > 0 && len(filename) <= len(tc.wantPrefix)+1 {
-			t.Errorf("GenerateTokenFilename(%q) = %q, expected hash component after prefix", 
+			t.Errorf("GenerateTokenFilename(%q) = %q, expected hash component after prefix",
 				tc.apiKey, filename)
 		}
 	}

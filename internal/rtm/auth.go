@@ -76,5 +76,5 @@ func (f *Flow) TimeRemaining() time.Duration {
 	if f.IsExpired() {
 		return 0
 	}
-	return f.ExpiresAt.Sub(time.Now())
+	return time.Until(f.ExpiresAt)
 }

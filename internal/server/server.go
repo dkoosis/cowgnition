@@ -22,11 +22,11 @@ type MCPServer struct {
 	httpServer   *http.Server
 	tokenManager *auth.TokenManager
 	// Add version information
-	version      string
+	version string
 	// Add startup time for uptime tracking
-	startTime    time.Time
+	startTime time.Time
 	// Add server instance ID for debugging
-	instanceID   string
+	instanceID string
 }
 
 // NewServer creates a new MCP server with the provided configuration.
@@ -80,7 +80,7 @@ func (s *MCPServer) Start() error {
 
 	// Add health check endpoint
 	mux.HandleFunc("/health", s.handleHealthCheck)
-	
+
 	// Add status endpoint for monitoring
 	mux.HandleFunc("/status", s.handleStatusCheck)
 
@@ -139,8 +139,8 @@ func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
 func (s *MCPServer) handleStatusCheck(w http.ResponseWriter, r *http.Request) {
 	// Only allow access from localhost or if a special header is present
 	clientIP := r.RemoteAddr
-	if !strings.HasPrefix(clientIP, "127.0.0.1") && !strings.HasPrefix(clientIP, "[::1]") && 
-	   r.Header.Get("X-Status-Secret") != s.config.Server.StatusSecret {
+	if !strings.HasPrefix(clientIP, "127.0.0.1") && !strings.HasPrefix(clientIP, "[::1]") &&
+		r.Header.Get("X-Status-Secret") != s.config.Server.StatusSecret {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -148,14 +148,14 @@ func (s *MCPServer) handleStatusCheck(w http.ResponseWriter, r *http.Request) {
 	// Gather status information
 	status := map[string]interface{}{
 		"server": map[string]interface{}{
-			"name":       s.config.Server.Name,
-			"version":    s.version,
-			"uptime":     s.GetUptime().String(),
-			"started_at": s.startTime.Format(time.RFC3339),
+			"name":        s.config.Server.Name,
+			"version":     s.version,
+			"uptime":      s.GetUptime().String(),
+			"started_at":  s.startTime.Format(time.RFC3339),
 			"instance_id": s.instanceID,
 		},
 		"auth": map[string]interface{}{
-			"status": s.rtmService.GetAuthStatus(),
+			"status":        s.rtmService.GetAuthStatus(),
 			"authenticated": s.rtmService.IsAuthenticated(),
 			"pending_flows": s.rtmService.GetActiveAuthFlows(),
 		},

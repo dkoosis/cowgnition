@@ -20,11 +20,11 @@ type Config struct {
 
 // ServerConfig contains server configuration
 type ServerConfig struct {
-	Name        string `yaml:"name"`
-	Port        int    `yaml:"port"`
+	Name         string `yaml:"name"`
+	Port         int    `yaml:"port"`
 	StatusSecret string `yaml:"status_secret"`
 	// Add development mode flag
-	DevMode     bool   `yaml:"dev_mode"`
+	DevMode bool `yaml:"dev_mode"`
 }
 
 // RTMConfig contains Remember The Milk API configuration
@@ -32,16 +32,16 @@ type RTMConfig struct {
 	APIKey       string `yaml:"api_key"`
 	SharedSecret string `yaml:"shared_secret"`
 	// Add default permission level
-	Permission   string `yaml:"permission"`
+	Permission string `yaml:"permission"`
 	// Add token refresh interval in hours
-	TokenRefresh int    `yaml:"token_refresh"`
+	TokenRefresh int `yaml:"token_refresh"`
 }
 
 // AuthConfig contains authentication configuration
 type AuthConfig struct {
-	TokenPath     string `yaml:"token_path"`
+	TokenPath string `yaml:"token_path"`
 	// Add option to disable token encryption for development
-	DisableEncryption bool   `yaml:"disable_encryption"`
+	DisableEncryption bool `yaml:"disable_encryption"`
 }
 
 // LoggingConfig contains logging configuration

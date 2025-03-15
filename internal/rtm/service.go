@@ -22,11 +22,11 @@ type Service struct {
 	authStatus   Status
 	authFlows    map[string]*Flow
 	// Add permission level
-	permission   Permission
+	permission Permission
 	// Add refresh interval
 	tokenRefresh time.Duration
 	// Add last refresh time
-	lastRefresh  time.Time
+	lastRefresh time.Time
 }
 
 // NewService creates a new RTM service with the specified credentials.
@@ -36,7 +36,7 @@ func NewService(apiKey, sharedSecret, tokenPath string) *Service {
 		tokenPath:    tokenPath,
 		authStatus:   StatusUnknown,
 		authFlows:    make(map[string]*Flow),
-		permission:   PermDelete, // Default to full access
+		permission:   PermDelete,     // Default to full access
 		tokenRefresh: 24 * time.Hour, // Check token daily
 	}
 }
@@ -108,13 +108,13 @@ func (s *Service) refreshTokenIfNeeded() {
 
 	if shouldRefresh {
 		log.Println("Refreshing auth token")
-		
+
 		// Just validate the current token again
 		valid, err := s.client.CheckToken()
-		
+
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		
+
 		if err != nil || !valid {
 			log.Printf("Error refreshing token: %v", err)
 			s.authStatus = StatusNotAuthenticated

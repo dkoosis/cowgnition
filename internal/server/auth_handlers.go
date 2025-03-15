@@ -2,14 +2,11 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/cowgnition/cowgnition/internal/rtm"
 )
 
 // handleAuthResource handles the auth://rtm resource.
@@ -32,9 +29,9 @@ func (s *MCPServer) handleAuthResource(w http.ResponseWriter) {
 
 	// Return auth URL and instructions
 	content := formatAuthInstructions(authURL, frob)
-	
+
 	response := map[string]interface{}{
-		"content":  content,
+		"content":   content,
 		"mime_type": "text/markdown",
 	}
 
@@ -56,7 +53,7 @@ You are already authenticated with Remember The Milk. You can now:
 `
 
 	return map[string]interface{}{
-		"content":  content,
+		"content":   content,
 		"mime_type": "text/markdown",
 	}
 }
@@ -109,22 +106,22 @@ func (s *MCPServer) handleAuthenticationTool(w http.ResponseWriter, args map[str
 	// Complete authentication flow
 	if err := s.rtmService.CompleteAuthFlow(frob); err != nil {
 		log.Printf("Error completing auth flow: %v", err)
-		
+
 		// Check for specific errors to provide more helpful messages
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "expired") {
-			writeErrorResponse(w, http.StatusBadRequest, 
+			writeErrorResponse(w, http.StatusBadRequest,
 				"Authentication flow expired. Please start a new authentication process by accessing the auth://rtm resource again.")
 			return
 		}
-		
+
 		if strings.Contains(errMsg, "invalid frob") {
-			writeErrorResponse(w, http.StatusBadRequest, 
+			writeErrorResponse(w, http.StatusBadRequest,
 				"Invalid frob. Please make sure you're using the frob from the most recent authentication attempt.")
 			return
 		}
-		
-		writeErrorResponse(w, http.StatusInternalServerError, 
+
+		writeErrorResponse(w, http.StatusInternalServerError,
 			fmt.Sprintf("Authentication failed: %v. Please try starting the authentication process again.", err))
 		return
 	}
@@ -165,31 +162,31 @@ func (s *MCPServer) handleLogoutTool(args map[string]interface{}) (string, error
 // handleAuthStatusTool provides information about the current authentication status.
 func (s *MCPServer) handleAuthStatusTool(_ map[string]interface{}) (string, error) {
 	var result strings.Builder
-	
+
 	result.WriteString("# Remember The Milk Authentication Status\n\n")
-	
+
 	if s.rtmService.IsAuthenticated() {
 		result.WriteString("✅ **Status:** Authenticated\n\n")
-		
+
 		// Get token info if possible
 		if s.tokenManager != nil && s.tokenManager.HasToken() {
 			if fileInfo, err := s.tokenManager.GetTokenFileInfo(); err == nil {
-				result.WriteString(fmt.Sprintf("- **Last authenticated:** %s\n", 
+				result.WriteString(fmt.Sprintf("- **Last authenticated:** %s\n",
 					fileInfo.ModTime().Format(time.RFC1123)))
 			}
 		}
-		
+
 		result.WriteString("\nYou can use all Remember The Milk features through Claude.")
 	} else {
 		result.WriteString("❌ **Status:** Not authenticated\n\n")
-		
+
 		// Check if there's a pending auth flow
 		if s.rtmService.GetActiveAuthFlows() > 0 {
 			result.WriteString("There is a pending authentication flow. Please complete it or start a new one.\n\n")
 		}
-		
+
 		result.WriteString("To authenticate, please access the `auth://rtm` resource.")
 	}
-	
+
 	return result.String(), nil
 }
