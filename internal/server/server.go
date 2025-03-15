@@ -19,6 +19,8 @@ type MCPServer struct {
 	rtmService   *rtm.Service
 	httpServer   *http.Server
 	tokenManager *auth.TokenManager
+	// Add version information
+	version      string
 }
 
 // NewMCPServer creates a new MCP server with the provided configuration.
@@ -46,6 +48,7 @@ func NewMCPServer(cfg *config.Config) (*MCPServer, error) {
 		config:       cfg,
 		rtmService:   rtmService,
 		tokenManager: tokenManager,
+		version:      "1.0.0", // This should be injected from build information
 	}, nil
 }
 
@@ -60,9 +63,15 @@ func (s *MCPServer) Start() error {
 	mux.HandleFunc("/mcp/read_resource", s.handleReadResource)
 	mux.HandleFunc("/mcp/list_tools", s.handleListTools)
 	mux.HandleFunc("/mcp/call_tool", s.handleCallTool)
+	
+	// Add notification endpoint for upcoming MCP spec compliance
+	mux.HandleFunc("/mcp/send_notification", s.handleSendNotification)
+	
+	// Add health check endpoint
+	mux.HandleFunc("/health", s.handleHealthCheck)
 
 	// Add middleware
-	handler := logMiddleware(recoveryMiddleware(mux))
+	handler := logMiddleware(recoveryMiddleware(corsMiddleware(mux)))
 
 	// Create HTTP server
 	s.httpServer = &http.Server{
@@ -74,7 +83,8 @@ func (s *MCPServer) Start() error {
 	}
 
 	// Start HTTP server
-	log.Printf("Starting MCP server on port %d", s.config.Server.Port)
+	log.Printf("Starting MCP server '%s' version %s on port %d", 
+		s.config.Server.Name, s.version, s.config.Server.Port)
 	if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
 		return fmt.Errorf("HTTP server error: %w", err)
 	}
@@ -86,4 +96,59 @@ func (s *MCPServer) Start() error {
 func (s *MCPServer) Stop(ctx context.Context) error {
 	log.Println("Shutting down MCP server...")
 	return s.httpServer.Shutdown(ctx)
+}
+
+// handleHealthCheck provides a simple health check endpoint.
+func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
+	// Check if RTM service is healthy
+	if s.rtmService == nil {
+		http.Error(w, "RTM service not initialized", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Return simple health check response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"healthy"}`))
+}
+
+// handleSendNotification is a placeholder for notification support.
+// The MCP spec may evolve to include proper notification support.
+func (s *MCPServer) handleSendNotification(w http.ResponseWriter, r *http.Request) {
+	// Currently, we don't support notifications, so return appropriate error
+	if r.Method != http.MethodPost {
+		writeErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Return unsupported operation for now
+	writeErrorResponse(w, http.StatusNotImplemented, "Notifications not yet supported")
+}
+
+// GetVersion returns the server version.
+func (s *MCPServer) GetVersion() string {
+	return s.version
+}
+
+// SetVersion sets the server version.
+func (s *MCPServer) SetVersion(version string) {
+	s.version = version
+}
+
+// corsMiddleware adds CORS headers for development scenarios.
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers for development
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight requests
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }

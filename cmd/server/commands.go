@@ -41,6 +41,11 @@ func RegisterCommands() map[string]Command {
 			Description: "Show help for commands",
 			Run:         helpCommand,
 		},
+		"check": {
+			Name:        "check",
+			Description: "Check authentication status with RTM",
+			Run:         checkCommand,
+		},
 	}
 }
 
@@ -49,15 +54,25 @@ func RegisterCommands() map[string]Command {
 func serveCommand(args []string) error {
 	// Parse command-specific flags
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	configPath := fs.String("config", "configs/config.yaml", "Path to configuration file")
+	configPath := fs.String("config", "", "Path to configuration file")
+	debugMode := fs.Bool("debug", false, "Enable debug logging")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
+	// Find config file if not specified
+	configFile := findConfigFile(*configPath)
+
 	// Load config
-	cfg, err := config.LoadConfig(*configPath)
+	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
 		return fmt.Errorf("error loading config: %w", err)
+	}
+
+	// Set debug mode if requested
+	if *debugMode {
+		log.Printf("Debug mode enabled")
+		// In a real implementation, we would configure logging level here
 	}
 
 	// Create and start server
@@ -66,10 +81,13 @@ func serveCommand(args []string) error {
 		return fmt.Errorf("error creating server: %w", err)
 	}
 
+	// Set server version
+	mcp.SetVersion(version)
+
 	// Start server in goroutine
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("Starting MCP server on port %d", cfg.Server.Port)
+		log.Printf("Starting MCP server '%s' on port %d", cfg.Server.Name, cfg.Server.Port)
 		errCh <- mcp.Start()
 	}()
 
@@ -99,7 +117,41 @@ func serveCommand(args []string) error {
 
 // versionCommand displays the current version information.
 func versionCommand(args []string) error {
-	fmt.Printf("CowGnition version %s\n", version)
+	printVersion()
+	return nil
+}
+
+// checkCommand checks the RTM authentication status.
+func checkCommand(args []string) error {
+	// Parse command-specific flags
+	fs := flag.NewFlagSet("check", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to configuration file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// Find config file if not specified
+	configFile := findConfigFile(*configPath)
+
+	// Load config
+	cfg, err := config.LoadConfig(configFile)
+	if err != nil {
+		return fmt.Errorf("error loading config: %w", err)
+	}
+
+	fmt.Println("Checking RTM authentication status...")
+
+	// Create server (but don't start HTTP server)
+	mcp, err := server.NewMCPServer(cfg)
+	if err != nil {
+		return fmt.Errorf("error creating server: %w", err)
+	}
+
+	// Check if authenticated
+	// In a real implementation, we would call a method on the server to check authentication
+	fmt.Println("Authentication status check complete.")
+	fmt.Println("Note: This is a placeholder. Implementation would check token validity with RTM.")
+
 	return nil
 }
 
@@ -128,22 +180,36 @@ func helpCommand(args []string) error {
 		// Show command help
 		fmt.Printf("Command: %s\n", cmd.Name)
 		fmt.Printf("Description: %s\n", cmd.Description)
-		// TODO: Add command-specific usage information if needed
+		
+		// Add command-specific usage information
+		switch cmdName {
+		case "serve":
+			fmt.Println("\nUsage:")
+			fmt.Println("  cowgnition serve [options]")
+			fmt.Println("\nOptions:")
+			fmt.Println("  -config string   Path to configuration file")
+			fmt.Println("  -debug           Enable debug logging")
+		case "check":
+			fmt.Println("\nUsage:")
+			fmt.Println("  cowgnition check [options]")
+			fmt.Println("\nOptions:")
+			fmt.Println("  -config string   Path to configuration file")
+		}
+		
 		return nil
 	}
 
 	// Otherwise, show general help
 	fmt.Println("CowGnition - Remember The Milk MCP Server")
-	fmt.Println()
-	fmt.Println("Usage:")
+	fmt.Println("\nUsage:")
 	fmt.Println("  cowgnition [command] [options]")
-	fmt.Println()
-	fmt.Println("Available Commands:")
+	fmt.Println("\nAvailable Commands:")
 	for _, cmd := range cmds {
 		fmt.Printf("  %-10s %s\n", cmd.Name, cmd.Description)
 	}
-	fmt.Println()
-	fmt.Println("Use 'cowgnition help [command]' for more information about a command.")
+	fmt.Println("\nUse 'cowgnition help [command]' for more information about a command.")
+	fmt.Println("\nVersion:")
+	fmt.Printf("  %s\n", version)
 
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cowgnition/cowgnition/pkg/mcp"
 )
@@ -22,14 +23,18 @@ func (s *MCPServer) handleInitialize(w http.ResponseWriter, r *http.Request) {
 	// Parse request
 	var req mcp.InitializeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+		writeErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body: %v", err))
 		return
 	}
+
+	// Log initialization attempt
+	log.Printf("MCP initialization requested by: %s (version: %s)", 
+		req.ServerName, req.ServerVersion)
 
 	// Construct server information
 	serverInfo := mcp.ServerInfo{
 		Name:    s.config.Server.Name,
-		Version: "1.0.0", // TODO: Use version from build
+		Version: s.version,
 	}
 
 	// Define capabilities
@@ -37,16 +42,28 @@ func (s *MCPServer) handleInitialize(w http.ResponseWriter, r *http.Request) {
 		"resources": map[string]interface{}{
 			"list": true,
 			"read": true,
+			// We don't support resource subscriptions yet
+			"subscribe": false,
+			"listChanged": false,
 		},
 		"tools": map[string]interface{}{
 			"list": true,
 			"call": true,
+			"listChanged": false,
 		},
 		"logging": map[string]interface{}{
 			"log":     true,
 			"warning": true,
 			"error":   true,
 		},
+		// We don't support prompts yet
+		"prompts": map[string]interface{}{
+			"list": false,
+			"get": false,
+			"listChanged": false,
+		},
+		// We don't support completion yet
+		"completion": false,
 	}
 
 	// Construct response
@@ -54,6 +71,9 @@ func (s *MCPServer) handleInitialize(w http.ResponseWriter, r *http.Request) {
 		ServerInfo:   serverInfo,
 		Capabilities: capabilities,
 	}
+
+	// Log successful initialization
+	log.Printf("MCP initialization successful for: %s", req.ServerName)
 
 	writeJSONResponse(w, http.StatusOK, response)
 }
@@ -143,9 +163,11 @@ func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
 	// Get resource name from query parameters
 	name := r.URL.Query().Get("name")
 	if name == "" {
-		writeErrorResponse(w, http.StatusBadRequest, "Missing resource name")
+		writeErrorResponse(w, http.StatusBadRequest, "Missing resource name parameter")
 		return
 	}
+
+	log.Printf("Resource request: %s", name)
 
 	// Handle authentication resource
 	if name == "auth://rtm" {
@@ -160,18 +182,20 @@ func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Start authentication flow
-		authURL, _, err := s.rtmService.StartAuthFlow()
+		authURL, frob, err := s.rtmService.StartAuthFlow()
 		if err != nil {
 			log.Printf("Error starting auth flow: %v", err)
-			writeErrorResponse(w, http.StatusInternalServerError, "Error starting authentication flow")
+			writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Error starting authentication flow: %v", err))
 			return
 		}
 
 		// Return auth URL
 		content := fmt.Sprintf(
-			"Please authorize CowGnition to access your Remember The Milk account by visiting the following URL: %s\n\n"+
-				"After authorizing, you will be given a frob. Use the 'authenticate' tool with this frob to complete the authentication.",
-			authURL,
+			"Please authorize CowGnition to access your Remember The Milk account by visiting the following URL:\n\n%s\n\n"+
+				"After authorizing, you will be given a frob. Use the 'authenticate' tool with this frob to complete the authentication.\n\n"+
+				"Frob: %s\n\n"+
+				"You can use this command to authenticate: 'Use the authenticate tool with frob %s'",
+			authURL, frob, frob,
 		)
 
 		response := mcp.ResourceResponse{
@@ -185,7 +209,7 @@ func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
 
 	// Check authentication for other resources
 	if !s.rtmService.IsAuthenticated() {
-		writeErrorResponse(w, http.StatusUnauthorized, "Not authenticated with Remember The Milk")
+		writeErrorResponse(w, http.StatusUnauthorized, "Not authenticated with Remember The Milk. Please access auth://rtm resource first.")
 		return
 	}
 
@@ -193,6 +217,9 @@ func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
 	var content string
 	var err error
 	mimeType := "text/plain"
+
+	// Track resource fetch timing
+	startTime := time.Now()
 
 	switch {
 	case name == "lists://all":
@@ -212,12 +239,16 @@ func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
 	case name == "tags://all":
 		content, err = s.handleTagsResource()
 	default:
-		writeErrorResponse(w, http.StatusNotFound, "Resource not found")
+		writeErrorResponse(w, http.StatusNotFound, fmt.Sprintf("Resource not found: %s", name))
 		return
 	}
 
+	// Log fetch timing
+	duration := time.Since(startTime)
+	log.Printf("Resource %s fetched in %v", name, duration)
+
 	if err != nil {
-		log.Printf("Error handling resource: %v", err)
+		log.Printf("Error handling resource %s: %v", name, err)
 		writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Error handling resource: %v", err))
 		return
 	}
@@ -301,7 +332,131 @@ func (s *MCPServer) handleListTools(w http.ResponseWriter, r *http.Request) {
 					},
 				},
 			},
-			// Add more tools as needed
+			{
+				Name:        "uncomplete_task",
+				Description: "Mark a completed task as incomplete",
+				Arguments: []mcp.ToolArgument{
+					{
+						Name:        "list_id",
+						Description: "The ID of the list containing the task",
+						Required:    true,
+					},
+					{
+						Name:        "taskseries_id",
+						Description: "The ID of the task series",
+						Required:    true,
+					},
+					{
+						Name:        "task_id",
+						Description: "The ID of the task",
+						Required:    true,
+					},
+				},
+			},
+			{
+				Name:        "delete_task",
+				Description: "Delete a task",
+				Arguments: []mcp.ToolArgument{
+					{
+						Name:        "list_id",
+						Description: "The ID of the list containing the task",
+						Required:    true,
+					},
+					{
+						Name:        "taskseries_id",
+						Description: "The ID of the task series",
+						Required:    true,
+					},
+					{
+						Name:        "task_id",
+						Description: "The ID of the task",
+						Required:    true,
+					},
+				},
+			},
+			{
+				Name:        "set_due_date",
+				Description: "Set or update a task's due date",
+				Arguments: []mcp.ToolArgument{
+					{
+						Name:        "list_id",
+						Description: "The ID of the list containing the task",
+						Required:    true,
+					},
+					{
+						Name:        "taskseries_id",
+						Description: "The ID of the task series",
+						Required:    true,
+					},
+					{
+						Name:        "task_id",
+						Description: "The ID of the task",
+						Required:    true,
+					},
+					{
+						Name:        "due_date",
+						Description: "The due date (leave empty to clear)",
+						Required:    false,
+					},
+					{
+						Name:        "has_due_time",
+						Description: "Whether the due date includes a time component",
+						Required:    false,
+					},
+				},
+			},
+			{
+				Name:        "set_priority",
+				Description: "Set a task's priority",
+				Arguments: []mcp.ToolArgument{
+					{
+						Name:        "list_id",
+						Description: "The ID of the list containing the task",
+						Required:    true,
+					},
+					{
+						Name:        "taskseries_id",
+						Description: "The ID of the task series",
+						Required:    true,
+					},
+					{
+						Name:        "task_id",
+						Description: "The ID of the task",
+						Required:    true,
+					},
+					{
+						Name:        "priority",
+						Description: "The priority (1=high, 2=medium, 3=low, 0=none)",
+						Required:    true,
+					},
+				},
+			},
+			{
+				Name:        "add_tags",
+				Description: "Add tags to a task",
+				Arguments: []mcp.ToolArgument{
+					{
+						Name:        "list_id",
+						Description: "The ID of the list containing the task",
+						Required:    true,
+					},
+					{
+						Name:        "taskseries_id",
+						Description: "The ID of the task series",
+						Required:    true,
+					},
+					{
+						Name:        "task_id",
+						Description: "The ID of the task",
+						Required:    true,
+					},
+					{
+						Name:        "tags",
+						Description: "The tags to add (string or array of strings)",
+						Required:    true,
+					},
+				},
+			},
 		}
 	}
 
@@ -323,9 +478,12 @@ func (s *MCPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 	// Parse request
 	var req mcp.CallToolRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+		writeErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body: %v", err))
 		return
 	}
+
+	log.Printf("Tool call request: %s", req.Name)
+	startTime := time.Now()
 
 	// Handle authentication tool
 	if req.Name == "authenticate" {
@@ -358,7 +516,7 @@ func (s *MCPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 
 	// Check authentication for other tools
 	if !s.rtmService.IsAuthenticated() {
-		writeErrorResponse(w, http.StatusUnauthorized, "Not authenticated with Remember The Milk")
+		writeErrorResponse(w, http.StatusUnauthorized, "Not authenticated with Remember The Milk. Please authenticate first.")
 		return
 	}
 
@@ -371,14 +529,27 @@ func (s *MCPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 		result, err = s.handleAddTaskTool(req.Arguments)
 	case "complete_task":
 		result, err = s.handleCompleteTaskTool(req.Arguments)
-	// Add more tools as needed
+	case "uncomplete_task":
+		result, err = s.handleUncompleteTaskTool(req.Arguments)
+	case "delete_task":
+		result, err = s.handleDeleteTaskTool(req.Arguments)
+	case "set_due_date":
+		result, err = s.handleSetDueDateTool(req.Arguments)
+	case "set_priority":
+		result, err = s.handleSetPriorityTool(req.Arguments)
+	case "add_tags":
+		result, err = s.handleAddTagsTool(req.Arguments)
 	default:
-		writeErrorResponse(w, http.StatusNotFound, "Tool not found")
+		writeErrorResponse(w, http.StatusNotFound, fmt.Sprintf("Tool not found: %s", req.Name))
 		return
 	}
 
+	// Log tool execution timing
+	duration := time.Since(startTime)
+	log.Printf("Tool %s executed in %v", req.Name, duration)
+
 	if err != nil {
-		log.Printf("Error handling tool: %v", err)
+		log.Printf("Error handling tool %s: %v", req.Name, err)
 		writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Error handling tool: %v", err))
 		return
 	}
