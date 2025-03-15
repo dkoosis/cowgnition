@@ -197,3 +197,21 @@ Enhance security, reliability, and performance:
 - Implemented logout functionality
 - Created comprehensive authentication status tool
 - Added detailed documentation in README.md
+
+### 3. Task Resources Implementation
+
+```
+Implement resources for tasks. This includes task listing with filtering (all, today, tomorrow, week), individual task retrieval, and proper formatting for MCP context exposure. Use proper pagination for large task lists.
+
+Current progress:
+- Basic task resource implementation complete and functional
+- Initial filters implemented (all, today, tomorrow, week)
+- Resource rendering with formatting for due dates, priorities, and tags
+
+Remaining items:
+- Implement pagination for large task lists
+- Add additional filter options (priority, completion status)
+- Optimize performance for large datasets
+- Add detailed individual task view resource
+- Enhance error handling for API rate limits
+```
