@@ -1,7 +1,7 @@
 package rtm
 
 import (
-	"crypto/md5"
+	"crypto/md5" // #nosec G501 - MD5 is required by RTM API specification
 	"encoding/hex"
 	"encoding/xml"
 	"fmt"
@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	// API endpoints
-	baseURL = "https://api.rememberthemilk.com/services/rest/"
-	authURL = "https://www.rememberthemilk.com/services/auth/"
+	// API endpoints - keep as constants for reference
+	defaultBaseURL = "https://api.rememberthemilk.com/services/rest/"
+	authURL        = "https://www.rememberthemilk.com/services/auth/"
 
 	// Response status
 	statusOK   = "ok"
@@ -29,6 +29,7 @@ type Client struct {
 	sharedSecret string
 	authToken    string
 	httpClient   *http.Client
+	baseURL      string
 }
 
 // Response represents a generic RTM API response
@@ -49,6 +50,7 @@ func NewClient(apiKey, sharedSecret string) *Client {
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
+		baseURL: defaultBaseURL,
 	}
 }
 
@@ -173,7 +175,7 @@ func (c *Client) doRequest(params url.Values, v interface{}) error {
 	params.Set("api_sig", sig)
 
 	// Prepare request
-	reqURL := baseURL + "?" + params.Encode()
+	reqURL := c.baseURL + "?" + params.Encode()
 	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
@@ -203,10 +205,13 @@ func (c *Client) doRequest(params url.Values, v interface{}) error {
 	}
 
 	// Check API status
-	respStatus := v.(interface {
+	respStatus, ok := v.(interface {
 		GetStatus() string
 		GetError() (string, string)
 	})
+	if !ok {
+		return fmt.Errorf("response does not implement required interface")
+	}
 
 	if respStatus.GetStatus() != statusOK {
 		code, msg := respStatus.GetError()
@@ -230,6 +235,7 @@ func (r Response) GetError() (string, string) {
 }
 
 // generateSignature generates an API signature
+// #nosec G401 - MD5 is required by RTM API specification
 func (c *Client) generateSignature(params url.Values) string {
 	// Sort parameters by key
 	keys := make([]string, 0, len(params))
@@ -246,8 +252,8 @@ func (c *Client) generateSignature(params url.Values) string {
 		sb.WriteString(params.Get(k))
 	}
 
-	// Calculate MD5 hash
-	h := md5.New()
+	// Calculate MD5 hash - Required by RTM API
+	h := md5.New() // #nosec G401 - MD5 is required by RTM API specification
 	h.Write([]byte(sb.String()))
 	return hex.EncodeToString(h.Sum(nil))
 }

@@ -1,5 +1,4 @@
-// internal/rtm/auth.go
-
+// Package rtm provides client functionality for the Remember The Milk API.
 package rtm
 
 import (
@@ -172,8 +171,8 @@ func (s *Service) CheckAuthStatus() (AuthStatus, error) {
 	if err != nil || !valid {
 		// Token is invalid, update status and clear token
 		s.client.SetAuthToken("")
-		if err := s.tokenManager.DeleteToken(); err != nil {
-			log.Printf("Warning: Failed to delete invalid token: %v", err)
+		if deleteErr := s.tokenManager.DeleteToken(); deleteErr != nil {
+			log.Printf("Warning: Failed to delete invalid token: %v", deleteErr)
 		}
 
 		s.mu.Lock()
@@ -196,7 +195,10 @@ func (s *Service) CheckAuthStatus() (AuthStatus, error) {
 
 // IsAuthenticated returns true if the user is authenticated with RTM.
 func (s *Service) IsAuthenticated() bool {
-	status, _ := s.CheckAuthStatus()
+	status, err := s.CheckAuthStatus()
+	if err != nil {
+		log.Printf("Warning: Error checking authentication status: %v", err)
+	}
 	return status == AuthStatusAuthenticated
 }
 
@@ -222,7 +224,7 @@ func (s *Service) ClearAuthentication() error {
 
 // RefreshToken attempts to refresh the auth token if it's expiring.
 // Currently, RTM tokens don't expire unless revoked by the user or API key changes.
-func (s *Service) RefreshToken(ctx context.Context) error {
+func (s *Service) RefreshToken(_ context.Context) error {
 	// RTM tokens don't currently expire, but we can verify them
 	status, err := s.CheckAuthStatus()
 	if err != nil {

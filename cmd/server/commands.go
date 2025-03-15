@@ -116,7 +116,8 @@ func serveCommand(args []string) error {
 }
 
 // versionCommand displays the current version information.
-func versionCommand(args []string) error {
+// nolint:unused
+func versionCommand(_ []string) error {
 	printVersion()
 	return nil
 }

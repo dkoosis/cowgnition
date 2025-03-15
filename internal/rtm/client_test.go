@@ -240,8 +240,3 @@ func TestResponseGetError(t *testing.T) {
 		t.Errorf("Response.GetError() with no error message = %v, want %v", msg, "")
 	}
 }
-
-// Helper function to check if a string contains a substring (corrected)
-func contains(s, substr string) bool {
-	return strings.Contains(s, substr)
-}

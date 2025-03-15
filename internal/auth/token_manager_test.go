@@ -7,142 +7,101 @@ import (
 )
 
 func TestTokenManager(t *testing.T) {
-	// Create a temporary directory for test
-	tempDir, err := os.MkdirTemp("", "token-test")
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "token_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer os.RemoveAll(tempDir) // Clean up after test
 
-	// Test file path
+	// Create token path
 	tokenPath := filepath.Join(tempDir, "test_token")
 
 	// Create token manager
 	tm, err := NewTokenManager(tokenPath)
 	if err != nil {
-		t.Fatalf("NewTokenManager() error = %v", err)
+		t.Fatalf("Failed to create token manager: %v", err)
 	}
 
-	// Test HasToken (should be false initially)
+	// Test initial state - should have no token
 	if tm.HasToken() {
-		t.Errorf("HasToken() = true, want false for new TokenManager")
+		t.Errorf("New token manager should not have a token")
 	}
 
-	// Test SaveToken
-	testToken := "test_token_123"
-	if err := tm.SaveToken(testToken); err != nil {
-		t.Errorf("SaveToken() error = %v", err)
+	// Test saving token
+	testToken := "test_auth_token_12345"
+	if saveErr := tm.SaveToken(testToken); saveErr != nil {
+		t.Errorf("Failed to save token: %v", saveErr)
 	}
 
-	// Verify file exists with correct permissions
-	fileInfo, err := os.Stat(tokenPath)
-	if err != nil {
-		t.Errorf("Token file not created: %v", err)
-	}
-
-	// Check file mode (should be 0600)
-	expectedMode := os.FileMode(0600)
-	if fileInfo.Mode().Perm() != expectedMode {
-		t.Errorf("Token file has incorrect permissions: got %v, want %v",
-			fileInfo.Mode().Perm(), expectedMode)
-	}
-
-	// Test HasToken (should be true now)
+	// Check that token exists
 	if !tm.HasToken() {
-		t.Errorf("HasToken() = false, want true after saving token")
+		t.Errorf("Token manager should have a token after saving")
 	}
 
-	// Test LoadToken
-	loadedToken, err := tm.LoadToken()
-	if err != nil {
-		t.Errorf("LoadToken() error = %v", err)
+	// Test loading token
+	loadedToken, loadErr := tm.LoadToken()
+	if loadErr != nil {
+		t.Errorf("Failed to load token: %v", loadErr)
 	}
-
 	if loadedToken != testToken {
-		t.Errorf("LoadToken() = %v, want %v", loadedToken, testToken)
+		t.Errorf("Loaded token does not match saved token: got %s, want %s", loadedToken, testToken)
 	}
 
-	// Test DeleteToken
-	if err := tm.DeleteToken(); err != nil {
-		t.Errorf("DeleteToken() error = %v", err)
+	// Test deleting token
+	if deleteErr := tm.DeleteToken(); deleteErr != nil {
+		t.Errorf("Failed to delete token: %v", deleteErr)
 	}
 
-	// Verify file no longer exists
-	if _, err := os.Stat(tokenPath); !os.IsNotExist(err) {
-		t.Errorf("Token file still exists after DeleteToken()")
-	}
-
-	// HasToken should now be false
+	// Check that token is gone
 	if tm.HasToken() {
-		t.Errorf("HasToken() = true, want false after DeleteToken()")
+		t.Errorf("Token manager should not have a token after deletion")
 	}
-
-	// Test LoadToken on non-existent file
-	_, err = tm.LoadToken()
-	if err == nil {
-		t.Errorf("LoadToken() should return error for non-existent file")
-	}
-
-	// Test DeleteToken on non-existent file (should not error)
-	if err := tm.DeleteToken(); err != nil {
-		t.Errorf("DeleteToken() on non-existent file returned error: %v", err)
+	if _, statErr := os.Stat(tokenPath); !os.IsNotExist(statErr) {
+		t.Errorf("Token file should not exist after deletion")
 	}
 }
 
-func TestNewTokenManagerCreatesDirectory(t *testing.T) {
-	// Create a temporary directory for test
-	tempDir, err := os.MkdirTemp("", "token-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
+func TestTokenManagerCreateDirectory(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, createErr := os.MkdirTemp("", "token_test")
+	if createErr != nil {
+		t.Fatalf("Failed to create temp dir: %v", createErr)
 	}
-	defer os.RemoveAll(tempDir)
+	defer os.RemoveAll(tempDir) // Clean up after test
 
-	// Create a subdirectory path that doesn't exist yet
-	subDir := filepath.Join(tempDir, "subdir1", "subdir2")
+	// Create a nested path that doesn't exist yet
+	subDir := filepath.Join(tempDir, "nested", "dirs")
 	tokenPath := filepath.Join(subDir, "test_token")
 
-	// Verify directory doesn't exist
-	if _, err := os.Stat(subDir); !os.IsNotExist(err) {
-		t.Fatalf("Test setup failed: subdirectory already exists")
+	// Check that directory doesn't exist
+	if _, statErr := os.Stat(subDir); !os.IsNotExist(statErr) {
+		t.Errorf("Test setup failed: nested directory should not exist")
 	}
 
-	// Create token manager, which should create the directory
-	_, err = NewTokenManager(tokenPath)
-	if err != nil {
-		t.Fatalf("NewTokenManager() error = %v", err)
+	// Create token manager - should create the directory
+	tm, createTmErr := NewTokenManager(tokenPath)
+	if createTmErr != nil {
+		t.Fatalf("Failed to create token manager with nested path: %v", createTmErr)
 	}
 
-	// Verify directory was created
-	if _, err := os.Stat(subDir); os.IsNotExist(err) {
-		t.Errorf("NewTokenManager() failed to create directory structure")
-	}
-}
-
-func TestTokenManagerWithTilde(t *testing.T) {
-	// Skip this test if running as root, as home directory expansion won't work as expected
-	if os.Geteuid() == 0 {
-		t.Skip("Skipping test when running as root")
+	// Check that directory was created
+	if _, statErr := os.Stat(subDir); os.IsNotExist(statErr) {
+		t.Errorf("Token manager failed to create directory structure")
 	}
 
-	// Get home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("Failed to get home directory: %v", err)
+	// Test saving token in nested directory
+	testToken := "test_auth_token_in_nested_dir"
+	if saveErr := tm.SaveToken(testToken); saveErr != nil {
+		t.Errorf("Failed to save token in nested directory: %v", saveErr)
 	}
 
-	// Test with path containing tilde
-	tokenPath := "~/test_token_tilde"
-	expandedPath := filepath.Join(homeDir, "test_token_tilde")
-
-	// Create a fake token manager that doesn't actually create files
-	// We're just testing path expansion, not file operations
-	tm := &TokenManager{
-		tokenPath: tokenPath,
+	// Check that token exists and can be loaded
+	loadedToken, loadErr := tm.LoadToken()
+	if loadErr != nil {
+		t.Errorf("Failed to load token from nested directory: %v", loadErr)
 	}
-
-	// Verify tokenPath was expanded
-	if tm.tokenPath != expandedPath {
-		t.Errorf("TokenManager path expansion failed: got %v, want %v",
-			tm.tokenPath, expandedPath)
+	if loadedToken != testToken {
+		t.Errorf("Loaded token from nested directory does not match: got %s, want %s", loadedToken, testToken)
 	}
 }

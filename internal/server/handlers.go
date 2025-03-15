@@ -171,39 +171,7 @@ func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
 
 	// Handle authentication resource
 	if name == "auth://rtm" {
-		if s.rtmService.IsAuthenticated() {
-			// Already authenticated
-			response := mcp.ResourceResponse{
-				Content:  "Authentication successful. You are already authenticated with Remember The Milk.",
-				MimeType: "text/plain",
-			}
-			writeJSONResponse(w, http.StatusOK, response)
-			return
-		}
-
-		// Start authentication flow
-		authURL, frob, err := s.rtmService.StartAuthFlow()
-		if err != nil {
-			log.Printf("Error starting auth flow: %v", err)
-			writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Error starting authentication flow: %v", err))
-			return
-		}
-
-		// Return auth URL
-		content := fmt.Sprintf(
-			"Please authorize CowGnition to access your Remember The Milk account by visiting the following URL:\n\n%s\n\n"+
-				"After authorizing, you will be given a frob. Use the 'authenticate' tool with this frob to complete the authentication.\n\n"+
-				"Frob: %s\n\n"+
-				"You can use this command to authenticate: 'Use the authenticate tool with frob %s'",
-			authURL, frob, frob,
-		)
-
-		response := mcp.ResourceResponse{
-			Content:  content,
-			MimeType: "text/plain",
-		}
-
-		writeJSONResponse(w, http.StatusOK, response)
+		s.handleAuthResource(w)
 		return
 	}
 
@@ -261,6 +229,44 @@ func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
 	writeJSONResponse(w, http.StatusOK, response)
 }
 
+// handleAuthResource handles the auth://rtm resource.
+// This is extracted from handleReadResource to reduce complexity.
+func (s *MCPServer) handleAuthResource(w http.ResponseWriter) {
+	if s.rtmService.IsAuthenticated() {
+		// Already authenticated
+		response := mcp.ResourceResponse{
+			Content:  "Authentication successful. You are already authenticated with Remember The Milk.",
+			MimeType: "text/plain",
+		}
+		writeJSONResponse(w, http.StatusOK, response)
+		return
+	}
+
+	// Start authentication flow
+	authURL, frob, err := s.rtmService.StartAuthFlow()
+	if err != nil {
+		log.Printf("Error starting auth flow: %v", err)
+		writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Error starting authentication flow: %v", err))
+		return
+	}
+
+	// Return auth URL
+	content := fmt.Sprintf(
+		"Please authorize CowGnition to access your Remember The Milk account by visiting the following URL:\n\n%s\n\n"+
+			"After authorizing, you will be given a frob. Use the 'authenticate' tool with this frob to complete the authentication.\n\n"+
+			"Frob: %s\n\n"+
+			"You can use this command to authenticate: 'Use the authenticate tool with frob %s'",
+		authURL, frob, frob,
+	)
+
+	response := mcp.ResourceResponse{
+		Content:  content,
+		MimeType: "text/plain",
+	}
+
+	writeJSONResponse(w, http.StatusOK, response)
+}
+
 // handleListTools handles the MCP list_tools request.
 // It returns a list of available tools based on authentication status.
 func (s *MCPServer) handleListTools(w http.ResponseWriter, r *http.Request) {
@@ -289,175 +295,7 @@ func (s *MCPServer) handleListTools(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// Return all available tools
-		tools = []mcp.ToolDefinition{
-			{
-				Name:        "add_task",
-				Description: "Add a new task",
-				Arguments: []mcp.ToolArgument{
-					{
-						Name:        "name",
-						Description: "The name of the task",
-						Required:    true,
-					},
-					{
-						Name:        "list_id",
-						Description: "The ID of the list to add the task to",
-						Required:    false,
-					},
-					{
-						Name:        "due_date",
-						Description: "The due date of the task (e.g. 'today', 'tomorrow', '2023-12-31')",
-						Required:    false,
-					},
-				},
-			},
-			{
-				Name:        "complete_task",
-				Description: "Mark a task as completed",
-				Arguments: []mcp.ToolArgument{
-					{
-						Name:        "list_id",
-						Description: "The ID of the list containing the task",
-						Required:    true,
-					},
-					{
-						Name:        "taskseries_id",
-						Description: "The ID of the task series",
-						Required:    true,
-					},
-					{
-						Name:        "task_id",
-						Description: "The ID of the task",
-						Required:    true,
-					},
-				},
-			},
-			{
-				Name:        "uncomplete_task",
-				Description: "Mark a completed task as incomplete",
-				Arguments: []mcp.ToolArgument{
-					{
-						Name:        "list_id",
-						Description: "The ID of the list containing the task",
-						Required:    true,
-					},
-					{
-						Name:        "taskseries_id",
-						Description: "The ID of the task series",
-						Required:    true,
-					},
-					{
-						Name:        "task_id",
-						Description: "The ID of the task",
-						Required:    true,
-					},
-				},
-			},
-			{
-				Name:        "delete_task",
-				Description: "Delete a task",
-				Arguments: []mcp.ToolArgument{
-					{
-						Name:        "list_id",
-						Description: "The ID of the list containing the task",
-						Required:    true,
-					},
-					{
-						Name:        "taskseries_id",
-						Description: "The ID of the task series",
-						Required:    true,
-					},
-					{
-						Name:        "task_id",
-						Description: "The ID of the task",
-						Required:    true,
-					},
-				},
-			},
-			{
-				Name:        "set_due_date",
-				Description: "Set or update a task's due date",
-				Arguments: []mcp.ToolArgument{
-					{
-						Name:        "list_id",
-						Description: "The ID of the list containing the task",
-						Required:    true,
-					},
-					{
-						Name:        "taskseries_id",
-						Description: "The ID of the task series",
-						Required:    true,
-					},
-					{
-						Name:        "task_id",
-						Description: "The ID of the task",
-						Required:    true,
-					},
-					{
-						Name:        "due_date",
-						Description: "The due date (leave empty to clear)",
-						Required:    false,
-					},
-					{
-						Name:        "has_due_time",
-						Description: "Whether the due date includes a time component",
-						Required:    false,
-					},
-				},
-			},
-			{
-				Name:        "set_priority",
-				Description: "Set a task's priority",
-				Arguments: []mcp.ToolArgument{
-					{
-						Name:        "list_id",
-						Description: "The ID of the list containing the task",
-						Required:    true,
-					},
-					{
-						Name:        "taskseries_id",
-						Description: "The ID of the task series",
-						Required:    true,
-					},
-					{
-						Name:        "task_id",
-						Description: "The ID of the task",
-						Required:    true,
-					},
-					{
-						Name:        "priority",
-						Description: "The priority (1=high, 2=medium, 3=low, 0=none)",
-						Required:    true,
-					},
-				},
-			},
-			{
-				Name:        "add_tags",
-				Description: "Add tags to a task",
-				Arguments: []mcp.ToolArgument{
-					{
-						Name:        "list_id",
-						Description: "The ID of the list containing the task",
-						Required:    true,
-					},
-					{
-						Name:        "taskseries_id",
-						Description: "The ID of the task series",
-						Required:    true,
-					},
-					{
-						Name:        "task_id",
-						Description: "The ID of the task",
-						Required:    true,
-					},
-					{
-						Name:        "tags",
-						Description: "The tags to add (string or array of strings)",
-						Required:    true,
-					},
-				},
-			},
-		}
+		tools = getAuthenticatedTools()
 	}
 
 	response := mcp.ListToolsResponse{
@@ -465,6 +303,180 @@ func (s *MCPServer) handleListTools(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSONResponse(w, http.StatusOK, response)
+}
+
+// getAuthenticatedTools returns the list of available tools when authenticated.
+// This is extracted from handleListTools to reduce complexity.
+func getAuthenticatedTools() []mcp.ToolDefinition {
+	return []mcp.ToolDefinition{
+		{
+			Name:        "add_task",
+			Description: "Add a new task",
+			Arguments: []mcp.ToolArgument{
+				{
+					Name:        "name",
+					Description: "The name of the task",
+					Required:    true,
+				},
+				{
+					Name:        "list_id",
+					Description: "The ID of the list to add the task to",
+					Required:    false,
+				},
+				{
+					Name:        "due_date",
+					Description: "The due date of the task (e.g. 'today', 'tomorrow', '2023-12-31')",
+					Required:    false,
+				},
+			},
+		},
+		{
+			Name:        "complete_task",
+			Description: "Mark a task as completed",
+			Arguments: []mcp.ToolArgument{
+				{
+					Name:        "list_id",
+					Description: "The ID of the list containing the task",
+					Required:    true,
+				},
+				{
+					Name:        "taskseries_id",
+					Description: "The ID of the task series",
+					Required:    true,
+				},
+				{
+					Name:        "task_id",
+					Description: "The ID of the task",
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "uncomplete_task",
+			Description: "Mark a completed task as incomplete",
+			Arguments: []mcp.ToolArgument{
+				{
+					Name:        "list_id",
+					Description: "The ID of the list containing the task",
+					Required:    true,
+				},
+				{
+					Name:        "taskseries_id",
+					Description: "The ID of the task series",
+					Required:    true,
+				},
+				{
+					Name:        "task_id",
+					Description: "The ID of the task",
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "delete_task",
+			Description: "Delete a task",
+			Arguments: []mcp.ToolArgument{
+				{
+					Name:        "list_id",
+					Description: "The ID of the list containing the task",
+					Required:    true,
+				},
+				{
+					Name:        "taskseries_id",
+					Description: "The ID of the task series",
+					Required:    true,
+				},
+				{
+					Name:        "task_id",
+					Description: "The ID of the task",
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "set_due_date",
+			Description: "Set or update a task's due date",
+			Arguments: []mcp.ToolArgument{
+				{
+					Name:        "list_id",
+					Description: "The ID of the list containing the task",
+					Required:    true,
+				},
+				{
+					Name:        "taskseries_id",
+					Description: "The ID of the task series",
+					Required:    true,
+				},
+				{
+					Name:        "task_id",
+					Description: "The ID of the task",
+					Required:    true,
+				},
+				{
+					Name:        "due_date",
+					Description: "The due date (leave empty to clear)",
+					Required:    false,
+				},
+				{
+					Name:        "has_due_time",
+					Description: "Whether the due date includes a time component",
+					Required:    false,
+				},
+			},
+		},
+		{
+			Name:        "set_priority",
+			Description: "Set a task's priority",
+			Arguments: []mcp.ToolArgument{
+				{
+					Name:        "list_id",
+					Description: "The ID of the list containing the task",
+					Required:    true,
+				},
+				{
+					Name:        "taskseries_id",
+					Description: "The ID of the task series",
+					Required:    true,
+				},
+				{
+					Name:        "task_id",
+					Description: "The ID of the task",
+					Required:    true,
+				},
+				{
+					Name:        "priority",
+					Description: "The priority (1=high, 2=medium, 3=low, 0=none)",
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "add_tags",
+			Description: "Add tags to a task",
+			Arguments: []mcp.ToolArgument{
+				{
+					Name:        "list_id",
+					Description: "The ID of the list containing the task",
+					Required:    true,
+				},
+				{
+					Name:        "taskseries_id",
+					Description: "The ID of the task series",
+					Required:    true,
+				},
+				{
+					Name:        "task_id",
+					Description: "The ID of the task",
+					Required:    true,
+				},
+				{
+					Name:        "tags",
+					Description: "The tags to add (string or array of strings)",
+					Required:    true,
+				},
+			},
+		},
+	}
 }
 
 // handleCallTool handles the MCP call_tool request.
@@ -487,30 +499,7 @@ func (s *MCPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 
 	// Handle authentication tool
 	if req.Name == "authenticate" {
-		if s.rtmService.IsAuthenticated() {
-			writeJSONResponse(w, http.StatusOK, mcp.ToolResponse{
-				Result: "Already authenticated with Remember The Milk.",
-			})
-			return
-		}
-
-		// Get frob from arguments
-		frob, ok := req.Arguments["frob"].(string)
-		if !ok || frob == "" {
-			writeErrorResponse(w, http.StatusBadRequest, "Missing or invalid 'frob' argument")
-			return
-		}
-
-		// Complete authentication flow
-		if err := s.rtmService.CompleteAuthFlow(frob); err != nil {
-			log.Printf("Error completing auth flow: %v", err)
-			writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Error completing authentication: %v", err))
-			return
-		}
-
-		writeJSONResponse(w, http.StatusOK, mcp.ToolResponse{
-			Result: "Authentication successful! You can now use all features of Remember The Milk.",
-		})
+		s.handleAuthenticationTool(w, req.Arguments)
 		return
 	}
 
@@ -520,29 +509,8 @@ func (s *MCPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle different tools
-	var result string
-	var err error
-
-	switch req.Name {
-	case "add_task":
-		result, err = s.handleAddTaskTool(req.Arguments)
-	case "complete_task":
-		result, err = s.handleCompleteTaskTool(req.Arguments)
-	case "uncomplete_task":
-		result, err = s.handleUncompleteTaskTool(req.Arguments)
-	case "delete_task":
-		result, err = s.handleDeleteTaskTool(req.Arguments)
-	case "set_due_date":
-		result, err = s.handleSetDueDateTool(req.Arguments)
-	case "set_priority":
-		result, err = s.handleSetPriorityTool(req.Arguments)
-	case "add_tags":
-		result, err = s.handleAddTagsTool(req.Arguments)
-	default:
-		writeErrorResponse(w, http.StatusNotFound, fmt.Sprintf("Tool not found: %s", req.Name))
-		return
-	}
+	// Handle the appropriate tool
+	result, err := s.dispatchToolRequest(req.Name, req.Arguments)
 
 	// Log tool execution timing
 	duration := time.Since(startTime)
@@ -557,4 +525,56 @@ func (s *MCPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 	writeJSONResponse(w, http.StatusOK, mcp.ToolResponse{
 		Result: result,
 	})
+}
+
+// handleAuthenticationTool handles the authenticate tool.
+// This is extracted from handleCallTool to reduce complexity.
+func (s *MCPServer) handleAuthenticationTool(w http.ResponseWriter, args map[string]interface{}) {
+	if s.rtmService.IsAuthenticated() {
+		writeJSONResponse(w, http.StatusOK, mcp.ToolResponse{
+			Result: "Already authenticated with Remember The Milk.",
+		})
+		return
+	}
+
+	// Get frob from arguments
+	frob, ok := args["frob"].(string)
+	if !ok || frob == "" {
+		writeErrorResponse(w, http.StatusBadRequest, "Missing or invalid 'frob' argument")
+		return
+	}
+
+	// Complete authentication flow
+	if err := s.rtmService.CompleteAuthFlow(frob); err != nil {
+		log.Printf("Error completing auth flow: %v", err)
+		writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Error completing authentication: %v", err))
+		return
+	}
+
+	writeJSONResponse(w, http.StatusOK, mcp.ToolResponse{
+		Result: "Authentication successful! You can now use all features of Remember The Milk.",
+	})
+}
+
+// dispatchToolRequest routes the tool request to the appropriate handler.
+// This is extracted from handleCallTool to reduce complexity.
+func (s *MCPServer) dispatchToolRequest(toolName string, args map[string]interface{}) (string, error) {
+	switch toolName {
+	case "add_task":
+		return s.handleAddTaskTool(args)
+	case "complete_task":
+		return s.handleCompleteTaskTool(args)
+	case "uncomplete_task":
+		return s.handleUncompleteTaskTool(args)
+	case "delete_task":
+		return s.handleDeleteTaskTool(args)
+	case "set_due_date":
+		return s.handleSetDueDateTool(args)
+	case "set_priority":
+		return s.handleSetPriorityTool(args)
+	case "add_tags":
+		return s.handleAddTagsTool(args)
+	default:
+		return "", fmt.Errorf("unknown tool: %s", toolName)
+	}
 }

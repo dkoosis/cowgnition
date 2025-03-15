@@ -99,7 +99,7 @@ func (s *MCPServer) Stop(ctx context.Context) error {
 }
 
 // handleHealthCheck provides a simple health check endpoint.
-func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
+func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
 	// Check if RTM service is healthy
 	if s.rtmService == nil {
 		http.Error(w, "RTM service not initialized", http.StatusServiceUnavailable)
@@ -109,7 +109,11 @@ func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	// Return simple health check response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"healthy"}`))
+
+	// Check the Write error to satisfy linter
+	if _, err := w.Write([]byte(`{"status":"healthy"}`)); err != nil {
+		log.Printf("Error writing health check response: %v", err)
+	}
 }
 
 // handleSendNotification is a placeholder for notification support.

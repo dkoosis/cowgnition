@@ -235,39 +235,48 @@ func (s *MCPServer) handleSetPriorityTool(args map[string]interface{}) (string, 
 	return fmt.Sprintf("Priority has been set to %s.", priorityDisplay), nil
 }
 
-// handleAddTagsTool handles the add_tags tool.
-// It adds tags to a task in Remember The Milk.
-func (s *MCPServer) handleAddTagsTool(args map[string]interface{}) (string, error) {
-	// Get required arguments
-	listID, ok := args["list_id"].(string)
-	if !ok || listID == "" {
-		return "", fmt.Errorf("missing or invalid 'list_id' argument")
-	}
-
-	taskseriesID, ok := args["taskseries_id"].(string)
-	if !ok || taskseriesID == "" {
-		return "", fmt.Errorf("missing or invalid 'taskseries_id' argument")
-	}
-
-	taskID, ok := args["task_id"].(string)
-	if !ok || taskID == "" {
-		return "", fmt.Errorf("missing or invalid 'task_id' argument")
-	}
-
-	// Get tags
+// parseTagArgument extracts tags from the tags argument, which can be a string or array.
+func parseTagArgument(tagsArg interface{}) ([]string, error) {
 	var tags []string
-	if tagsArg, ok := args["tags"].([]interface{}); ok {
-		for _, t := range tagsArg {
-			if tagStr, ok := t.(string); ok && tagStr != "" {
+
+	// Handle different tag formats
+	switch t := tagsArg.(type) {
+	case []interface{}:
+		for _, tagItem := range t {
+			if tagStr, ok := tagItem.(string); ok && tagStr != "" {
 				tags = append(tags, tagStr)
 			}
 		}
-	} else if tagsStr, ok := args["tags"].(string); ok && tagsStr != "" {
-		tags = []string{tagsStr}
+	case string:
+		if t != "" {
+			tags = append(tags, t)
+		}
+	case nil:
+		return nil, fmt.Errorf("missing 'tags' argument")
+	default:
+		return nil, fmt.Errorf("invalid 'tags' argument type")
 	}
 
 	if len(tags) == 0 {
-		return "", fmt.Errorf("missing or invalid 'tags' argument")
+		return nil, fmt.Errorf("no valid tags provided")
+	}
+
+	return tags, nil
+}
+
+// handleAddTagsTool handles the add_tags tool.
+// It adds tags to a task in Remember The Milk.
+func (s *MCPServer) handleAddTagsTool(args map[string]interface{}) (string, error) {
+	// Extract task IDs first
+	listID, taskseriesID, taskID, err := extractTaskIDs(args)
+	if err != nil {
+		return "", err
+	}
+
+	// Parse tags
+	tags, err := parseTagArgument(args["tags"])
+	if err != nil {
+		return "", err
 	}
 
 	// Create timeline for task operations
@@ -281,5 +290,30 @@ func (s *MCPServer) handleAddTagsTool(args map[string]interface{}) (string, erro
 		return "", fmt.Errorf("error adding tags: %w", err)
 	}
 
-	return fmt.Sprintf("Tags have been added to the task."), nil
+	return "Tags have been added to the task.", nil
+}
+
+// extractTaskIDs extracts the standard task identifiers from args map.
+func extractTaskIDs(args map[string]interface{}) (listID, taskseriesID, taskID string, err error) {
+	var ok bool
+
+	// Get list_id
+	listID, ok = args["list_id"].(string)
+	if !ok || listID == "" {
+		return "", "", "", fmt.Errorf("missing or invalid 'list_id' argument")
+	}
+
+	// Get taskseries_id
+	taskseriesID, ok = args["taskseries_id"].(string)
+	if !ok || taskseriesID == "" {
+		return "", "", "", fmt.Errorf("missing or invalid 'taskseries_id' argument")
+	}
+
+	// Get task_id
+	taskID, ok = args["task_id"].(string)
+	if !ok || taskID == "" {
+		return "", "", "", fmt.Errorf("missing or invalid 'task_id' argument")
+	}
+
+	return listID, taskseriesID, taskID, nil
 }

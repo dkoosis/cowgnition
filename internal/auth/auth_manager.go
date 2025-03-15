@@ -142,8 +142,8 @@ func (am *AuthManager) CompleteAuthFlow(frob string, getToken func(frob string) 
 	}
 
 	// Save token
-	if err := am.tokenManager.SaveToken(token); err != nil {
-		return fmt.Errorf("error saving token: %w", err)
+	if saveErr := am.tokenManager.SaveToken(token); saveErr != nil {
+		return fmt.Errorf("error saving token: %w", saveErr)
 	}
 
 	// Clean up auth flow
@@ -188,8 +188,8 @@ func (am *AuthManager) CheckAuthStatus(verifyToken func(token string) (bool, err
 	valid, err := verifyToken(token)
 	if err != nil || !valid {
 		// Token is invalid, remove it
-		if err := am.tokenManager.DeleteToken(); err != nil {
-			return StatusFailed, fmt.Errorf("error removing invalid token: %w", err)
+		if deleteErr := am.tokenManager.DeleteToken(); deleteErr != nil {
+			return StatusFailed, fmt.Errorf("error removing invalid token: %w", deleteErr)
 		}
 
 		am.mu.Lock()
@@ -259,6 +259,7 @@ func (am *AuthManager) CleanExpiredFlows() {
 
 // generateFrob creates a unique frob for authentication.
 // In a real implementation, this would be provided by the RTM API.
+// nolint:unparam
 func generateFrob() (string, error) {
 	// This is a placeholder - in the real implementation,
 	// we'd call RTM API to get a frob rather than generating one
