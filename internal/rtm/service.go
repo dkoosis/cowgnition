@@ -1,89 +1,26 @@
+// Package rtm provides client functionality for the Remember The Milk API.
 package rtm
 
 import (
-	"encoding/xml"
 	"fmt"
 	"net/url"
-	"os"
-	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/cowgnition/cowgnition/internal/auth"
 )
 
-// Service provides methods for interacting with RTM API
+// Service provides methods for interacting with RTM API.
+// It handles authentication, request signing, and API operations.
 type Service struct {
-	client    *Client
-	tokenPath string
+	client       *Client
+	tokenPath    string
+	authManager  *auth.AuthManager
+	mu           sync.RWMutex
+	lastSyncTime time.Time
 }
 
-// TaskList represents a list of tasks
-type TaskList struct {
-	XMLName  xml.Name `xml:"lists"`
-	Lists    []List   `xml:"list"`
-}
-
-// List represents an RTM list
-type List struct {
-	ID       string `xml:"id,attr"`
-	Name     string `xml:"name,attr"`
-	Deleted  string `xml:"deleted,attr"`
-	Locked   string `xml:"locked,attr"`
-	Archived string `xml:"archived,attr"`
-	Position string `xml:"position,attr"`
-	Smart    string `xml:"smart,attr"`
-	Filter   string `xml:"filter,omitempty"`
-}
-
-// TasksResponse represents the response for getting tasks
-type TasksResponse struct {
-	Response
-	Tasks struct {
-		List []struct {
-			ID         string       `xml:"id,attr"`
-			TaskSeries []TaskSeries `xml:"taskseries"`
-		} `xml:"list"`
-	} `xml:"tasks"`
-}
-
-// TaskSeries represents a series of tasks
-type TaskSeries struct {
-	ID         string `xml:"id,attr"`
-	Created    string `xml:"created,attr"`
-	Modified   string `xml:"modified,attr"`
-	Name       string `xml:"name,attr"`
-	Source     string `xml:"source,attr"`
-	Tags       []string `xml:"tags>tag,omitempty"`
-	Notes      []Note `xml:"notes>note,omitempty"`
-	Tasks      []Task `xml:"task"`
-}
-
-// Task represents an RTM task
-type Task struct {
-	ID          string `xml:"id,attr"`
-	Due         string `xml:"due,attr"`
-	HasDueTime  string `xml:"has_due_time,attr"`
-	Added       string `xml:"added,attr"`
-	Completed   string `xml:"completed,attr"`
-	Deleted     string `xml:"deleted,attr"`
-	Priority    string `xml:"priority,attr"`
-	Postponed   string `xml:"postponed,attr"`
-	Estimate    string `xml:"estimate,attr"`
-}
-
-// Note represents a note on a task
-type Note struct {
-	ID        string `xml:"id,attr"`
-	Created   string `xml:"created,attr"`
-	Modified  string `xml:"modified,attr"`
-	Title     string `xml:"title"`
-	Content   string `xml:"content"`
-}
-
-// TimelineResponse represents the response for creating a timeline
-type TimelineResponse struct {
-	Response
-	Timeline string `xml:"timeline"`
-}
-
-// NewService creates a new RTM service
+// NewService creates a new RTM service with the specified credentials.
 func NewService(apiKey, sharedSecret, tokenPath string) *Service {
 	return &Service{
 		client:    NewClient(apiKey, sharedSecret),
@@ -91,163 +28,280 @@ func NewService(apiKey, sharedSecret, tokenPath string) *Service {
 	}
 }
 
-// Initialize sets up the service and loads the auth token if available
+// Initialize sets up the service and loads the auth token if available.
+// It establishes the auth manager and verifies any existing tokens.
 func (s *Service) Initialize() error {
-	// Create token directory if it doesn't exist
-	tokenDir := filepath.Dir(s.tokenPath)
-	if err := os.MkdirAll(tokenDir, 0700); err != nil {
-		return fmt.Errorf("error creating token directory: %w", err)
+	// Create auth manager with delete permission (full access)
+	authManager, err := auth.NewAuthManager(s.tokenPath, auth.PermDelete)
+	if err != nil {
+		return fmt.Errorf("error creating auth manager: %w", err)
+	}
+	s.authManager = authManager
+
+	// Check authentication status
+	status, err := s.authManager.CheckAuthStatus(s.verifyToken)
+	if err != nil {
+		return fmt.Errorf("error checking authentication status: %w", err)
 	}
 
-	// Attempt to load token
-	token, err := s.loadToken()
-	if err == nil {
-		s.client.SetAuthToken(token)
-		
-		// Verify token
-		valid, err := s.client.CheckToken()
+	// If authenticated, set the token on the client
+	if status == auth.StatusAuthenticated {
+		token, err := s.authManager.GetToken()
 		if err != nil {
-			return fmt.Errorf("error checking token: %w", err)
+			return fmt.Errorf("error loading token: %w", err)
 		}
-		
-		if !valid {
-			// Token is invalid, remove it
-			if err := os.Remove(s.tokenPath); err != nil {
-				return fmt.Errorf("error removing invalid token: %w", err)
-			}
-			
-			// Clear the token
-			s.client.SetAuthToken("")
-		}
+		s.client.SetAuthToken(token)
 	}
 
 	return nil
 }
 
-// IsAuthenticated checks if the service has a valid auth token
-func (s *Service) IsAuthenticated() bool {
-	return s.client.GetAuthToken() != ""
+// verifyToken checks if a token is valid with the RTM API.
+func (s *Service) verifyToken(token string) (bool, error) {
+	// Set token temporarily for verification
+	s.client.SetAuthToken(token)
+
+	// Check token validity
+	valid, err := s.client.CheckToken()
+
+	// If error or invalid, clear the token
+	if err != nil || !valid {
+		s.client.SetAuthToken("")
+		return false, err
+	}
+
+	return true, nil
 }
 
-// StartAuthFlow begins the authentication flow and returns a URL for the user to visit
+// IsAuthenticated checks if the service has a valid auth token.
+func (s *Service) IsAuthenticated() bool {
+	status := s.authManager.GetStatus()
+	return status == auth.StatusAuthenticated
+}
+
+// StartAuthFlow begins the authentication flow and returns a URL for the user to visit.
 func (s *Service) StartAuthFlow() (string, string, error) {
-	// Get a frob
-	frob, err := s.client.GetFrob()
+	// Generate auth URL through the auth manager
+	authURL, frob, err := s.authManager.StartAuthFlow(s.generateAuthURL)
 	if err != nil {
-		return "", "", fmt.Errorf("error getting frob: %w", err)
+		return "", "", fmt.Errorf("error starting auth flow: %w", err)
 	}
-	
-	// Generate auth URL
-	authURL := s.client.GetAuthURL(frob, "delete") // Use delete permission for full access
-	
+
 	return authURL, frob, nil
 }
 
-// CompleteAuthFlow completes the authentication flow with the provided frob
+// generateAuthURL creates an authentication URL for the given frob and permission level.
+func (s *Service) generateAuthURL(frob string, perm string) (string, error) {
+	// Use client to generate auth URL
+	authURL := s.client.GetAuthURL(frob, perm)
+	return authURL, nil
+}
+
+// CompleteAuthFlow completes the authentication flow with the provided frob.
 func (s *Service) CompleteAuthFlow(frob string) error {
-	// Exchange frob for token
-	token, err := s.client.GetToken(frob)
+	// Exchange frob for token through auth manager
+	err := s.authManager.CompleteAuthFlow(frob, s.getToken)
 	if err != nil {
-		return fmt.Errorf("error getting token: %w", err)
+		return fmt.Errorf("error completing auth flow: %w", err)
 	}
-	
-	// Save token
-	if err := s.saveToken(token); err != nil {
-		return fmt.Errorf("error saving token: %w", err)
+
+	// Get and set the token on successful completion
+	token, err := s.authManager.GetToken()
+	if err != nil {
+		return fmt.Errorf("error loading token after auth completion: %w", err)
 	}
-	
+
+	s.client.SetAuthToken(token)
 	return nil
 }
 
-// GetLists retrieves all lists
+// getToken exchanges a frob for a token using the RTM API.
+func (s *Service) getToken(frob string) (string, error) {
+	// Use client to get token from frob
+	token, err := s.client.GetToken(frob)
+	if err != nil {
+		return "", fmt.Errorf("error getting token from RTM API: %w", err)
+	}
+
+	return token, nil
+}
+
+// GetLists retrieves all lists from RTM.
 func (s *Service) GetLists() ([]List, error) {
+	// Ensure we're authenticated
+	if !s.IsAuthenticated() {
+		return nil, fmt.Errorf("not authenticated with RTM")
+	}
+
 	params := url.Values{}
 	params.Set("method", "rtm.lists.getList")
-	
+
 	type listResponse struct {
 		Response
 		Lists struct {
 			List []List `xml:"list"`
 		} `xml:"lists"`
 	}
-	
+
 	var resp listResponse
 	if err := s.client.doRequest(params, &resp); err != nil {
 		return nil, fmt.Errorf("error getting lists: %w", err)
 	}
-	
+
 	return resp.Lists.List, nil
 }
 
-// GetTasks retrieves tasks based on the provided filter
+// GetTasks retrieves tasks based on the provided filter.
 func (s *Service) GetTasks(filter string) (*TasksResponse, error) {
+	// Ensure we're authenticated
+	if !s.IsAuthenticated() {
+		return nil, fmt.Errorf("not authenticated with RTM")
+	}
+
 	params := url.Values{}
 	params.Set("method", "rtm.tasks.getList")
-	
+
+	// Add filter if provided
 	if filter != "" {
 		params.Set("filter", filter)
 	}
-	
+
+	// Add last_sync if we have a previous sync time
+	s.mu.RLock()
+	if !s.lastSyncTime.IsZero() {
+		params.Set("last_sync", s.lastSyncTime.Format(time.RFC3339))
+	}
+	s.mu.RUnlock()
+
 	var resp TasksResponse
 	if err := s.client.doRequest(params, &resp); err != nil {
 		return nil, fmt.Errorf("error getting tasks: %w", err)
 	}
-	
+
+	// Update last sync time
+	s.mu.Lock()
+	s.lastSyncTime = time.Now()
+	s.mu.Unlock()
+
 	return &resp, nil
 }
 
-// CreateTimeline creates a new timeline for operations that support undo
+// CreateTimeline creates a new timeline for operations that support undo.
 func (s *Service) CreateTimeline() (string, error) {
+	// Ensure we're authenticated
+	if !s.IsAuthenticated() {
+		return "", fmt.Errorf("not authenticated with RTM")
+	}
+
 	params := url.Values{}
 	params.Set("method", "rtm.timelines.create")
-	
+
 	var resp TimelineResponse
 	if err := s.client.doRequest(params, &resp); err != nil {
 		return "", fmt.Errorf("error creating timeline: %w", err)
 	}
-	
+
 	return resp.Timeline, nil
 }
 
-// AddTask adds a new task
+// AddTask adds a new task.
 func (s *Service) AddTask(timeline, listID, name, dueDate string) error {
+	// Ensure we're authenticated
+	if !s.IsAuthenticated() {
+		return fmt.Errorf("not authenticated with RTM")
+	}
+
 	params := url.Values{}
 	params.Set("method", "rtm.tasks.add")
 	params.Set("timeline", timeline)
 	params.Set("list_id", listID)
 	params.Set("name", name)
-	
+
 	if dueDate != "" {
 		params.Set("due", dueDate)
 	}
-	
+
 	var resp Response
 	if err := s.client.doRequest(params, &resp); err != nil {
 		return fmt.Errorf("error adding task: %w", err)
 	}
-	
+
 	return nil
 }
 
-// CompleteTask marks a task as completed
+// CompleteTask marks a task as completed.
 func (s *Service) CompleteTask(timeline, listID, taskseriesID, taskID string) error {
+	// Ensure we're authenticated
+	if !s.IsAuthenticated() {
+		return fmt.Errorf("not authenticated with RTM")
+	}
+
 	params := url.Values{}
 	params.Set("method", "rtm.tasks.complete")
 	params.Set("timeline", timeline)
 	params.Set("list_id", listID)
 	params.Set("taskseries_id", taskseriesID)
 	params.Set("task_id", taskID)
-	
+
 	var resp Response
 	if err := s.client.doRequest(params, &resp); err != nil {
 		return fmt.Errorf("error completing task: %w", err)
 	}
-	
+
 	return nil
 }
 
-// AddTags adds tags to a task
+// UncompleteTask marks a completed task as incomplete.
+func (s *Service) UncompleteTask(timeline, listID, taskseriesID, taskID string) error {
+	// Ensure we're authenticated
+	if !s.IsAuthenticated() {
+		return fmt.Errorf("not authenticated with RTM")
+	}
+
+	params := url.Values{}
+	params.Set("method", "rtm.tasks.uncomplete")
+	params.Set("timeline", timeline)
+	params.Set("list_id", listID)
+	params.Set("taskseries_id", taskseriesID)
+	params.Set("task_id", taskID)
+
+	var resp Response
+	if err := s.client.doRequest(params, &resp); err != nil {
+		return fmt.Errorf("error uncompleting task: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteTask deletes a task.
+func (s *Service) DeleteTask(timeline, listID, taskseriesID, taskID string) error {
+	// Ensure we're authenticated
+	if !s.IsAuthenticated() {
+		return fmt.Errorf("not authenticated with RTM")
+	}
+
+	params := url.Values{}
+	params.Set("method", "rtm.tasks.delete")
+	params.Set("timeline", timeline)
+	params.Set("list_id", listID)
+	params.Set("taskseries_id", taskseriesID)
+	params.Set("task_id", taskID)
+
+	var resp Response
+	if err := s.client.doRequest(params, &resp); err != nil {
+		return fmt.Errorf("error deleting task: %w", err)
+	}
+
+	return nil
+}
+
+// AddTags adds tags to a task.
 func (s *Service) AddTags(timeline, listID, taskseriesID, taskID string, tags []string) error {
+	// Ensure we're authenticated
+	if !s.IsAuthenticated() {
+		return fmt.Errorf("not authenticated with RTM")
+	}
+
 	params := url.Values{}
 	params.Set("method", "rtm.tasks.addTags")
 	params.Set("timeline", timeline)
@@ -255,34 +309,147 @@ func (s *Service) AddTags(timeline, listID, taskseriesID, taskID string, tags []
 	params.Set("taskseries_id", taskseriesID)
 	params.Set("task_id", taskID)
 	params.Set("tags", combineTagsForAPI(tags))
-	
+
 	var resp Response
 	if err := s.client.doRequest(params, &resp); err != nil {
 		return fmt.Errorf("error adding tags: %w", err)
 	}
-	
+
 	return nil
 }
 
-// combineTagsForAPI combines tags for the API
+// RemoveTags removes tags from a task.
+func (s *Service) RemoveTags(timeline, listID, taskseriesID, taskID string, tags []string) error {
+	// Ensure we're authenticated
+	if !s.IsAuthenticated() {
+		return fmt.Errorf("not authenticated with RTM")
+	}
+
+	params := url.Values{}
+	params.Set("method", "rtm.tasks.removeTags")
+	params.Set("timeline", timeline)
+	params.Set("list_id", listID)
+	params.Set("taskseries_id", taskseriesID)
+	params.Set("task_id", taskID)
+	params.Set("tags", combineTagsForAPI(tags))
+
+	var resp Response
+	if err := s.client.doRequest(params, &resp); err != nil {
+		return fmt.Errorf("error removing tags: %w", err)
+	}
+
+	return nil
+}
+
+// SetDueDate sets or updates a task's due date.
+func (s *Service) SetDueDate(timeline, listID, taskseriesID, taskID, dueDate string, hasDueTime bool) error {
+	// Ensure we're authenticated
+	if !s.IsAuthenticated() {
+		return fmt.Errorf("not authenticated with RTM")
+	}
+
+	params := url.Values{}
+	params.Set("method", "rtm.tasks.setDueDate")
+	params.Set("timeline", timeline)
+	params.Set("list_id", listID)
+	params.Set("taskseries_id", taskseriesID)
+	params.Set("task_id", taskID)
+
+	if dueDate == "" {
+		// Clear due date
+		params.Set("due", "")
+	} else {
+		params.Set("due", dueDate)
+		if hasDueTime {
+			params.Set("has_due_time", "1")
+		} else {
+			params.Set("has_due_time", "0")
+		}
+	}
+
+	var resp Response
+	if err := s.client.doRequest(params, &resp); err != nil {
+		return fmt.Errorf("error setting due date: %w", err)
+	}
+
+	return nil
+}
+
+// SetPriority sets a task's priority.
+func (s *Service) SetPriority(timeline, listID, taskseriesID, taskID, priority string) error {
+	// Ensure we're authenticated
+	if !s.IsAuthenticated() {
+		return fmt.Errorf("not authenticated with RTM")
+	}
+
+	params := url.Values{}
+	params.Set("method", "rtm.tasks.setPriority")
+	params.Set("timeline", timeline)
+	params.Set("list_id", listID)
+	params.Set("taskseries_id", taskseriesID)
+	params.Set("task_id", taskID)
+	params.Set("priority", priority)
+
+	var resp Response
+	if err := s.client.doRequest(params, &resp); err != nil {
+		return fmt.Errorf("error setting priority: %w", err)
+	}
+
+	return nil
+}
+
+// SetName renames a task.
+func (s *Service) SetName(timeline, listID, taskseriesID, taskID, name string) error {
+	// Ensure we're authenticated
+	if !s.IsAuthenticated() {
+		return fmt.Errorf("not authenticated with RTM")
+	}
+
+	params := url.Values{}
+	params.Set("method", "rtm.tasks.setName")
+	params.Set("timeline", timeline)
+	params.Set("list_id", listID)
+	params.Set("taskseries_id", taskseriesID)
+	params.Set("task_id", taskID)
+	params.Set("name", name)
+
+	var resp Response
+	if err := s.client.doRequest(params, &resp); err != nil {
+		return fmt.Errorf("error setting name: %w", err)
+	}
+
+	return nil
+}
+
+// AddNote adds a note to a task.
+func (s *Service) AddNote(timeline, listID, taskseriesID, taskID, title, text string) error {
+	// Ensure we're authenticated
+	if !s.IsAuthenticated() {
+		return fmt.Errorf("not authenticated with RTM")
+	}
+
+	params := url.Values{}
+	params.Set("method", "rtm.tasks.notes.add")
+	params.Set("timeline", timeline)
+	params.Set("list_id", listID)
+	params.Set("taskseries_id", taskseriesID)
+	params.Set("task_id", taskID)
+	params.Set("note_title", title)
+	params.Set("note_text", text)
+
+	var resp Response
+	if err := s.client.doRequest(params, &resp); err != nil {
+		return fmt.Errorf("error adding note: %w", err)
+	}
+
+	return nil
+}
+
+// combineTagsForAPI combines tags for the API.
 func combineTagsForAPI(tags []string) string {
+	// URL encode each tag and combine with commas
 	for i, tag := range tags {
-		// Escape commas in tag names
 		tags[i] = url.QueryEscape(tag)
 	}
 	return fmt.Sprintf("\"%s\"", url.QueryEscape(fmt.Sprintf("%s", tags)))
-}
-
-// SaveToken saves the token to disk
-func (s *Service) saveToken(token string) error {
-	return os.WriteFile(s.tokenPath, []byte(token), 0600)
-}
-
-// LoadToken loads the token from disk
-func (s *Service) loadToken() (string, error) {
-	data, err := os.ReadFile(s.tokenPath)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
 }
