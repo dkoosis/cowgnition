@@ -26,6 +26,31 @@ When working with AI on this project:
 4. Update this TODO document after completing each section
 5. Commit changes in logical units with descriptive messages
 
+## Development Workflow
+
+1. Use MCP Inspector for rapid testing:
+   ```
+   mcp dev --command ./cowgnition --args "serve --config configs/config.yaml"
+   ```
+
+2. Monitor logs during development:
+   ```
+   tail -n 20 -F ~/Library/Logs/Claude/mcp*.log
+   ```
+
+3. Test with Claude Desktop:
+   - Create `~/Library/Application Support/Claude/developer_settings.json` with `{"allowDevTools": true}`
+   - Install server via `mcp install --name "RTM" --command ./cowgnition --args "serve --config configs/config.yaml"`
+   - Use Command-Option-Shift-i to open DevTools for debugging
+   - Restart Claude Desktop after configuration changes
+
+4. Debugging cycle:
+   - Make code changes
+   - Run tests (when implemented)
+   - Test with Inspector
+   - Check logs
+   - Verify in Claude Desktop
+
 ## Implementation Roadmap
 
 ### 1. Core MCP Server Framework
@@ -51,6 +76,34 @@ Let's implement the core MCP server framework following the Model Context Protoc
    - call_tool: Executing tool functionality
 
 Focus on creating a clean, modular implementation with well-defined interfaces.
+```
+
+### 1a. MCP Development Tooling & Quality Assurance
+
+```
+Set up and integrate MCP debugging and quality assurance tools to enhance development workflow:
+
+1. Add structured logging with Zap:
+   - Replace standard log package with Zap
+   - Implement structured log format with timestamps, request IDs, and severity levels
+   - Create custom logging middleware for HTTP handlers
+   - Add MCP protocol notification logging
+
+2. Implement Inspector integration for testing:
+   - Create test script for MCP Inspector
+   - Document Inspector usage workflow in README.md
+   - Add common test cases for RTM functionality
+
+3. Improve error diagnostics:
+   - Enhance error context in API interactions
+   - Implement more robust error recovery in HTTP handlers
+   - Add diagnostic logging for initialization and auth flows
+
+4. Set up Claude Desktop development environment:
+   - Create developer_settings.json with DevTools enabled
+   - Document log file locations and monitoring commands
+   - Add development workflow section to README
+   - Establish working directory best practices
 ```
 
 ### 2. RTM Authentication Flow
@@ -110,7 +163,32 @@ Implement search and filter tools using RTM's query syntax. Support complex filt
 ### 11. Testing and Documentation
 
 ```
-Write comprehensive tests for the implementation. This includes unit tests for individual components and integration tests for the full server. Update the documentation with complete usage examples.
+Implement comprehensive testing at multiple levels:
+
+1. Unit testing:
+   - Create unit tests for core components using Go's testing package
+   - Implement mocks for RTM API client
+   - Test error handling and edge cases
+   - Verify authentication flows
+   - Test resource and tool handlers independently
+
+2. Integration testing:
+   - Create end-to-end tests using actual MCP protocol
+   - Test server initialization and shutdown
+   - Verify protocol compliance
+   - Test with mock RTM responses
+
+3. MCP Inspector testing:
+   - Create test scripts for Inspector
+   - Document manual testing procedures
+   - Create test cases covering key functionality
+
+4. Documentation:
+   - Update README with complete usage examples
+   - Create troubleshooting guide
+   - Document authentication workflow with screenshots
+   - Provide example prompts for Claude to use with RTM
+   - Document API status and limitations
 ```
 
 ### 12. Client Integration Support
@@ -122,10 +200,36 @@ Add specific support for Claude Desktop integration. This includes installation 
 ### 13. Security and Performance Optimization
 
 ```
-Review the implementation for security vulnerabilities and performance bottlenecks. Implement rate limiting, caching, and error resilience. Add logging for debugging and telemetry.
+Enhance security, reliability, and performance:
+
+1. Security enhancements:
+   - Implement token encryption at rest
+   - Add request validation and sanitization
+   - Implement proper HTTP security headers
+   - Sanitize log output to prevent sensitive data exposure
+   - Add rate limiting for authentication attempts
+
+2. Performance optimization:
+   - Implement response caching for resources
+   - Add conditional requests with ETags
+   - Optimize large response handling
+   - Implement connection pooling for RTM API
+   - Profile and optimize hot code paths
+
+3. Reliability improvements:
+   - Add circuit breaker for RTM API calls
+   - Implement graceful degradation for non-critical features
+   - Add automatic recovery for transient errors
+   - Implement proper timeout handling
+
+4. Monitoring and telemetry:
+   - Add structured logging with correlation IDs
+   - Implement metrics collection (requests, errors, latency)
+   - Create health check endpoint
+   - Add diagnostic tools for debugging
+   - Implement OpenTelemetry integration
 ```
 
 ## Completed Tasks
 
 *Move completed tasks here with date of completion*
-

@@ -1,9 +1,10 @@
-# CowGnition
-<img src="/assets/cowgnition_logo.png" width="100" height="100">
+# CowGnition 🐄 🧠
+
+![CowGnition Logo](/assets/cowgnition_logo.png)
 
 ## Overview
 
-CowGnition is an MCP (Model Context Protocol) server implementation written in Go that connects Claude Desktop and other MCP clients to the Remember The Milk (RTM) task management service. This server enables AI assistants to interact with your tasks, lists, and reminders through a secure, standardized interface.
+CowGnition brings Remember The Milk to your Claude Desktop. This MCP (Model Context Protocol) server connects Claude directly to your RTM tasks, letting your AI assistant help manage your to-dos with natural conversation. For RTM enthusiasts who've trusted it for years, CowGnition helps bridge your trusted task system with modern AI assistance.
 
 ## Quick Links
 
@@ -39,16 +40,16 @@ make build
 
 For detailed build instructions and development environment setup, see the [Development section](#development) below or the [development practices guide](GO_PRACTICES.md).
 
-## Quickstart
+## Quickstart ⚡
 
-### 1. Get Remember The Milk API credentials
+### 1. Get Your RTM API Credentials
 
-- Register for an API key at [rememberthemilk.com/services/api/keys.rtm](https://www.rememberthemilk.com/services/api/keys.rtm)
-- You'll receive an API key and shared secret
+- Grab an API key from [rememberthemilk.com/services/api/keys.rtm](https://www.rememberthemilk.com/services/api/keys.rtm)
+- RTM will provide you with an API key and shared secret (treat these like passwords!)
 
-### 2. Configure the server
+### 2. Create Your Config
 
-Create a `config.yaml` file:
+Whip up a `config.yaml` file with your credentials:
 
 ```yaml
 server:
@@ -63,23 +64,27 @@ auth:
   token_path: "~/.config/cowgnition/tokens"
 ```
 
-### 3. Run the server
+### 3. Fire It Up
 
 ```bash
 ./cowgnition serve --config configs/config.yaml
 ```
 
-### 4. Install in Claude Desktop
+### 4. Connect to Claude
+
+Add CowGnition to Claude Desktop:
 
 ```bash
 mcp install --name "Remember The Milk" --command cowgnition --args "serve --config configs/config.yaml"
 ```
 
-Or use the development mode to test:
+Want to test before committing? Try dev mode:
 
 ```bash
 mcp dev --command ./cowgnition --args "serve --config configs/config.yaml"
 ```
+
+Once connected, just start chatting with Claude about your tasks!
 
 ## What Can CowGnition Do?
 
@@ -93,13 +98,15 @@ With CowGnition installed in Claude Desktop, you can interact with your Remember
 
 ## Authentication Flow
 
-The CowGnition server handles the RTM authentication flow:
+Getting connected is straightforward – a simple handshake between CowGnition and your RTM account:
 
-1. When first accessing RTM resources, Claude will prompt the user to authenticate
-2. The server will generate an authentication URL for the user to visit
-3. After authorizing access on the Remember The Milk website, the user will receive a frob
-4. The user enters this frob in Claude, and the server exchanges it for an auth token
-5. The server securely stores the token for future sessions
+1. Ask Claude to check your tasks, and it'll notice you need to authenticate
+2. Claude provides a special RTM authorization link
+3. Click the link, tell RTM "yes, I trust CowGnition" and you'll get a special code (frob)
+4. Tell Claude this code and you're connected
+5. CowGnition securely stores your connection for future chats
+
+Your credentials stay secure – CowGnition just gets the permission it needs to be helpful.
 
 ## Development
 
@@ -155,22 +162,24 @@ cowgnition/
 
 For a more detailed explanation of the project organization, see the [Project Organization](docs/PROJECT_ORGANIZATION.md) document.
 
-## Protocol Implementation
+## Under the Hood 🔧
 
-CowGnition implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) to enable secure communication between Claude and Remember The Milk. For information about how MCP works, see the [MCP documentation in this repo](https://github.com/modelcontextprotocol/python-sdk/tree/main).
+CowGnition uses the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) to create the seamless connection between Claude and RTM. If you're curious about the technical details, check out the [MCP documentation](https://github.com/modelcontextprotocol/python-sdk/tree/main).
 
-### MCP Resources
+### Available Resources
 
-CowGnition exposes the following MCP resources:
+These are the data channels Claude can tap into:
 
-- `auth://rtm`: Authentication for Remember The Milk
-- `tasks://all`: All tasks across all lists
-- `tasks://today`: Tasks due today
-- `tasks://tomorrow`: Tasks due tomorrow
-- `tasks://week`: Tasks due within the next 7 days
-- `tasks://list/{list_id}`: Tasks within a specific list
-- `lists://all`: All task lists
-- `tags://all`: All tags used in the system
+- `auth://rtm`: The gateway to your RTM account
+- `tasks://all`: Your complete task collection
+- `tasks://today`: Just what's due today (the "now" list)
+- `tasks://tomorrow`: Tomorrow's responsibilities  
+- `tasks://week`: Your week at a glance
+- `tasks://list/{list_id}`: Tasks from a specific list (like "Shopping" or "Work")
+- `lists://all`: All your carefully curated lists
+- `tags://all`: Your organizational tags
+
+Claude uses these behind the scenes to fetch exactly what you're asking about.
 
 ## MCP Tools
 
@@ -190,20 +199,22 @@ CowGnition implements the following MCP tools:
 - `remove_tags`: Remove tags from a task
 - `add_note`: Add a note to a task
 
-## API Documentation
+## For the Technically Curious 🔍
 
-CowGnition integrates with the Remember The Milk API. For detailed information on the API endpoints and authentication flow, see:
+CowGnition connects with the same RTM API that powers all your favorite RTM clients. If you want to peek behind the curtain:
 
 - [Authentication Process](https://docs.google.com/document/d/drive:///1slmdAa8yBZfDwpSP0ZQlsn1cB11BCpULg_50mPzsjEM?fields=name%2Cowners%2CcreatedTime%2CmodifiedTime%2CmimeType%2CwebViewLink%2Ccapabilities%2FcanDownload%2Csize&includeContent=True#authentication)
-- [RTM Tasks Structure](https://docs.google.com/document/d/drive:///1slmdAa8yBZfDwpSP0ZQlsn1cB11BCpULg_50mPzsjEM?fields=name%2Cowners%2CcreatedTime%2CmodifiedTime%2CmimeType%2CwebViewLink%2Ccapabilities%2FcanDownload%2Csize&includeContent=True#tasks)
+- [Tasks Structure](https://docs.google.com/document/d/drive:///1slmdAa8yBZfDwpSP0ZQlsn1cB11BCpULg_50mPzsjEM?fields=name%2Cowners%2CcreatedTime%2CmodifiedTime%2CmimeType%2CwebViewLink%2Ccapabilities%2FcanDownload%2Csize&includeContent=True#tasks)
 - [Response Formats](https://docs.google.com/document/d/drive:///1slmdAa8yBZfDwpSP0ZQlsn1cB11BCpULg_50mPzsjEM?fields=name%2Cowners%2CcreatedTime%2CmodifiedTime%2CmimeType%2CwebViewLink%2Ccapabilities%2FcanDownload%2Csize&includeContent=True#response-formats)
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Acknowledgements
+## Thank You 💌
 
-- [Model Context Protocol](https://modelcontextprotocol.io/) - For establishing the protocol standard
-- [Remember The Milk API](https://www.rememberthemilk.com/services/api/) - For their task management platform
-- The open source community for various libraries and tools that made this project possible
+- Bob and Emily at [Remember The Milk](https://www.rememberthemilk.com/) for creating a thoughtful task management system that many of us have relied on for over a decade
+- [Anthropic](https://www.anthropic.com/) for the Model Context Protocol that makes this integration possible
+- The open source Go community for all the tools that helped build CowGnition
+
+Moo-ve your tasks forward with CowGnition and Claude 🐄 🧠
