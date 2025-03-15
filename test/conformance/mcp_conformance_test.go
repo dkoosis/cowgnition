@@ -37,7 +37,7 @@ func TestMCPInitializeEndpoint(t *testing.T) {
 	defer rtmMock.Close()
 
 	// Override RTM API endpoint in client
-	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.URL); err != nil {
+	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.BaseURL); err != nil {
 		t.Fatalf("Failed to set environment variable: %v", err)
 	}
 	defer os.Unsetenv("RTM_API_ENDPOINT")
@@ -212,7 +212,7 @@ func TestMCPResourceEndpoints(t *testing.T) {
 	defer rtmMock.Close()
 
 	// Override RTM API endpoint in client
-	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.URL); err != nil {
+	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.BaseURL); err != nil {
 		t.Fatalf("Failed to set environment variable: %v", err)
 	}
 	defer os.Unsetenv("RTM_API_ENDPOINT")
@@ -389,7 +389,7 @@ func TestMCPToolEndpoints(t *testing.T) {
 	defer rtmMock.Close()
 
 	// Override RTM API endpoint in client
-	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.URL); err != nil {
+	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.BaseURL); err != nil {
 		t.Fatalf("Failed to set environment variable: %v", err)
 	}
 	defer os.Unsetenv("RTM_API_ENDPOINT")
@@ -546,7 +546,7 @@ func TestReadResourceAuthenticated(t *testing.T) {
 	rtmMock.AddResponse("rtm.tasks.getList", `<rsp stat="ok"><tasks><list id="1"><taskseries id="1" created="2025-03-15T12:00:00Z" modified="2025-03-15T12:00:00Z" name="Test Task" source="api"><tags /><participants /><notes /><task id="1" due="" has_due_time="0" added="2025-03-15T12:00:00Z" completed="" deleted="" priority="N" postponed="0" estimate="" /></taskseries></list></tasks></rsp>`)
 
 	// Override RTM API endpoint
-	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.URL); err != nil {
+	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.BaseURL); err != nil {
 		t.Fatalf("Failed to set environment variable: %v", err)
 	}
 	defer os.Unsetenv("RTM_API_ENDPOINT")
@@ -566,100 +566,4 @@ func TestReadResourceAuthenticated(t *testing.T) {
 	// 1. Running the authentication flow
 	// 2. Setting up a mock token in the token manager
 	// 3. Testing resource endpoints like lists://all and tasks://today
-}
-
-// validateMCPResource validates the structure of a resource definition from list_resources
-func validateMCPResource(t *testing.T, resource interface{}) {
-	t.Helper()
-
-	resourceObj, ok := resource.(map[string]interface{})
-	if !ok {
-		t.Errorf("Resource is not an object: %v", resource)
-		return
-	}
-
-	// Check required fields
-	requiredFields := []string{"name", "description"}
-	for _, field := range requiredFields {
-		if resourceObj[field] == nil {
-			t.Errorf("Resource missing required field: %s", field)
-		}
-	}
-
-	// Check name is a string
-	if _, ok := resourceObj["name"].(string); !ok {
-		t.Errorf("Resource name is not a string: %v", resourceObj["name"])
-	}
-
-	// Check description is a string
-	if _, ok := resourceObj["description"].(string); !ok {
-		t.Errorf("Resource description is not a string: %v", resourceObj["description"])
-	}
-
-	// Check arguments if present
-	if args, ok := resourceObj["arguments"].([]interface{}); ok {
-		for i, arg := range args {
-			argObj, ok := arg.(map[string]interface{})
-			if !ok {
-				t.Errorf("Argument %d is not an object: %v", i, arg)
-				continue
-			}
-
-			// Check required argument fields
-			argFields := []string{"name", "description", "required"}
-			for _, field := range argFields {
-				if argObj[field] == nil {
-					t.Errorf("Argument %d missing required field: %s", i, field)
-				}
-			}
-		}
-	}
-}
-
-// validateMCPTool validates the structure of a tool definition from list_tools
-func validateMCPTool(t *testing.T, tool interface{}) {
-	t.Helper()
-
-	toolObj, ok := tool.(map[string]interface{})
-	if !ok {
-		t.Errorf("Tool is not an object: %v", tool)
-		return
-	}
-
-	// Check required fields
-	requiredFields := []string{"name", "description"}
-	for _, field := range requiredFields {
-		if toolObj[field] == nil {
-			t.Errorf("Tool missing required field: %s", field)
-		}
-	}
-
-	// Check name is a string
-	if _, ok := toolObj["name"].(string); !ok {
-		t.Errorf("Tool name is not a string: %v", toolObj["name"])
-	}
-
-	// Check description is a string
-	if _, ok := toolObj["description"].(string); !ok {
-		t.Errorf("Tool description is not a string: %v", toolObj["description"])
-	}
-
-	// Check arguments if present
-	if args, ok := toolObj["arguments"].([]interface{}); ok {
-		for i, arg := range args {
-			argObj, ok := arg.(map[string]interface{})
-			if !ok {
-				t.Errorf("Argument %d is not an object: %v", i, arg)
-				continue
-			}
-
-			// Check required argument fields
-			argFields := []string{"name", "description", "required"}
-			for _, field := range argFields {
-				if argObj[field] == nil {
-					t.Errorf("Argument %d missing required field: %s", i, field)
-				}
-			}
-		}
-	}
 }

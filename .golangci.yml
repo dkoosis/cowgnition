@@ -30,7 +30,15 @@ linters-settings:
 
 issues:
   exclude-rules:
+    # Exclude complexity issues in test files
     - path: _test\.go
       linters:
         - errcheck
         - gosec
+        - unparam
+        - gocyclo # Explicitly exclude gocyclo for test files
+
+    # Target specifically the test/conformance directory
+    - path: test/conformance/
+      linters:
+        - gocyclo

@@ -5,26 +5,34 @@
 ### 1. Testing Infrastructure and Quality Assurance (CURRENT FOCUS)
 
 #### 1.1 Testing Framework Setup (IN PROGRESS)
+
 ```
 Establish a comprehensive testing framework to ensure server quality:
 1. ✅ Set up structured test directories for unit, integration, and conformance tests
-2. ✅ Create test helpers and utilities for common testing patterns 
+2. ✅ Create test helpers and utilities for common testing patterns
 3. ✅ Implement test fixtures for RTM API responses
 4. Set up GitHub Actions workflow for automated testing
 5. Configure test coverage reporting
 ```
 
 #### 1.2 Code Quality Improvements (NEXT TASK)
+
 ```
 Improve code quality and maintainability:
 1. ✅ Fix linting issues in test code
 2. ✅ Refactor complex test functions to improve maintainability
-3. Run comprehensive test suite with all fixes
-4. Document testing patterns and best practices
-5. Implement additional code quality checks
+3. Fix test failures:
+   - Internal/config: Fix path validation to accept temp directories in tests
+   - Internal/config: Fix parseInt test for partial matches
+   - Internal/rtm: Fix CheckToken test for invalid token detection
+   - Test/conformance: Fix resource endpoint test for nonexistent resources
+4. Run comprehensive test suite with all fixes
+5. Document testing patterns and best practices
+6. Implement additional code quality checks
 ```
 
 #### 1.3 MCP Protocol Conformance Testing
+
 ```
 Implement tests to verify compliance with the MCP specification:
 1. Create test suite verifying all required MCP endpoints
@@ -36,6 +44,7 @@ Implement tests to verify compliance with the MCP specification:
 ```
 
 #### 1.4 RTM API Integration Testing
+
 ```
 Test integration with Remember The Milk API:
 1. Create mock RTM server for testing without real API credentials
@@ -47,6 +56,7 @@ Test integration with Remember The Milk API:
 ```
 
 #### 1.5 Performance and Load Testing
+
 ```
 Verify server performance characteristics:
 1. Set up benchmarking tools for response times
@@ -59,6 +69,7 @@ Verify server performance characteristics:
 ### 2. Build Environment Optimization
 
 #### 2.1 Dependency Management
+
 ```
 Improve dependency management and build process:
 1. Update Go module dependencies
@@ -69,6 +80,7 @@ Improve dependency management and build process:
 ```
 
 #### 2.2 Release Pipeline
+
 ```
 Establish automated release process:
 1. Configure semantic versioning
@@ -79,6 +91,7 @@ Establish automated release process:
 ```
 
 #### 2.3 Development Tooling
+
 ```
 Enhance development experience:
 1. Configure comprehensive linting with golangci-lint
@@ -91,6 +104,7 @@ Enhance development experience:
 ### 3. Task Resources Implementation
 
 #### 3.1 Pagination Implementation
+
 ```
 Implement pagination support for task resources to handle large task lists efficiently:
 1. Add pagination parameters to resource handlers
@@ -101,6 +115,7 @@ Implement pagination support for task resources to handle large task lists effic
 ```
 
 #### 3.2 Advanced Task Filtering
+
 ```
 Enhance task filtering capabilities:
 1. Add priority filtering (high, medium, low)
@@ -111,6 +126,7 @@ Enhance task filtering capabilities:
 ```
 
 #### 3.3 Individual Task View Resource
+
 ```
 Create a detailed view resource for individual tasks:
 1. Implement task://details/{taskseries_id}/{task_id} resource
@@ -121,6 +137,7 @@ Create a detailed view resource for individual tasks:
 ```
 
 #### 3.4 Performance Optimization and Rate Limiting
+
 ```
 Optimize task resources for performance and handle RTM API rate limits:
 1. Implement response caching with appropriate cache invalidation
@@ -133,6 +150,7 @@ Optimize task resources for performance and handle RTM API rate limits:
 ### 4. List Resources Implementation
 
 #### 4.1 Basic List Resources
+
 ```
 Implement basic list resource functionality:
 1. Create lists://all resource with proper formatting
@@ -143,6 +161,7 @@ Implement basic list resource functionality:
 ```
 
 #### 4.2 Smart Lists and List Filtering
+
 ```
 Enhance list resources with smart list support and filtering:
 1. Add detection and special handling for smart lists
@@ -153,6 +172,7 @@ Enhance list resources with smart list support and filtering:
 ```
 
 #### 4.3 List Statistics and Insights
+
 ```
 Add rich statistics and insights to list resources:
 1. Calculate and include completion statistics
@@ -263,7 +283,7 @@ Enhance security, reliability, and performance:
 
 ### 3. Code Quality Improvements (March 15, 2025)
 
-- Fixed linting issues in test code by addressing unused parameters
+- Fixed linting issues in test code by addressing unused parameters and complexity
 - Refactored complex test functions to improve maintainability and reduce cyclomatic complexity
 - Created reusable test helper functions for common patterns
 - Improved test structure with better subtests organization

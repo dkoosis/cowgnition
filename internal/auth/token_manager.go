@@ -106,10 +106,7 @@ func (tm *TokenManager) DisableEncryption() {
 // It uses a derived key from the machine-specific information.
 func (tm *TokenManager) encryptToken(token string) ([]byte, error) {
 	// Get encryption key based on machine-specific information
-	key, err := tm.getDerivedKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting encryption key: %w", err)
-	}
+	key := tm.getDerivedKey()
 
 	// Create a new AES cipher block
 	block, err := aes.NewCipher(key)
@@ -140,10 +137,7 @@ func (tm *TokenManager) encryptToken(token string) ([]byte, error) {
 // decryptToken decrypts a token that was encrypted with encryptToken.
 func (tm *TokenManager) decryptToken(data []byte) (string, error) {
 	// Get the same encryption key used for encryption
-	key, err := tm.getDerivedKey()
-	if err != nil {
-		return "", fmt.Errorf("error getting encryption key: %w", err)
-	}
+	key := tm.getDerivedKey()
 
 	// Create a new AES cipher block
 	block, err := aes.NewCipher(key)
@@ -183,7 +177,7 @@ func (tm *TokenManager) decryptToken(data []byte) (string, error) {
 
 // getDerivedKey generates a 32-byte key derived from machine-specific information.
 // This ensures the token can only be decrypted on the same machine.
-func (tm *TokenManager) getDerivedKey() ([]byte, error) {
+func (tm *TokenManager) getDerivedKey() []byte {
 	// Use a combination of hostname, username, and token path as the key seed
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -203,7 +197,7 @@ func (tm *TokenManager) getDerivedKey() ([]byte, error) {
 
 	// Hash the seed to get a 32-byte key (SHA-256)
 	hash := sha256.Sum256([]byte(seed))
-	return hash[:], nil
+	return hash[:]
 }
 
 // GenerateTokenFilename creates a unique token filename based on the API key.
