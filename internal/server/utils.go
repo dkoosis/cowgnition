@@ -83,7 +83,10 @@ func formatDate(dateStr string) string {
 }
 
 // validateResourceName checks if a resource name is valid.
-// nolint:unused
+//
+// TODO: Determine if validateResourceName is still needed. If not, remove it.
+//
+//lint:ignore U1000 This function is temporarily unused.
 func validateResourceName(name string) bool {
 	validResources := map[string]bool{
 		"auth://rtm":       true,
@@ -109,7 +112,10 @@ func validateResourceName(name string) bool {
 }
 
 // validateToolName checks if a tool name is valid.
-// nolint:unused
+//
+// TODO: Determine if validateToolName is still needed. If not, remove it.
+//
+//lint:ignore U1000 This function is temporarily unused.
 func validateToolName(name string) bool {
 	validTools := map[string]bool{
 		"authenticate":    true,
@@ -129,7 +135,10 @@ func validateToolName(name string) bool {
 
 // extractPathParam extracts a path parameter from a resource name.
 // Example: extractPathParam("tasks://list/123", "tasks://list/") returns "123"
-// nolint:unused
+//
+// TODO: Determine if extractPathParam is still needed. If not, remove it.
+//
+//lint:ignore U1000 This function is temporarily unused.
 func extractPathParam(name, prefix string) string {
 	if len(name) <= len(prefix) {
 		return ""
@@ -138,7 +147,10 @@ func extractPathParam(name, prefix string) string {
 }
 
 // formatTaskPriority returns a human-readable priority string.
-// nolint:unused
+//
+// TODO: Determine if formatTaskPriority is still needed. If not, remove it.
+//
+//lint:ignore U1000 This function is temporarily unused.
 func formatTaskPriority(priority string) string {
 	switch priority {
 	case "1":
@@ -154,7 +166,10 @@ func formatTaskPriority(priority string) string {
 
 // coalesceString returns the first non-empty string from the provided arguments.
 // Useful for handling optional parameters with defaults.
-// nolint:unused
+//
+// TODO: Determine if coalesceString is still needed. If not, remove it.
+//
+//lint:ignore U1000 This function is temporarily unused.
 func coalesceString(values ...string) string {
 	for _, v := range values {
 		if v != "" {
@@ -165,7 +180,10 @@ func coalesceString(values ...string) string {
 }
 
 // formatMarkdownTable formats data as a markdown table.
-// nolint:unused
+//
+// TODO: Determine if formatMarkdownTable is still needed. If not, remove it.
+//
+//lint:ignore U1000 This function is temporarily unused.
 func formatMarkdownTable(headers []string, rows [][]string) string {
 	if len(headers) == 0 || len(rows) == 0 {
 		return ""

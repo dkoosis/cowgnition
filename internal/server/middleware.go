@@ -49,7 +49,10 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 }
 
 // requestIDMiddleware adds a unique request ID to each request.
-// nolint:unused
+//
+// TODO: Determine if requestIDMiddleware is still needed. If not, remove it.
+//
+//lint:ignore U1000 This function is temporarily unused.
 func requestIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Generate a request ID (in a production system, use a proper UUID)

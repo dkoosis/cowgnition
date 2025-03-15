@@ -53,6 +53,13 @@ Test integration with Remember The Milk API:
 4. Test list operations and pagination handling
 5. Test all supported RTM API operations
 6. Validate error handling for API rate limits and failures
+*   server/utils.go: Determine if `validateResourceName` is still needed. If not, remove it.
+*   server/utils.go: Determine if `validateToolName` is still needed. If not, remove it.
+*   server/utils.go: Determine if `extractPathParam` is still needed. If not, remove it.
+*    server/utils.go: Determine if `formatTaskPriority` is still needed. If not, remove it.
+*    server/utils.go: Determine if `coalesceString` is still needed. If not, remove it.
+*    server/utils.go: Determine if `formatMarkdownTable` is still needed. If not, remove it.
+*   server/middleware.go: Determine if `requestIDMiddleware` is still needed.  If not, remove it.
 ```
 
 #### 1.5 Performance and Load Testing

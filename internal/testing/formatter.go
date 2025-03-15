@@ -1,4 +1,3 @@
-// Package testing provides utilities for enhancing test output and execution.
 package testing
 
 import (
@@ -7,180 +6,155 @@ import (
 	"testing"
 )
 
-// Colors for terminal output
+// ANSI escape codes for colors and text styles.
 const (
-	Reset   = "\033[0m"
-	Bold    = "\033[1m"
-	Red     = "\033[31m"
-	Green   = "\033[32m"
-	Yellow  = "\033[33m"
-	Blue    = "\033[34m"
-	Magenta = "\033[35m"
-	Cyan    = "\033[36m"
-	Gray    = "\033[37m"
+	Reset  = "\033[0m"
+	Bold   = "\033[1m"
+	Red    = "\033[31m"
+	Green  = "\033[32m"
+	Yellow = "\033[33m"
+	Blue   = "\033[34m"
+	Cyan   = "\033[36m"
 )
 
-// SectionDivider prints a section divider to visually separate test sections
-func SectionDivider(name string) {
+// SectionDivider prints a formatted section divider.
+func SectionDivider(t *testing.T, name string) {
 	width := 80
 	nameLen := len(name)
 	padding := width - nameLen - 4 // 4 for " [ " and " ] "
-	
+
 	if padding < 0 {
 		padding = 0
 	}
-	
+
 	leftPad := padding / 2
 	rightPad := padding - leftPad
-	
-	fmt.Printf("\n%s%s%s [ %s%s%s ] %s%s%s\n\n", 
-		Bold, Cyan, strings.Repeat("=", leftPad), 
+
+	t.Logf("\n%s%s%s [ %s%s%s ] %s%s%s\n",
+		Bold, Cyan, strings.Repeat("=", leftPad),
 		Yellow, name, Cyan,
 		strings.Repeat("=", rightPad), Reset, Bold)
 }
 
-// SuccessMessage formats a success message with green color
-func SuccessMessage(format string, args ...interface{}) string {
-	return fmt.Sprintf("%s%s%s%s", Green, Bold, fmt.Sprintf(format, args...), Reset)
-}
-
-// ErrorMessage formats an error message with red color
-func ErrorMessage(format string, args ...interface{}) string {
-	return fmt.Sprintf("%s%s%s%s", Red, Bold, fmt.Sprintf(format, args...), Reset)
-}
-
-// WarningMessage formats a warning message with yellow color
-func WarningMessage(format string, args ...interface{}) string {
-	return fmt.Sprintf("%s%s%s%s", Yellow, Bold, fmt.Sprintf(format, args...), Reset)
-}
-
-// InfoMessage formats an info message with blue color
-func InfoMessage(format string, args ...interface{}) string {
-	return fmt.Sprintf("%s%s%s", Blue, fmt.Sprintf(format, args...), Reset)
-}
-
-// TestResult represents the result of a test
+// TestResult stores information about a single test's outcome.
 type TestResult struct {
 	Name    string
 	Success bool
-	Message string
+	Message string // Used for detailed error messages, including panics.
 }
 
-// TestRunner manages the execution and reporting of tests
+// TestRunner manages test execution and reporting.
 type TestRunner struct {
-	t        *testing.T
-	results  []TestResult
-	testName string
+	t       *testing.T
+	results []TestResult
 }
 
-// NewTestRunner creates a new test runner
-func NewTestRunner(t *testing.T, testName string) *TestRunner {
-	SectionDivider(testName)
+// NewTestRunner creates a new TestRunner instance.
+func NewTestRunner(t *testing.T) *TestRunner {
 	return &TestRunner{
-		t:        t,
-		results:  []TestResult{},
-		testName: testName,
+		t:       t,
+		results: []TestResult{},
 	}
 }
 
-// Run runs a sub-test and records the result
+// Run executes a sub-test and records the result.
 func (r *TestRunner) Run(name string, fn func(t *testing.T)) {
 	r.t.Run(name, func(t *testing.T) {
-		fmt.Printf("%s▶ %s%s: ", Bold, name, Reset)
-		
 		success := true
 		var message string
-		
-		// This is a simple way to capture test failures
-		// In a complete implementation, you might use t.Cleanup() 
-		// with a more robust capture mechanism
-		originalFailNow := t.FailNow
-		t.FailNow = func() {
-			success = false
-			message = "Test failed"
-			originalFailNow()
-		}
-		
-		fn(t)
-		
-		if success {
-			fmt.Printf("%s\n", SuccessMessage("PASS"))
-		} else {
-			fmt.Printf("%s\n", ErrorMessage("FAIL"))
-		}
-		
-		r.results = append(r.results, TestResult{
-			Name:    name,
-			Success: success,
-			Message: message,
+
+		// Use t.Cleanup for robust failure handling (including panics).
+		t.Cleanup(func() {
+			if r := recover(); r != nil {
+				success = false
+				message = fmt.Sprintf("Panic: %v", r)
+				t.Errorf("Test panicked: %v", r) // Log the panic.
+			}
+
+			if t.Failed() {
+				success = false
+				// If t.Errorf was called, the message is already in the output.
+			}
+
+			r.results = append(r.results, TestResult{
+				Name:    t.Name(), // Full test name.
+				Success: success,
+				Message: message,
+			})
 		})
+
+		fn(t) // Execute the actual test function.
 	})
 }
 
-// Summary prints a summary of all test results
+// Summary prints a summary of the test run.
 func (r *TestRunner) Summary() {
 	passed := 0
+	failedTests := []TestResult{}
+
 	for _, result := range r.results {
 		if result.Success {
 			passed++
+		} else {
+			failedTests = append(failedTests, result)
 		}
 	}
-	
-	fmt.Printf("\n%s%s Test Summary: %d/%d passed %s\n\n", 
-		Bold, 
-		passed == len(r.results) ? Green : Red,
+
+	r.t.Logf("\n%s%sTest Summary: %d/%d passed%s\n",
+		Bold,
+		func() string {
+			if passed == len(r.results) {
+				return Green
+			}
+			return Red
+		}(), // Added semicolon
 		passed, len(r.results),
 		Reset)
-	
-	if passed != len(r.results) {
-		fmt.Printf("%sFailed tests:%s\n", Bold, Reset)
-		for _, result := range r.results {
-			if !result.Success {
-				fmt.Printf("  - %s: %s\n", result.Name, result.Message)
+
+	if len(failedTests) > 0 {
+		r.t.Logf("%sFailed tests:%s\n", Bold, Reset)
+		for _, result := range failedTests {
+			r.t.Logf("  - %s%s%s\n", Red, result.Name, Reset) // Color failed test names.
+			if result.Message != "" {
+				r.t.Logf("    %s%s%s\n", Red, result.Message, Reset) // And any panic messages
 			}
 		}
-		fmt.Println()
+		r.t.Fail() // Mark the overall test suite as failed.
 	}
 }
 
-// Helper functions for common assertions
+// Helper functions (assertions)
 
-// AssertEquals checks if expected equals actual
 func AssertEquals(t *testing.T, expected, actual interface{}, message string) {
 	if expected != actual {
 		t.Errorf("%s\nExpected: %v\nActual:   %v", message, expected, actual)
 	}
 }
 
-// AssertTrue checks if condition is true
 func AssertTrue(t *testing.T, condition bool, message string) {
 	if !condition {
 		t.Errorf("%s\nExpected condition to be true", message)
 	}
 }
 
-// AssertFalse checks if condition is false
 func AssertFalse(t *testing.T, condition bool, message string) {
 	if condition {
 		t.Errorf("%s\nExpected condition to be false", message)
 	}
 }
 
-// AssertNil checks if value is nil
 func AssertNil(t *testing.T, value interface{}, message string) {
 	if value != nil {
 		t.Errorf("%s\nExpected nil, got: %v", message, value)
 	}
 }
 
-// AssertNotNil checks if value is not nil
 func AssertNotNil(t *testing.T, value interface{}, message string) {
 	if value == nil {
 		t.Errorf("%s\nExpected non-nil value", message)
 	}
 }
 
-// AssertContains checks if string contains substring
 func AssertContains(t *testing.T, str, substr string, message string) {
 	if !strings.Contains(str, substr) {
 		t.Errorf("%s\nExpected string to contain: %q\nString: %q", message, substr, str)
