@@ -1,37 +1,37 @@
 package rtm
 
 import (
-	"encoding/xml"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 )
 
 func TestGenerateSignature(t *testing.T) {
 	client := NewClient("api_key_123", "shared_secret_abc")
-	
+
 	// Test case 1: Basic parameters
 	params := url.Values{}
 	params.Set("method", "rtm.test.echo")
 	params.Set("api_key", "api_key_123")
 	params.Set("name", "value")
-	
+
 	expected := "6ad44c5a5e59978a5055c26fb7c6e6f0" // Pre-calculated expected MD5
 	actual := client.generateSignature(params)
-	
+
 	if actual != expected {
 		t.Errorf("generateSignature() = %v, want %v", actual, expected)
 	}
-	
+
 	// Test case 2: Different order of parameters should yield same signature
 	params = url.Values{}
 	params.Set("name", "value")
 	params.Set("api_key", "api_key_123")
 	params.Set("method", "rtm.test.echo")
-	
+
 	actual = client.generateSignature(params)
-	
+
 	if actual != expected {
 		t.Errorf("generateSignature() with reordered params = %v, want %v", actual, expected)
 	}
@@ -39,18 +39,18 @@ func TestGenerateSignature(t *testing.T) {
 
 func TestGetAuthURL(t *testing.T) {
 	client := NewClient("api_key_123", "shared_secret_abc")
-	
+
 	url := client.GetAuthURL("test_frob", "delete")
-	
+
 	// Check that URL contains the expected parts
 	if url == "" {
 		t.Error("GetAuthURL() returned empty string")
 	}
-	
-	if url[:len(authURL)] != authURL {
+
+	if !strings.HasPrefix(url, authURL) {
 		t.Errorf("GetAuthURL() should start with %s, got %s", authURL, url)
 	}
-	
+
 	// Check that params are included
 	requiredParams := []string{
 		"api_key=api_key_123",
@@ -58,9 +58,9 @@ func TestGetAuthURL(t *testing.T) {
 		"frob=test_frob",
 		"api_sig=",
 	}
-	
+
 	for _, param := range requiredParams {
-		if !contains(url, param) {
+		if !strings.Contains(url, param) {
 			t.Errorf("GetAuthURL() should contain %s, got %s", param, url)
 		}
 	}
@@ -71,43 +71,45 @@ func setupMockServer(t *testing.T, expectedMethod string, response string) *http
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Errorf("Expected GET request, got %s", r.Method)
+			return // Add return to stop processing on error
 		}
-		
+
 		query := r.URL.Query()
 		method := query.Get("method")
 		if method != expectedMethod {
 			t.Errorf("Expected method %s, got %s", expectedMethod, method)
+			return // Add return to stop processing on error
 		}
-		
+
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(response))
+		_, err := w.Write([]byte(response)) // Check for write errors
+		if err != nil {
+			t.Fatalf("Error writing response: %v", err)
+		}
 	}))
 }
 
 func TestGetFrob(t *testing.T) {
 	// Setup mock server
 	mockResp := `<rsp stat="ok">
-		<frob>test_frob_123</frob>
-	</rsp>`
+        <frob>test_frob_123</frob>
+    </rsp>`
 	server := setupMockServer(t, "rtm.auth.getFrob", mockResp)
 	defer server.Close()
-	
+
 	// Create client with baseURL pointing to mock server
+	// Pass server.URL directly to the client.
 	client := NewClient("api_key_123", "shared_secret_abc")
-	
-	// Replace baseURL with mock server URL for testing
-	baseURLOrig := baseURL
-	defer func() { baseURL = baseURLOrig }()
-	baseURL = server.URL
-	
+	client.baseURL = server.URL // Directly set the client's baseURL
+
 	// Test GetFrob
 	frob, err := client.GetFrob()
-	
+
 	if err != nil {
 		t.Errorf("GetFrob() returned unexpected error: %v", err)
 	}
-	
+
 	if frob != "test_frob_123" {
 		t.Errorf("GetFrob() = %v, want %v", frob, "test_frob_123")
 	}
@@ -116,34 +118,30 @@ func TestGetFrob(t *testing.T) {
 func TestGetToken(t *testing.T) {
 	// Setup mock server
 	mockResp := `<rsp stat="ok">
-		<auth>
-			<token>test_token_abc</token>
-			<perms>delete</perms>
-			<user id="123" username="test_user" fullname="Test User" />
-		</auth>
-	</rsp>`
+        <auth>
+            <token>test_token_abc</token>
+            <perms>delete</perms>
+            <user id="123" username="test_user" fullname="Test User" />
+        </auth>
+    </rsp>`
 	server := setupMockServer(t, "rtm.auth.getToken", mockResp)
 	defer server.Close()
-	
-	// Create client with baseURL pointing to mock server
+
+	// Create client, passing the mock server URL directly
 	client := NewClient("api_key_123", "shared_secret_abc")
-	
-	// Replace baseURL with mock server URL for testing
-	baseURLOrig := baseURL
-	defer func() { baseURL = baseURLOrig }()
-	baseURL = server.URL
-	
+	client.baseURL = server.URL
+
 	// Test GetToken
 	token, err := client.GetToken("test_frob_123")
-	
+
 	if err != nil {
 		t.Errorf("GetToken() returned unexpected error: %v", err)
 	}
-	
+
 	if token != "test_token_abc" {
 		t.Errorf("GetToken() = %v, want %v", token, "test_token_abc")
 	}
-	
+
 	// Check that token was saved in client
 	if client.authToken != "test_token_abc" {
 		t.Errorf("GetToken() should set client.authToken to %v, got %v", "test_token_abc", client.authToken)
@@ -153,51 +151,51 @@ func TestGetToken(t *testing.T) {
 func TestCheckToken(t *testing.T) {
 	// Setup mock server with valid response
 	mockResp := `<rsp stat="ok">
-		<auth>
-			<token>test_token_abc</token>
-			<perms>delete</perms>
-			<user id="123" username="test_user" fullname="Test User" />
-		</auth>
-	</rsp>`
+        <auth>
+            <token>test_token_abc</token>
+            <perms>delete</perms>
+            <user id="123" username="test_user" fullname="Test User" />
+        </auth>
+    </rsp>`
 	server := setupMockServer(t, "rtm.auth.checkToken", mockResp)
 	defer server.Close()
-	
-	// Create client with baseURL pointing to mock server
+
+	// Create client, passing the mock server URL directly
 	client := NewClient("api_key_123", "shared_secret_abc")
 	client.SetAuthToken("test_token_abc")
-	
-	// Replace baseURL with mock server URL for testing
-	baseURLOrig := baseURL
-	defer func() { baseURL = baseURLOrig }()
-	baseURL = server.URL
-	
+	client.baseURL = server.URL // Set the baseURL
+
 	// Test CheckToken
 	valid, err := client.CheckToken()
-	
+
 	if err != nil {
 		t.Errorf("CheckToken() returned unexpected error: %v", err)
 	}
-	
+
 	if !valid {
 		t.Errorf("CheckToken() = %v, want %v", valid, true)
 	}
-	
+
 	// Setup mock server with error response
 	mockRespErr := `<rsp stat="fail">
-		<err code="98" msg="Login failed / Invalid auth token" />
-	</rsp>`
+        <err code="98" msg="Login failed / Invalid auth token" />
+    </rsp>`
 	serverErr := setupMockServer(t, "rtm.auth.checkToken", mockRespErr)
 	defer serverErr.Close()
-	
-	baseURL = serverErr.URL
-	
+
+	// Create a *new* client for the error case.  This is important
+	// to avoid state leaking between tests.
+	clientErr := NewClient("api_key_123", "shared_secret_abc")
+	clientErr.SetAuthToken("test_token_abc") // Use a consistent token
+	clientErr.baseURL = serverErr.URL        // Set baseURL to the error server
+
 	// Test CheckToken with invalid token
-	valid, err = client.CheckToken()
-	
+	valid, err = clientErr.CheckToken()
+
 	if err == nil {
 		t.Error("CheckToken() with invalid token should return error")
 	}
-	
+
 	if valid {
 		t.Errorf("CheckToken() with invalid token = %v, want %v", valid, false)
 	}
@@ -215,35 +213,35 @@ func TestResponseGetError(t *testing.T) {
 			Message: "Test error",
 		},
 	}
-	
+
 	code, msg := resp.GetError()
-	
+
 	if code != "123" {
 		t.Errorf("Response.GetError() code = %v, want %v", code, "123")
 	}
-	
+
 	if msg != "Test error" {
 		t.Errorf("Response.GetError() message = %v, want %v", msg, "Test error")
 	}
-	
+
 	// Test with no error
 	resp = Response{
 		Status: statusOK,
 		Error:  nil,
 	}
-	
+
 	code, msg = resp.GetError()
-	
+
 	if code != "" {
 		t.Errorf("Response.GetError() with no error code = %v, want %v", code, "")
 	}
-	
+
 	if msg != "" {
 		t.Errorf("Response.GetError() with no error message = %v, want %v", msg, "")
 	}
 }
 
-// Helper function to check if a string contains a substring
+// Helper function to check if a string contains a substring (corrected)
 func contains(s, substr string) bool {
-	return s != "" && substr != "" && s != substr && s[len(s)-len(substr):] != substr && s[:len(substr)] != substr && len(s) > len(substr)
+	return strings.Contains(s, substr)
 }

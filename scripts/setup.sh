@@ -1,26 +1,67 @@
 #!/bin/bash
 # Setup script for development environment
 
+set -e
+
+# Colors
+GREEN="\033[0;32m"
+BLUE="\033[0;34m"
+YELLOW="\033[0;33m"
+NC="\033[0m" # No Color
+
+echo -e "${BLUE}Setting up CowGnition development environment...${NC}"
+
 # Create config from example if it doesn't exist
 if [ ! -f configs/config.yaml ]; then
-  echo "Creating config.yaml from example..."
+  echo -e "${YELLOW}Creating config.yaml from example...${NC}"
   cp configs/config.example.yaml configs/config.yaml
-  echo "Please edit configs/config.yaml to add your RTM API credentials"
+  echo -e "${YELLOW}Please edit configs/config.yaml to add your RTM API credentials${NC}"
 fi
 
 # Create token directory
+echo -e "${YELLOW}Creating token directory...${NC}"
 mkdir -p ~/.config/cowgnition/tokens
 
 # Install development tools
+echo -e "${YELLOW}Installing development tools...${NC}"
 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 go install golang.org/x/tools/cmd/goimports@latest
 go install golang.org/x/tools/cmd/godoc@latest
+go install github.com/securego/gosec/v2/cmd/gosec@latest
 
 # Install hot reload tool
 if command -v brew &> /dev/null; then
+  echo -e "${YELLOW}Installing entr for hot reloading...${NC}"
   brew install entr
 else
-  echo "Please install 'entr' manually for hot reloading functionality"
+  echo -e "${YELLOW}Please install 'entr' manually for hot reloading functionality${NC}"
 fi
 
-echo "Setup complete! You can now build the project with 'make build'"
+# Set up git hooks
+echo -e "${YELLOW}Setting up Git hooks...${NC}"
+mkdir -p .git/hooks
+if [ -f ".git/hooks/pre-commit" ]; then
+  echo -e "${YELLOW}Backing up existing pre-commit hook to pre-commit.bak${NC}"
+  mv .git/hooks/pre-commit .git/hooks/pre-commit.bak
+fi
+cp scripts/pre-commit .git/hooks/
+chmod +x .git/hooks/pre-commit
+
+# Create or update .golangci.yml
+if [ ! -f .golangci.yml ]; then
+  echo -e "${YELLOW}Creating .golangci.yml configuration...${NC}"
+  cp scripts/golangci.yml .golangci.yml
+fi
+
+# Create .editorconfig if it doesn't exist
+if [ ! -f .editorconfig ]; then
+  echo -e "${YELLOW}Creating .editorconfig...${NC}"
+  cp scripts/editorconfig .editorconfig
+fi
+
+# Run initial format
+echo -e "${YELLOW}Running initial code formatting...${NC}"
+make fmt
+
+echo -e "${GREEN}Setup complete! You can now build the project with 'make build'${NC}"
+echo -e "${GREEN}Run 'make help' to see all available commands${NC}"

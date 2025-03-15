@@ -20,7 +20,7 @@ type MCPServer struct {
 	httpServer   *http.Server
 	tokenManager *auth.TokenManager
 	// Add version information
-	version      string
+	version string
 }
 
 // NewMCPServer creates a new MCP server with the provided configuration.
@@ -63,10 +63,10 @@ func (s *MCPServer) Start() error {
 	mux.HandleFunc("/mcp/read_resource", s.handleReadResource)
 	mux.HandleFunc("/mcp/list_tools", s.handleListTools)
 	mux.HandleFunc("/mcp/call_tool", s.handleCallTool)
-	
+
 	// Add notification endpoint for upcoming MCP spec compliance
 	mux.HandleFunc("/mcp/send_notification", s.handleSendNotification)
-	
+
 	// Add health check endpoint
 	mux.HandleFunc("/health", s.handleHealthCheck)
 
@@ -83,7 +83,7 @@ func (s *MCPServer) Start() error {
 	}
 
 	// Start HTTP server
-	log.Printf("Starting MCP server '%s' version %s on port %d", 
+	log.Printf("Starting MCP server '%s' version %s on port %d",
 		s.config.Server.Name, s.version, s.config.Server.Port)
 	if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
 		return fmt.Errorf("HTTP server error: %w", err)

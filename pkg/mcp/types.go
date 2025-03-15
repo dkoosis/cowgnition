@@ -17,8 +17,8 @@ type ResourceArgument struct {
 
 // ToolDefinition represents an MCP tool definition exposed by the server.
 type ToolDefinition struct {
-	Name        string        `json:"name"`
-	Description string        `json:"description"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
 	Arguments   []ToolArgument `json:"arguments"`
 }
 

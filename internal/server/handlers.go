@@ -28,7 +28,7 @@ func (s *MCPServer) handleInitialize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log initialization attempt
-	log.Printf("MCP initialization requested by: %s (version: %s)", 
+	log.Printf("MCP initialization requested by: %s (version: %s)",
 		req.ServerName, req.ServerVersion)
 
 	// Construct server information
@@ -43,12 +43,12 @@ func (s *MCPServer) handleInitialize(w http.ResponseWriter, r *http.Request) {
 			"list": true,
 			"read": true,
 			// We don't support resource subscriptions yet
-			"subscribe": false,
+			"subscribe":   false,
 			"listChanged": false,
 		},
 		"tools": map[string]interface{}{
-			"list": true,
-			"call": true,
+			"list":        true,
+			"call":        true,
 			"listChanged": false,
 		},
 		"logging": map[string]interface{}{
@@ -58,8 +58,8 @@ func (s *MCPServer) handleInitialize(w http.ResponseWriter, r *http.Request) {
 		},
 		// We don't support prompts yet
 		"prompts": map[string]interface{}{
-			"list": false,
-			"get": false,
+			"list":        false,
+			"get":         false,
 			"listChanged": false,
 		},
 		// We don't support completion yet

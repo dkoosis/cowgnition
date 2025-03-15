@@ -51,7 +51,7 @@ func (s *Service) Initialize() error {
 		} else {
 			// Set token on client
 			s.client.SetAuthToken(token)
-			
+
 			// Check if token is valid
 			valid, err := s.client.CheckToken()
 			if err != nil || !valid {
@@ -77,7 +77,7 @@ func (s *Service) Initialize() error {
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
-		
+
 		for range ticker.C {
 			s.CleanupExpiredFlows()
 		}

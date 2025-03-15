@@ -1,0 +1,114 @@
+run:
+  # Timeout for running linters, default is 1m
+  timeout: 5m
+  # Include test files
+  tests: true
+  # Skip auto-generated files
+  skip-files:
+    - ".*\\.pb\\.go$"
+  # Set exit code to 1 if any issue is found
+  issues-exit-code: 1
+
+# Output configuration options
+output:
+  # Format: colored-line-number|line-number|json|tab|checkstyle|code-climate|junit-xml
+  format: colored-line-number
+  # Print lines of code with issue
+  print-issued-lines: true
+  # Print linter name in the end of issue text
+  print-linter-name: true
+
+# All available linters
+linters:
+  enable:
+    - errcheck     # Check for unchecked errors
+    - gosimple     # Simplify code
+    - govet        # Examine Go source code for suspicious constructs
+    - ineffassign  # Detect ineffective assignments
+    - staticcheck  # Comprehensive static analyzer
+    - typecheck    # Type-check Go code
+    - unused       # Check for unused constants, variables, functions and types
+    - gosec        # Security-focused linter
+    - gocyclo      # Cyclomatic complexity
+    - gofmt        # Format Go code
+    - goimports    # Manage Go imports
+    - misspell     # Fix common misspellings
+    - revive       # Fast, configurable, extensible linter for Go
+    - unconvert    # Remove unnecessary type conversions
+    - unparam      # Find unused function parameters
+    - whitespace   # Check for trailing whitespace
+
+# Linter settings
+linters-settings:
+  errcheck:
+    # Report about not checking returned errors
+    check-type-assertions: true
+    check-blank: true
+  gocyclo:
+    # Minimal code complexity
+    min-complexity: 15
+  gofmt:
+    # Simplify code
+    simplify: true
+  goimports:
+    # Put local imports after import stdlib imports
+    local-prefixes: github.com/cowgnition/cowgnition
+  gosec:
+    excludes:
+      - G204 # Subprocess launched with a potential tainted input or cmd arguments
+  govet:
+    check-shadowing: true
+    check-unreachable: true
+    check-rangeloops: true
+    check-copylocks: true
+  misspell:
+    locale: US
+  revive:
+    # Rules file
+    rules:
+      - name: exported
+        arguments: ["checkPrivateReceivers", "disableStutteringCheck"]
+      - name: dot-imports
+      - name: blank-imports
+      - name: context-keys-type
+      - name: context-as-argument
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+  staticcheck:
+    # https://staticcheck.io/docs/options
+    checks: ["all"]
+
+# Custom issue settings
+issues:
+  # Excluding configuration per-path, per-linter, per-text and per-source
+  exclude-rules:
+    # Exclude some staticcheck messages
+    - linters:
+        - staticcheck
+      text: "SA1019:"
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+        - gocyclo
+  # Maximum issues count per one linter
+  max-issues-per-linter: 0
+  # Maximum count of issues with the same text
+  max-same-issues: 0
+  # Show only new issues
+  new: false

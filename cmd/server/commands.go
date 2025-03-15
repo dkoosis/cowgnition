@@ -185,7 +185,7 @@ func helpCommand(args []string) error {
 		// Show command help
 		fmt.Printf("Command: %s\n", cmd.Name)
 		fmt.Printf("Description: %s\n", cmd.Description)
-		
+
 		// Add command-specific usage information
 		switch cmdName {
 		case "serve":
@@ -200,7 +200,7 @@ func helpCommand(args []string) error {
 			fmt.Println("\nOptions:")
 			fmt.Println("  -config string   Path to configuration file")
 		}
-		
+
 		return nil
 	}
 

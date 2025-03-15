@@ -10,11 +10,11 @@ import (
 
 // ErrorResponse represents a standardized error response.
 type ErrorResponse struct {
-	Error       string `json:"error"`
-	Status      int    `json:"status"`
-	Path        string `json:"path,omitempty"`
-	RequestID   string `json:"request_id,omitempty"`
-	Timestamp   string `json:"timestamp"`
+	Error     string `json:"error"`
+	Status    int    `json:"status"`
+	Path      string `json:"path,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
+	Timestamp string `json:"timestamp"`
 }
 
 // writeJSONResponse writes a JSON response with the given status code and data.
@@ -85,13 +85,13 @@ func formatDate(dateStr string) string {
 // validateResourceName checks if a resource name is valid.
 func validateResourceName(name string) bool {
 	validResources := map[string]bool{
-		"auth://rtm":   true,
-		"tasks://all":  true,
-		"tasks://today": true,
+		"auth://rtm":       true,
+		"tasks://all":      true,
+		"tasks://today":    true,
 		"tasks://tomorrow": true,
-		"tasks://week": true,
-		"lists://all":  true,
-		"tags://all":   true,
+		"tasks://week":     true,
+		"lists://all":      true,
+		"tags://all":       true,
 	}
 
 	// Direct match

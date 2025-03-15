@@ -69,11 +69,11 @@ func (s *MCPServer) handleTasksResource(filter string) (string, error) {
 				}
 
 				// Write task line
-				sb.WriteString(fmt.Sprintf("%s%s%s%s%s\n", 
-					priority, 
-					completed, 
-					ts.Name, 
-					dueDate, 
+				sb.WriteString(fmt.Sprintf("%s%s%s%s%s\n",
+					priority,
+					completed,
+					ts.Name,
+					dueDate,
 					tags))
 			}
 		}
@@ -121,10 +121,10 @@ func (s *MCPServer) handleListsResource() (string, error) {
 		}
 
 		// Write list line
-		sb.WriteString(fmt.Sprintf("- %s (ID: %s)%s%s\n", 
-			list.Name, 
-			list.ID, 
-			listType, 
+		sb.WriteString(fmt.Sprintf("- %s (ID: %s)%s%s\n",
+			list.Name,
+			list.ID,
+			listType,
 			archived))
 	}
 
@@ -141,7 +141,7 @@ func (s *MCPServer) handleTagsResource() (string, error) {
 
 	// Extract unique tags
 	tagMap := make(map[string]int)
-	
+
 	for _, list := range tasksResp.Tasks.List {
 		for _, ts := range list.Taskseries {
 			for _, tag := range ts.Tags.Tag {

@@ -162,7 +162,7 @@ func (s *Service) CheckAuthStatus() (AuthStatus, error) {
 			s.mu.Unlock()
 			return AuthStatusNotAuthenticated, nil
 		}
-		
+
 		// Set token on client
 		s.client.SetAuthToken(token)
 	}
@@ -175,11 +175,11 @@ func (s *Service) CheckAuthStatus() (AuthStatus, error) {
 		if err := s.tokenManager.DeleteToken(); err != nil {
 			log.Printf("Warning: Failed to delete invalid token: %v", err)
 		}
-		
+
 		s.mu.Lock()
 		s.authStatus = AuthStatusNotAuthenticated
 		s.mu.Unlock()
-		
+
 		if err != nil {
 			return AuthStatusNotAuthenticated, fmt.Errorf("error checking token: %w", err)
 		}
@@ -190,7 +190,7 @@ func (s *Service) CheckAuthStatus() (AuthStatus, error) {
 	s.mu.Lock()
 	s.authStatus = AuthStatusAuthenticated
 	s.mu.Unlock()
-	
+
 	return AuthStatusAuthenticated, nil
 }
 
