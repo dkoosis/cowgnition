@@ -53,8 +53,55 @@ type LoggingConfig struct {
 
 // LoadConfig loads configuration from the specified file
 func LoadConfig(path string) (*Config, error) {
+	// Validate and sanitize the path
+	cleanPath := filepath.Clean(path)
+
+	// Check for suspicious path elements
+	if strings.Contains(cleanPath, "..") {
+		return nil, fmt.Errorf("suspicious config path contains directory traversal: %s", path)
+	}
+
+	// Define safe prefixes for config files
+	safeLocations := []string{
+		"configs/",
+		"/etc/cowgnition/",
+		filepath.Join(os.Getenv("HOME"), ".config", "cowgnition"),
+	}
+
+	// Check if path is within a safe location
+	pathIsValid := false
+	if !filepath.IsAbs(cleanPath) {
+		// Relative paths are allowed if they start with "configs/"
+		if strings.HasPrefix(cleanPath, "configs/") {
+			pathIsValid = true
+		}
+	} else {
+		// For absolute paths, check against our safe locations
+		for _, loc := range safeLocations {
+			// Convert loc to absolute if needed
+			absLoc := loc
+			if !filepath.IsAbs(loc) {
+				// Get working directory for relative paths
+				wd, err := os.Getwd()
+				if err != nil {
+					continue
+				}
+				absLoc = filepath.Join(wd, loc)
+			}
+
+			if strings.HasPrefix(cleanPath, absLoc) {
+				pathIsValid = true
+				break
+			}
+		}
+	}
+
+	if !pathIsValid {
+		return nil, fmt.Errorf("config file path is outside of allowed locations: %s", path)
+	}
+
 	// Read the config file
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(cleanPath)
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file: %w", err)
 	}
