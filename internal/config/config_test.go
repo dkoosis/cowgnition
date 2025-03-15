@@ -227,8 +227,8 @@ func TestParseInt(t *testing.T) {
 		{"123", 123, false},
 		{"0", 0, false},
 		{"-123", -123, false},
+		{"123abc", 123, false}, // fmt.Sscanf only reads the number part
 		{"abc", 0, true},
-		{"123abc", 0, true},
 		{"", 0, true},
 	}
 

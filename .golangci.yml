@@ -1,44 +1,67 @@
-run:
-  timeout: 5m
-  tests: true
-  issues-exit-code: 1
-
 linters:
   disable-all: true
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - typecheck
-    - unused
-    - gosec
-    - gocyclo
-    - gofmt
-    - goimports
-    - misspell
-    - revive
-    - unconvert
-    - unparam
-    - whitespace
+    # Core linters
+    - errcheck # Check for unchecked errors
+    - gosimple # Simplify code
+    - govet # Reports suspicious constructs
+    - ineffassign # Detect ineffectual assignments
+    - staticcheck # Static analysis checks
+    - typecheck # Standard Go type checks
+    - unused # Check for unused constants, variables, functions and types
+
+    # Code quality linters
+    - gosec # Security checks
+    - gocyclo # Cyclomatic complexity
+    - gofmt # Go formatting
+    - goimports # Fix imports ordering
+    - misspell # Correct commonly misspelled words
+    - revive # Replacement for golint
+    - unconvert # Remove unnecessary type conversions
+    - unparam # Find unused parameters
+    - whitespace # Whitespace style
+
+    # Additional linters
+    - bodyclose # Check for unclosed HTTP response bodies
+    - dogsled # Check for too many blank identifiers (_ = _, _ = _)
+    - durationcheck # Check for durations with different units
+    - errorlint # Find error handling mistakes
+    - exportloopref # Check for pointers to enclosing loop variables
+    - godot # Check comments end with a period
+    - nilerr # Check for pattern return nil, err == nil
+    - noctx # Check for HTTP requests without context
+    - thelper # Detect t.Helper() calls in tests
+    - tparallel # Detect incorrect usage of t.Parallel()
 
 linters-settings:
   gocyclo:
     min-complexity: 15
     skip-tests: true
 
+  gosec:
+    # Severity of errors to show
+    severity: medium
+
+  revive:
+    # Rules with custom configuration
+    rules:
+      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#exported
+      - name: exported
+        severity: warning
+        disabled: false
+        arguments:
+          - "checkPrivateReceivers"
+          - "sayRepetitiveInsteadOfStutters"
+
+  errorlint:
+    # Check for comparison of errors using errors.Is
+    asserts: true
+    # Check for wrapping errors using errors.As
+    errorf: true
+
 issues:
   exclude-rules:
-    # Exclude complexity issues in test files
     - path: _test\.go
       linters:
         - errcheck
         - gosec
-        - unparam
-        - gocyclo # Explicitly exclude gocyclo for test files
-
-    # Target specifically the test/conformance directory
-    - path: test/conformance/
-      linters:
-        - gocyclo

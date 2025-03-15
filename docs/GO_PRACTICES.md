@@ -6,40 +6,43 @@ This document outlines our standard tools and practices for Go development. Thes
 
 ### Required Tools
 
-| Tool | Purpose | Installation |
-|------|---------|-------------|
-| [Go](https://go.dev/dl/) | The Go compiler and toolchain | OS-specific package manager or download from go.dev |
-| [golangci-lint](https://golangci-lint.run/usage/install/) | Comprehensive linting tool | `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest` |
-| [goimports](https://pkg.go.dev/golang.org/x/tools/cmd/goimports) | Import organization and formatting | `go install golang.org/x/tools/cmd/goimports@latest` |
+| Tool                                                             | Purpose                            | Installation                                                            |
+| ---------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------- |
+| [Go](https://go.dev/dl/)                                         | The Go compiler and toolchain      | OS-specific package manager or download from go.dev                     |
+| [golangci-lint](https://golangci-lint.run/usage/install/)        | Comprehensive linting tool         | `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest` |
+| [goimports](https://pkg.go.dev/golang.org/x/tools/cmd/goimports) | Import organization and formatting | `go install golang.org/x/tools/cmd/goimports@latest`                    |
 
 ### Additional Tooling Decisions
 
-| Tool | Status | Purpose | Notes |
-|------|--------|---------|-------|
-| [gopls](https://pkg.go.dev/golang.org/x/tools/gopls) | **USING** | Go language server | Required for all developers; ensures consistent editor experience |
-| [dlv](https://github.com/go-delve/delve) | **USING** | Debugger | Standard debugger for all Go development |
-| [mockgen](https://github.com/golang/mock) | **USING** | Mock generation | We use this exclusively for mocking in tests |
-| [entr](https://github.com/eradman/entr) | **USING** | File watcher | Required for our development workflow |
-| [wire](https://github.com/google/wire) | **NOT USING** | Dependency injection | We prefer manual DI over code generation for this |
-| [testify](https://github.com/stretchr/testify) | **NOT USING** | Testing framework | We use standard library testing only |
-| [ginkgo/gomega](https://onsi.github.io/ginkgo/) | **NOT USING** | BDD testing | We prefer table-driven tests with standard library |
-| [cobra](https://github.com/spf13/cobra) | **PREFERRED** | CLI framework | If CLI functionality is needed, we will use Cobra |
-| [viper](https://github.com/spf13/viper) | **PREFERRED** | Configuration | When robust configuration is needed beyond simple flags |
-| [zap](https://github.com/uber-go/zap) | **PREFERRED** | Logging | Our standard for structured logging when needed |
+| Tool                                                 | Status        | Purpose              | Notes                                                             |
+| ---------------------------------------------------- | ------------- | -------------------- | ----------------------------------------------------------------- |
+| [gopls](https://pkg.go.dev/golang.org/x/tools/gopls) | **USING**     | Go language server   | Required for all developers; ensures consistent editor experience |
+| [dlv](https://github.com/go-delve/delve)             | **USING**     | Debugger             | Standard debugger for all Go development                          |
+| [mockgen](https://github.com/golang/mock)            | **USING**     | Mock generation      | We use this exclusively for mocking in tests                      |
+| [entr](https://github.com/eradman/entr)              | **USING**     | File watcher         | Required for our development workflow                             |
+| [wire](https://github.com/google/wire)               | **NOT USING** | Dependency injection | We prefer manual DI over code generation for this                 |
+| [testify](https://github.com/stretchr/testify)       | **EVALUATE**  | Testing framework    | We use standard library testing only                              |
+| [ginkgo/gomega](https://onsi.github.io/ginkgo/)      | **NOT USING** | BDD testing          | We prefer table-driven tests with standard library                |
+| [cobra](https://github.com/spf13/cobra)              | **PREFERRED** | CLI framework        | If CLI functionality is needed, we will use Cobra                 |
+| [viper](https://github.com/spf13/viper)              | **PREFERRED** | Configuration        | When robust configuration is needed beyond simple flags           |
+| [zap](https://github.com/uber-go/zap)                | **PREFERRED** | Logging              | Our standard for structured logging when needed                   |
 
 ## Code Style and Quality Practices
 
 1. **Code Formatting**
+
    - Always run `goimports` or at minimum `gofmt` to ensure consistent formatting
    - Configure your editor for automatic formatting on save
    - Format should be enforced in CI/CD pipelines
 
 2. **Linting**
+
    - Use `golangci-lint` with our standard configuration
    - Fix linting issues before committing code
    - Our standard linters include: `govet`, `staticcheck`, `gosec`, `errcheck`, `ineffassign`, and `gocritic`
 
 3. **Documentation**
+
    - Document all exported functions, types, and packages
    - Follow Go's standard comment style (see [godoc documentation](https://go.dev/blog/godoc))
    - Include examples where appropriate
@@ -78,16 +81,19 @@ For more details, see [Standard Go Project Layout](https://github.com/golang-sta
 ## Development Workflow
 
 1. **Module Management**
+
    - Use Go modules for dependency management
    - Pin dependencies to specific versions
    - Regularly update dependencies and review changes
 
 2. **Commit Standards**
+
    - Write clear, descriptive commit messages
    - Reference issue numbers when applicable
    - Keep commits focused on single concerns
 
 3. **Code Review Guidelines**
+
    - Review for readability, correctness, and design
    - Ensure tests are included with new features
    - Verify error handling is comprehensive

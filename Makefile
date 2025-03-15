@@ -1,4 +1,4 @@
-.PHONY: all build clean test lint fmt dev help check static-analysis
+.PHONY: all build clean test test-coverage lint fmt dev help check static-analysis
 
 # Colors for output formatting
 GREEN := \033[0;32m
@@ -10,11 +10,11 @@ NC := \033[0m # No Color
 # Variables
 BINARY_NAME := cowgnition
 MAIN_PACKAGE := ./cmd/server
+GO_FILES := $(shell find . -name "*.go" -not -path "./vendor/*" -not -path "./test/*")
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT_HASH := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 LDFLAGS := -ldflags "-X main.version=${VERSION} -X main.commitHash=${COMMIT_HASH} -X main.buildDate=${BUILD_DATE}"
-GO_FILES := $(shell find . -name "*.go" -not -path "./vendor/*" -not -path "./test/*")
 
 # Default target - run all checks and build.  Stop on first failure.
 all: check fmt static-analysis lint test build
@@ -34,14 +34,22 @@ clean:
 	@go clean -cache -testcache
 	@printf "${GREEN}✓ Cleaned${NC}\n"
 
-# Run tests (with verbose output and coverage)
+# Run tests
 test:
 	@printf "${BLUE}▶ Running tests...${NC}\n"
-	@go test -v -coverprofile=coverage.out ./... && \
+	@go test -v ./... && \
 		printf "${GREEN}✓ Tests passed${NC}\n" || \
 		(printf "${RED}✗ Tests failed${NC}\n" && exit 1)
 
-# Run linters (with timeout)
+# Run tests with coverage
+test-coverage:
+	@printf "${BLUE}▶ Running tests with coverage...${NC}\n"
+	@go test -coverprofile=coverage.out ./...
+	@go tool cover -html=coverage.out -o coverage.html
+	@printf "${GREEN}✓ Coverage report generated: coverage.html${NC}\n"
+	@go tool cover -func=coverage.out
+
+# Run linters
 lint:
 	@printf "${BLUE}▶ Running linters...${NC}\n"
 	@if ! command -v golangci-lint >/dev/null 2>&1; then \
@@ -83,7 +91,7 @@ check:
 	@if command -v goimports >/dev/null 2>&1; then printf "${GREEN}✓${NC}\n"; else printf "${RED}✗${NC}\n"; fi
 	@printf "  entr:          "
 	@if command -v entr >/dev/null 2>&1; then printf "${GREEN}✓${NC}\n"; else printf "${RED}✗${NC}\n"; fi
-    @printf "  staticcheck:   "
+	@printf "  staticcheck:   "
 	@if command -v staticcheck >/dev/null 2>&1; then printf "${GREEN}✓${NC}\n"; else printf "${RED}✗${NC}\n"; fi
 
 # Static analysis using go vet and staticcheck
@@ -107,6 +115,7 @@ help:
 	@printf "  %-16s %s\n" "build" "Build the application"
 	@printf "  %-16s %s\n" "clean" "Clean build artifacts"
 	@printf "  %-16s %s\n" "test" "Run tests (with verbose output and coverage)"
+	@printf "  %-16s %s\n" "test-coverage" "Run tests with coverage report"
 	@printf "  %-16s %s\n" "lint" "Run linters (with timeout)"
 	@printf "  %-16s %s\n" "fmt" "Format code (using gofmt and goimports)"
 	@printf "  %-16s %s\n" "dev" "Run with hot reloading (requires entr)"

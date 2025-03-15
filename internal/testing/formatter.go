@@ -30,6 +30,7 @@ func SectionDivider(t *testing.T, name string) {
 	leftPad := padding / 2
 	rightPad := padding - leftPad
 
+	// Use t.Logf for direct integration with go test output.
 	t.Logf("\n%s%s%s [ %s%s%s ] %s%s%s\n",
 		Bold, Cyan, strings.Repeat("=", leftPad),
 		Yellow, name, Cyan,
@@ -107,7 +108,7 @@ func (r *TestRunner) Summary() {
 				return Green
 			}
 			return Red
-		}(), // Added semicolon
+		}(), // Inline function for color.
 		passed, len(r.results),
 		Reset)
 
@@ -159,4 +160,24 @@ func AssertContains(t *testing.T, str, substr string, message string) {
 	if !strings.Contains(str, substr) {
 		t.Errorf("%s\nExpected string to contain: %q\nString: %q", message, substr, str)
 	}
+}
+
+// SuccessMessage formats a success message.
+func SuccessMessage(format string, args ...interface{}) string {
+	return fmt.Sprintf("%s%s%s%s", Green, Bold, fmt.Sprintf(format, args...), Reset)
+}
+
+// ErrorMessage formats an error message.
+func ErrorMessage(format string, args ...interface{}) string {
+	return fmt.Sprintf("%s%s%s%s", Red, Bold, fmt.Sprintf(format, args...), Reset)
+}
+
+// WarningMessage formats a warning message.
+func WarningMessage(format string, args ...interface{}) string {
+	return fmt.Sprintf("%s%s%s%s", Yellow, Bold, fmt.Sprintf(format, args...), Reset)
+}
+
+// InfoMessage formats an info message.
+func InfoMessage(format string, args ...interface{}) string {
+	return fmt.Sprintf("%s%s%s", Blue, fmt.Sprintf(format, args...), Reset)
 }
