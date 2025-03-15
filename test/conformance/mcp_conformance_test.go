@@ -36,7 +36,6 @@ func TestMCPInitializeEndpoint(t *testing.T) {
 	defer rtmMock.Close()
 
 	// Override RTM API endpoint in client
-	origBaseURL := "https://api.rememberthemilk.com/services/rest/"
 	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.BaseURL); err != nil {
 		t.Fatalf("Failed to set environment variable: %v", err)
 	}
@@ -206,7 +205,6 @@ func TestMCPResourceEndpoints(t *testing.T) {
 	defer rtmMock.Close()
 
 	// Override RTM API endpoint in client
-	origBaseURL := "https://api.rememberthemilk.com/services/rest/"
 	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.BaseURL); err != nil {
 		t.Fatalf("Failed to set environment variable: %v", err)
 	}
@@ -375,7 +373,6 @@ func TestMCPToolEndpoints(t *testing.T) {
 	defer rtmMock.Close()
 
 	// Override RTM API endpoint in client
-	origBaseURL := "https://api.rememberthemilk.com/services/rest/"
 	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.BaseURL); err != nil {
 		t.Fatalf("Failed to set environment variable: %v", err)
 	}

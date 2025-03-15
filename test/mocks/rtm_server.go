@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -176,7 +177,9 @@ func (s *RTMServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if method == "" {
 		// If no method is specified, return an error
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`<rsp stat="fail"><err code="1" msg="Method not specified" /></rsp>`))
+		if _, err := w.Write([]byte(`<rsp stat="fail"><err code="1" msg="Method not specified" /></rsp>`)); err != nil {
+			log.Printf("Error writing response: %v", err)
+		}
 		return
 	}
 
@@ -193,7 +196,9 @@ func (s *RTMServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		// If still no response, return a default error
 		w.WriteHeader(http.StatusNotImplemented)
-		w.Write([]byte(fmt.Sprintf(`<rsp stat="fail"><err code="1" msg="No mock response defined for method %s" /></rsp>`, method)))
+		if _, err := w.Write([]byte(fmt.Sprintf(`<rsp stat="fail"><err code="1" msg="No mock response defined for method %s" /></rsp>`, method))); err != nil {
+			log.Printf("Error writing response: %v", err)
+		}
 		return
 	}
 
@@ -202,7 +207,9 @@ func (s *RTMServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(statusCode)
 
 	// Write the response
-	w.Write([]byte(response))
+	if _, err := w.Write([]byte(response)); err != nil {
+		log.Printf("Error writing response: %v", err)
+	}
 }
 
 // ValidateRequest checks if a request has been made with specific characteristics.

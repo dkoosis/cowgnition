@@ -24,7 +24,7 @@ type MCPClient struct {
 }
 
 // NewMCPClient creates a new MCP test client with the provided server.
-func NewMCPClient(t *testing.T, s *server.MCPServer) *MCPClient {
+func NewMCPClient(_ *testing.T, s *server.MCPServer) *MCPClient {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Route requests to the MCP server based on path
 		switch r.URL.Path {
@@ -59,7 +59,7 @@ func (c *MCPClient) Close() {
 }
 
 // Initialize sends an initialization request to the MCP server.
-func (c *MCPClient) Initialize(t *testing.T, serverName, serverVersion string) (map[string]interface{}, error) {
+func (c *MCPClient) Initialize(_ *testing.T, serverName, serverVersion string) (map[string]interface{}, error) {
 	reqBody := map[string]interface{}{
 		"server_name":    serverName,
 		"server_version": serverVersion,
@@ -95,7 +95,7 @@ func (c *MCPClient) Initialize(t *testing.T, serverName, serverVersion string) (
 }
 
 // ListResources sends a list_resources request to the MCP server.
-func (c *MCPClient) ListResources(t *testing.T) (map[string]interface{}, error) {
+func (c *MCPClient) ListResources(_ *testing.T) (map[string]interface{}, error) {
 	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/mcp/list_resources", nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
@@ -120,7 +120,7 @@ func (c *MCPClient) ListResources(t *testing.T) (map[string]interface{}, error) 
 }
 
 // ReadResource sends a read_resource request to the MCP server.
-func (c *MCPClient) ReadResource(t *testing.T, resourceName string) (map[string]interface{}, error) {
+func (c *MCPClient) ReadResource(_ *testing.T, resourceName string) (map[string]interface{}, error) {
 	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/mcp/read_resource?name="+url.QueryEscape(resourceName), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
@@ -145,7 +145,7 @@ func (c *MCPClient) ReadResource(t *testing.T, resourceName string) (map[string]
 }
 
 // ListTools sends a list_tools request to the MCP server.
-func (c *MCPClient) ListTools(t *testing.T) (map[string]interface{}, error) {
+func (c *MCPClient) ListTools(_ *testing.T) (map[string]interface{}, error) {
 	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/mcp/list_tools", nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
@@ -170,7 +170,7 @@ func (c *MCPClient) ListTools(t *testing.T) (map[string]interface{}, error) {
 }
 
 // CallTool sends a call_tool request to the MCP server.
-func (c *MCPClient) CallTool(t *testing.T, toolName string, args map[string]interface{}) (map[string]interface{}, error) {
+func (c *MCPClient) CallTool(_ *testing.T, toolName string, args map[string]interface{}) (map[string]interface{}, error) {
 	reqBody := map[string]interface{}{
 		"name":      toolName,
 		"arguments": args,
