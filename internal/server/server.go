@@ -135,6 +135,11 @@ func (s *MCPServer) SetVersion(version string) {
 	s.version = version
 }
 
+// GetRTMService returns the server's RTM service.
+func (s *MCPServer) GetRTMService() *rtm.Service {
+	return s.rtmService
+}
+
 // corsMiddleware adds CORS headers for development scenarios.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

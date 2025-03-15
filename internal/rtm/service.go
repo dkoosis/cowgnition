@@ -3,6 +3,7 @@ package rtm
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 	"sync"
 	"time"
@@ -15,115 +16,96 @@ import (
 type Service struct {
 	client       *Client
 	tokenPath    string
-	authManager  *auth.AuthManager
+	tokenManager *auth.TokenManager
 	mu           sync.RWMutex
 	lastSyncTime time.Time
+	authStatus   AuthStatus
+	authFlows    map[string]*AuthFlow
 }
 
 // NewService creates a new RTM service with the specified credentials.
 func NewService(apiKey, sharedSecret, tokenPath string) *Service {
 	return &Service{
-		client:    NewClient(apiKey, sharedSecret),
-		tokenPath: tokenPath,
+		client:     NewClient(apiKey, sharedSecret),
+		tokenPath:  tokenPath,
+		authStatus: AuthStatusUnknown,
+		authFlows:  make(map[string]*AuthFlow),
 	}
 }
 
 // Initialize sets up the service and loads the auth token if available.
-// It establishes the auth manager and verifies any existing tokens.
+// It establishes the token manager and verifies any existing tokens.
 func (s *Service) Initialize() error {
-	// Create auth manager with delete permission (full access)
-	authManager, err := auth.NewAuthManager(s.tokenPath, auth.PermDelete)
+	// Create token manager for secure token storage
+	tokenManager, err := auth.NewTokenManager(s.tokenPath)
 	if err != nil {
-		return fmt.Errorf("error creating auth manager: %w", err)
+		return fmt.Errorf("error creating token manager: %w", err)
 	}
-	s.authManager = authManager
+	s.tokenManager = tokenManager
 
-	// Check authentication status
-	status, err := s.authManager.CheckAuthStatus(s.verifyToken)
-	if err != nil {
-		return fmt.Errorf("error checking authentication status: %w", err)
-	}
-
-	// If authenticated, set the token on the client
-	if status == auth.StatusAuthenticated {
-		token, err := s.authManager.GetToken()
+	// Check if we have a stored token
+	if s.tokenManager.HasToken() {
+		token, err := s.tokenManager.LoadToken()
 		if err != nil {
-			return fmt.Errorf("error loading token: %w", err)
+			log.Printf("Warning: Error loading token: %v", err)
+		} else {
+			// Set token on client
+			s.client.SetAuthToken(token)
+			
+			// Check if token is valid
+			valid, err := s.client.CheckToken()
+			if err != nil || !valid {
+				// Token is invalid, clear it
+				log.Printf("Stored token is invalid, clearing it. Error: %v", err)
+				s.client.SetAuthToken("")
+				if err := s.tokenManager.DeleteToken(); err != nil {
+					log.Printf("Warning: Failed to delete invalid token: %v", err)
+				}
+				s.authStatus = AuthStatusNotAuthenticated
+			} else {
+				// Token is valid
+				s.authStatus = AuthStatusAuthenticated
+				log.Println("Successfully authenticated with stored token")
+			}
 		}
-		s.client.SetAuthToken(token)
+	} else {
+		// No token stored
+		s.authStatus = AuthStatusNotAuthenticated
 	}
+
+	// Start a background cleanup routine for expired auth flows
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		
+		for range ticker.C {
+			s.CleanupExpiredFlows()
+		}
+	}()
 
 	return nil
 }
 
-// verifyToken checks if a token is valid with the RTM API.
-func (s *Service) verifyToken(token string) (bool, error) {
-	// Set token temporarily for verification
-	s.client.SetAuthToken(token)
-
-	// Check token validity
-	valid, err := s.client.CheckToken()
-
-	// If error or invalid, clear the token
-	if err != nil || !valid {
-		s.client.SetAuthToken("")
-		return false, err
-	}
-
-	return true, nil
+// GetAuthStatus returns the current authentication status.
+func (s *Service) GetAuthStatus() AuthStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.authStatus
 }
 
-// IsAuthenticated checks if the service has a valid auth token.
-func (s *Service) IsAuthenticated() bool {
-	status := s.authManager.GetStatus()
-	return status == auth.StatusAuthenticated
+// GetActiveAuthFlows returns a count of active authentication flows.
+func (s *Service) GetActiveAuthFlows() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.authFlows)
 }
 
-// StartAuthFlow begins the authentication flow and returns a URL for the user to visit.
-func (s *Service) StartAuthFlow() (string, string, error) {
-	// Generate auth URL through the auth manager
-	authURL, frob, err := s.authManager.StartAuthFlow(s.generateAuthURL)
-	if err != nil {
-		return "", "", fmt.Errorf("error starting auth flow: %w", err)
-	}
-
-	return authURL, frob, nil
-}
-
-// generateAuthURL creates an authentication URL for the given frob and permission level.
-func (s *Service) generateAuthURL(frob string, perm string) (string, error) {
-	// Use client to generate auth URL
-	authURL := s.client.GetAuthURL(frob, perm)
-	return authURL, nil
-}
-
-// CompleteAuthFlow completes the authentication flow with the provided frob.
-func (s *Service) CompleteAuthFlow(frob string) error {
-	// Exchange frob for token through auth manager
-	err := s.authManager.CompleteAuthFlow(frob, s.getToken)
-	if err != nil {
-		return fmt.Errorf("error completing auth flow: %w", err)
-	}
-
-	// Get and set the token on successful completion
-	token, err := s.authManager.GetToken()
-	if err != nil {
-		return fmt.Errorf("error loading token after auth completion: %w", err)
-	}
-
-	s.client.SetAuthToken(token)
-	return nil
-}
-
-// getToken exchanges a frob for a token using the RTM API.
-func (s *Service) getToken(frob string) (string, error) {
-	// Use client to get token from frob
-	token, err := s.client.GetToken(frob)
-	if err != nil {
-		return "", fmt.Errorf("error getting token from RTM API: %w", err)
-	}
-
-	return token, nil
+// HasAuthFlow checks if a specific frob has an active authentication flow.
+func (s *Service) HasAuthFlow(frob string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, exists := s.authFlows[frob]
+	return exists
 }
 
 // GetLists retrieves all lists from RTM.

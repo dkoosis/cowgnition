@@ -142,15 +142,20 @@ func checkCommand(args []string) error {
 	fmt.Println("Checking RTM authentication status...")
 
 	// Create server (but don't start HTTP server)
-	mcp, err := server.NewMCPServer(cfg)
+	svr, err := server.NewMCPServer(cfg)
 	if err != nil {
 		return fmt.Errorf("error creating server: %w", err)
 	}
 
-	// Check if authenticated
-	// In a real implementation, we would call a method on the server to check authentication
-	fmt.Println("Authentication status check complete.")
-	fmt.Println("Note: This is a placeholder. Implementation would check token validity with RTM.")
+	// Check if authenticated using the RTM service
+	fmt.Println("Authentication status check:")
+	rtmService := svr.GetRTMService()
+	if rtmService != nil && rtmService.IsAuthenticated() {
+		fmt.Println("✓ Authenticated with Remember The Milk")
+	} else {
+		fmt.Println("✗ Not authenticated with Remember The Milk")
+		fmt.Println("Run the server and access the auth://rtm resource to authenticate")
+	}
 
 	return nil
 }
