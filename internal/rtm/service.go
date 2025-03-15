@@ -435,3 +435,145 @@ func combineTagsForAPI(tags []string) string {
 	}
 	return fmt.Sprintf("\"%s\"", url.QueryEscape(fmt.Sprintf("%s", tags)))
 }
+
+// IsAuthenticated checks if the service has a valid authentication token.
+func (s *Service) IsAuthenticated() bool {
+	// Check current auth status
+	s.mu.RLock()
+	status := s.authStatus
+	s.mu.RUnlock()
+
+	// If we know we're authenticated, return true
+	if status == StatusAuthenticated {
+		return true
+	}
+
+	// If we don't know or think we're not authenticated, check if we have a token
+	if !s.tokenManager.HasToken() {
+		s.mu.Lock()
+		s.authStatus = StatusNotAuthenticated
+		s.mu.Unlock()
+		return false
+	}
+
+	// We have a token, check if it's valid
+	token, err := s.tokenManager.LoadToken()
+	if err != nil {
+		log.Printf("Error loading token: %v", err)
+		s.mu.Lock()
+		s.authStatus = StatusNotAuthenticated
+		s.mu.Unlock()
+		return false
+	}
+
+	// Set token on client
+	s.client.SetAuthToken(token)
+
+	// Verify token validity
+	valid, err := s.client.CheckToken()
+	if err != nil || !valid {
+		// Token is invalid, clear it
+		log.Printf("Stored token is invalid. Error: %v", err)
+		s.client.SetAuthToken("")
+		if err := s.tokenManager.DeleteToken(); err != nil {
+			log.Printf("Warning: Failed to delete invalid token: %v", err)
+		}
+		s.mu.Lock()
+		s.authStatus = StatusNotAuthenticated
+		s.mu.Unlock()
+		return false
+	}
+
+	// Token is valid
+	s.mu.Lock()
+	s.authStatus = StatusAuthenticated
+	s.mu.Unlock()
+	return true
+}
+
+// CleanupExpiredFlows removes any authentication flows that have expired.
+func (s *Service) CleanupExpiredFlows() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	for frob, flow := range s.authFlows {
+		// Check if flow has expired (24 hours)
+		if now.Sub(flow.StartTime) > 24*time.Hour {
+			delete(s.authFlows, frob)
+		}
+	}
+}
+
+// StartAuthFlow initiates the RTM authentication flow.
+// It returns the auth URL for the user to visit and the frob for future reference.
+func (s *Service) StartAuthFlow() (string, string, error) {
+	// Generate frob
+	frob, err := s.client.GetFrob()
+	if err != nil {
+		return "", "", fmt.Errorf("error getting frob: %w", err)
+	}
+
+	// Generate auth URL
+	authURL := s.client.GetAuthURL(frob, string(PermDelete))
+
+	// Create auth flow
+	flow := &Flow{
+		Frob:       frob,
+		StartTime:  time.Now(),
+		Permission: PermDelete,
+		AuthURL:    authURL,
+		ExpiresAt:  time.Now().Add(24 * time.Hour),
+	}
+
+	// Store auth flow
+	s.mu.Lock()
+	s.authFlows[frob] = flow
+	s.authStatus = StatusPending
+	s.mu.Unlock()
+
+	return authURL, frob, nil
+}
+
+// CompleteAuthFlow completes the authentication flow with the provided frob.
+// It exchanges the frob for a permanent auth token.
+func (s *Service) CompleteAuthFlow(frob string) error {
+	// Check if we have this frob
+	s.mu.RLock()
+	flow, exists := s.authFlows[frob]
+	s.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("invalid frob, not found in active authentication flows")
+	}
+
+	// Check if flow has expired
+	if time.Now().After(flow.ExpiresAt) {
+		s.mu.Lock()
+		delete(s.authFlows, frob)
+		s.mu.Unlock()
+		return fmt.Errorf("authentication flow expired, please start a new one")
+	}
+
+	// Exchange frob for token
+	token, err := s.client.GetToken(frob)
+	if err != nil {
+		s.mu.Lock()
+		s.authStatus = StatusNotAuthenticated
+		s.mu.Unlock()
+		return fmt.Errorf("error getting token: %w", err)
+	}
+
+	// Save token
+	if err := s.tokenManager.SaveToken(token); err != nil {
+		return fmt.Errorf("error saving token: %w", err)
+	}
+
+	// Clean up auth flow
+	s.mu.Lock()
+	delete(s.authFlows, frob)
+	s.authStatus = StatusAuthenticated
+	s.mu.Unlock()
+
+	return nil
+}
