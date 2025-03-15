@@ -3,8 +3,8 @@ package conformance
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
@@ -438,7 +438,7 @@ func TestMCPToolEndpoints(t *testing.T) {
 
 			if name, ok := toolObj["name"].(string); ok && name == "authenticate" {
 				authToolFound = true
-				
+
 				// Check arguments structure
 				args, ok := toolObj["arguments"].([]interface{})
 				if !ok {
@@ -446,7 +446,7 @@ func TestMCPToolEndpoints(t *testing.T) {
 				} else if len(args) == 0 {
 					t.Error("authenticate tool should have at least one argument (frob)")
 				}
-				
+
 				break
 			}
 		}
@@ -483,8 +483,8 @@ func TestMCPToolEndpoints(t *testing.T) {
 
 		// This should fail because we're using an invalid frob, but the API should
 		// accept the request and return a structured error
-		if resp.StatusCode != http.StatusInternalServerError && 
-		   resp.StatusCode != http.StatusBadRequest {
+		if resp.StatusCode != http.StatusInternalServerError &&
+			resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("Unexpected status code: got %d, want 500 or 400", resp.StatusCode)
 		}
 

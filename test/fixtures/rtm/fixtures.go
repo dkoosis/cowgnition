@@ -8,19 +8,19 @@ import (
 
 // Constants for test data
 const (
-	TestFrob       = "test_frob_12345"
-	TestToken      = "test_token_abc123"
-	TestUserID     = "123"
-	TestUsername   = "test_user"
-	TestFullname   = "Test User"
-	TestTimeline   = "timeline_12345"
-	TestListID     = "1"
-	TestListName   = "Test List"
-	TestTaskID     = "1001"
-	TestSeriesID   = "2001"
-	TestTagName    = "test_tag"
-	TestNoteID     = "3001"
-	TestNoteTitle  = "Test Note"
+	TestFrob        = "test_frob_12345"
+	TestToken       = "test_token_abc123"
+	TestUserID      = "123"
+	TestUsername    = "test_user"
+	TestFullname    = "Test User"
+	TestTimeline    = "timeline_12345"
+	TestListID      = "1"
+	TestListName    = "Test List"
+	TestTaskID      = "1001"
+	TestSeriesID    = "2001"
+	TestTagName     = "test_tag"
+	TestNoteID      = "3001"
+	TestNoteTitle   = "Test Note"
 	TestNoteContent = "This is a test note content"
 )
 
@@ -168,7 +168,7 @@ func GetTasksGetListResponse(tasks []Task) string {
 	if len(tasks) == 0 {
 		// Current date in ISO format
 		now := time.Now().Format("2006-01-02T15:04:05Z")
-		
+
 		// Default tasks
 		tasks = []Task{
 			{
