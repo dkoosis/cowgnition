@@ -7,12 +7,12 @@ import (
 	"time"
 )
 
-// AuthStatus represents the current authentication status
-type AuthStatus int
+// Status represents the current authentication status
+type Status int
 
 const (
 	// StatusNotAuthenticated indicates no authentication has been attempted
-	StatusNotAuthenticated AuthStatus = iota
+	StatusNotAuthenticated Status = iota
 
 	// StatusPending indicates authentication is in progress
 	StatusPending
@@ -38,8 +38,8 @@ const (
 	PermDelete Permission = "delete"
 )
 
-// AuthFlow represents an ongoing authentication flow
-type AuthFlow struct {
+// Flow represents an ongoing authentication flow
+type Flow struct {
 	Frob        string
 	CreatedAt   time.Time
 	Permission  Permission
@@ -47,20 +47,20 @@ type AuthFlow struct {
 	AuthURL     string
 }
 
-// AuthManager handles the RTM authentication process.
+// Manager handles the RTM authentication process.
 // It manages auth flows, tokens, and permission levels.
-type AuthManager struct {
+type Manager struct {
 	tokenPath    string
 	permission   Permission
 	tokenManager *TokenManager
-	authFlows    map[string]*AuthFlow
+	authFlows    map[string]*Flow
 	mu           sync.RWMutex
 	refreshChan  chan struct{}
-	status       AuthStatus
+	status       Status
 }
 
-// NewAuthManager creates a new authentication manager.
-func NewAuthManager(tokenPath string, permission Permission) (*AuthManager, error) {
+// NewManager creates a new authentication manager.
+func NewManager(tokenPath string, permission Permission) (*Manager, error) {
 	// Create token manager
 	tokenManager, err := NewTokenManager(tokenPath)
 	if err != nil {
@@ -68,11 +68,11 @@ func NewAuthManager(tokenPath string, permission Permission) (*AuthManager, erro
 	}
 
 	// Create auth manager
-	manager := &AuthManager{
+	manager := &Manager{
 		tokenPath:    tokenPath,
 		permission:   permission,
 		tokenManager: tokenManager,
-		authFlows:    make(map[string]*AuthFlow),
+		authFlows:    make(map[string]*Flow),
 		refreshChan:  make(chan struct{}, 1),
 		status:       StatusNotAuthenticated,
 	}
@@ -82,7 +82,7 @@ func NewAuthManager(tokenPath string, permission Permission) (*AuthManager, erro
 
 // StartAuthFlow begins a new authentication flow with the specified permission level.
 // It returns the authentication URL for the user to visit and the frob for future use.
-func (am *AuthManager) StartAuthFlow(generateAuthURL func(frob string, perm string) (string, error)) (string, string, error) {
+func (am *Manager) StartAuthFlow(generateAuthURL func(frob string, perm string) (string, error)) (string, string, error) {
 	// Generate a frob
 	frob, err := generateFrob()
 	if err != nil {
@@ -96,7 +96,7 @@ func (am *AuthManager) StartAuthFlow(generateAuthURL func(frob string, perm stri
 	}
 
 	// Create auth flow
-	flow := &AuthFlow{
+	flow := &Flow{
 		Frob:       frob,
 		CreatedAt:  time.Now(),
 		Permission: am.permission,
@@ -114,7 +114,7 @@ func (am *AuthManager) StartAuthFlow(generateAuthURL func(frob string, perm stri
 
 // CompleteAuthFlow completes an authentication flow with the provided frob.
 // It exchanges the frob for a token and stores it securely.
-func (am *AuthManager) CompleteAuthFlow(frob string, getToken func(frob string) (string, error)) error {
+func (am *Manager) CompleteAuthFlow(frob string, getToken func(frob string) (string, error)) error {
 	// Validate frob
 	am.mu.RLock()
 	flow, exists := am.authFlows[frob]
@@ -157,7 +157,7 @@ func (am *AuthManager) CompleteAuthFlow(frob string, getToken func(frob string) 
 
 // CheckAuthStatus checks the current authentication status.
 // It verifies token existence and validity.
-func (am *AuthManager) CheckAuthStatus(verifyToken func(token string) (bool, error)) (AuthStatus, error) {
+func (am *Manager) CheckAuthStatus(verifyToken func(token string) (bool, error)) (Status, error) {
 	am.mu.RLock()
 	status := am.status
 	am.mu.RUnlock()
@@ -211,19 +211,19 @@ func (am *AuthManager) CheckAuthStatus(verifyToken func(token string) (bool, err
 }
 
 // GetStatus returns the current authentication status without verification.
-func (am *AuthManager) GetStatus() AuthStatus {
+func (am *Manager) GetStatus() Status {
 	am.mu.RLock()
 	defer am.mu.RUnlock()
 	return am.status
 }
 
 // GetToken retrieves the stored authentication token if available.
-func (am *AuthManager) GetToken() (string, error) {
+func (am *Manager) GetToken() (string, error) {
 	return am.tokenManager.LoadToken()
 }
 
 // ClearAuthentication removes all authentication data.
-func (am *AuthManager) ClearAuthentication() error {
+func (am *Manager) ClearAuthentication() error {
 	// Remove token
 	if err := am.tokenManager.DeleteToken(); err != nil {
 		return fmt.Errorf("error removing token: %w", err)
@@ -232,21 +232,21 @@ func (am *AuthManager) ClearAuthentication() error {
 	// Reset status
 	am.mu.Lock()
 	am.status = StatusNotAuthenticated
-	am.authFlows = make(map[string]*AuthFlow)
+	am.authFlows = make(map[string]*Flow)
 	am.mu.Unlock()
 
 	return nil
 }
 
 // HasPendingFlow checks if there are any pending authentication flows.
-func (am *AuthManager) HasPendingFlow() bool {
+func (am *Manager) HasPendingFlow() bool {
 	am.mu.RLock()
 	defer am.mu.RUnlock()
 	return len(am.authFlows) > 0
 }
 
 // CleanExpiredFlows removes expired authentication flows.
-func (am *AuthManager) CleanExpiredFlows() {
+func (am *Manager) CleanExpiredFlows() {
 	am.mu.Lock()
 	defer am.mu.Unlock()
 

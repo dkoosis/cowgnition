@@ -13,8 +13,8 @@ import (
 	"github.com/cowgnition/cowgnition/internal/rtm"
 )
 
-// MCPServer represents an MCP server for RTM integration.
-type MCPServer struct {
+// Server represents an MCP server for RTM integration.
+type Server struct {
 	config       *config.Config
 	rtmService   *rtm.Service
 	httpServer   *http.Server
@@ -23,9 +23,9 @@ type MCPServer struct {
 	version string
 }
 
-// NewMCPServer creates a new MCP server with the provided configuration.
+// NewServer creates a new MCP server with the provided configuration.
 // It initializes the RTM service and authentication token manager.
-func NewMCPServer(cfg *config.Config) (*MCPServer, error) {
+func NewServer(cfg *config.Config) (*Server, error) {
 	// Create token manager
 	tokenManager, err := auth.NewTokenManager(cfg.Auth.TokenPath)
 	if err != nil {
@@ -44,7 +44,7 @@ func NewMCPServer(cfg *config.Config) (*MCPServer, error) {
 		return nil, fmt.Errorf("error initializing RTM service: %w", err)
 	}
 
-	return &MCPServer{
+	return &Server{
 		config:       cfg,
 		rtmService:   rtmService,
 		tokenManager: tokenManager,
@@ -53,7 +53,7 @@ func NewMCPServer(cfg *config.Config) (*MCPServer, error) {
 }
 
 // Start starts the MCP server and returns an error if it fails to start.
-func (s *MCPServer) Start() error {
+func (s *Server) Start() error {
 	// Create router
 	mux := http.NewServeMux()
 
@@ -93,13 +93,13 @@ func (s *MCPServer) Start() error {
 }
 
 // Stop gracefully stops the MCP server with the given context timeout.
-func (s *MCPServer) Stop(ctx context.Context) error {
+func (s *Server) Stop(ctx context.Context) error {
 	log.Println("Shutting down MCP server...")
 	return s.httpServer.Shutdown(ctx)
 }
 
 // handleHealthCheck provides a simple health check endpoint.
-func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
 	// Check if RTM service is healthy
 	if s.rtmService == nil {
 		http.Error(w, "RTM service not initialized", http.StatusServiceUnavailable)
@@ -118,7 +118,7 @@ func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
 
 // handleSendNotification is a placeholder for notification support.
 // The MCP spec may evolve to include proper notification support.
-func (s *MCPServer) handleSendNotification(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSendNotification(w http.ResponseWriter, r *http.Request) {
 	// Currently, we don't support notifications, so return appropriate error
 	if r.Method != http.MethodPost {
 		writeErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -130,17 +130,17 @@ func (s *MCPServer) handleSendNotification(w http.ResponseWriter, r *http.Reques
 }
 
 // GetVersion returns the server version.
-func (s *MCPServer) GetVersion() string {
+func (s *Server) GetVersion() string {
 	return s.version
 }
 
 // SetVersion sets the server version.
-func (s *MCPServer) SetVersion(version string) {
+func (s *Server) SetVersion(version string) {
 	s.version = version
 }
 
 // GetRTMService returns the server's RTM service.
-func (s *MCPServer) GetRTMService() *rtm.Service {
+func (s *Server) GetRTMService() *rtm.Service {
 	return s.rtmService
 }
 

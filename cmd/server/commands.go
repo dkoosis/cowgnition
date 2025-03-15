@@ -76,19 +76,19 @@ func serveCommand(args []string) error {
 	}
 
 	// Create and start server
-	mcp, err := server.NewMCPServer(cfg)
+	srv, err := server.NewServer(cfg)
 	if err != nil {
 		return fmt.Errorf("error creating server: %w", err)
 	}
 
 	// Set server version
-	mcp.SetVersion(version)
+	srv.SetVersion(version)
 
 	// Start server in goroutine
 	errCh := make(chan error, 1)
 	go func() {
 		log.Printf("Starting MCP server '%s' on port %d", cfg.Server.Name, cfg.Server.Port)
-		errCh <- mcp.Start()
+		errCh <- srv.Start()
 	}()
 
 	// Wait for interrupt or error
@@ -107,7 +107,7 @@ func serveCommand(args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := mcp.Stop(ctx); err != nil {
+	if err := srv.Stop(ctx); err != nil {
 		return fmt.Errorf("error stopping server: %w", err)
 	}
 
@@ -143,7 +143,7 @@ func checkCommand(args []string) error {
 	fmt.Println("Checking RTM authentication status...")
 
 	// Create server (but don't start HTTP server)
-	svr, err := server.NewMCPServer(cfg)
+	svr, err := server.NewServer(cfg)
 	if err != nil {
 		return fmt.Errorf("error creating server: %w", err)
 	}

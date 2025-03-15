@@ -19,8 +19,8 @@ type Service struct {
 	tokenManager *auth.TokenManager
 	mu           sync.RWMutex
 	lastSyncTime time.Time
-	authStatus   AuthStatus
-	authFlows    map[string]*AuthFlow
+	authStatus   Status
+	authFlows    map[string]*Flow
 }
 
 // NewService creates a new RTM service with the specified credentials.
@@ -28,8 +28,8 @@ func NewService(apiKey, sharedSecret, tokenPath string) *Service {
 	return &Service{
 		client:     NewClient(apiKey, sharedSecret),
 		tokenPath:  tokenPath,
-		authStatus: AuthStatusUnknown,
-		authFlows:  make(map[string]*AuthFlow),
+		authStatus: StatusUnknown,
+		authFlows:  make(map[string]*Flow),
 	}
 }
 
@@ -61,16 +61,16 @@ func (s *Service) Initialize() error {
 				if err := s.tokenManager.DeleteToken(); err != nil {
 					log.Printf("Warning: Failed to delete invalid token: %v", err)
 				}
-				s.authStatus = AuthStatusNotAuthenticated
+				s.authStatus = StatusNotAuthenticated
 			} else {
 				// Token is valid
-				s.authStatus = AuthStatusAuthenticated
+				s.authStatus = StatusAuthenticated
 				log.Println("Successfully authenticated with stored token")
 			}
 		}
 	} else {
 		// No token stored
-		s.authStatus = AuthStatusNotAuthenticated
+		s.authStatus = StatusNotAuthenticated
 	}
 
 	// Start a background cleanup routine for expired auth flows
@@ -87,7 +87,7 @@ func (s *Service) Initialize() error {
 }
 
 // GetAuthStatus returns the current authentication status.
-func (s *Service) GetAuthStatus() AuthStatus {
+func (s *Service) GetAuthStatus() Status {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.authStatus

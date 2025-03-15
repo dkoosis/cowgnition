@@ -8,30 +8,30 @@ import (
 	"time"
 )
 
-// AuthStatus represents the current authentication status.
-type AuthStatus int
+// Status represents the current authentication status.
+type Status int
 
 const (
-	// AuthStatusUnknown indicates that the authentication status is not determined yet.
-	AuthStatusUnknown AuthStatus = iota
-	// AuthStatusNotAuthenticated indicates that the user is not authenticated.
-	AuthStatusNotAuthenticated
-	// AuthStatusPending indicates that authentication is in progress.
-	AuthStatusPending
-	// AuthStatusAuthenticated indicates that the user is authenticated.
-	AuthStatusAuthenticated
+	// StatusUnknown indicates that the authentication status is not determined yet.
+	StatusUnknown Status = iota
+	// StatusNotAuthenticated indicates that the user is not authenticated.
+	StatusNotAuthenticated
+	// StatusPending indicates that authentication is in progress.
+	StatusPending
+	// StatusAuthenticated indicates that the user is authenticated.
+	StatusAuthenticated
 )
 
 // String returns a string representation of the auth status.
-func (s AuthStatus) String() string {
+func (s Status) String() string {
 	switch s {
-	case AuthStatusUnknown:
+	case StatusUnknown:
 		return "Unknown"
-	case AuthStatusNotAuthenticated:
+	case StatusNotAuthenticated:
 		return "Not Authenticated"
-	case AuthStatusPending:
+	case StatusPending:
 		return "Authentication Pending"
-	case AuthStatusAuthenticated:
+	case StatusAuthenticated:
 		return "Authenticated"
 	default:
 		return "Invalid Status"
@@ -50,8 +50,8 @@ const (
 	PermDelete Permission = "delete"
 )
 
-// AuthFlow represents an ongoing authentication flow.
-type AuthFlow struct {
+// Flow represents an ongoing authentication flow.
+type Flow struct {
 	Frob       string
 	StartTime  time.Time
 	Permission Permission
@@ -72,7 +72,7 @@ func (s *Service) StartAuthFlow() (string, string, error) {
 	authURL := s.client.GetAuthURL(frob, string(PermDelete))
 
 	// Create and store auth flow
-	flow := &AuthFlow{
+	flow := &Flow{
 		Frob:       frob,
 		StartTime:  time.Now(),
 		Permission: PermDelete,
@@ -83,7 +83,7 @@ func (s *Service) StartAuthFlow() (string, string, error) {
 	// Store auth flow
 	s.mu.Lock()
 	s.authFlows[frob] = flow
-	s.authStatus = AuthStatusPending
+	s.authStatus = StatusPending
 	s.mu.Unlock()
 
 	log.Printf("Started RTM auth flow with frob: %s", frob)
@@ -114,7 +114,7 @@ func (s *Service) CompleteAuthFlow(frob string) error {
 	token, err := s.client.GetToken(frob)
 	if err != nil {
 		s.mu.Lock()
-		s.authStatus = AuthStatusNotAuthenticated
+		s.authStatus = StatusNotAuthenticated
 		s.mu.Unlock()
 		return fmt.Errorf("error getting token: %w", err)
 	}
@@ -129,7 +129,7 @@ func (s *Service) CompleteAuthFlow(frob string) error {
 
 	// Update status and clean up flow
 	s.mu.Lock()
-	s.authStatus = AuthStatusAuthenticated
+	s.authStatus = StatusAuthenticated
 	delete(s.authFlows, frob)
 	s.mu.Unlock()
 
@@ -139,13 +139,13 @@ func (s *Service) CompleteAuthFlow(frob string) error {
 
 // CheckAuthStatus checks if the current authentication is valid.
 // It returns the current status and an error if the check fails.
-func (s *Service) CheckAuthStatus() (AuthStatus, error) {
+func (s *Service) CheckAuthStatus() (Status, error) {
 	s.mu.RLock()
 	status := s.authStatus
 	s.mu.RUnlock()
 
 	// If we're in a definitive state, return it
-	if status == AuthStatusPending {
+	if status == StatusPending {
 		// Pending means we're waiting for user to authorize
 		return status, nil
 	}
@@ -157,9 +157,9 @@ func (s *Service) CheckAuthStatus() (AuthStatus, error) {
 		token, err := s.tokenManager.LoadToken()
 		if err != nil || token == "" {
 			s.mu.Lock()
-			s.authStatus = AuthStatusNotAuthenticated
+			s.authStatus = StatusNotAuthenticated
 			s.mu.Unlock()
-			return AuthStatusNotAuthenticated, nil
+			return StatusNotAuthenticated, nil
 		}
 
 		// Set token on client
@@ -176,21 +176,21 @@ func (s *Service) CheckAuthStatus() (AuthStatus, error) {
 		}
 
 		s.mu.Lock()
-		s.authStatus = AuthStatusNotAuthenticated
+		s.authStatus = StatusNotAuthenticated
 		s.mu.Unlock()
 
 		if err != nil {
-			return AuthStatusNotAuthenticated, fmt.Errorf("error checking token: %w", err)
+			return StatusNotAuthenticated, fmt.Errorf("error checking token: %w", err)
 		}
-		return AuthStatusNotAuthenticated, nil
+		return StatusNotAuthenticated, nil
 	}
 
 	// Token is valid
 	s.mu.Lock()
-	s.authStatus = AuthStatusAuthenticated
+	s.authStatus = StatusAuthenticated
 	s.mu.Unlock()
 
-	return AuthStatusAuthenticated, nil
+	return StatusAuthenticated, nil
 }
 
 // IsAuthenticated returns true if the user is authenticated with RTM.
@@ -199,7 +199,7 @@ func (s *Service) IsAuthenticated() bool {
 	if err != nil {
 		log.Printf("Warning: Error checking authentication status: %v", err)
 	}
-	return status == AuthStatusAuthenticated
+	return status == StatusAuthenticated
 }
 
 // ClearAuthentication removes all authentication data.
@@ -214,8 +214,8 @@ func (s *Service) ClearAuthentication() error {
 
 	// Update status and clean up flows
 	s.mu.Lock()
-	s.authStatus = AuthStatusNotAuthenticated
-	s.authFlows = make(map[string]*AuthFlow)
+	s.authStatus = StatusNotAuthenticated
+	s.authFlows = make(map[string]*Flow)
 	s.mu.Unlock()
 
 	log.Println("RTM authentication data cleared")
@@ -231,7 +231,7 @@ func (s *Service) RefreshToken(_ context.Context) error {
 		return fmt.Errorf("error checking token status: %w", err)
 	}
 
-	if status != AuthStatusAuthenticated {
+	if status != StatusAuthenticated {
 		return fmt.Errorf("not authenticated, cannot refresh token")
 	}
 
