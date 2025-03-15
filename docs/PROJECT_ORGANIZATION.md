@@ -1,246 +1,145 @@
-# Axe Handle Project Organization
+# Project Organization 📂
 
-This document describes the architecture, directory structure, organization patterns, and components of the Axe Handle project.
-
-## Overview
-
-Axe Handle is a code generator for creating Model Context Protocol (MCP) servers, written in Go. It takes a service definition as input and produces a Go-based implementation of an MCP-compliant server.
-
-## Table of Contents
-- [Core Architecture](#core-architecture)
-- [Directory Structure](#directory-structure)
-- [Naming Conventions](#naming-conventions)
-- [Component Architecture](#component-architecture)
-- [Data Flow](#data-flow)
-- [Template System](#template-system)
-- [Generated Output](#generated-output)
-
-## Core Architecture
-
-Axe Handle follows a pipeline architecture for transforming input schemas into generated code:
-
-```
-User Schema (.proto) → Parser → Validator → Mapper → Generator → Go Server
-```
-
-### Key Components
-
-1. **Parser**
-   - Processes the input schema (Protobuf format)
-   - Extracts resources, operations, and types
-
-2. **Validator**
-   - Ensures compliance with MCP specifications
-   - Validates schema against business rules
-
-3. **Mapper**
-   - Transforms parsed schema into an intermediate representation
-   - Resolves relationships between resources
-
-4. **Generator**
-   - Creates server code from templates using the mapped data
-   - Manages output directory structure
-
-### Supporting Systems
-
-1. **Template System**
-   - A flexible template engine built around Go's text/template
-   - Templates organized by target framework and component type
-
-2. **Validation Utilities**
-   - Comprehensive validation for inputs, paths, and schemas
-   - Ensures data integrity throughout the pipeline
-
-3. **Error Handling**
-   - Structured error types with detailed error wrapping
-   - Using Go 1.13+ error wrapping for context enrichment
-
-4. **Logging**
-   - Structured logging with levels
-   - Performance tracking for generation steps
+This document provides a friendly tour of how CowGnition is organized and architected.
 
 ## Directory Structure
 
+CowGnition follows the [standard Go project layout](https://github.com/golang-standards/project-layout) with the following structure:
+
 ```
-axe-handle/
+cowgnition/
 ├── cmd/                      # Command-line entry points
-│   └── axe/                  # Main CLI application
+│   └── server/               # Main server application
+│       ├── main.go           # Application entry point
+│       └── commands.go       # CLI command definitions
+├── configs/                  # Configuration files
+│   └── config.example.yaml   # Example configuration template
 ├── internal/                 # Private application code
-│   ├── generator/            # Code generation logic
-│   ├── parser/               # Schema parsing
-│   ├── mapper/               # Schema to code mapping
-│   └── template/             # Template management
+│   ├── auth/                 # RTM authentication
+│   │   ├── auth_manager.go   # Authentication flow management
+│   │   └── token_manager.go  # Secure token storage
+│   ├── config/               # Configuration handling
+│   │   └── config.go         # Config loading and validation
+│   ├── server/               # MCP server implementation
+│   │   ├── server.go         # MCP server core
+│   │   ├── handlers.go       # HTTP handlers for MCP endpoints
+│   │   ├── resources.go      # Resource implementations
+│   │   ├── tools.go          # Tool implementations
+│   │   ├── middleware.go     # HTTP middleware
+│   │   └── utils.go          # Helper functions
+│   └── rtm/                  # RTM API client
+│       ├── client.go         # HTTP client for RTM API
+│       ├── service.go        # Business logic for RTM operations
+│       └── types.go          # RTM data models
 ├── pkg/                      # Shareable libraries
-│   ├── mcp/                  # MCP protocol definitions
-│   └── validations/          # Validation utilities
-├── templates/                # Go templates for generated code
-│   └── server/               # Server templates
-├── examples/                 # Example schemas and generated code
-└── docs/                     # Project documentation
+│   └── mcp/                  # MCP protocol utilities
+│       └── types.go          # MCP type definitions
+├── scripts/                  # Build and utility scripts
+│   └── setup.sh              # Development environment setup
+└── docs/                     # Documentation
+    └── PROJECT_ORGANIZATION.md  # This file
 ```
-
-### Key Directories
-
-- **`cmd/`**: Contains the main entry points for the application's executables.
-- **`internal/`**: Contains private application code that is not meant to be imported by other applications.
-- **`pkg/`**: Contains libraries that can be used by other applications.
-- **`templates/`**: Contains the actual template files used for code generation.
-- **`examples/`**: Contains example input schemas and generated code.
-- **`docs/`**: Contains high-level documentation for the project.
-
-## Naming Conventions
-
-### Packages
-
-- Use lowercase, single-word names for packages
-- Package names should be nouns
-- Avoid underscores in package names
-
-### Files
-
-- Use lowercase with underscores for file names (e.g., `server_generator.go`)
-- Test files should be named `*_test.go`
-- Main executable files should be in their own package (e.g., `cmd/axe/main.go`)
-
-### Functions and Methods
-
-- Use MixedCaps (camelCase or PascalCase) for function names
-- Public functions should start with an uppercase letter
-- Private functions should start with a lowercase letter
-
-### Types and Interfaces
-
-- Use PascalCase for type and interface names
-- Interfaces with a single method should end with `-er` (e.g., `Parser`)
-- Keep interfaces small and focused
 
 ## Component Architecture
 
-The Axe Handle project consists of these main components:
+CowGnition follows a layered architecture with clear separation of concerns:
 
-### Generator (Axe Handle)
+1. **Command Layer** (`cmd/server/`)
 
-1. **Parser System**
-   - Processes Protocol Buffer schemas
-   - Validates schema against MCP requirements
-   - Extracts resources, operations, and types
+   - Handles parsing command-line arguments
+   - Initializes and manages application lifecycle
+   - Routes to appropriate commands
 
-2. **Mapper System**
-   - Maps parsed schema to MCP concepts
-   - Resolves relationships between resources
-   - Validates mapping for completeness
+2. **Server Layer** (`internal/server/`)
 
-3. **Template System**
-   - Loads templates from filesystem
-   - Renders templates with mapped data
-   - Writes generated code to output directory
+   - Implements the Model Context Protocol
+   - Exposes resources and tools
+   - Manages HTTP endpoints and request handling
 
-4. **Code Generator**
-   - Coordinates the end-to-end generation process
-   - Handles command-line parameters
-   - Manages output directory structure
+3. **Service Layer** (`internal/rtm/service.go`)
 
-### Generated Server (MCP)
+   - Implements business logic for RTM operations
+   - Manages authentication state
+   - Coordinates client calls
 
-1. **Go-based Server**
-   - HTTP endpoints for MCP operations
-   - WebSocket support for real-time communication
-   - Error handling and validation
+4. **Client Layer** (`internal/rtm/client.go`)
 
-2. **Resource Handlers**
-   - Operation implementations for each resource
-   - Request validation and transformation
-   - Response formatting
+   - Handles HTTP communication with RTM API
+   - Implements API request signing
+   - Parses API responses
 
-3. **Documentation**
-   - API documentation for the MCP server
-   - Resource and operation descriptions
-   - Sample requests and responses
+5. **Auth Layer** (`internal/auth/`)
 
-## Data Flow
+   - Manages authentication flows
+   - Securely stores tokens
+   - Validates authentication state
 
-The data flows through the system as follows:
+6. **Config Layer** (`internal/config/`)
+   - Loads and validates configuration
+   - Provides access to application settings
 
-1. **Input**: Protocol Buffer schema defining the service
-2. **Parsing**: Schema is parsed into an intermediate representation
-3. **Mapping**: Intermediate representation is mapped to MCP concepts
-4. **Generation**: Code is generated from templates using mapped data
-5. **Output**: Go server implementing the MCP protocol
+## MCP Protocol Implementation
 
-### Data Flow Diagram
+The server implements the Model Context Protocol, which provides a standardized way for AI assistants to interact with external services:
 
-```
-┌───────────┐    ┌──────────┐    ┌──────────────┐    ┌───────────┐    ┌───────────┐
-│           │    │          │    │              │    │           │    │           │
-│  Protobuf │───>│  Parser  │───>│ Intermediate │───>│  Mapper   │───>│  Context  │
-│  Schema   │    │          │    │ Representation│    │           │    │ Model     │
-│           │    │          │    │              │    │           │    │           │
-└───────────┘    └──────────┘    └──────────────┘    └───────────┘    └─────┬─────┘
-                                                                            │
-                                                                            ▼
-┌───────────┐    ┌──────────┐    ┌──────────────┐    ┌───────────┐    ┌───────────┐
-│           │    │          │    │              │    │           │    │           │
-│  Output   │<───│ Generated│<───│  Rendered    │<───│ Template  │<───│ Template  │
-│  Server   │    │  Files   │    │  Templates   │    │ Engine    │    │ Loader    │
-│           │    │          │    │              │    │           │    │           │
-└───────────┘    └──────────┘    └──────────────┘    └───────────┘    └───────────┘
-```
+1. **Initialization**
 
-## Template System
+   - Server declares its capabilities
+   - Client establishes connection parameters
 
-Templates are organized by component type:
+2. **Resources**
 
-```
-templates/
-├── server/
-│   ├── main.go.tmpl
-│   ├── handlers.go.tmpl
-│   ├── types.go.tmpl
-│   └── docs.md.tmpl
-└── common/
-    └── helpers.tmpl
-```
+   - Read-only data sources
+   - Support parametrized paths
+   - Return formatted text content
 
-### Template Engine
+3. **Tools**
+   - Action-oriented capabilities
+   - Support arguments for customization
+   - Return operation results
 
-The project uses Go's standard `text/template` and `html/template` packages:
+## Data Flow 🔄
 
-- Templates are parsed once and cached for performance
-- Custom functions extend the template functionality
-- Each template can include other templates
-- Data passed to templates is strongly typed
+Here's how information flows when you ask Claude about your tasks:
 
-### Template Functions
+1. You ask Claude something like "What's due today?" in Claude Desktop
+2. Claude thinks "I need to check their RTM account"
+3. Claude calls CowGnition behind the scenes using MCP
+4. CowGnition quickly checks if you're logged in
+5. If you're not yet connected, CowGnition sends back auth instructions
+6. If you're all set, CowGnition fetches what you need from RTM
+7. CowGnition translates RTM's response into something Claude understands
+8. Claude presents your task information in a conversational way
 
-A set of helper functions is available within templates:
+All this happens in seconds – the technical complexity stays hidden while you have a natural conversation with Claude.
 
-- Type conversion helpers (camelCase, PascalCase, etc.)
-- Code generation helpers (indent, wrapComment, etc.)
-- Validation helpers for generated code
+## Authentication Flow
 
-## Generated Output
+The Remember The Milk authentication implementation follows the OAuth-like flow described in the [RTM API documentation](https://www.rememberthemilk.com/services/api/authentication.rtm):
 
-The generated server follows this structure:
+1. User requests access to RTM resources
+2. Server generates auth URL with API key
+3. User visits URL and authorizes the application
+4. User receives a frob from RTM
+5. User provides frob to CowGnition via Claude
+6. CowGnition exchanges frob for permanent token
+7. Token is stored securely for future sessions
 
-```
-generated/
-├── cmd/
-│   └── server/
-│       └── main.go           # Entry point
-├── internal/
-│   ├── handlers/             # Resource handlers
-│   ├── models/               # Domain models
-│   └── server/               # Server configuration
-├── api/
-│   └── openapi.yaml          # API documentation
-└── README.md                 # Usage instructions
-```
+## Design Principles 🧩
 
-The generated code includes:
+CowGnition is built on these solid principles:
 
-- Go structs for all resources
-- HTTP handlers for all operations
-- Request/response validation
-- Documentation for the generated API
-- Configuration for the server
-- Middleware for authentication and logging
+1. **Separation of Concerns** - Everything has one job and does it well, like RTM's focused approach to task management
+2. **Clean API Boundaries** - Components talk to each other through clear channels, no confusion
+3. **Security First** - Your RTM connection is treated with care and respect
+4. **Friendly Failures** - When something goes wrong, you get helpful guidance, not cryptic errors
+5. **Flexibility** - Configuration options let you set things up your way
+6. **Testability** - Code that can be thoroughly tested is code you can trust
+
+These principles help us create a reliable bridge between Claude and your carefully curated RTM tasks.
+
+## Related Documentation
+
+- [README.md](../README.md) - Project overview and usage instructions
+- [GO_PRACTICES.md](../GO_PRACTICES.md) - Go development guidelines
+- [TODO.md](../TODO.md) - Development roadmap
