@@ -12,6 +12,7 @@ This document outlines our standard tools and practices for Go development. Thes
 | [golangci-lint](https://golangci-lint.run/usage/install/)        | Comprehensive linting tool         | `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest` |
 | [goimports](https://pkg.go.dev/golang.org/x/tools/cmd/goimports) | Import organization and formatting | `go install golang.org/x/tools/cmd/goimports@latest`                    |
 | [gotestsum](https://github.com/gotestyourself/gotestsum)         | Enhanced test output and reporting | `go install gotest.tools/gotestsum@latest`                              |
+| [staticcheck](https://staticcheck.io/docs/getting-started/)      | Advanced static analysis tool      | `go install honnef.co/go/tools/cmd/staticcheck@latest`                  |
 
 ### Additional Tooling Decisions
 
@@ -30,20 +31,18 @@ This document outlines our standard tools and practices for Go development. Thes
 
 ## Test Tooling with gotestsum
 
-We've standardized on `gotestsum` for test formatting and output, replacing our previous custom test runner. This decision provides several benefits:
+We've standardized on `gotestsum` for test formatting and output. This decision provides several benefits:
 
 1. **Improved readability**: Clear, organized test output with better formatting than standard `go test`
 2. **Configurable formats**: Multiple output formats depending on needs:
    - `dots`: Compact output showing each test as a dot (good for large test suites)
-   - `pkgname`: Grouped by package with clean pass/fail indicators (our default)
+   - `pkgname`: Grouped by package with clean pass/fail indicators
    - `testname`: Lists all tests with pass/fail status
    - `standard-verbose`: Similar to `go test -v` but better formatted
    - `standard-quiet`: Minimal output, good for CI
 3. **JUnit XML integration**: Provides CI integration with test reporting systems
 4. **Failure summary**: Provides concise failure summary at the end of all tests
 5. **Watch mode**: Supports watching for changes and re-running tests
-6. **Consistent output**: Ensures all developers see the same test results format
-7. **Maintained tool**: Benefits from community maintenance and updates
 
 Usage examples:
 
@@ -59,15 +58,9 @@ gotestsum --format pkgname --junitfile unit-tests.xml
 
 # Watch mode for TDD workflow
 gotestsum --watch
-
-# Run tests for a specific package
-gotestsum --format pkgname -- ./internal/config
-
-# Run tests with a specific pattern
-gotestsum --format testname -- -run TestConfig
 ```
 
-For our project, `gotestsum` is integrated into the Makefile, and developers should use `make test` rather than running `go test` directly. This ensures consistent test output and reporting across all environments.
+For our project, `gotestsum` is integrated into the Makefile, and developers should use `make test` rather than running `go test` directly.
 
 ## Code Style and Quality Practices
 
@@ -88,12 +81,21 @@ For our project, `gotestsum` is integrated into the Makefile, and developers sho
    - Document all exported functions, types, and packages
    - Follow Go's standard comment style (see [godoc documentation](https://go.dev/blog/godoc))
    - Include examples where appropriate
+   - All comments should end with a period, per Go style
 
-4. **Testing**
+4. **Error Handling**
+   
+   - Use explicit error checking for all operations that can fail
+   - Wrap errors with context using `fmt.Errorf("context: %w", err)`
+   - Return errors early to avoid deep nesting
+   - Use custom error types for specific error conditions that need handling
+
+5. **Testing**
    - Write unit tests for all packages
    - Use table-driven tests for comprehensive case coverage
    - Target at least 70% code coverage for critical functionality
    - Use mocks appropriately to isolate unit tests
+   - Use `t.Helper()` for test helper functions to improve error reporting
 
 ## Project Structure
 
@@ -127,12 +129,14 @@ For more details, see [Standard Go Project Layout](https://github.com/golang-sta
    - Use Go modules for dependency management
    - Pin dependencies to specific versions
    - Regularly update dependencies and review changes
+   - Run `go mod tidy` before committing changes
 
 2. **Commit Standards**
 
    - Write clear, descriptive commit messages
    - Reference issue numbers when applicable
    - Keep commits focused on single concerns
+   - Use the format: `area: brief description` (e.g., `auth: add token refreshing`)
 
 3. **Code Review Guidelines**
 
@@ -174,6 +178,15 @@ Every project should include:
 5. **.gitignore** appropriate for Go projects
 6. **go.mod** and **go.sum** for dependency management
 
+## Function Size and Complexity Guidelines
+
+- Keep functions focused on a single responsibility
+- Aim for functions under 30 lines of code where possible
+- If a function exceeds 50 lines, consider refactoring
+- Maintain cyclomatic complexity under 15 (measured by gocyclo)
+- If a file exceeds 300 lines, evaluate splitting it into multiple files
+- Use clear, descriptive function and variable names
+
 ## References
 
 - [Effective Go](https://go.dev/doc/effective_go) - Official guide to writing idiomatic Go code
@@ -181,3 +194,4 @@ Every project should include:
 - [Standard Go Project Layout](https://github.com/golang-standards/project-layout) - Common project organization
 - [Go Proverbs](https://go-proverbs.github.io/) - Concise guiding principles
 - [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md) - Comprehensive style guidelines
+- [Dave Cheney's Practical Go](https://dave.cheney.net/practical-go/presentations/qcon-china.html) - Practical Go lessons

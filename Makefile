@@ -34,14 +34,14 @@ clean:
 	@go clean -cache -testcache
 	@printf "${GREEN}✓ Cleaned${NC}\n"
 
-# Run tests using gotestsum for better output
+# Run tests using gotestsum
 test:
-	@printf "${BLUE}▶ Running tests...${NC}\n"
+	@printf "${BLUE}▶ Running tests with gotestsum...${NC}\n"
 	@if command -v gotestsum >/dev/null 2>&1; then \
 		gotestsum --format pkgname -- ./...; \
 	else \
-		printf "${YELLOW}⚠ gotestsum not found, using standard go test${NC}\n"; \
-		go test -v ./...; \
+		printf "${RED}✗ gotestsum not found. Please install with: go install gotest.tools/gotestsum@latest${NC}\n"; \
+		exit 1; \
 	fi
 
 # Run tests with coverage using gotestsum
@@ -50,8 +50,8 @@ test-coverage:
 	@if command -v gotestsum >/dev/null 2>&1; then \
 		gotestsum --format pkgname -- -coverprofile=coverage.out ./...; \
 	else \
-		printf "${YELLOW}⚠ gotestsum not found, using standard go test${NC}\n"; \
-		go test -coverprofile=coverage.out ./...; \
+		printf "${RED}✗ gotestsum not found. Please install with: go install gotest.tools/gotestsum@latest${NC}\n"; \
+		exit 1; \
 	fi
 	@go tool cover -html=coverage.out -o coverage.html
 	@printf "${GREEN}✓ Coverage report generated: coverage.html${NC}\n"
@@ -102,7 +102,7 @@ check:
 	@printf "  staticcheck:   "
 	@if command -v staticcheck >/dev/null 2>&1; then printf "${GREEN}✓${NC}\n"; else printf "${RED}✗${NC}\n"; fi
 	@printf "  gotestsum:     "
-	@if command -v gotestsum >/dev/null 2>&1; then printf "${GREEN}✓${NC}\n"; else printf "${YELLOW}⚠ (optional, but recommended)${NC}\n"; fi
+	@if command -v gotestsum >/dev/null 2>&1; then printf "${GREEN}✓${NC}\n"; else printf "${RED}✗${NC}\n"; fi
 
 # Static analysis using go vet and staticcheck
 static-analysis:
@@ -126,7 +126,6 @@ setup-tools:
 	@go install honnef.co/go/tools/cmd/staticcheck@latest
 	@go install gotest.tools/gotestsum@latest
 	@printf "${GREEN}✓ Development tools installed${NC}\n"
-	@printf "${YELLOW}ℹ Run 'make test' to use gotestsum for running tests${NC}\n"
 
 # Help target
 help:
@@ -134,7 +133,7 @@ help:
 	@printf "  %-16s %s\n" "all" "Run all checks, static analysis, tests, and build (default)"
 	@printf "  %-16s %s\n" "build" "Build the application"
 	@printf "  %-16s %s\n" "clean" "Clean build artifacts"
-	@printf "  %-16s %s\n" "test" "Run tests using gotestsum for better output"
+	@printf "  %-16s %s\n" "test" "Run tests using gotestsum"
 	@printf "  %-16s %s\n" "test-coverage" "Run tests with coverage report"
 	@printf "  %-16s %s\n" "lint" "Run linters (with timeout)"
 	@printf "  %-16s %s\n" "fmt" "Format code (using gofmt and goimports)"
