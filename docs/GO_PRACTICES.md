@@ -11,6 +11,7 @@ This document outlines our standard tools and practices for Go development. Thes
 | [Go](https://go.dev/dl/)                                         | The Go compiler and toolchain      | OS-specific package manager or download from go.dev                     |
 | [golangci-lint](https://golangci-lint.run/usage/install/)        | Comprehensive linting tool         | `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest` |
 | [goimports](https://pkg.go.dev/golang.org/x/tools/cmd/goimports) | Import organization and formatting | `go install golang.org/x/tools/cmd/goimports@latest`                    |
+| [gotestsum](https://github.com/gotestyourself/gotestsum)         | Enhanced test output and reporting | `go install gotest.tools/gotestsum@latest`                              |
 
 ### Additional Tooling Decisions
 
@@ -26,6 +27,39 @@ This document outlines our standard tools and practices for Go development. Thes
 | [cobra](https://github.com/spf13/cobra)              | **PREFERRED** | CLI framework        | If CLI functionality is needed, we will use Cobra                 |
 | [viper](https://github.com/spf13/viper)              | **PREFERRED** | Configuration        | When robust configuration is needed beyond simple flags           |
 | [zap](https://github.com/uber-go/zap)                | **PREFERRED** | Logging              | Our standard for structured logging when needed                   |
+
+## Test Tooling with gotestsum
+
+We've standardized on `gotestsum` for test formatting and output. This decision provides several benefits:
+
+1. **Improved readability**: Clear, organized test output with better formatting than standard `go test`
+2. **Configurable formats**: Multiple output formats depending on needs:
+   - `dots`: Compact output showing each test as a dot (good for large test suites)
+   - `pkgname`: Grouped by package with clean pass/fail indicators
+   - `testname`: Lists all tests with pass/fail status
+   - `standard-verbose`: Similar to `go test -v` but better formatted
+   - `standard-quiet`: Minimal output, good for CI
+3. **JUnit XML integration**: Provides CI integration with test reporting systems
+4. **Failure summary**: Provides concise failure summary at the end of all tests
+5. **Watch mode**: Supports watching for changes and re-running tests
+
+Usage examples:
+
+```bash
+# Run tests with package-focused output (default in our Makefile)
+gotestsum --format pkgname
+
+# Run tests with minimal output (good for CI)
+gotestsum --format dots
+
+# Generate JUnit XML for CI integration
+gotestsum --format pkgname --junitfile unit-tests.xml
+
+# Watch mode for TDD workflow
+gotestsum --watch
+```
+
+For our project, `gotestsum` is integrated into the Makefile, and developers should use `make test` rather than running `go test` directly.
 
 ## Code Style and Quality Practices
 

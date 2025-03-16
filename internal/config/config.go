@@ -31,16 +31,16 @@ type ServerConfig struct {
 type RTMConfig struct {
 	APIKey       string `yaml:"api_key"`
 	SharedSecret string `yaml:"shared_secret"`
-	// Add default permission level.
+	// Permission level: read, write, or delete.
 	Permission string `yaml:"permission"`
-	// Add token refresh interval in hours.
+	// Token refresh interval in hours.
 	TokenRefresh int `yaml:"token_refresh"`
 }
 
 // AuthConfig contains authentication configuration.
 type AuthConfig struct {
 	TokenPath string `yaml:"token_path"`
-	// Add option to disable token encryption for development.
+	// Option to disable token encryption for development.
 	DisableEncryption bool `yaml:"disable_encryption"`
 }
 
@@ -53,50 +53,51 @@ type LoggingConfig struct {
 
 // LoadConfig loads configuration from the specified path.
 func LoadConfig(path string) (*Config, error) {
-	// Validate and sanitize path
+	// Validate and sanitize path.
 	cleanPath := filepath.Clean(path)
 
-	// Check if path is in temp directory (for testing)
+	// Check if path is in temp directory (for testing).
 	tempDir := os.TempDir()
 	isTempPath := strings.HasPrefix(cleanPath, tempDir)
 
-	// Check for suspicious path only if not a temp path
+	// Check for suspicious path only if not a temp path.
 	if !isTempPath && strings.Contains(cleanPath, "..") {
 		return nil, fmt.Errorf("suspicious path contains directory traversal: %s", path)
 	}
 
-	// Check file permissions and readability
+	// Check file permissions and readability.
 	if _, err := os.Stat(cleanPath); err != nil {
 		return nil, fmt.Errorf("cannot access config file: %w", err)
 	}
 
-	// Read config file with better error handling
+	// Read config file with better error handling.
 	data, err := os.ReadFile(cleanPath)
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file: %w", err)
 	}
 
-	// Parse config
+	// Parse config.
 	var config Config
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("error parsing config file: %w", err)
 	}
 
-	// Environment variable overrides
+	// Environment variable overrides.
 	applyEnvironmentOverrides(&config)
 
-	// Set defaults
-	setDefaults(&config)
-
-	// Validate configuration (always validate, even for test files)
+	// Validate configuration first - before setting defaults.
+	// This lets us catch invalid values like negative ports.
 	if err := validateConfig(&config); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	// Store original token path for tests
+	// Set defaults after validation.
+	setDefaults(&config)
+
+	// Store original token path for tests.
 	originalTokenPath := config.Auth.TokenPath
 
-	// Expand paths for actual usage (but preserve original paths for testing)
+	// Expand paths for actual usage (but preserve original paths for testing).
 	if !isTempPath {
 		config.Auth.TokenPath = expandPath(config.Auth.TokenPath)
 		if config.Logging.File != "" {
@@ -104,7 +105,7 @@ func LoadConfig(path string) (*Config, error) {
 		}
 	}
 
-	// For testing paths, still validate expansion works but don't modify the original
+	// For testing paths, still validate expansion works but don't modify the original.
 	if isTempPath {
 		_ = expandPath(originalTokenPath)
 		if config.Logging.File != "" {
@@ -146,7 +147,7 @@ func applyEnvironmentOverrides(config *Config) {
 // setDefaults sets default values for optional configuration fields.
 func setDefaults(config *Config) {
 	// Default server port.
-	if config.Server.Port <= 0 {
+	if config.Server.Port == 0 {
 		config.Server.Port = 8080
 	}
 
@@ -157,7 +158,7 @@ func setDefaults(config *Config) {
 
 	// Default token refresh interval.
 	if config.RTM.TokenRefresh <= 0 {
-		config.RTM.TokenRefresh = 24 // 24 hours
+		config.RTM.TokenRefresh = 24 // 24 hours.
 	}
 
 	// Default logging level.
@@ -182,9 +183,9 @@ func validateConfig(config *Config) error {
 		return fmt.Errorf("server name is required")
 	}
 
-	// Updated port validation to explicitly check for negative values
-	if config.Server.Port <= 0 || config.Server.Port > 65535 {
-		return fmt.Errorf("invalid server port: %d (must be between 1 and 65535)", config.Server.Port)
+	// Port validation - now ensures negative values are caught.
+	if config.Server.Port < 0 || config.Server.Port > 65535 {
+		return fmt.Errorf("invalid server port: %d (must be between 0 and 65535)", config.Server.Port)
 	}
 
 	if config.RTM.APIKey == "" {
@@ -205,13 +206,13 @@ func validateConfig(config *Config) error {
 		return fmt.Errorf("invalid permission level: %s (must be read, write, or delete)", config.RTM.Permission)
 	}
 
-	// Validate logging level
+	// Validate logging level.
 	validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
 	if !validLevels[config.Logging.Level] {
 		return fmt.Errorf("invalid logging level: %s (must be debug, info, warn, or error)", config.Logging.Level)
 	}
 
-	// Validate logging format
+	// Validate logging format.
 	validFormats := map[string]bool{"text": true, "json": true}
 	if !validFormats[config.Logging.Format] {
 		return fmt.Errorf("invalid logging format: %s (must be text or json)", config.Logging.Format)
