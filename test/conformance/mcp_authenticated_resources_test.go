@@ -372,15 +372,15 @@ func TestReadResourceAuthenticated(t *testing.T) {
 		}
 
 		// Verify result contains authentication status.
-		result, ok := authResult["result"].(string)
+		resultString, ok := authResult["result"].(string)
 		if !ok {
 			t.Errorf("result is not a string: %v", authResult["result"])
 			return
 		}
 
 		// Status should indicate we're authenticated.
-		if !strings.Contains(result, "Authenticated") {
-			t.Errorf("auth_status tool doesn't indicate authentication: %s", result)
+		if !strings.Contains(resultString, "Authenticated") {
+			t.Errorf("auth_status tool doesn't indicate authentication: %s", resultString)
 		}
 	})
 }

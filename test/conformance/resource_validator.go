@@ -9,9 +9,9 @@ import (
 // MCPResourceDefinition represents the expected structure of a resource
 // definition from the MCP protocol.
 type MCPResourceDefinition struct {
-	Name        string                   `json:"name"`
-	Description string                   `json:"description"`
-	Arguments   []MCPResourceArgument    `json:"arguments,omitempty"`
+	Name        string                `json:"name"`
+	Description string                `json:"description"`
+	Arguments   []MCPResourceArgument `json:"arguments,omitempty"`
 }
 
 // MCPResourceArgument represents an argument for an MCP resource.
@@ -54,13 +54,13 @@ func validateMCPResource(t *testing.T, resource interface{}) bool {
 		t.Errorf("Resource name is not a string: %v", resourceObj["name"])
 		return false
 	}
-	
+
 	if name == "" {
 		t.Errorf("Resource name cannot be empty")
 		return false
 	}
 
-	description, ok := resourceObj["description"].(string)
+	_, ok = resourceObj["description"].(string)
 	if !ok {
 		t.Errorf("Resource description is not a string: %v", resourceObj["description"])
 		return false
@@ -136,7 +136,7 @@ func validateResourceNameFormat(name string) bool {
 	// - files://all
 	// - tasks://today
 	// - tasks://list/{list_id}
-	
+
 	// For our current implementation, we'll accept anything with "://"
 	// This could be enhanced with more specific validation in the future
 	return len(name) > 3 && strings.Contains(name[1:], "://")
@@ -187,13 +187,13 @@ func validateResourceResponse(t *testing.T, response map[string]interface{}) boo
 func validateMimeType(mimeType string) bool {
 	// Common MIME types used in MCP resources
 	validMimeTypes := map[string]bool{
-		"text/plain":     true,
-		"text/markdown":  true,
-		"text/html":      true,
+		"text/plain":       true,
+		"text/markdown":    true,
+		"text/html":        true,
 		"application/json": true,
-		"image/png":      true,
-		"image/jpeg":     true,
-		"image/svg+xml":  true,
+		"image/png":        true,
+		"image/jpeg":       true,
+		"image/svg+xml":    true,
 	}
 
 	// For more complex validation, we could use regex to check format
@@ -248,13 +248,13 @@ func validateMCPTool(t *testing.T, tool interface{}) bool {
 		t.Errorf("Tool name is not a string: %v", toolObj["name"])
 		return false
 	}
-	
+
 	if name == "" {
 		t.Errorf("Tool name cannot be empty")
 		return false
 	}
 
-	description, ok := toolObj["description"].(string)
+	_, ok = toolObj["description"].(string)
 	if !ok {
 		t.Errorf("Tool description is not a string: %v", toolObj["description"])
 		return false
