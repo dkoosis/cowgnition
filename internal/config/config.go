@@ -59,14 +59,9 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("suspicious path contains directory traversal: %s", path)
 	}
 
-	// Improved temp directory handling with proper prefix check
+	// Check if path is in temp directory (for testing)
 	tempDir := os.TempDir()
 	isTempPath := strings.HasPrefix(cleanPath, tempDir)
-
-	if !isTempPath {
-		// Rest of validation logic remains unchanged
-		// ...
-	}
 
 	// Check file permissions and readability
 	if _, err := os.Stat(cleanPath); err != nil {
