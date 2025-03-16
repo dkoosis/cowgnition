@@ -295,3 +295,5 @@ Enhance security, reliability, and performance:
 - Created reusable test helper functions for common patterns
 - Improved test structure with better subtests organization
 - Enhanced readability and maintainability of test code
+- Fixed HTTP context handling in test code to satisfy noctx linter requirements
+- Added proper timeout handling to all HTTP requests in tests

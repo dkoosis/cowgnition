@@ -59,42 +59,42 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("suspicious config path contains directory traversal: %s", path)
 	}
 
-	// For tests, allow temporary directories.
-	if strings.Contains(cleanPath, os.TempDir()) {
-		return &Config{}, nil
-	}
+	// Special handling for test paths
+	isTempPath := strings.Contains(cleanPath, os.TempDir())
+	pathIsValid := isTempPath // Temporary directories are valid for tests
 
-	// Define safe prefixes for config files.
-	safeLocations := []string{
-		"configs/",
-		"/etc/cowgnition/",
-		filepath.Join(os.Getenv("HOME"), ".config", "cowgnition"),
-	}
-
-	// Check if path is within a safe location.
-	pathIsValid := false
-	if !filepath.IsAbs(cleanPath) {
-		// Relative paths are allowed if they start with "configs/".
-		if strings.HasPrefix(cleanPath, "configs/") {
-			pathIsValid = true
+	if !isTempPath {
+		// Define safe prefixes for config files.
+		safeLocations := []string{
+			"configs/",
+			"/etc/cowgnition/",
+			filepath.Join(os.Getenv("HOME"), ".config", "cowgnition"),
 		}
-	} else {
-		// For absolute paths, check against our safe locations.
-		for _, loc := range safeLocations {
-			// Convert loc to absolute if needed.
-			absLoc := loc
-			if !filepath.IsAbs(loc) {
-				// Get working directory for relative paths.
-				wd, err := os.Getwd()
-				if err != nil {
-					continue
-				}
-				absLoc = filepath.Join(wd, loc)
-			}
 
-			if strings.HasPrefix(cleanPath, absLoc) {
+		// Check if path is within a safe location.
+		if !filepath.IsAbs(cleanPath) {
+			// Relative paths are allowed if they start with "configs/".
+			if strings.HasPrefix(cleanPath, "configs/") {
 				pathIsValid = true
-				break
+			}
+		} else {
+			// For absolute paths, check against our safe locations.
+			for _, loc := range safeLocations {
+				// Convert loc to absolute if needed.
+				absLoc := loc
+				if !filepath.IsAbs(loc) {
+					// Get working directory for relative paths.
+					wd, err := os.Getwd()
+					if err != nil {
+						continue
+					}
+					absLoc = filepath.Join(wd, loc)
+				}
+
+				if strings.HasPrefix(cleanPath, absLoc) {
+					pathIsValid = true
+					break
+				}
 			}
 		}
 	}
