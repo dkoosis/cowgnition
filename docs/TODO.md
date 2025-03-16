@@ -25,6 +25,24 @@ Establish a comprehensive testing framework to ensure server quality:
 3. ✅ Implement test fixtures for RTM API responses
 4. Set up GitHub Actions workflow for automated testing
 5. Configure test coverage reporting
+
+Enhance test diagnostics and error reporting:
+1. Create MCP-specific assertion helper functions to complement existing helpers
+   - Add functions like assertStatusCode, assertContentType, assertJSONStructure
+   - Encapsulate common validation logic with clear error messages
+   - Ensure all helpers use t.Helper() for proper error reporting
+
+2. Improve error message context in existing tests
+   - Include test case name in error messages
+   - Add request URL and method information to error reports
+   - Include relevant request/response details in failures
+   - Enhance response validation errors with field-specific context
+
+3. Add request/response logging capabilities to MCPClient
+   - Add optional debug mode to MCPClient
+   - Implement request logging before sending
+   - Add response logging after receiving
+   - Make logging conditional based on debug flag
 ```
 
 #### 1.3 Code Quality Improvements
