@@ -37,9 +37,7 @@ clean:
 # Run tests
 test:
 	@printf "${BLUE}▶ Running tests...${NC}\n"
-	@go test -v ./... && \
-		printf "${GREEN}✓ Tests passed${NC}\n" || \
-		(printf "${RED}✗ Tests failed${NC}\n" && exit 1)
+	@go test -v ./... | go run cmd/testrunner/main.go
 
 # Run tests with coverage
 test-coverage:
