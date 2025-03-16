@@ -4,7 +4,7 @@
 
 ## Have you Herd?
 
-CowGnition connects your Remember The Milk tasks with Claude Desktop. This MCP server lets you ask your AI assistant to manage your to-do lists, look up due dates, and get insights about your tasks through simple conversations. The [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) allows Claude Desktop, and other conversational agents that are MCP clients, to use "tools" like RTM to do things on your behalf. 
+CowGnition connects your Remember The Milk tasks with Claude Desktop. This MCP server lets you ask your AI assistant to manage your to-do lists, look up due dates, and get insights about your tasks through simple conversations. The [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) allows Claude Desktop, and other conversational agents that are MCP clients, to use "tools" like RTM to do things on your behalf.
 
 ## Quick Links
 
@@ -50,7 +50,7 @@ server:
   port: 8080
 
 rtm:
-  api_key: "your_api_key" 
+  api_key: "your_api_key"
   shared_secret: "your_shared_secret"
 
 auth:

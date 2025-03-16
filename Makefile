@@ -34,15 +34,25 @@ clean:
 	@go clean -cache -testcache
 	@printf "${GREEN}✓ Cleaned${NC}\n"
 
-# Run tests
+# Run tests using gotestsum for better output
 test:
 	@printf "${BLUE}▶ Running tests...${NC}\n"
-	@go test -v ./... | go run cmd/testrunner/main.go
+	@if command -v gotestsum >/dev/null 2>&1; then \
+		gotestsum --format pkgname -- ./...; \
+	else \
+		printf "${YELLOW}⚠ gotestsum not found, using standard go test${NC}\n"; \
+		go test -v ./...; \
+	fi
 
-# Run tests with coverage
+# Run tests with coverage using gotestsum
 test-coverage:
 	@printf "${BLUE}▶ Running tests with coverage...${NC}\n"
-	@go test -coverprofile=coverage.out ./...
+	@if command -v gotestsum >/dev/null 2>&1; then \
+		gotestsum --format pkgname -- -coverprofile=coverage.out ./...; \
+	else \
+		printf "${YELLOW}⚠ gotestsum not found, using standard go test${NC}\n"; \
+		go test -coverprofile=coverage.out ./...; \
+	fi
 	@go tool cover -html=coverage.out -o coverage.html
 	@printf "${GREEN}✓ Coverage report generated: coverage.html${NC}\n"
 	@go tool cover -func=coverage.out
@@ -91,6 +101,8 @@ check:
 	@if command -v entr >/dev/null 2>&1; then printf "${GREEN}✓${NC}\n"; else printf "${RED}✗${NC}\n"; fi
 	@printf "  staticcheck:   "
 	@if command -v staticcheck >/dev/null 2>&1; then printf "${GREEN}✓${NC}\n"; else printf "${RED}✗${NC}\n"; fi
+	@printf "  gotestsum:     "
+	@if command -v gotestsum >/dev/null 2>&1; then printf "${GREEN}✓${NC}\n"; else printf "${YELLOW}⚠ (optional, but recommended)${NC}\n"; fi
 
 # Static analysis using go vet and staticcheck
 static-analysis:
@@ -106,17 +118,27 @@ static-analysis:
 		printf "${GREEN}✓ staticcheck passed${NC}\n" || \
 		(printf "${RED}✗ staticcheck found issues${NC}\n" && exit 1)
 
+# Install development tools
+setup-tools:
+	@printf "${BLUE}▶ Installing development tools...${NC}\n"
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@go install golang.org/x/tools/cmd/goimports@latest
+	@go install honnef.co/go/tools/cmd/staticcheck@latest
+	@go install gotest.tools/gotestsum@latest
+	@printf "${GREEN}✓ Development tools installed${NC}\n"
+
 # Help target
 help:
 	@printf "${BLUE}CowGnition Make Targets:${NC}\n"
 	@printf "  %-16s %s\n" "all" "Run all checks, static analysis, tests, and build (default)"
 	@printf "  %-16s %s\n" "build" "Build the application"
 	@printf "  %-16s %s\n" "clean" "Clean build artifacts"
-	@printf "  %-16s %s\n" "test" "Run tests (with verbose output and coverage)"
+	@printf "  %-16s %s\n" "test" "Run tests using gotestsum for better output"
 	@printf "  %-16s %s\n" "test-coverage" "Run tests with coverage report"
 	@printf "  %-16s %s\n" "lint" "Run linters (with timeout)"
 	@printf "  %-16s %s\n" "fmt" "Format code (using gofmt and goimports)"
 	@printf "  %-16s %s\n" "dev" "Run with hot reloading (requires entr)"
 	@printf "  %-16s %s\n" "check" "Check for required tools"
 	@printf "  %-16s %s\n" "static-analysis" "Run static analysis (go vet and staticcheck)"
+	@printf "  %-16s %s\n" "setup-tools" "Install development tools"
 	@printf "  %-16s %s\n" "help" "Show this help message"
