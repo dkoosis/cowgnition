@@ -27,7 +27,7 @@ Establish a comprehensive testing framework to ensure server quality:
 5. Configure test coverage reporting
 ```
 
-#### 1.3 Code Quality Improvements 
+#### 1.3 Code Quality Improvements
 
 ```
 Improve code quality and maintainability:
@@ -43,16 +43,40 @@ Improve code quality and maintainability:
 6. Implement additional code quality checks
 ```
 
-#### 1.4 MCP Protocol Conformance Testing
+#### 1.4 MCP Protocol Conformance Testing (PRIORITY FOCUS)
 
 ```
-Implement tests to verify compliance with the MCP specification:
-1. Create test suite verifying all required MCP endpoints
-2. Test protocol initialization and capability negotiation
-3. Test resource listing and retrieval flows
-4. Test tool discovery and execution
-5. Validate all response formats against the MCP schema
-6. Test error handling and recovery scenarios
+Implement comprehensive tests to verify compliance with the MCP specification:
+
+1. Core endpoint verification:
+   - Enhance TestMCPInitializeEndpoint to verify all required capabilities
+   - Complete TestMCPResourceEndpoints with more thorough validation
+   - Extend TestMCPToolEndpoints to test actual tool execution
+   - Implement TestReadResourceAuthenticated (currently skipped)
+
+2. Schema validation:
+   - Create Go structs matching MCP protocol schemas
+   - Implement JSON schema validators for responses
+   - Validate all response fields conform to specification
+   - Add validators for each message type (initialization, resources, tools)
+
+3. Error handling validation:
+   - Test responses to invalid inputs
+   - Verify error formatting conforms to MCP specification
+   - Test edge cases like missing parameters
+   - Validate behavior with malformed requests
+
+4. Testing helpers enhancement:
+   - Complete validateMCPResource helper function
+   - Complete validateMCPTool helper function
+   - Add helpers for other response types
+   - Create test fixture generators for common request patterns
+
+5. Protocol flow conformance:
+   - Test complete interaction sequences
+   - Verify proper state transitions
+   - Test concurrent operations
+   - Validate protocol version compatibility
 ```
 
 #### 1.5 RTM API Integration Testing
@@ -315,5 +339,5 @@ Enhance security, reliability, and performance:
 - Replaced custom test runner with gotestsum for better output formatting
 - Updated Makefile to standardize on gotestsum for test targets
 - Configured appropriate test output format (pkgname)
-- Updated documentation to reflect test runner changes 
+- Updated documentation to reflect test runner changes
 - Removed custom test runner implementation
