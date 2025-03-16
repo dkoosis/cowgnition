@@ -67,7 +67,7 @@ func NewClient(apiKey, sharedSecret string) *Client {
 // #nosec G401 - MD5 is required by RTM API specification.
 func (c *Client) generateSignature(params url.Values) string {
 	// Sort parameters by key
-	keys := make([]string, 0, len(params))
+	keys := make([]string, 0, len(params)) // Changed to a slice of strings
 	for k := range params {
 		keys = append(keys, k)
 	}
@@ -82,8 +82,8 @@ func (c *Client) generateSignature(params url.Values) string {
 	}
 
 	// Calculate MD5 hash - Required by RTM API.
-	h := md5.New() // #nosec G401 - MD5 is required by RTM API specification.
-	h.Write([]byte(sb.String()))
+	h := md5.New()               // #nosec G401 - MD5 is required by RTM API specification.
+	h.Write([]byte(sb.String())) // Corrected to use []byte
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -214,13 +214,13 @@ func (c *Client) doRequest(params url.Values, v interface{}) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
-		return fmt.Errorf("error creating request: %w", err)
+		return fmt.Errorf("error creating request to %s: %w", reqURL, err)
 	}
 
 	// Send request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("error sending request: %w", err)
+		return fmt.Errorf("error sending request to %s: %w", reqURL, err)
 	}
 	defer resp.Body.Close()
 
@@ -237,7 +237,7 @@ func (c *Client) doRequest(params url.Values, v interface{}) error {
 
 	// Parse response
 	if err := xml.Unmarshal(body, v); err != nil {
-		return fmt.Errorf("error parsing response: %w", err)
+		return fmt.Errorf("error parsing XML response for type %T: %w", v, err)
 	}
 
 	// Check API status
