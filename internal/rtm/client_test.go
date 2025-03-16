@@ -66,7 +66,7 @@ func TestGetAuthURL(t *testing.T) {
 	}
 }
 
-// Mock RTM API response for testing
+// Mock RTM API response for testing.
 func setupMockServer(t *testing.T, expectedMethod string, response string) *httptest.Server {
 	t.Helper() // Added this line to fix the linting issue
 

@@ -21,7 +21,7 @@ const (
 	defaultBaseURL = "https://api.rememberthemilk.com/services/rest/"
 	authURL        = "https://www.rememberthemilk.com/services/auth/"
 
-	// Response status:
+	// Response status.
 	statusOK   = "ok"
 	statusFail = "fail"
 )

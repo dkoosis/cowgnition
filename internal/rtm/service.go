@@ -82,13 +82,13 @@ func (s *Service) Initialize() error {
 		s.authStatus = StatusNotAuthenticated
 	}
 
-	// Start a background cleanup routine for expired auth flows and token refresh
+	// Start a background cleanup routine for expired auth flows and token refresh.
 	go s.startBackgroundTasks()
 
 	return nil
 }
 
-// startBackgroundTasks starts background routines for token refresh and flow cleanup
+// startBackgroundTasks starts background routines for token refresh and flow cleanup.
 func (s *Service) startBackgroundTasks() {
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()

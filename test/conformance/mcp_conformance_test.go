@@ -2,12 +2,14 @@
 package conformance
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
@@ -96,7 +98,10 @@ func TestMCPInitializeEndpoint(t *testing.T) {
 				t.Fatalf("Failed to marshal request: %v", err)
 			}
 
-			req, err := http.NewRequest(http.MethodPost, client.BaseURL+"/mcp/initialize", strings.NewReader(string(body)))
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, client.BaseURL+"/mcp/initialize", strings.NewReader(string(body)))
 			if err != nil {
 				t.Fatalf("Failed to create request: %v", err)
 			}
@@ -229,7 +234,10 @@ func TestMCPResourceEndpoints(t *testing.T) {
 
 	// Test list_resources endpoint
 	t.Run("list_resources", func(t *testing.T) {
-		req, err := http.NewRequest(http.MethodGet, client.BaseURL+"/mcp/list_resources", nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, client.BaseURL+"/mcp/list_resources", nil)
 		if err != nil {
 			t.Fatalf("Failed to create request: %v", err)
 		}
@@ -288,7 +296,10 @@ func TestMCPResourceEndpoints(t *testing.T) {
 		// Configure mock for getFrob which is used in the auth resource
 		rtmMock.AddResponse("rtm.auth.getFrob", `<rsp stat="ok"><frob>test_frob_12345</frob></rsp>`)
 
-		req, err := http.NewRequest(http.MethodGet, client.BaseURL+"/mcp/read_resource?name=auth://rtm", nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, client.BaseURL+"/mcp/read_resource?name=auth://rtm", nil)
 		if err != nil {
 			t.Fatalf("Failed to create request: %v", err)
 		}
@@ -336,7 +347,10 @@ func TestMCPResourceEndpoints(t *testing.T) {
 
 	// Test read_resource with non-existent resource
 	t.Run("read_resource_nonexistent", func(t *testing.T) {
-		req, err := http.NewRequest(http.MethodGet, client.BaseURL+"/mcp/read_resource?name=nonexistent://resource", nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, client.BaseURL+"/mcp/read_resource?name=nonexistent://resource", nil)
 		if err != nil {
 			t.Fatalf("Failed to create request: %v", err)
 		}
@@ -406,7 +420,10 @@ func TestMCPToolEndpoints(t *testing.T) {
 
 	// Test list_tools endpoint
 	t.Run("list_tools", func(t *testing.T) {
-		req, err := http.NewRequest(http.MethodGet, client.BaseURL+"/mcp/list_tools", nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, client.BaseURL+"/mcp/list_tools", nil)
 		if err != nil {
 			t.Fatalf("Failed to create request: %v", err)
 		}
@@ -482,7 +499,10 @@ func TestMCPToolEndpoints(t *testing.T) {
 			t.Fatalf("Failed to marshal request: %v", err)
 		}
 
-		req, err := http.NewRequest(http.MethodPost, client.BaseURL+"/mcp/call_tool", strings.NewReader(string(body)))
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, client.BaseURL+"/mcp/call_tool", strings.NewReader(string(body)))
 		if err != nil {
 			t.Fatalf("Failed to create request: %v", err)
 		}
