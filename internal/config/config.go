@@ -85,14 +85,13 @@ func LoadConfig(path string) (*Config, error) {
 	// Environment variable overrides.
 	applyEnvironmentOverrides(&config)
 
-	// Validate configuration first - before setting defaults.
-	// This lets us catch invalid values like negative ports.
+	// Set defaults before validation.
+	setDefaults(&config)
+
+	// Validate configuration after setting defaults.
 	if err := validateConfig(&config); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
-
-	// Set defaults after validation.
-	setDefaults(&config)
 
 	// Store original token path for tests.
 	originalTokenPath := config.Auth.TokenPath

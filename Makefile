@@ -126,6 +126,7 @@ setup-tools:
 	@go install honnef.co/go/tools/cmd/staticcheck@latest
 	@go install gotest.tools/gotestsum@latest
 	@printf "${GREEN}✓ Development tools installed${NC}\n"
+	@printf "${YELLOW}ℹ Run 'make test' to use gotestsum for running tests${NC}\n"
 
 # Help target
 help:

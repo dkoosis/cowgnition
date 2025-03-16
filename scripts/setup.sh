@@ -28,6 +28,7 @@ go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 go install golang.org/x/tools/cmd/goimports@latest
 go install golang.org/x/tools/cmd/godoc@latest
 go install github.com/securego/gosec/v2/cmd/gosec@latest
+go install gotest.tools/gotestsum@latest
 
 # Install hot reload tool
 if command -v brew &> /dev/null; then
@@ -48,20 +49,3 @@ cp scripts/pre-commit .git/hooks/
 chmod +x .git/hooks/pre-commit
 
 # Create or update .golangci.yml
-if [ ! -f .golangci.yml ]; then
-  echo -e "${YELLOW}Creating .golangci.yml configuration...${NC}"
-  cp scripts/golangci.yml .golangci.yml
-fi
-
-# Create .editorconfig if it doesn't exist
-if [ ! -f .editorconfig ]; then
-  echo -e "${YELLOW}Creating .editorconfig...${NC}"
-  cp scripts/editorconfig .editorconfig
-fi
-
-# Run initial format
-echo -e "${YELLOW}Running initial code formatting...${NC}"
-make fmt
-
-echo -e "${GREEN}Setup complete! You can now build the project with 'make build'${NC}"
-echo -e "${GREEN}Run 'make help' to see all available commands${NC}"

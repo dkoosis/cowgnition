@@ -30,18 +30,20 @@ This document outlines our standard tools and practices for Go development. Thes
 
 ## Test Tooling with gotestsum
 
-We've standardized on `gotestsum` for test formatting and output. This decision provides several benefits:
+We've standardized on `gotestsum` for test formatting and output, replacing our previous custom test runner. This decision provides several benefits:
 
 1. **Improved readability**: Clear, organized test output with better formatting than standard `go test`
 2. **Configurable formats**: Multiple output formats depending on needs:
    - `dots`: Compact output showing each test as a dot (good for large test suites)
-   - `pkgname`: Grouped by package with clean pass/fail indicators
+   - `pkgname`: Grouped by package with clean pass/fail indicators (our default)
    - `testname`: Lists all tests with pass/fail status
    - `standard-verbose`: Similar to `go test -v` but better formatted
    - `standard-quiet`: Minimal output, good for CI
 3. **JUnit XML integration**: Provides CI integration with test reporting systems
 4. **Failure summary**: Provides concise failure summary at the end of all tests
 5. **Watch mode**: Supports watching for changes and re-running tests
+6. **Consistent output**: Ensures all developers see the same test results format
+7. **Maintained tool**: Benefits from community maintenance and updates
 
 Usage examples:
 
@@ -57,9 +59,15 @@ gotestsum --format pkgname --junitfile unit-tests.xml
 
 # Watch mode for TDD workflow
 gotestsum --watch
+
+# Run tests for a specific package
+gotestsum --format pkgname -- ./internal/config
+
+# Run tests with a specific pattern
+gotestsum --format testname -- -run TestConfig
 ```
 
-For our project, `gotestsum` is integrated into the Makefile, and developers should use `make test` rather than running `go test` directly.
+For our project, `gotestsum` is integrated into the Makefile, and developers should use `make test` rather than running `go test` directly. This ensures consistent test output and reporting across all environments.
 
 ## Code Style and Quality Practices
 
