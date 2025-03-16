@@ -14,10 +14,11 @@ import (
 
 // TestStats tracks test statistics.
 type TestStats struct {
-	PassCount  int
-	FailCount  int
-	SkipCount  int
-	TotalCount int
+	PassCount      int
+	FailCount      int
+	SkipCount      int
+	TotalCount     int
+	PackageResults map[string]string // Track package results.
 }
 
 // ColoredPrinters contains formatting functions.
@@ -31,6 +32,7 @@ type ColoredPrinters struct {
 	ErrText   func(a ...interface{}) string
 	Header    func(a ...interface{}) string
 	Highlight func(a ...interface{}) string
+	Separator func(a ...interface{}) string
 }
 
 // Patterns contains compiled regex patterns.
@@ -42,6 +44,7 @@ type Patterns struct {
 	Summary *regexp.Regexp
 	Error   *regexp.Regexp
 	Package *regexp.Regexp
+	NoTest  *regexp.Regexp
 }
 
 func main() {
@@ -50,17 +53,27 @@ func main() {
 
 	patterns := compilePatterns()
 	printers := setupColorPrinters()
-	stats := TestStats{}
+	stats := TestStats{
+		PackageResults: make(map[string]string),
+	}
 
 	printHeader(printers)
 
-	// Process each line
+	// Process each line.
+	currentPackage := ""
 	for scanner.Scan() {
 		line := scanner.Text()
-		processLine(line, patterns, printers, &stats)
+		packageName := extractPackageName(line, patterns)
+		if packageName != "" {
+			currentPackage = packageName
+			fmt.Println(printers.Separator("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄"))
+			fmt.Printf("%s %s\n", printers.Pkg("PACKAGE"), printers.Highlight(packageName))
+		}
+
+		processLine(line, patterns, printers, &stats, currentPackage)
 	}
 
-	// Print summary statistics
+	// Print summary statistics.
 	printSummary(startTime, printers, stats)
 
 	if stats.FailCount > 0 {
@@ -73,6 +86,22 @@ func main() {
 	}
 }
 
+// extractPackageName gets the package name from test output lines.
+func extractPackageName(line string, patterns Patterns) string {
+	// Extract package name from PASS/FAIL lines or "ok" summary lines.
+	if match := patterns.Summary.FindStringSubmatch(line); len(match) > 2 {
+		return match[2]
+	}
+
+	// Check for no test files line.
+	if match := patterns.NoTest.FindStringSubmatch(line); len(match) > 1 {
+		return strings.TrimSpace(match[1])
+	}
+
+	return ""
+}
+
+// compilePatterns creates all regex patterns used for parsing test output.
 func compilePatterns() Patterns {
 	return Patterns{
 		Passed:  regexp.MustCompile(`^PASS$|^--- PASS:`),
@@ -81,10 +110,12 @@ func compilePatterns() Patterns {
 		Run:     regexp.MustCompile(`^=== RUN\s+(.+)$`),
 		Summary: regexp.MustCompile(`^(ok|FAIL)\s+(\S+)\s+(.+)$`),
 		Error:   regexp.MustCompile(`^\s*(.+\.go:\d+:|Error:)(.+)$`),
-		Package: regexp.MustCompile(`^\?.*\[no test files\]$`),
+		Package: regexp.MustCompile(`^PASS|^FAIL\s+(\S+)`),
+		NoTest:  regexp.MustCompile(`^\?\s+([^\[]+)\s+\[no test files\]$`),
 	}
 }
 
+// setupColorPrinters configures all color formatters for output.
 func setupColorPrinters() ColoredPrinters {
 	return ColoredPrinters{
 		Pass:      color.New(color.FgGreen, color.Bold).SprintFunc(),
@@ -96,22 +127,25 @@ func setupColorPrinters() ColoredPrinters {
 		ErrText:   color.New(color.FgRed).SprintFunc(),
 		Header:    color.New(color.FgMagenta, color.Bold).SprintFunc(),
 		Highlight: color.New(color.FgHiWhite, color.Bold).SprintFunc(),
+		Separator: color.New(color.FgBlue).SprintFunc(),
 	}
 }
 
+// printHeader displays the application header.
 func printHeader(p ColoredPrinters) {
 	fmt.Println(p.Header("┌─────────────────────────────────────────────────────────────────┐"))
 	fmt.Println(p.Header("│                  CowGnition Test Runner                         │"))
 	fmt.Println(p.Header("└─────────────────────────────────────────────────────────────────┘"))
 }
 
-func processLine(line string, patterns Patterns, p ColoredPrinters, stats *TestStats) {
+// processLine handles a single line of test output.
+func processLine(line string, patterns Patterns, p ColoredPrinters, stats *TestStats, currentPackage string) {
 	switch {
 	case patterns.Passed.MatchString(line):
-		handlePassedLine(line, p, stats)
+		handlePassedLine(line, p, stats, currentPackage)
 
 	case patterns.Failed.MatchString(line):
-		handleFailedLine(line, p, stats)
+		handleFailedLine(line, p, stats, currentPackage)
 
 	case patterns.Skipped.MatchString(line):
 		handleSkippedLine(line, p, stats)
@@ -119,11 +153,11 @@ func processLine(line string, patterns Patterns, p ColoredPrinters, stats *TestS
 	case patterns.Run.MatchString(line):
 		handleRunLine(line, patterns.Run, p)
 
-	case patterns.Package.MatchString(line):
-		handlePackageLine(line, p)
+	case patterns.NoTest.MatchString(line):
+		handleNoTestLine(line, p)
 
 	case patterns.Summary.MatchString(line):
-		handleSummaryLine(line, patterns.Summary, p)
+		handleSummaryLine(line, patterns.Summary, p, stats)
 
 	case patterns.Error.MatchString(line):
 		handleErrorLine(line, patterns.Error, p)
@@ -133,28 +167,38 @@ func processLine(line string, patterns Patterns, p ColoredPrinters, stats *TestS
 	}
 }
 
-func handlePassedLine(line string, p ColoredPrinters, stats *TestStats) {
+// handlePassedLine processes a successful test line.
+func handlePassedLine(line string, p ColoredPrinters, stats *TestStats, currentPackage string) {
 	fmt.Println(p.Pass("✓ " + line))
 	if strings.HasPrefix(line, "--- PASS:") {
 		stats.PassCount++
 		stats.TotalCount++
+		if currentPackage != "" {
+			stats.PackageResults[currentPackage] = "pass"
+		}
 	}
 }
 
-func handleFailedLine(line string, p ColoredPrinters, stats *TestStats) {
+// handleFailedLine processes a failed test line.
+func handleFailedLine(line string, p ColoredPrinters, stats *TestStats, currentPackage string) {
 	fmt.Println(p.Fail("✗ " + line))
 	if strings.HasPrefix(line, "--- FAIL:") {
 		stats.FailCount++
 		stats.TotalCount++
+		if currentPackage != "" {
+			stats.PackageResults[currentPackage] = "fail"
+		}
 	}
 }
 
+// handleSkippedLine processes a skipped test line.
 func handleSkippedLine(line string, p ColoredPrinters, stats *TestStats) {
 	fmt.Println(p.Skip("⚠ " + line))
 	stats.SkipCount++
 	stats.TotalCount++
 }
 
+// handleRunLine processes a test run start line.
 func handleRunLine(line string, pattern *regexp.Regexp, p ColoredPrinters) {
 	matches := pattern.FindStringSubmatch(line)
 	if len(matches) > 1 {
@@ -164,12 +208,19 @@ func handleRunLine(line string, pattern *regexp.Regexp, p ColoredPrinters) {
 	}
 }
 
-func handlePackageLine(line string, p ColoredPrinters) {
-	packageName := strings.Split(line, "[")[0]
-	fmt.Println(p.Info("   "+packageName) + p.Skip("[no test files]"))
+// handleNoTestLine processes a "no test files" line.
+func handleNoTestLine(line string, p ColoredPrinters) {
+	matches := regexp.MustCompile(`^\?\s+([^\[]+)\s+\[no test files\]$`).FindStringSubmatch(line)
+	if len(matches) > 1 {
+		packageName := strings.TrimSpace(matches[1])
+		fmt.Printf("%s %s %s\n", p.Info("•"), p.Pkg(packageName), p.Skip("[no test files]"))
+	} else {
+		fmt.Println(line)
+	}
 }
 
-func handleSummaryLine(line string, pattern *regexp.Regexp, p ColoredPrinters) {
+// handleSummaryLine processes package summary lines.
+func handleSummaryLine(line string, pattern *regexp.Regexp, p ColoredPrinters, stats *TestStats) {
 	matches := pattern.FindStringSubmatch(line)
 	if len(matches) > 3 {
 		status := matches[1]
@@ -178,14 +229,17 @@ func handleSummaryLine(line string, pattern *regexp.Regexp, p ColoredPrinters) {
 
 		if status == "ok" {
 			fmt.Printf("%s %s %s\n", p.Pass("PASS"), p.Pkg(package_), timing)
+			stats.PackageResults[package_] = "pass"
 		} else {
 			fmt.Printf("%s %s %s\n", p.Fail("FAIL"), p.Pkg(package_), timing)
+			stats.PackageResults[package_] = "fail"
 		}
 	} else {
 		fmt.Println(line)
 	}
 }
 
+// handleErrorLine processes error lines with file references.
 func handleErrorLine(line string, pattern *regexp.Regexp, p ColoredPrinters) {
 	matches := pattern.FindStringSubmatch(line)
 	if len(matches) > 2 {
@@ -195,15 +249,36 @@ func handleErrorLine(line string, pattern *regexp.Regexp, p ColoredPrinters) {
 	}
 }
 
+// handleDefaultLine processes any other test output line.
 func handleDefaultLine(line string, p ColoredPrinters) {
 	line = strings.Replace(line, "PASS", p.Pass("PASS"), -1)
 	line = strings.Replace(line, "FAIL", p.Fail("FAIL"), -1)
 	fmt.Println(line)
 }
 
+// printSummary displays the final test results and statistics.
 func printSummary(startTime time.Time, p ColoredPrinters, stats TestStats) {
 	duration := time.Since(startTime)
-	fmt.Println(p.Header("┌─────────────────────────────────────────────────────────────────┐"))
+
+	fmt.Println("\n" + p.Separator("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄"))
+
+	// Print package results.
+	fmt.Println(p.Header("Package Results:"))
+
+	passedPackages := 0
+	failedPackages := 0
+	for pkg, result := range stats.PackageResults {
+		if result == "pass" {
+			fmt.Printf("  %s %s\n", p.Pass("✓"), p.Pkg(pkg))
+			passedPackages++
+		} else {
+			fmt.Printf("  %s %s\n", p.Fail("✗"), p.Pkg(pkg))
+			failedPackages++
+		}
+	}
+
+	// Main summary box.
+	fmt.Println(p.Header("\n┌─────────────────────────────────────────────────────────────────┐"))
 	fmt.Printf("%s │ Summary: %s %d passed, %s %d failed, %s %d skipped %s    │\n",
 		p.Header(""),
 		p.Pass("✓"),
@@ -212,6 +287,13 @@ func printSummary(startTime time.Time, p ColoredPrinters, stats TestStats) {
 		stats.FailCount,
 		p.Skip("⚠"),
 		stats.SkipCount,
+		p.Header(""))
+	fmt.Printf("%s │ Packages: %s %d passed, %s %d failed %s                  │\n",
+		p.Header(""),
+		p.Pass("✓"),
+		passedPackages,
+		p.Fail("✗"),
+		failedPackages,
 		p.Header(""))
 	fmt.Printf("%s │ Total tests: %-47d │\n", p.Header(""), stats.TotalCount)
 	fmt.Printf("%s │ Duration: %-50s │\n", p.Header(""), duration.Round(time.Millisecond))
