@@ -3,7 +3,7 @@ package helpers
 
 import (
 	"bytes"
-	"context"
+	"context" // Added import for context
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -70,7 +70,10 @@ func (c *MCPClient) Initialize(_ *testing.T, serverName, serverVersion string) (
 		return nil, fmt.Errorf("error marshaling request: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/mcp/initialize", bytes.NewBuffer(body))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/mcp/initialize", bytes.NewBuffer(body))
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
@@ -96,7 +99,10 @@ func (c *MCPClient) Initialize(_ *testing.T, serverName, serverVersion string) (
 
 // ListResources sends a list_resources request to the MCP server.
 func (c *MCPClient) ListResources(_ *testing.T) (map[string]interface{}, error) {
-	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/mcp/list_resources", nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/mcp/list_resources", nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
@@ -121,7 +127,10 @@ func (c *MCPClient) ListResources(_ *testing.T) (map[string]interface{}, error) 
 
 // ReadResource sends a read_resource request to the MCP server.
 func (c *MCPClient) ReadResource(_ *testing.T, resourceName string) (map[string]interface{}, error) {
-	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/mcp/read_resource?name="+url.QueryEscape(resourceName), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/mcp/read_resource?name="+url.QueryEscape(resourceName), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
@@ -146,7 +155,10 @@ func (c *MCPClient) ReadResource(_ *testing.T, resourceName string) (map[string]
 
 // ListTools sends a list_tools request to the MCP server.
 func (c *MCPClient) ListTools(_ *testing.T) (map[string]interface{}, error) {
-	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/mcp/list_tools", nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/mcp/list_tools", nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
@@ -181,7 +193,10 @@ func (c *MCPClient) CallTool(_ *testing.T, toolName string, args map[string]inte
 		return nil, fmt.Errorf("error marshaling request: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/mcp/call_tool", bytes.NewBuffer(body))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/mcp/call_tool", bytes.NewBuffer(body))
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}

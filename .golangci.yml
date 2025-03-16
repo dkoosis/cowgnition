@@ -1,5 +1,6 @@
 linters:
-  disable-all: true
+  disable-all: true # Disable all linters by default
+  # Enable the linters you want to use
   enable:
     # Core linters
     - errcheck # Check for unchecked errors
@@ -23,10 +24,10 @@ linters:
 
     # Additional linters
     - bodyclose # Check for unclosed HTTP response bodies
+    - copyloopvar # Checks for proper loop variable capture (replacement for exportloopref)
     - dogsled # Check for too many blank identifiers (_ = _, _ = _)
     - durationcheck # Check for durations with different units
     - errorlint # Find error handling mistakes
-    - exportloopref # Check for pointers to enclosing loop variables
     - godot # Check comments end with a period
     - nilerr # Check for pattern return nil, err == nil
     - noctx # Check for HTTP requests without context
@@ -61,7 +62,8 @@ linters-settings:
 
 issues:
   exclude-rules:
-    - path: _test\.go
+    - path: "_test\\.go$"
       linters:
+        - gocyclo
         - errcheck
         - gosec

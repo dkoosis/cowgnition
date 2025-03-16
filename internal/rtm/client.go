@@ -1,6 +1,8 @@
+// Package rtm provides client functionality for the Remember The Milk API.
 package rtm
 
 import (
+	"context"
 	"crypto/md5" // #nosec G501 - MD5 is required by RTM API specification.
 	"encoding/hex"
 	"encoding/xml"
@@ -159,7 +161,7 @@ func (c *Client) GetToken(frob string) (string, error) {
 	return resp.Auth.Token, nil
 }
 
-// CheckToken checks if a token is valid
+// CheckToken checks if a token is valid.
 func (c *Client) CheckToken() (bool, error) {
 	if c.authToken == "" {
 		return false, fmt.Errorf("no auth token set")
@@ -184,14 +186,14 @@ func (c *Client) CheckToken() (bool, error) {
 
 	var resp authResponse
 	if err := c.doRequest(params, &resp); err != nil {
-		// If we get an error code 98, the token is invalid
-		return false, nil
+		// If we get an error, the token is invalid
+		return false, err
 	}
 
 	return true, nil
 }
 
-// doRequest performs an API request
+// doRequest performs an API request.
 func (c *Client) doRequest(params url.Values, v interface{}) error {
 	// Add API key to parameters
 	params.Set("api_key", c.apiKey)
@@ -207,7 +209,10 @@ func (c *Client) doRequest(params url.Values, v interface{}) error {
 
 	// Prepare request
 	reqURL := c.baseURL + "?" + params.Encode()
-	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}

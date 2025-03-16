@@ -19,6 +19,7 @@ const (
 
 // SectionDivider prints a formatted section divider.
 func SectionDivider(t *testing.T, name string) {
+	t.Helper()
 	width := 80
 	nameLen := len(name)
 	padding := width - nameLen - 4 // 4 for " [ " and " ] "
@@ -52,6 +53,7 @@ type TestRunner struct {
 
 // NewTestRunner creates a new TestRunner instance.
 func NewTestRunner(t *testing.T) *TestRunner {
+	t.Helper()
 	return &TestRunner{
 		t:       t,
 		results: []TestResult{},
@@ -127,36 +129,42 @@ func (r *TestRunner) Summary() {
 // Helper functions (assertions)
 
 func AssertEquals(t *testing.T, expected, actual interface{}, message string) {
+	t.Helper()
 	if expected != actual {
 		t.Errorf("%s\nExpected: %v\nActual:   %v", message, expected, actual)
 	}
 }
 
 func AssertTrue(t *testing.T, condition bool, message string) {
+	t.Helper()
 	if !condition {
 		t.Errorf("%s\nExpected condition to be true", message)
 	}
 }
 
 func AssertFalse(t *testing.T, condition bool, message string) {
+	t.Helper()
 	if condition {
 		t.Errorf("%s\nExpected condition to be false", message)
 	}
 }
 
 func AssertNil(t *testing.T, value interface{}, message string) {
+	t.Helper()
 	if value != nil {
 		t.Errorf("%s\nExpected nil, got: %v", message, value)
 	}
 }
 
 func AssertNotNil(t *testing.T, value interface{}, message string) {
+	t.Helper()
 	if value == nil {
 		t.Errorf("%s\nExpected non-nil value", message)
 	}
 }
 
 func AssertContains(t *testing.T, str, substr string, message string) {
+	t.Helper()
 	if !strings.Contains(str, substr) {
 		t.Errorf("%s\nExpected string to contain: %q\nString: %q", message, substr, str)
 	}
