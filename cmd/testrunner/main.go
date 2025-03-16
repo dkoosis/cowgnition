@@ -77,13 +77,9 @@ func main() {
 			}
 
 		default:
-			// Check if line contains "PASS" or "FAIL" words
-			if strings.Contains(line, "PASS") {
-				line = strings.Replace(line, "PASS", pass("PASS"), -1)
-			}
-			if strings.Contains(line, "FAIL") {
-				line = strings.Replace(line, "FAIL", fail("FAIL"), -1)
-			}
+			// Check if line contains "PASS" or "FAIL" words and replace them
+			line = strings.Replace(line, "PASS", pass("PASS"), -1)
+			line = strings.Replace(line, "FAIL", fail("FAIL"), -1)
 			fmt.Println(line)
 		}
 	}

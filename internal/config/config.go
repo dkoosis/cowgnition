@@ -1,3 +1,4 @@
+// internal/config/config.go
 package config
 
 import (
@@ -61,7 +62,6 @@ func LoadConfig(path string) (*Config, error) {
 	// Improved temp directory handling with proper prefix check
 	tempDir := os.TempDir()
 	isTempPath := strings.HasPrefix(cleanPath, tempDir)
-	pathIsValid := isTempPath
 
 	if !isTempPath {
 		// Rest of validation logic remains unchanged

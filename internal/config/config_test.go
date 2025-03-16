@@ -1,3 +1,5 @@
+// internal/config/config_test.go
+
 package config
 
 import (
@@ -220,14 +222,14 @@ func TestExpandPath(t *testing.T) {
 
 func TestParseInt(t *testing.T) {
 	testCases := []struct {
-		input    string
-		expected int
-		hasError bool
+		input     string
+		expected  int
+		expectErr bool
 	}{
 		{"123", 123, false},
 		{"0", 0, false},
 		{"-123", -123, false},
-		{"123abc", 123, false}, // fmt.Sscanf only reads the number part
+		{"123abc", 123, false}, // This test case reflects the actual behavior of fmt.Sscanf
 		{"abc", 0, true},
 		{"", 0, true},
 	}
@@ -236,12 +238,12 @@ func TestParseInt(t *testing.T) {
 		result, err := parseInt(tc.input)
 
 		// Check error
-		if (err != nil) != tc.hasError {
-			t.Errorf("parseInt(%q) error = %v, want error = %v", tc.input, err != nil, tc.hasError)
+		if (err != nil) != tc.expectErr {
+			t.Errorf("parseInt(%q) error = %v, want error = %v", tc.input, err != nil, tc.expectErr)
 		}
 
 		// Check value if no error expected
-		if !tc.hasError && result != tc.expected {
+		if !tc.expectErr && result != tc.expected {
 			t.Errorf("parseInt(%q) = %v, want %v", tc.input, result, tc.expected)
 		}
 	}
