@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -181,8 +182,9 @@ func validateConfig(config *Config) error {
 		return fmt.Errorf("server name is required")
 	}
 
+	// Updated port validation to explicitly check for negative values
 	if config.Server.Port <= 0 || config.Server.Port > 65535 {
-		return fmt.Errorf("invalid server port: %d", config.Server.Port)
+		return fmt.Errorf("invalid server port: %d (must be between 1 and 65535)", config.Server.Port)
 	}
 
 	if config.RTM.APIKey == "" {
@@ -232,9 +234,8 @@ func expandPath(path string) string {
 
 // parseInt parses a string to an integer with error handling.
 func parseInt(s string) (int, error) {
-	var v int
-	n, err := fmt.Sscanf(s, "%d", &v)
-	if err != nil || n != 1 {
+	v, err := strconv.Atoi(s)
+	if err != nil {
 		return 0, fmt.Errorf("invalid integer: %s", s)
 	}
 	return v, nil
