@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -38,7 +37,7 @@ func TestMCPInitializeEndpoint(t *testing.T) {
 	defer rtmMock.Close()
 
 	// Override RTM API endpoint in client
-	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.URL); err != nil {
+	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.BaseURL); err != nil {
 		t.Fatalf("Failed to set environment variable: %v", err)
 	}
 	defer os.Unsetenv("RTM_API_ENDPOINT")
@@ -213,7 +212,7 @@ func TestMCPResourceEndpoints(t *testing.T) {
 	defer rtmMock.Close()
 
 	// Override RTM API endpoint in client
-	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.URL); err != nil {
+	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.BaseURL); err != nil {
 		t.Fatalf("Failed to set environment variable: %v", err)
 	}
 	defer os.Unsetenv("RTM_API_ENDPOINT")
@@ -390,7 +389,7 @@ func TestMCPToolEndpoints(t *testing.T) {
 	defer rtmMock.Close()
 
 	// Override RTM API endpoint in client
-	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.URL); err != nil {
+	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.BaseURL); err != nil {
 		t.Fatalf("Failed to set environment variable: %v", err)
 	}
 	defer os.Unsetenv("RTM_API_ENDPOINT")
@@ -515,7 +514,7 @@ func TestMCPToolEndpoints(t *testing.T) {
 	})
 }
 
-// TestReadResourceAuthenticated tests the resource endpoints when authenticated
+// TestReadResourceAuthenticated tests the resource endpoints when authenticated.
 func TestReadResourceAuthenticated(t *testing.T) {
 	// Skip for now - needs more setup for authentication flow
 	t.Skip("Requires authentication flow setup")
@@ -547,7 +546,7 @@ func TestReadResourceAuthenticated(t *testing.T) {
 	rtmMock.AddResponse("rtm.tasks.getList", `<rsp stat="ok"><tasks><list id="1"><taskseries id="1" created="2025-03-15T12:00:00Z" modified="2025-03-15T12:00:00Z" name="Test Task" source="api"><tags /><participants /><notes /><task id="1" due="" has_due_time="0" added="2025-03-15T12:00:00Z" completed="" deleted="" priority="N" postponed="0" estimate="" /></taskseries></list></tasks></rsp>`)
 
 	// Override RTM API endpoint
-	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.URL); err != nil {
+	if err := os.Setenv("RTM_API_ENDPOINT", rtmMock.BaseURL); err != nil {
 		t.Fatalf("Failed to set environment variable: %v", err)
 	}
 	defer os.Unsetenv("RTM_API_ENDPOINT")
@@ -570,6 +569,9 @@ func TestReadResourceAuthenticated(t *testing.T) {
 }
 
 // validateMCPResource validates the structure of a resource definition from list_resources
+// TODO: Use this in resource validation tests once we implement more resource endpoints
+//
+//lint:ignore U1000 Will be used in future tests
 func validateMCPResource(t *testing.T, resource interface{}) {
 	t.Helper()
 
@@ -618,6 +620,9 @@ func validateMCPResource(t *testing.T, resource interface{}) {
 }
 
 // validateMCPTool validates the structure of a tool definition from list_tools
+// TODO: Use this in tool validation tests once we implement more tool endpoints
+//
+//lint:ignore U1000 Will be used in future tests
 func validateMCPTool(t *testing.T, tool interface{}) {
 	t.Helper()
 

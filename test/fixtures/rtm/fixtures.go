@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Constants for test data
+// Constants for test data:
 const (
 	TestFrob        = "test_frob_12345"
 	TestToken       = "test_token_abc123"

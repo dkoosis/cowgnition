@@ -15,16 +15,16 @@ import (
 )
 
 const (
-	// API endpoints - keep as constants for reference
+	// API endpoints - keep as constants for reference.
 	defaultBaseURL = "https://api.rememberthemilk.com/services/rest/"
 	authURL        = "https://www.rememberthemilk.com/services/auth/"
 
-	// Response status
+	// Response status:
 	statusOK   = "ok"
 	statusFail = "fail"
 )
 
-// Client represents an RTM API client
+// Client represents an RTM API client.
 type Client struct {
 	apiKey       string
 	sharedSecret string

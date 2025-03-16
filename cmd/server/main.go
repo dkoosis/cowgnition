@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// Version information (populated at build time)
+// Version information (populated at build time).
 var (
 	version    = "dev"
 	commitHash = "unknown"

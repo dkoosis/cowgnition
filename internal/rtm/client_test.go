@@ -190,7 +190,7 @@ func TestCheckToken(t *testing.T) {
 	clientErr.baseURL = serverErr.URL        // Set baseURL to the error server
 
 	// Test CheckToken with invalid token
-	valid, err = clientErr.CheckToken()
+	valid, _ = clientErr.CheckToken() // Use blank identifier to ignore the error
 
 	// We expect valid to be false, but don't necessarily expect an error
 	// since the API might just return a "fail" status
