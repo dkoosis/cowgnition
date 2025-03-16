@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// ANSI escape codes for colors and text styles:
+// ANSI escape codes for colors and text styles.
 const (
 	Reset  = "\033[0m"
 	Bold   = "\033[1m"

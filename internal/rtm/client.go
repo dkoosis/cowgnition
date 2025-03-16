@@ -1,7 +1,7 @@
 package rtm
 
 import (
-	"crypto/md5" // #nosec G501 - MD5 is required by RTM API specification
+	"crypto/md5" // #nosec G501 - MD5 is required by RTM API specification.
 	"encoding/hex"
 	"encoding/xml"
 	"fmt"
@@ -33,7 +33,7 @@ type Client struct {
 	baseURL      string
 }
 
-// Response represents a generic RTM API response
+// Response represents a generic RTM API response.
 type Response struct {
 	XMLName xml.Name `xml:"rsp"`
 	Status  string   `xml:"stat,attr"`
@@ -43,9 +43,9 @@ type Response struct {
 	} `xml:"err,omitempty"`
 }
 
-// NewClient creates a new RTM API client
+// NewClient creates a new RTM API client.
 func NewClient(apiKey, sharedSecret string) *Client {
-	// Check for environment variable to override the API endpoint
+	// Check for environment variable to override the API endpoint.
 	baseURL := defaultBaseURL
 	if envBaseURL := os.Getenv("RTM_API_ENDPOINT"); envBaseURL != "" {
 		baseURL = envBaseURL
@@ -61,8 +61,8 @@ func NewClient(apiKey, sharedSecret string) *Client {
 	}
 }
 
-// generateSignature generates an API signature
-// #nosec G401 - MD5 is required by RTM API specification
+// generateSignature generates an API signature.
+// #nosec G401 - MD5 is required by RTM API specification.
 func (c *Client) generateSignature(params url.Values) string {
 	// Sort parameters by key
 	keys := make([]string, 0, len(params))
@@ -71,7 +71,7 @@ func (c *Client) generateSignature(params url.Values) string {
 	}
 	sort.Strings(keys)
 
-	// Concatenate parameters
+	// Concatenate parameters.
 	var sb strings.Builder
 	sb.WriteString(c.sharedSecret)
 	for _, k := range keys {
@@ -79,23 +79,23 @@ func (c *Client) generateSignature(params url.Values) string {
 		sb.WriteString(params.Get(k))
 	}
 
-	// Calculate MD5 hash - Required by RTM API
-	h := md5.New() // #nosec G401 - MD5 is required by RTM API specification
+	// Calculate MD5 hash - Required by RTM API.
+	h := md5.New() // #nosec G401 - MD5 is required by RTM API specification.
 	h.Write([]byte(sb.String()))
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// SetAuthToken sets the authentication token
+// SetAuthToken sets the authentication token.
 func (c *Client) SetAuthToken(token string) {
 	c.authToken = token
 }
 
-// GetAuthToken returns the current authentication token
+// GetAuthToken returns the current authentication token.
 func (c *Client) GetAuthToken() string {
 	return c.authToken
 }
 
-// GetAuthURL generates an authentication URL for a desktop application
+// GetAuthURL generates an authentication URL for a desktop application.
 func (c *Client) GetAuthURL(frob, perms string) string {
 	params := url.Values{}
 	params.Set("api_key", c.apiKey)
@@ -111,7 +111,7 @@ func (c *Client) GetAuthURL(frob, perms string) string {
 	return authURL + "?" + params.Encode()
 }
 
-// GetFrob requests a frob from the RTM API
+// GetFrob requests a frob from the RTM API.
 func (c *Client) GetFrob() (string, error) {
 	type frobResponse struct {
 		Response
@@ -129,7 +129,7 @@ func (c *Client) GetFrob() (string, error) {
 	return resp.Frob, nil
 }
 
-// GetToken exchanges a frob for an auth token
+// GetToken exchanges a frob for an auth token.
 func (c *Client) GetToken(frob string) (string, error) {
 	type authResponse struct {
 		Response

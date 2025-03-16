@@ -7,38 +7,38 @@ import (
 	"time"
 )
 
-// Status represents the current authentication status
+// Status represents the current authentication status.
 type Status int
 
 const (
-	// StatusNotAuthenticated indicates no authentication has been attempted
+	// StatusNotAuthenticated indicates no authentication has been attempted.
 	StatusNotAuthenticated Status = iota
 
-	// StatusPending indicates authentication is in progress
+	// StatusPending indicates authentication is in progress.
 	StatusPending
 
-	// StatusAuthenticated indicates successful authentication
+	// StatusAuthenticated indicates successful authentication.
 	StatusAuthenticated
 
-	// StatusFailed indicates authentication failure
+	// StatusFailed indicates authentication failure.
 	StatusFailed
 )
 
-// Permission represents the RTM permission level
+// Permission represents the RTM permission level.
 type Permission string
 
 const (
-	// PermRead provides read-only access
+	// PermRead provides read-only access.
 	PermRead Permission = "read"
 
-	// PermWrite provides read and write access
+	// PermWrite provides read and write access.
 	PermWrite Permission = "write"
 
-	// PermDelete provides full access including deletion
+	// PermDelete provides full access including deletion.
 	PermDelete Permission = "delete"
 )
 
-// Flow represents an ongoing authentication flow
+// Flow represents an ongoing authentication flow.
 type Flow struct {
 	Frob        string
 	CreatedAt   time.Time
