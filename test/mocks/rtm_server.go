@@ -36,6 +36,7 @@ type RequestRecord struct {
 
 // NewRTMServer creates a new mock RTM server for testing.
 func NewRTMServer(t *testing.T) *RTMServer {
+	t.Helper()
 	server := &RTMServer{
 		Requests:   make([]RequestRecord, 0),
 		Responses:  make(map[string]string),
@@ -214,6 +215,7 @@ func (s *RTMServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 // ValidateRequest checks if a request has been made with specific characteristics.
 func (s *RTMServer) ValidateRequest(t *testing.T, method string, validateFn func(RequestRecord) bool) bool {
+	t.Helper()
 	requests := s.GetRequestsForMethod(method)
 	if len(requests) == 0 {
 		t.Errorf("No requests recorded for method %s", method)

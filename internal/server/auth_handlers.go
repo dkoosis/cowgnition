@@ -38,7 +38,7 @@ func (s *MCPServer) handleAuthResource(w http.ResponseWriter) {
 	writeJSONResponse(w, http.StatusOK, response)
 }
 
-// formatAuthSuccessResponse creates a rich response for successful authentication
+// formatAuthSuccessResponse creates a rich response for successful authentication.
 func formatAuthSuccessResponse() map[string]interface{} {
 	// Create formatted content with emoji and rich formatting
 	content := `# ✅ Authentication Successful
@@ -58,7 +58,7 @@ You are already authenticated with Remember The Milk. You can now:
 	}
 }
 
-// formatAuthInstructions creates rich instructions for the authentication flow
+// formatAuthInstructions creates rich instructions for the authentication flow.
 func formatAuthInstructions(authURL, frob string) string {
 	return fmt.Sprintf(`# 🔑 Remember The Milk Authentication
 

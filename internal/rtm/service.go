@@ -99,7 +99,7 @@ func (s *Service) startBackgroundTasks() {
 	}
 }
 
-// refreshTokenIfNeeded checks and refreshes the auth token if necessary
+// refreshTokenIfNeeded checks and refreshes the auth token if necessary.
 func (s *Service) refreshTokenIfNeeded() {
 	s.mu.RLock()
 	shouldRefresh := s.authStatus == StatusAuthenticated &&

@@ -257,12 +257,12 @@ func (c *Client) doRequest(params url.Values, v interface{}) error {
 	return nil
 }
 
-// Helper method to extract status
+// Helper method to extract status.
 func (r Response) GetStatus() string {
 	return r.Status
 }
 
-// Helper method to extract error
+// Helper method to extract error.
 func (r Response) GetError() (string, string) {
 	if r.Error != nil {
 		return r.Error.Code, r.Error.Message
