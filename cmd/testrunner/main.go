@@ -93,6 +93,11 @@ func extractPackageName(line string, patterns Patterns) string {
 		return match[2]
 	}
 
+	// Extract package name from "PASS" or "FAIL" package lines
+	if match := patterns.Package.FindStringSubmatch(line); len(match) > 1 {
+		return match[1]
+	}
+
 	// Check for no test files line.
 	if match := patterns.NoTest.FindStringSubmatch(line); len(match) > 1 {
 		return strings.TrimSpace(match[1])
@@ -110,7 +115,7 @@ func compilePatterns() Patterns {
 		Run:     regexp.MustCompile(`^=== RUN\s+(.+)$`),
 		Summary: regexp.MustCompile(`^(ok|FAIL)\s+(\S+)\s+(.+)$`),
 		Error:   regexp.MustCompile(`^\s*(.+\.go:\d+:|Error:)(.+)$`),
-		Package: regexp.MustCompile(`^PASS|^FAIL\s+(\S+)`),
+		Package: regexp.MustCompile(`^(PASS|FAIL)\s+(\S+)`), // Fixed to capture package names correctly
 		NoTest:  regexp.MustCompile(`^\?\s+([^\[]+)\s+\[no test files\]$`),
 	}
 }
@@ -162,8 +167,30 @@ func processLine(line string, patterns Patterns, p ColoredPrinters, stats *TestS
 	case patterns.Error.MatchString(line):
 		handleErrorLine(line, patterns.Error, p)
 
+	case patterns.Package.MatchString(line):
+		handlePackageLine(line, patterns.Package, p, stats)
+
 	default:
 		handleDefaultLine(line, p)
+	}
+}
+
+// handlePackageLine processes package result lines (PASS/FAIL package).
+func handlePackageLine(line string, pattern *regexp.Regexp, p ColoredPrinters, stats *TestStats) {
+	matches := pattern.FindStringSubmatch(line)
+	if len(matches) > 2 {
+		status := matches[1]
+		packageName := matches[2]
+
+		if status == "PASS" {
+			fmt.Printf("%s %s\n", p.Pass("PASS"), p.Pkg(packageName))
+			stats.PackageResults[packageName] = "pass"
+		} else {
+			fmt.Printf("%s %s\n", p.Fail("FAIL"), p.Pkg(packageName))
+			stats.PackageResults[packageName] = "fail"
+		}
+	} else {
+		fmt.Println(line)
 	}
 }
 
