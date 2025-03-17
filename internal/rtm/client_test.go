@@ -1,6 +1,7 @@
 package rtm
 
 import (
+	"encoding/xml"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -52,7 +53,7 @@ func TestGetAuthURL(t *testing.T) {
 	}
 
 	// Check that params are included
-	requiredParams := []string{
+	requiredParams := string{
 		"api_key=api_key_123",
 		"perms=delete",
 		"frob=test_frob",
@@ -85,7 +86,7 @@ func setupMockServer(t *testing.T, expectedMethod string, response string) *http
 
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
-		_, err := w.Write([]byte(response)) // Check for write errors
+		_, err := w.Write(byte(response)) // Check for write errors
 		if err != nil {
 			t.Fatalf("Error writing response: %v", err)
 		}
@@ -240,3 +241,310 @@ func TestResponseGetError(t *testing.T) {
 		t.Errorf("Response.GetError() with no error message = %v, want %v", msg, "")
 	}
 }
+
+func TestDo(t *testing.T) {
+	// Test successful API call
+	t.Run("Success", func(t *testing.T) {
+		mockResp := `<rsp stat="ok"><echo>test</echo></rsp>`
+		server := setupMockServer(t, "rtm.test.echo", mockResp)
+		defer server.Close()
+
+		client := NewClient("api_key_123", "shared_secret_abc")
+		client.baseURL = server.URL
+
+		params := url.Values{}
+		params.Set("method", "rtm.test.echo")
+
+		var result struct {
+			Echo string `xml:"echo"`
+		}
+		_, err := client.Do(params, &result)
+
+		if err != nil {
+			t.Errorf("Do() returned unexpected error: %v", err)
+		}
+
+		if result.Echo != "test" {
+			t.Errorf("Do() result.Echo = %v, want %v", result.Echo, "test")
+		}
+	})
+
+	// Test API error
+	t.Run("APIError", func(t *testing.T) {
+		mockResp := `<rsp stat="fail"><err code="123" msg="Test error"/></rsp>`
+		server := setupMockServer(t, "rtm.test.echo", mockResp)
+		defer server.Close()
+
+		client := NewClient("api_key_123", "shared_secret_abc")
+		client.baseURL = server.URL
+
+		params := url.Values{}
+		params.Set("method", "rtm.test.echo")
+
+		_, err := client.Do(params, nil)
+
+		if err == nil {
+			t.Error("Do() should return an error for API fail response")
+		}
+
+		apiErr, ok := err.(APIError)
+		if !ok {
+			t.Errorf("Do() error type = %T, want APIError", err)
+		}
+
+		if apiErr.Code != 123 {
+			t.Errorf("Do() APIError.Code = %v, want %v", apiErr.Code, 123)
+		}
+
+		if apiErr.Message != "Test error" {
+			t.Errorf("Do() APIError.Message = %v, want %v", apiErr.Message, "Test error")
+		}
+	})
+
+	// Test HTTP error
+	t.Run("HTTPError", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		client := NewClient("api_key_123", "shared_secret_abc")
+		client.baseURL = server.URL
+
+		params := url.Values{}
+		params.Set("method", "rtm.test.echo")
+
+		_, err := client.Do(params, nil)
+
+		if err == nil {
+			t.Error("Do() should return an error for HTTP 500 response")
+		}
+
+		// Check if the error message contains the HTTP status
+		if !strings.Contains(err.Error(), "HTTP status: 500") {
+			t.Errorf("Do() error message should contain HTTP status, got: %v", err)
+		}
+	})
+
+	// Test XML unmarshalling error
+	t.Run("UnmarshalError", func(t *testing.T) {
+		mockResp := `<rsp stat="ok"><invalid-xml></rsp>` // Invalid XML
+		server := setupMockServer(t, "rtm.test.echo", mockResp)
+		defer server.Close()
+
+		client := NewClient("api_key_123", "shared_secret_abc")
+		client.baseURL = server.URL
+
+		params := url.Values{}
+		params.Set("method", "rtm.test.echo")
+
+		var result struct {
+			Echo string `xml:"echo"`
+		}
+		_, err := client.Do(params, &result)
+
+		if err == nil {
+			t.Error("Do() should return an error for invalid XML response")
+		}
+
+		if _, ok := err.(*xml.SyntaxError); !ok {
+			t.Errorf("Do() error type = %T, want xml.SyntaxError", err)
+		}
+	})
+
+	// Test successful API call with POST
+	t.Run("SuccessPOST", func(t *testing.T) {
+		mockResp := `<rsp stat="ok"><echo>test</echo></rsp>`
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				t.Errorf("Expected POST request, got %s", r.Method)
+				return
+			}
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(http.StatusOK)
+			_, err := w.Write(byte(mockResp))
+			if err != nil {
+				t.Fatalf("Error writing response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		client := NewClient("api_key_123", "shared_secret_abc")
+		client.baseURL = server.URL
+		client.usePOST = true // Enable POST
+
+		params := url.Values{}
+		params.Set("method", "rtm.test.echo")
+
+		var result struct {
+			Echo string `xml:"echo"`
+		}
+		_, err := client.Do(params, &result)
+
+		if err != nil {
+			t.Errorf("Do() returned unexpected error: %v", err)
+		}
+
+		if result.Echo != "test" {
+			t.Errorf("Do() result.Echo = %v, want %v", result.Echo, "test")
+		}
+	})
+
+	// Test successful file upload
+	t.Run("FileUploadSuccess", func(t *testing.T) {
+		mockResp := `<rsp stat="ok"><photoid>12345</photoid></rsp>`
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				t.Errorf("Expected POST request, got %s", r.Method)
+				return
+			}
+
+			// Check Content-Type for multipart/form-data
+			if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+				t.Errorf("Expected multipart/form-data Content-Type, got %s", r.Header.Get("Content-Type"))
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(http.StatusOK)
+			_, err := w.Write(byte(mockResp))
+			if err != nil {
+				t.Fatalf("Error writing response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		client := NewClient("api_key_123", "shared_secret_abc")
+		client.baseURL = server.URL
+		client.usePOST = true // Ensure POST is used
+
+		params := url.Values{}
+		params.Set("method", "rtm.photos.upload")
+
+		fileContent := "test file content"
+		fileName := "test.txt"
+
+		file := strings.NewReader(fileContent)
+
+		result, err := client.Upload(params, "photo", fileName, file)
+
+		if err != nil {
+			t.Errorf("Upload() returned unexpected error: %v", err)
+		}
+
+		photoID, ok := result["photoid"].(string)
+		if !ok || photoID != "12345" {
+			t.Errorf("Upload() result[photoid] = %v, want %v", result["photoid"], "12345")
+		}
+	})
+
+	// Test file upload with API error
+	t.Run("FileUploadAPIError", func(t *testing.T) {
+		mockResp := `<rsp stat="fail"><err code="123" msg="Upload failed"/></rsp>`
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(http.StatusOK)
+			_, err := w.Write(byte(mockResp))
+			if err != nil {
+				t.Fatalf("Error writing response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		client := NewClient("api_key_123", "shared_secret_abc")
+		client.baseURL = server.URL
+		client.usePOST = true
+
+		params := url.Values{}
+		params.Set("method", "rtm.photos.upload")
+
+		fileContent := "test file content"
+		fileName := "test.txt"
+		file := strings.NewReader(fileContent)
+
+		_, err := client.Upload(params, "photo", fileName, file)
+
+		if err == nil {
+			t.Error("Upload() should return an error for API fail response")
+		}
+
+		apiErr, ok := err.(APIError)
+		if !ok {
+			t.Errorf("Upload() error type = %T, want APIError", err)
+		}
+
+		if apiErr.Code != 123 {
+			t.Errorf("Upload() APIError.Code = %v, want %v", apiErr.Code, 123)
+		}
+
+		if apiErr.Message != "Upload failed" {
+			t.Errorf("Upload() APIError.Message = %v, want %v", apiErr.Message, "Upload failed")
+		}
+	})
+
+	// Test file upload with HTTP error
+	t.Run("FileUploadHTTPError", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		client := NewClient("api_key_123", "shared_secret_abc")
+		client.baseURL = server.URL
+		client.usePOST = true
+
+		params := url.Values{}
+		params.Set("method", "rtm.photos.upload")
+
+		fileContent := "test file content"
+		fileName := "test.txt"
+		file := strings.NewReader(fileContent)
+
+		_, err := client.Upload(params, "photo", fileName, file)
+
+		if err == nil {
+			t.Error("Upload() should return an error for HTTP 500 response")
+		}
+
+		if !strings.Contains(err.Error(), "HTTP status: 500") {
+			t.Errorf("Upload() error message should contain HTTP status, got: %v", err)
+		}
+	})
+
+	// Test file upload with invalid XML response
+	t.Run("FileUploadUnmarshalError", func(t *testing.T) {
+		mockResp := `<rsp stat="ok"><invalid-xml></rsp>` // Invalid XML
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(http.StatusOK)
+			_, err := w.Write(byte(mockResp))
+			if err != nil {
+				t.Fatalf("Error writing response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		client := NewClient("api_key_123", "shared_secret_abc")
+		client.baseURL = server.URL
+		client.usePOST = true
+
+		params := url.Values{}
+		params.Set("method", "rtm.photos.upload")
+
+		fileContent := "test file content"
+		fileName := "test.txt"
+		file := strings.NewReader(fileContent)
+
+		_, err := client.Upload(params, "photo", fileName, file)
+
+		if err == nil {
+			t.Error("Upload() should return an error for invalid XML response")
+		}
+
+		if _, ok := err.(*xml.SyntaxError); !ok {
+			t.Errorf("Upload() error type = %T, want xml.SyntaxError", err)
+		}
+	})
+}
+
+// ErrorMsgEnhanced: 2024-02-29

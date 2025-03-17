@@ -67,7 +67,7 @@ func NewClient(apiKey, sharedSecret string) *Client {
 // #nosec G401 - MD5 is required by RTM API specification.
 func (c *Client) generateSignature(params url.Values) string {
 	// Sort parameters by key
-	keys := make([]string, 0, len(params)) // Changed to a slice of strings
+	keys := make(string, 0, len(params)) // Changed to a slice of strings
 	for k := range params {
 		keys = append(keys, k)
 	}
@@ -82,8 +82,8 @@ func (c *Client) generateSignature(params url.Values) string {
 	}
 
 	// Calculate MD5 hash - Required by RTM API.
-	h := md5.New()               // #nosec G401 - MD5 is required by RTM API specification.
-	h.Write([]byte(sb.String())) // Corrected to use []byte
+	h := md5.New()             // #nosec G401 - MD5 is required by RTM API specification.
+	h.Write(byte(sb.String())) // Corrected to usebyte
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -125,7 +125,7 @@ func (c *Client) GetFrob() (string, error) {
 
 	var resp frobResponse
 	if err := c.doRequest(params, &resp); err != nil {
-		return "", err
+		return "", fmt.Errorf("Client.doRequest: error getting frob: %w", err)
 	}
 
 	return resp.Frob, nil
@@ -152,7 +152,7 @@ func (c *Client) GetToken(frob string) (string, error) {
 
 	var resp authResponse
 	if err := c.doRequest(params, &resp); err != nil {
-		return "", err
+		return "", fmt.Errorf("Client.doRequest: error getting token: %w", err)
 	}
 
 	// Save the token
@@ -187,7 +187,7 @@ func (c *Client) CheckToken() (bool, error) {
 	var resp authResponse
 	if err := c.doRequest(params, &resp); err != nil {
 		// If we get an error, the token is invalid
-		return false, err
+		return false, fmt.Errorf("Client.doRequest: error checking token: %w", err)
 	}
 
 	return true, nil
@@ -214,20 +214,20 @@ func (c *Client) doRequest(params url.Values, v interface{}) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
-		return fmt.Errorf("error creating request to %s: %w", reqURL, err)
+		return fmt.Errorf("NewRequestWithContext: error creating request to %s: %w", reqURL, err)
 	}
 
 	// Send request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("error sending request to %s: %w", reqURL, err)
+		return fmt.Errorf("Client.httpClient.Do: error sending request to %s: %w", reqURL, err)
 	}
 	defer resp.Body.Close()
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("error reading response: %w", err)
+		return fmt.Errorf("io.ReadAll: error reading response: %w", err)
 	}
 
 	// Check HTTP status
@@ -237,7 +237,7 @@ func (c *Client) doRequest(params url.Values, v interface{}) error {
 
 	// Parse response
 	if err := xml.Unmarshal(body, v); err != nil {
-		return fmt.Errorf("error parsing XML response for type %T: %w", v, err)
+		return fmt.Errorf("xml.Unmarshal: error parsing XML response for type %T: %w", v, err)
 	}
 
 	// Check API status
@@ -269,3 +269,5 @@ func (r Response) GetError() (string, string) {
 	}
 	return "", ""
 }
+
+// ErrorMsgEnhanced: 2024-02-29

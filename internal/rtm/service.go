@@ -47,7 +47,7 @@ func (s *Service) Initialize() error {
 	// Create token manager for secure token storage
 	tokenManager, err := auth.NewTokenManager(s.tokenPath)
 	if err != nil {
-		return fmt.Errorf("error creating token manager: %w", err)
+		return fmt.Errorf("Initialize: error creating token manager: %w", err)
 	}
 	s.tokenManager = tokenManager
 
@@ -55,7 +55,7 @@ func (s *Service) Initialize() error {
 	if s.tokenManager.HasToken() {
 		token, err := s.tokenManager.LoadToken()
 		if err != nil {
-			log.Printf("Warning: Error loading token: %v", err)
+			log.Printf("Initialize: Warning: Error loading token: %v", err)
 		} else {
 			// Set token on client
 			s.client.SetAuthToken(token)
@@ -64,17 +64,17 @@ func (s *Service) Initialize() error {
 			valid, err := s.client.CheckToken()
 			if err != nil || !valid {
 				// Token is invalid, clear it
-				log.Printf("Stored token is invalid, clearing it. Error: %v", err)
+				log.Printf("Initialize: Warning: Stored token is invalid, clearing it. Error: %v", err)
 				s.client.SetAuthToken("")
 				if err := s.tokenManager.DeleteToken(); err != nil {
-					log.Printf("Warning: Failed to delete invalid token: %v", err)
+					log.Printf("Initialize: Warning: Failed to delete invalid token: %v", err)
 				}
 				s.authStatus = StatusNotAuthenticated
 			} else {
 				// Token is valid
 				s.authStatus = StatusAuthenticated
 				s.lastRefresh = time.Now()
-				log.Println("Successfully authenticated with stored token")
+				log.Println("Initialize: Successfully authenticated with stored token")
 			}
 		}
 	} else {
@@ -107,7 +107,7 @@ func (s *Service) refreshTokenIfNeeded() {
 	s.mu.RUnlock()
 
 	if shouldRefresh {
-		log.Println("Refreshing auth token")
+		log.Println("refreshTokenIfNeeded: Refreshing auth token")
 
 		// Just validate the current token again
 		valid, err := s.client.CheckToken()
@@ -116,12 +116,12 @@ func (s *Service) refreshTokenIfNeeded() {
 		defer s.mu.Unlock()
 
 		if err != nil || !valid {
-			log.Printf("Error refreshing token: %v", err)
+			log.Printf("refreshTokenIfNeeded: Error refreshing token: %v", err)
 			s.authStatus = StatusNotAuthenticated
 			// Clear the invalid token
 			s.client.SetAuthToken("")
 			if err := s.tokenManager.DeleteToken(); err != nil {
-				log.Printf("Warning: Failed to delete invalid token: %v", err)
+				log.Printf("refreshTokenIfNeeded: Warning: Failed to delete invalid token: %v", err)
 			}
 		} else {
 			// Token is still valid, update refresh time
@@ -168,10 +168,10 @@ func (s *Service) HasAuthFlow(frob string) bool {
 }
 
 // GetLists retrieves all lists from RTM.
-func (s *Service) GetLists() ([]List, error) {
+func (s *Service) GetLists() (List, error) {
 	// Ensure we're authenticated
 	if !s.IsAuthenticated() {
-		return nil, fmt.Errorf("not authenticated with RTM")
+		return nil, fmt.Errorf("GetLists: not authenticated with RTM")
 	}
 
 	params := url.Values{}
@@ -180,13 +180,13 @@ func (s *Service) GetLists() ([]List, error) {
 	type listResponse struct {
 		Response
 		Lists struct {
-			List []List `xml:"list"`
+			ListList `xml:"list"`
 		} `xml:"lists"`
 	}
 
 	var resp listResponse
 	if err := s.client.doRequest(params, &resp); err != nil {
-		return nil, fmt.Errorf("error getting lists: %w", err)
+		return nil, fmt.Errorf("GetLists: client.doRequest: error getting lists: %w", err)
 	}
 
 	return resp.Lists.List, nil
@@ -196,7 +196,7 @@ func (s *Service) GetLists() ([]List, error) {
 func (s *Service) GetTasks(filter string) (*TasksResponse, error) {
 	// Ensure we're authenticated
 	if !s.IsAuthenticated() {
-		return nil, fmt.Errorf("not authenticated with RTM")
+		return nil, fmt.Errorf("GetTasks: not authenticated with RTM")
 	}
 
 	params := url.Values{}
@@ -216,7 +216,7 @@ func (s *Service) GetTasks(filter string) (*TasksResponse, error) {
 
 	var resp TasksResponse
 	if err := s.client.doRequest(params, &resp); err != nil {
-		return nil, fmt.Errorf("error getting tasks: %w", err)
+		return nil, fmt.Errorf("GetTasks: client.doRequest: error getting tasks: %w", err)
 	}
 
 	// Update last sync time
@@ -231,7 +231,7 @@ func (s *Service) GetTasks(filter string) (*TasksResponse, error) {
 func (s *Service) CreateTimeline() (string, error) {
 	// Ensure we're authenticated
 	if !s.IsAuthenticated() {
-		return "", fmt.Errorf("not authenticated with RTM")
+		return "", fmt.Errorf("CreateTimeline: not authenticated with RTM")
 	}
 
 	params := url.Values{}
@@ -239,7 +239,7 @@ func (s *Service) CreateTimeline() (string, error) {
 
 	var resp TimelineResponse
 	if err := s.client.doRequest(params, &resp); err != nil {
-		return "", fmt.Errorf("error creating timeline: %w", err)
+		return "", fmt.Errorf("CreateTimeline: client.doRequest: error creating timeline: %w", err)
 	}
 
 	return resp.Timeline, nil
@@ -249,7 +249,7 @@ func (s *Service) CreateTimeline() (string, error) {
 func (s *Service) AddTask(timeline, listID, name, dueDate string) error {
 	// Ensure we're authenticated
 	if !s.IsAuthenticated() {
-		return fmt.Errorf("not authenticated with RTM")
+		return fmt.Errorf("AddTask: not authenticated with RTM")
 	}
 
 	params := url.Values{}
@@ -264,7 +264,7 @@ func (s *Service) AddTask(timeline, listID, name, dueDate string) error {
 
 	var resp Response
 	if err := s.client.doRequest(params, &resp); err != nil {
-		return fmt.Errorf("error adding task: %w", err)
+		return fmt.Errorf("AddTask: client.doRequest: error adding task: %w", err)
 	}
 
 	return nil
@@ -274,7 +274,7 @@ func (s *Service) AddTask(timeline, listID, name, dueDate string) error {
 func (s *Service) CompleteTask(timeline, listID, taskseriesID, taskID string) error {
 	// Ensure we're authenticated
 	if !s.IsAuthenticated() {
-		return fmt.Errorf("not authenticated with RTM")
+		return fmt.Errorf("CompleteTask: not authenticated with RTM")
 	}
 
 	params := url.Values{}
@@ -286,7 +286,7 @@ func (s *Service) CompleteTask(timeline, listID, taskseriesID, taskID string) er
 
 	var resp Response
 	if err := s.client.doRequest(params, &resp); err != nil {
-		return fmt.Errorf("error completing task: %w", err)
+		return fmt.Errorf("CompleteTask: client.doRequest: error completing task: %w", err)
 	}
 
 	return nil
@@ -296,7 +296,7 @@ func (s *Service) CompleteTask(timeline, listID, taskseriesID, taskID string) er
 func (s *Service) UncompleteTask(timeline, listID, taskseriesID, taskID string) error {
 	// Ensure we're authenticated
 	if !s.IsAuthenticated() {
-		return fmt.Errorf("not authenticated with RTM")
+		return fmt.Errorf("UncompleteTask: not authenticated with RTM")
 	}
 
 	params := url.Values{}
@@ -308,7 +308,7 @@ func (s *Service) UncompleteTask(timeline, listID, taskseriesID, taskID string) 
 
 	var resp Response
 	if err := s.client.doRequest(params, &resp); err != nil {
-		return fmt.Errorf("error uncompleting task: %w", err)
+		return fmt.Errorf("UncompleteTask: client.doRequest: error uncompleting task: %w", err)
 	}
 
 	return nil
@@ -318,7 +318,7 @@ func (s *Service) UncompleteTask(timeline, listID, taskseriesID, taskID string) 
 func (s *Service) DeleteTask(timeline, listID, taskseriesID, taskID string) error {
 	// Ensure we're authenticated
 	if !s.IsAuthenticated() {
-		return fmt.Errorf("not authenticated with RTM")
+		return fmt.Errorf("DeleteTask: not authenticated with RTM")
 	}
 
 	params := url.Values{}
@@ -330,7 +330,7 @@ func (s *Service) DeleteTask(timeline, listID, taskseriesID, taskID string) erro
 
 	var resp Response
 	if err := s.client.doRequest(params, &resp); err != nil {
-		return fmt.Errorf("error deleting task: %w", err)
+		return fmt.Errorf("DeleteTask: client.doRequest: error deleting task: %w", err)
 	}
 
 	return nil
@@ -340,7 +340,7 @@ func (s *Service) DeleteTask(timeline, listID, taskseriesID, taskID string) erro
 func (s *Service) SetDueDate(timeline, listID, taskseriesID, taskID, dueDate string, hasDueTime bool) error {
 	// Ensure we're authenticated
 	if !s.IsAuthenticated() {
-		return fmt.Errorf("not authenticated with RTM")
+		return fmt.Errorf("SetDueDate: not authenticated with RTM")
 	}
 
 	params := url.Values{}
@@ -364,7 +364,7 @@ func (s *Service) SetDueDate(timeline, listID, taskseriesID, taskID, dueDate str
 
 	var resp Response
 	if err := s.client.doRequest(params, &resp); err != nil {
-		return fmt.Errorf("error setting due date: %w", err)
+		return fmt.Errorf("SetDueDate: client.doRequest: error setting due date: %w", err)
 	}
 
 	return nil
@@ -374,7 +374,7 @@ func (s *Service) SetDueDate(timeline, listID, taskseriesID, taskID, dueDate str
 func (s *Service) SetPriority(timeline, listID, taskseriesID, taskID, priority string) error {
 	// Ensure we're authenticated
 	if !s.IsAuthenticated() {
-		return fmt.Errorf("not authenticated with RTM")
+		return fmt.Errorf("SetPriority: not authenticated with RTM")
 	}
 
 	params := url.Values{}
@@ -387,17 +387,17 @@ func (s *Service) SetPriority(timeline, listID, taskseriesID, taskID, priority s
 
 	var resp Response
 	if err := s.client.doRequest(params, &resp); err != nil {
-		return fmt.Errorf("error setting priority: %w", err)
+		return fmt.Errorf("SetPriority: client.doRequest: error setting priority: %w", err)
 	}
 
 	return nil
 }
 
 // AddTags adds tags to a task.
-func (s *Service) AddTags(timeline, listID, taskseriesID, taskID string, tags []string) error {
+func (s *Service) AddTags(timeline, listID, taskseriesID, taskID string, tagsstring string) error {
 	// Ensure we're authenticated
 	if !s.IsAuthenticated() {
-		return fmt.Errorf("not authenticated with RTM")
+		return fmt.Errorf("AddTags: not authenticated with RTM")
 	}
 
 	params := url.Values{}
@@ -410,17 +410,17 @@ func (s *Service) AddTags(timeline, listID, taskseriesID, taskID string, tags []
 
 	var resp Response
 	if err := s.client.doRequest(params, &resp); err != nil {
-		return fmt.Errorf("error adding tags: %w", err)
+		return fmt.Errorf("AddTags: client.doRequest: error adding tags: %w", err)
 	}
 
 	return nil
 }
 
 // RemoveTags removes tags from a task.
-func (s *Service) RemoveTags(timeline, listID, taskseriesID, taskID string, tags []string) error {
+func (s *Service) RemoveTags(timeline, listID, taskseriesID, taskID string, tagsstring []string) error {
 	// Ensure we're authenticated
 	if !s.IsAuthenticated() {
-		return fmt.Errorf("not authenticated with RTM")
+		return fmt.Errorf("RemoveTags: not authenticated with RTM")
 	}
 
 	params := url.Values{}
@@ -433,7 +433,7 @@ func (s *Service) RemoveTags(timeline, listID, taskseriesID, taskID string, tags
 
 	var resp Response
 	if err := s.client.doRequest(params, &resp); err != nil {
-		return fmt.Errorf("error removing tags: %w", err)
+		return fmt.Errorf("RemoveTags: client.doRequest: error removing tags: %w", err)
 	}
 
 	return nil
@@ -463,7 +463,7 @@ func (s *Service) IsAuthenticated() bool {
 	// We have a token, check if it's valid
 	token, err := s.tokenManager.LoadToken()
 	if err != nil {
-		log.Printf("Error loading token: %v", err)
+		log.Printf("IsAuthenticated: Error loading token: %v", err)
 		s.mu.Lock()
 		s.authStatus = StatusNotAuthenticated
 		s.mu.Unlock()
@@ -477,10 +477,10 @@ func (s *Service) IsAuthenticated() bool {
 	valid, err := s.client.CheckToken()
 	if err != nil || !valid {
 		// Token is invalid, clear it
-		log.Printf("Stored token is invalid. Error: %v", err)
+		log.Printf("IsAuthenticated: Stored token is invalid. Error: %v", err)
 		s.client.SetAuthToken("")
 		if err := s.tokenManager.DeleteToken(); err != nil {
-			log.Printf("Warning: Failed to delete invalid token: %v", err)
+			log.Printf("IsAuthenticated: Warning: Failed to delete invalid token: %v", err)
 		}
 		s.mu.Lock()
 		s.authStatus = StatusNotAuthenticated
@@ -506,7 +506,7 @@ func (s *Service) CleanupExpiredFlows() {
 		// Check if flow has expired
 		if now.After(flow.ExpiresAt) {
 			delete(s.authFlows, frob)
-			log.Printf("Cleared expired auth flow for frob: %s", frob)
+			log.Printf("CleanupExpiredFlows: Cleared expired auth flow for frob: %s", frob)
 		}
 	}
 }
@@ -517,7 +517,7 @@ func (s *Service) StartAuthFlow() (string, string, error) {
 	// Generate frob
 	frob, err := s.client.GetFrob()
 	if err != nil {
-		return "", "", fmt.Errorf("error getting frob: %w", err)
+		return "", "", fmt.Errorf("StartAuthFlow: error getting frob: %w", err)
 	}
 
 	// Get current permission level
@@ -555,7 +555,7 @@ func (s *Service) CompleteAuthFlow(frob string) error {
 	s.mu.RUnlock()
 
 	if !exists {
-		return fmt.Errorf("invalid frob, not found in active authentication flows")
+		return fmt.Errorf("CompleteAuthFlow: invalid frob, not found in active authentication flows")
 	}
 
 	// Check if flow has expired
@@ -563,7 +563,7 @@ func (s *Service) CompleteAuthFlow(frob string) error {
 		s.mu.Lock()
 		delete(s.authFlows, frob)
 		s.mu.Unlock()
-		return fmt.Errorf("authentication flow expired, please start a new one")
+		return fmt.Errorf("CompleteAuthFlow: authentication flow expired, please start a new one")
 	}
 
 	// Exchange frob for token
@@ -572,12 +572,12 @@ func (s *Service) CompleteAuthFlow(frob string) error {
 		s.mu.Lock()
 		s.authStatus = StatusNotAuthenticated
 		s.mu.Unlock()
-		return fmt.Errorf("error getting token: %w", err)
+		return fmt.Errorf("CompleteAuthFlow: error getting token: %w", err)
 	}
 
 	// Save token
 	if err := s.tokenManager.SaveToken(token); err != nil {
-		return fmt.Errorf("error saving token: %w", err)
+		return fmt.Errorf("CompleteAuthFlow: error saving token: %w", err)
 	}
 
 	// Clean up auth flow
@@ -594,7 +594,7 @@ func (s *Service) CompleteAuthFlow(frob string) error {
 func (s *Service) ClearAuthentication() error {
 	// Remove token
 	if err := s.tokenManager.DeleteToken(); err != nil {
-		return fmt.Errorf("error removing token: %w", err)
+		return fmt.Errorf("ClearAuthentication: error removing token: %w", err)
 	}
 
 	// Reset status and clear flows
@@ -604,15 +604,17 @@ func (s *Service) ClearAuthentication() error {
 	s.client.SetAuthToken("")
 	s.mu.Unlock()
 
-	log.Println("Authentication cleared")
+	log.Println("ClearAuthentication: Authentication cleared")
 	return nil
 }
 
 // combineTagsForAPI combines tags for the API.
-func combineTagsForAPI(tags []string) string {
+func combineTagsForAPI(tagsstring) string {
 	// URL encode each tag and combine with commas
 	for i, tag := range tags {
 		tags[i] = url.QueryEscape(tag)
 	}
 	return fmt.Sprintf("\"%s\"", url.QueryEscape(fmt.Sprintf("%s", tags)))
 }
+
+// ErrorMsgEnhanced: 2024-02-29
