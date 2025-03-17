@@ -127,6 +127,96 @@ Verify server performance characteristics:
 5. Measure and optimize startup and shutdown times
 ```
 
+#### 1.7 Code Organization and Documentation Improvements
+
+```
+Improve code organization to prevent duplication and enhance discoverability:
+1. Add package-level documentation to list key utility functions
+2. Apply consistent naming conventions across files within packages
+3. Create utils.go or helpers.go file in each package for common functions
+4. Add cross-referencing comments to related functions
+5. Improve error message clarity by showing file locations
+6. Reorganize functions to group related functionality
+7. Document package organization in PROJECT_ORGANIZATION.md
+```
+
+#### 1.8 AI-Friendly Project Structure Improvements (PRIORITY FOCUS)
+
+```
+Restructure the project to be more discoverable and reduce duplication, especially for AI assistants:
+
+1. Centralized Utility Functions:
+   - Create a dedicated util package for all general-purpose utilities
+   - Move existing helper functions from test files into appropriate util subpackages (util/url, util/string, etc.)
+   - Add comprehensive godoc comments that explain function purpose, inputs/outputs, and edge cases
+
+2. Test Helper Organization:
+   - Create an internal/testutil package for all test helpers
+   - Move common test functions (readResource, callTool, withRetry) to this package
+   - Use consistent naming for test helpers (e.g., prefix with Assert or Test)
+   - Add documentation describing when to use each helper
+
+3. Package Boundaries and Dependencies:
+   - Review and refactor circular dependencies
+   - Ensure each package has a clear single responsibility
+   - Replace package-level function variables with direct imports and calls
+   - Add package-level documentation explaining purpose and contents
+
+4. File Organization:
+   - Create consistent patterns for file organization within packages
+   - Add file-level comments describing the file's contents and purpose
+   - Consider splitting large files with mixed responsibilities
+   - Use standard file naming conventions (e.g., helpers.go, models.go, etc.)
+
+5. Documentation Enhancements:
+   - Add explicit cross-references in comments (e.g., "See also: util.FindURLEndIndex")
+   - Update PROJECT_ORGANIZATION.md to document the new structure
+   - Create a UTILITY_FUNCTIONS.md listing all available helpers by category
+   - Add examples in godoc comments showing function usage
+
+6. Naming and Conventions:
+   - Establish and document consistent naming patterns
+   - Rename confusing or abbreviated functions to be more descriptive
+   - Use full words rather than abbreviations in function and variable names
+   - Apply consistent casing (camelCase for unexported, PascalCase for exported)
+```
+
+#### 1.9 Enhanced AI-Assistant Compatibility
+
+```
+Make additional structural improvements to optimize for AI assistance:
+
+1. File Size and Complexity:
+   - Limit files to 300-500 lines maximum
+   - Break up large files into focused, single-purpose modules
+   - Ensure functions stay under 50 lines where possible
+   - Refactor complex logic into smaller, named helper functions
+
+2. Directory Structure:
+   - Flatten directory hierarchy to maximum 2-3 levels deep
+   - Use meaningful package names rather than excessive nesting
+   - Group related functionality by domain rather than technical type
+   - Eliminate redundant subdirectories
+
+3. Navigation and Discovery Aids:
+   - Add "SECTION:" marker comments to denote logical blocks of code
+   - Create a CODEBASE_MAP.md with high-level overview of key files
+   - Document common cross-file workflows and interactions
+   - Add TOC-style comments at the top of larger files
+
+4. Standardized Documentation:
+   - Create template comment blocks for common structures
+   - Standardize function header format for params, returns, examples
+   - Add /examples folder with self-contained usage examples
+   - Document architectural decisions in DECISIONS.md
+
+5. Explicit Dependencies:
+   - Use explicit imports rather than dot imports
+   - Avoid side effects in package initialization
+   - Document cross-package dependencies in README files
+   - Add interface documentation explaining when to use each interface
+```
+
 ### 2. Build Environment Optimization
 
 #### 2.1 Dependency Management
