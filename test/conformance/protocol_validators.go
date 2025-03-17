@@ -313,6 +313,110 @@ func (tester *MCPProtocolTester) TestCallTool(toolName string, args map[string]i
 	return toolResult
 }
 
+// testListResourcesAndValidate runs list_resources and validates the returned resources.
+func (tester *MCPProtocolTester) testListResourcesAndValidate(t *testing.T) []map[string]interface{} {
+	t.Helper()
+	resources := tester.TestListResources()
+	if resources == nil {
+		t.Error("list_resources failed")
+		return nil
+	}
+	for i, resource := range resources {
+		t.Run(fmt.Sprintf("Resource %d", i), func(t *testing.T) {
+			if !validateMCPResource(t, resource) { // Use existing validator
+				t.Errorf("Resource %d failed validation", i)
+			}
+		})
+	}
+	return resources
+}
+
+// testReadResources runs read_resource for all provided resources.
+func (tester *MCPProtocolTester) testReadResources(t *testing.T, resources []map[string]interface{}) {
+	t.Helper()
+	if len(resources) == 0 {
+		t.Skip("No resources to test")
+		return
+	}
+
+	for _, resource := range resources {
+		name, ok := resource["name"].(string)
+		if !ok {
+			continue
+		}
+
+		t.Run(name, func(t *testing.T) {
+			content, mimeType := tester.TestReadResource(name)
+			if content == "" && mimeType == "" {
+				t.Logf("Resource %s is not readable or requires authentication", name)
+				return
+			}
+
+			// Validate content and MIME type.
+			if !validateMimeType(mimeType) {
+				t.Errorf("Invalid MIME type: %s", mimeType)
+			}
+
+			if strings.TrimSpace(content) == "" {
+				t.Errorf("Resource content is empty")
+			}
+		})
+	}
+}
+
+// testListToolsAndValidate runs list_tools and validates the returned tools.
+func (tester *MCPProtocolTester) testListToolsAndValidate(t *testing.T) []map[string]interface{} {
+	t.Helper()
+	tools := tester.TestListTools()
+	if tools == nil {
+		t.Error("list_tools failed")
+		return nil
+	}
+	for i, tool := range tools {
+		t.Run(fmt.Sprintf("Tool %d", i), func(t *testing.T) {
+			if !validateMCPTool(t, tool) { // Use existing validator
+				t.Errorf("Tool %d failed validation", i)
+			}
+		})
+	}
+	return tools
+}
+
+// testCallSafeTools calls a predefined set of safe tools.
+func (tester *MCPProtocolTester) testCallSafeTools(t *testing.T, tools []map[string]interface{}) {
+	t.Helper()
+
+	if len(tools) == 0 {
+		t.Skip("No tools to test")
+		return
+	}
+
+	// Find tools that are safe to call without arguments.
+	safeTools := []string{"auth_status"}
+
+	for _, tool := range tools {
+		name, ok := tool["name"].(string)
+		if !ok {
+			continue
+		}
+
+		// Only call known safe tools.
+		for _, safeTool := range safeTools {
+			t.Run(name, func(t *testing.T) {
+				if name == safeTool {
+					result := tester.TestCallTool(name, map[string]interface{}{})
+					t.Logf("Tool %s result: %s", name, result)
+
+					// Verify result isn't empty.
+					if strings.TrimSpace(result) == "" {
+						t.Errorf("Tool %s returned empty result", name)
+					}
+				}
+			})
+		}
+	}
+}
+
 // RunComprehensiveTest runs all MCP protocol conformance tests.
 // This conducts a full test of the MCP server's protocol compliance.
 func (tester *MCPProtocolTester) RunComprehensiveTest() {
@@ -326,97 +430,86 @@ func (tester *MCPProtocolTester) RunComprehensiveTest() {
 		}
 	})
 
-	// Test list_resources.
+	// Test list_resources and validate.
 	var resources []map[string]interface{}
 	t.Run("ListResources", func(t *testing.T) {
-		resources = tester.TestListResources()
-		if resources == nil {
-			t.Error("list_resources failed")
-		} else {
-			// Validate resource structures.
-			for i, resource := range resources {
-				if !validateMCPResource(t, resource) {
-					t.Errorf("Resource %d failed validation", i)
-				}
-			}
-		}
+		resources = tester.testListResourcesAndValidate(t)
 	})
 
-	// Test read_resource for all resources.
+	// Test Read Resources
 	t.Run("ReadResources", func(t *testing.T) {
-		if len(resources) == 0 {
-			t.Skip("No resources to test")
-		}
-
-		for _, resource := range resources {
-			name, ok := resource["name"].(string)
-			if !ok {
-				continue
-			}
-
-			t.Run(name, func(t *testing.T) {
-				content, mimeType := tester.TestReadResource(name)
-				if content == "" && mimeType == "" {
-					t.Logf("Resource %s is not readable or requires authentication", name)
-					return
-				}
-
-				// Validate content and MIME type.
-				if !validateMimeType(mimeType) {
-					t.Errorf("Invalid MIME type: %s", mimeType)
-				}
-
-				if strings.TrimSpace(content) == "" {
-					t.Errorf("Resource content is empty")
-				}
-			})
-		}
+		tester.testReadResources(t, resources)
 	})
 
-	// Test list_tools.
+	// Test List Tools and validate.
 	var tools []map[string]interface{}
 	t.Run("ListTools", func(t *testing.T) {
-		tools = tester.TestListTools()
-		if tools == nil {
-			t.Error("list_tools failed")
-		} else {
-			// Validate tool structures.
-			for i, tool := range tools {
-				if !validateMCPTool(t, tool) {
-					t.Errorf("Tool %d failed validation", i)
-				}
-			}
-		}
+		tools = tester.testListToolsAndValidate(t)
 	})
 
-	// Don't try to call tools that may have side effects.
-	// Test only basic tools or tools with safe read-only operations.
+	// Test Call Safe Tools.
 	t.Run("CallTools", func(t *testing.T) {
-		if len(tools) == 0 {
-			t.Skip("No tools to test")
-		}
-
-		// Find tools that are safe to call without arguments.
-		safeTools := []string{"auth_status"}
-
-		for _, tool := range tools {
-			name, ok := tool["name"].(string)
-			if !ok {
-				continue
-			}
-
-			// Only call known safe tools.
-			for _, safeTool := range safeTools {
-				if name == safeTool {
-					result := tester.TestCallTool(name, map[string]interface{}{})
-					t.Logf("Tool %s result: %s", name, result)
-
-					// Verify result isn't empty.
-					if strings.TrimSpace(result) == "" {
-						t.Errorf("Tool %s returned empty result", name)
-					}
-				}
-			}
-		}
+		tester.testCallSafeTools(t, tools)
 	})
 }
+
+// validateMCPResource validates the structure of an MCP resource.
+// func validateMCPResource(t *testing.T, resource map[string]interface{}) bool {
+// 	t.Helper()
+// 	requiredFields := []string{"name", "kind", "mime_type"}
+// 	for _, field := range requiredFields {
+// 		if _, ok := resource[field]; !ok {
+// 			t.Errorf("Resource missing required field: %s", field)
+// 			return false
+// 		}
+// 	}
+
+// 	if _, ok := resource["name"].(string); !ok {
+// 		t.Error("resource name is not a string")
+// 		return false
+// 	}
+// 	if _, ok := resource["kind"].(string); !ok {
+// 		t.Error("resource kind is not a string")
+// 		return false
+// 	}
+
+// 	if mimeType, ok := resource["mime_type"].(string); !ok {
+// 		t.Error("mime_type is not a string")
+// 		return false
+// 	} else if !validateMimeType(mimeType) {
+// 		t.Errorf("invalid mime_type: %v", mimeType)
+// 		return false
+// 	}
+// 	return true
+// }
+
+// // validateMCPTool validates the structure of an MCP tool.
+// func validateMCPTool(t *testing.T, tool map[string]interface{}) bool {
+// 	t.Helper()
+
+// 	requiredFields := []string{"name", "arguments"}
+// 	for _, field := range requiredFields {
+// 		if _, ok := tool[field]; !ok {
+// 			t.Errorf("Tool missing required field: %s", field)
+// 			return false
+// 		}
+// 	}
+// 	if _, ok := tool["name"].(string); !ok {
+// 		t.Error("tool name is not a string")
+// 		return false
+// 	}
+// 	if _, ok := tool["arguments"].([]interface{}); !ok {
+// 		t.Error("tool arguments are not an array")
+// 		return false
+// 	}
+// 	return true
+// }
+
+// // validateMimeType validates an HTTP MIME type.  This is a very basic check.
+// func validateMimeType(mimeType string) bool {
+// 	parts := strings.Split(mimeType, "/")
+// 	if len(parts) != 2 {
+// 		return false
+// 	}
+// 	return strings.TrimSpace(parts[0]) != "" && strings.TrimSpace(parts[1]) != ""
+// }

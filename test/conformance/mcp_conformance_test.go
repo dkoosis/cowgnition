@@ -60,22 +60,22 @@ func TestMCPConformance(t *testing.T) {
 
 	// Run additional tests for authentication scenarios.
 	t.Run("AuthenticationScenarios", func(t *testing.T) {
-		testAuthenticationScenarios(t, s, rtmMock)
+		testAuthenticationScenarios(t, s) // Removed rtmMock
 	})
 
 	// Run additional tests for error handling.
 	t.Run("ErrorHandling", func(t *testing.T) {
-		testErrorHandlingScenarios(t, s, rtmMock)
+		testErrorHandlingScenarios(t, s) // Removed rtmMock
 	})
 
 	// Run resource-specific tests.
 	t.Run("ResourceTests", func(t *testing.T) {
-		testResourceImplementations(t, s, rtmMock)
+		testResourceImplementations(t, s) // Removed rtmMock
 	})
 
 	// Run tool-specific tests.
 	t.Run("ToolTests", func(t *testing.T) {
-		testToolImplementations(t, s, rtmMock)
+		testToolImplementations(t, s) // Removed rtmMock
 	})
 }
 
@@ -91,58 +91,58 @@ func setupMockRTMResponses(rtmMock *mocks.RTMServer) {
 
 	// List-related responses.
 	rtmMock.AddResponse("rtm.lists.getList", `<rsp stat="ok"><lists>
-		<list id="1" name="Inbox" deleted="0" locked="1" archived="0" position="-1" smart="0" />
-		<list id="2" name="Work" deleted="0" locked="0" archived="0" position="0" smart="0" />
-		<list id="3" name="Personal" deleted="0" locked="0" archived="0" position="1" smart="0" />
-		<list id="4" name="High Priority" deleted="0" locked="0" archived="0" position="2" smart="1">
-			<filter>(priority:1)</filter>
-		</list>
-	</lists></rsp>`)
+        <list id="1" name="Inbox" deleted="0" locked="1" archived="0" position="-1" smart="0" />
+        <list id="2" name="Work" deleted="0" locked="0" archived="0" position="0" smart="0" />
+        <list id="3" name="Personal" deleted="0" locked="0" archived="0" position="1" smart="0" />
+        <list id="4" name="High Priority" deleted="0" locked="0" archived="0" position="2" smart="1">
+            <filter>(priority:1)</filter>
+        </list>
+    </lists></rsp>`)
 
 	// Task-related responses.
 	rtmMock.AddResponse("rtm.tasks.getList", `<rsp stat="ok"><tasks>
-		<list id="1">
-			<taskseries id="101" created="2025-03-15T12:00:00Z" modified="2025-03-15T12:00:00Z" name="Buy groceries" source="api">
-				<tags><tag>shopping</tag></tags>
-				<participants/>
-				<notes/>
-				<task id="1001" due="2025-03-17T00:00:00Z" has_due_time="0" added="2025-03-15T12:00:00Z" completed="" deleted="" priority="1" postponed="0" estimate=""/>
-			</taskseries>
-			<taskseries id="102" created="2025-03-15T12:00:00Z" modified="2025-03-15T12:00:00Z" name="Finish report" source="api">
-				<tags><tag>work</tag></tags>
-				<participants/>
-				<notes>
-					<note id="201" created="2025-03-15T12:00:00Z" modified="2025-03-15T12:00:00Z" title="">Remember to include Q1 data</note>
-				</notes>
-				<task id="1002" due="2025-03-16T00:00:00Z" has_due_time="0" added="2025-03-15T12:00:00Z" completed="" deleted="" priority="2" postponed="0" estimate=""/>
-			</taskseries>
-		</list>
-	</tasks></rsp>`)
+        <list id="1">
+            <taskseries id="101" created="2025-03-15T12:00:00Z" modified="2025-03-15T12:00:00Z" name="Buy groceries" source="api">
+                <tags><tag>shopping</tag></tags>
+                <participants/>
+                <notes/>
+                <task id="1001" due="2025-03-17T00:00:00Z" has_due_time="0" added="2025-03-15T12:00:00Z" completed="" deleted="" priority="1" postponed="0" estimate=""/>
+            </taskseries>
+            <taskseries id="102" created="2025-03-15T12:00:00Z" modified="2025-03-15T12:00:00Z" name="Finish report" source="api">
+                <tags><tag>work</tag></tags>
+                <participants/>
+                <notes>
+                    <note id="201" created="2025-03-15T12:00:00Z" modified="2025-03-15T12:00:00Z" title="">Remember to include Q1 data</note>
+                </notes>
+                <task id="1002" due="2025-03-16T00:00:00Z" has_due_time="0" added="2025-03-15T12:00:00Z" completed="" deleted="" priority="2" postponed="0" estimate=""/>
+            </taskseries>
+        </list>
+    </tasks></rsp>`)
 
 	// Tool-related responses.
 	rtmMock.AddResponse("rtm.tasks.add", `<rsp stat="ok">
-		<transaction id="12345" undoable="1" />
-		<list id="1">
-			<taskseries id="103" created="2025-03-16T12:00:00Z" modified="2025-03-16T12:00:00Z" name="New Task" source="api">
-				<tags/>
-				<participants/>
-				<notes/>
-				<task id="1003" due="" has_due_time="0" added="2025-03-16T12:00:00Z" completed="" deleted="" priority="N" postponed="0" estimate="" />
-			</taskseries>
-		</list>
-	</rsp>`)
+        <transaction id="12345" undoable="1" />
+        <list id="1">
+            <taskseries id="103" created="2025-03-16T12:00:00Z" modified="2025-03-16T12:00:00Z" name="New Task" source="api">
+                <tags/>
+                <participants/>
+                <notes/>
+                <task id="1003" due="" has_due_time="0" added="2025-03-16T12:00:00Z" completed="" deleted="" priority="N" postponed="0" estimate="" />
+            </taskseries>
+        </list>
+    </rsp>`)
 
 	rtmMock.AddResponse("rtm.tasks.complete", `<rsp stat="ok">
-		<transaction id="12346" undoable="1" />
-		<list id="1">
-			<taskseries id="101" created="2025-03-15T12:00:00Z" modified="2025-03-16T12:00:00Z" name="Buy groceries" source="api">
-				<tags><tag>shopping</tag></tags>
-				<participants/>
-				<notes/>
-				<task id="1001" due="2025-03-17T00:00:00Z" has_due_time="0" added="2025-03-15T12:00:00Z" completed="2025-03-16T12:00:00Z" deleted="" priority="1" postponed="0" estimate=""/>
-			</taskseries>
-		</list>
-	</rsp>`)
+        <transaction id="12346" undoable="1" />
+        <list id="1">
+            <taskseries id="101" created="2025-03-15T12:00:00Z" modified="2025-03-16T12:00:00Z" name="Buy groceries" source="api">
+                <tags><tag>shopping</tag></tags>
+                <participants/>
+                <notes/>
+                <task id="1001" due="2025-03-17T00:00:00Z" has_due_time="0" added="2025-03-15T12:00:00Z" completed="2025-03-16T12:00:00Z" deleted="" priority="1" postponed="0" estimate=""/>
+            </taskseries>
+        </list>
+    </rsp>`)
 
 	// Add error responses for testing error scenarios.
 	rtmMock.AddResponse("rtm.error.invalidKey", `<rsp stat="fail"><err code="100" msg="Invalid API Key" /></rsp>`)
@@ -151,7 +151,7 @@ func setupMockRTMResponses(rtmMock *mocks.RTMServer) {
 }
 
 // testAuthenticationScenarios tests authentication-related scenarios.
-func testAuthenticationScenarios(t *testing.T, s *server.MCPServer, rtmMock *mocks.RTMServer) {
+func testAuthenticationScenarios(t *testing.T, s *server.MCPServer) { // Removed rtmMock
 	t.Helper()
 
 	// Create a protocol tester.
@@ -173,7 +173,7 @@ func testAuthenticationScenarios(t *testing.T, s *server.MCPServer, rtmMock *moc
 }
 
 // testErrorHandlingScenarios tests various error scenarios to ensure proper handling.
-func testErrorHandlingScenarios(t *testing.T, s *server.MCPServer, rtmMock *mocks.RTMServer) {
+func testErrorHandlingScenarios(t *testing.T, s *server.MCPServer) { // Removed rtmMock
 	t.Helper()
 
 	// Create a protocol tester.
@@ -196,7 +196,7 @@ func testErrorHandlingScenarios(t *testing.T, s *server.MCPServer, rtmMock *mock
 }
 
 // testResourceImplementations tests specific resource implementations.
-func testResourceImplementations(t *testing.T, s *server.MCPServer, rtmMock *mocks.RTMServer) {
+func testResourceImplementations(t *testing.T, s *server.MCPServer) { // Removed rtmMock
 	t.Helper()
 
 	// Create a protocol tester.
@@ -222,7 +222,7 @@ func testResourceImplementations(t *testing.T, s *server.MCPServer, rtmMock *moc
 }
 
 // testToolImplementations tests specific tool implementations.
-func testToolImplementations(t *testing.T, s *server.MCPServer, rtmMock *mocks.RTMServer) {
+func testToolImplementations(t *testing.T, s *server.MCPServer) { // Removed rtmMock
 	t.Helper()
 
 	// Create a protocol tester.

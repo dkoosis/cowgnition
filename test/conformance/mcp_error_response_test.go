@@ -81,6 +81,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				contentType: "application/json",
 				wantStatus:  http.StatusMethodNotAllowed,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusMethodNotAllowed)
 				},
 			},
@@ -91,6 +92,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				contentType: "application/json",
 				wantStatus:  http.StatusBadRequest,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusBadRequest)
 					validateErrorFieldExists(t, response, "error")
 				},
@@ -102,6 +104,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				contentType: "text/plain",
 				wantStatus:  http.StatusBadRequest,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusBadRequest)
 				},
 			},
@@ -112,6 +115,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				contentType: "application/json",
 				wantStatus:  http.StatusBadRequest,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusBadRequest)
 				},
 			},
@@ -182,6 +186,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				resourceName: "",
 				wantStatus:   http.StatusBadRequest,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusBadRequest)
 					validateErrorMessage(t, response, "Missing resource name")
 				},
@@ -192,6 +197,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				resourceName: "auth://rtm",
 				wantStatus:   http.StatusMethodNotAllowed,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusMethodNotAllowed)
 				},
 			},
@@ -201,6 +207,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				resourceName: "invalid://resource",
 				wantStatus:   http.StatusNotFound,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusNotFound)
 					validateErrorMessage(t, response, "Resource not found")
 				},
@@ -211,6 +218,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				resourceName: "not-a-valid-resource-name",
 				wantStatus:   http.StatusNotFound,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusNotFound)
 				},
 			},
@@ -285,6 +293,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				contentType: "application/json",
 				wantStatus:  http.StatusMethodNotAllowed,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusMethodNotAllowed)
 				},
 			},
@@ -295,6 +304,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				contentType: "application/json",
 				wantStatus:  http.StatusBadRequest,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusBadRequest)
 				},
 			},
@@ -305,6 +315,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				contentType: "application/json",
 				wantStatus:  http.StatusBadRequest,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusBadRequest)
 				},
 			},
@@ -315,6 +326,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				contentType: "application/json",
 				wantStatus:  http.StatusInternalServerError,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusInternalServerError)
 					validateErrorMessage(t, response, "unknown tool")
 				},
@@ -326,6 +338,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				contentType: "application/json",
 				wantStatus:  http.StatusBadRequest,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusBadRequest)
 				},
 			},
@@ -336,6 +349,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				contentType: "application/json",
 				wantStatus:  http.StatusBadRequest,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusBadRequest)
 				},
 			},
@@ -346,6 +360,7 @@ func TestMCPErrorResponses(t *testing.T) {
 				contentType: "application/json",
 				wantStatus:  http.StatusBadRequest,
 				validateError: func(t *testing.T, response map[string]interface{}) {
+					t.Helper()
 					validateStandardErrorResponse(t, response, http.StatusBadRequest)
 					validateErrorMessage(t, response, "Missing or invalid 'frob' argument")
 				},
@@ -451,23 +466,26 @@ func TestMCPMalformedRequests(t *testing.T) {
 		invalidURL := client.BaseURL + "/mcp/read_resource?name=" + url.QueryEscape("auth://rtm") + "&invalid=%zzz"
 
 		// Note: Go's http.NewRequest will escape invalid percent-encodings,
-		// so we need to manually create a request with an invalid URL.
-		req, err := http.NewRequest(http.MethodGet, invalidURL, nil)
-		if err == nil {
-			// If NewRequest didn't catch the invalid URL, try sending the request.
-			resp, err := client.Client.Do(req)
-			if err == nil {
-				defer resp.Body.Close()
-				// Should return an error status.
-				if resp.StatusCode == http.StatusOK {
-					t.Error("Expected error status for malformed URL")
-				}
-				// Verify error response format.
-				var response map[string]interface{}
-				if err := json.NewDecoder(resp.Body).Decode(&response); err == nil {
-					validateStandardErrorResponse(t, response, resp.StatusCode)
-				}
-			}
+		// so the error will occur during the Do() call, if at all.
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, invalidURL, nil)
+		if err != nil {
+			t.Fatalf("Unexpected error creating request: %v", err)
+		}
+		resp, err := client.Client.Do(req)
+		if err != nil {
+			// we expect some kind of error here, but it will be a url.Error due to the invalid escape
+			return
+		}
+		defer resp.Body.Close()
+
+		// Should return an error status.
+		if resp.StatusCode == http.StatusOK {
+			t.Error("Expected error status for malformed URL")
+		}
+		// Verify error response format.
+		var response map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&response); err == nil {
+			validateStandardErrorResponse(t, response, resp.StatusCode)
 		}
 
 		// Test oversized URL.
@@ -476,11 +494,11 @@ func TestMCPMalformedRequests(t *testing.T) {
 
 		req, err = http.NewRequestWithContext(ctx, http.MethodGet, longURL, nil)
 		if err != nil {
-			// This is expected, as the URL is intentionally too long.
+			// could fail here if the URL is just flat-out too long for the system
 			return
 		}
 
-		resp, err := client.Client.Do(req)
+		resp, err = client.Client.Do(req)
 		if err != nil {
 			// This is also expected, as the URL is too long.
 			return
