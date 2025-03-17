@@ -2,8 +2,15 @@
 package conformance
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,7 +134,7 @@ func (f *RTMLiveTestFramework) Close() {
 // RequireAuthenticated ensures the server is authenticated with RTM.
 func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interactive bool) bool {
 	// Check if already authenticated.
-	if helpers.IsAuthenticated(ctx, f.Client) {
+	if helpers.IsAuthenticated(f.Client) {
 		f.T.Logf("Server is already authenticated")
 		return true
 	}
@@ -139,7 +146,7 @@ func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interac
 	}
 
 	// Get auth resource to start authentication flow.
-	resp, err := helpers.ReadResource(ctx, f.Client, "auth://rtm")
+	resp, err := readResource(ctx, f.Client, "auth://rtm")
 	if err != nil {
 		f.T.Logf("Failed to read auth resource: %v", err)
 		return false
@@ -152,7 +159,7 @@ func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interac
 	}
 
 	// Extract auth URL and frob from content.
-	authURL, frob := helpers.ExtractAuthInfoFromContent(content)
+	authURL, frob := ExtractAuthInfoFromContent(content)
 	if authURL == "" || frob == "" {
 		f.T.Logf("Could not extract auth URL and frob from content")
 
@@ -200,7 +207,7 @@ func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interac
 		f.T.Logf("Warning: %v", err)
 
 		// Complete authentication using the call_tool interface.
-		result, err := helpers.CallTool(ctx, f.Client, "authenticate", map[string]interface{}{
+		result, err := callTool(ctx, f.Client, "authenticate", map[string]interface{}{
 			"frob": frob,
 		})
 		if err != nil {
@@ -214,7 +221,7 @@ func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interac
 	}
 
 	// Verify authentication was successful.
-	return helpers.IsAuthenticated(ctx, f.Client)
+	return helpers.IsAuthenticated(f.Client)
 }
 
 // RunAuthenticatedTest runs a test function that requires authentication.
@@ -231,4 +238,213 @@ func (f *RTMLiveTestFramework) RunAuthenticatedTest(name string, interactive boo
 		// Run the test function.
 		testFn(t)
 	})
+}
+
+// readResource sends a read_resource request to the MCP server, with retry logic.
+func readResource(ctx context.Context, client *helpers.MCPClient, resourceName string) (map[string]interface{}, error) {
+	return withRetry(ctx, func() (map[string]interface{}, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+			client.BaseURL+"/mcp/read_resource?name="+url.QueryEscape(resourceName), nil)
+		if err != nil {
+			return nil, fmt.Errorf("error creating request: %w", err)
+		}
+
+		resp, err := client.Client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("error sending request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		// Read response body.
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("error reading response: %w", err)
+		}
+
+		// Check response status.
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status code: %d, body: %s",
+				resp.StatusCode, string(body))
+		}
+
+		// Parse JSON response.
+		var result map[string]interface{}
+		if err := json.Unmarshal(body, &result); err != nil {
+			return nil, fmt.Errorf("error parsing response: %w", err)
+		}
+
+		return result, nil
+	})
+}
+
+// callTool sends a call_tool request to the MCP server, with retry logic.
+func callTool(ctx context.Context, client *helpers.MCPClient, name string, args map[string]interface{}) (map[string]interface{}, error) {
+	return withRetry(ctx, func() (map[string]interface{}, error) {
+		reqBody := map[string]interface{}{
+			"name":      name,
+			"arguments": args,
+		}
+
+		body, err := json.Marshal(reqBody)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling request: %w", err)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+			client.BaseURL+"/mcp/call_tool", bytes.NewBuffer(body))
+		if err != nil {
+			return nil, fmt.Errorf("error creating request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("error sending request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		// Check response status.
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("unexpected status code: %d, body: %s",
+				resp.StatusCode, string(body))
+		}
+
+		// Parse JSON response.
+		var result map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return nil, fmt.Errorf("error parsing response: %w", err)
+		}
+
+		return result, nil
+	})
+}
+
+// withRetry performs an action with retries and exponential backoff.
+func withRetry(ctx context.Context, fn func() (map[string]interface{}, error)) (map[string]interface{}, error) {
+	const maxRetries = 3
+	const initialDelay = 1 * time.Second
+
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			delay := initialDelay * time.Duration(1<<attempt) // Exponential backoff.
+			log.Printf("Retrying after error: %v, waiting %v", lastErr, delay)
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+
+		result, err := fn()
+		if err == nil {
+			return result, nil
+		}
+
+		lastErr = err
+		// Check for specific error codes (e.g., rate limiting).
+		if strings.Contains(err.Error(), "unexpected status code: 429") { // 429 Too Many Requests.
+			continue // Retry.
+		}
+		if strings.Contains(err.Error(), "unexpected status code: 5") { // 5xx Server Error.
+			continue // Retry
+		}
+
+		return nil, err // Don't retry other errors.
+	}
+
+	return nil, fmt.Errorf("max retries exceeded, last error: %w", lastErr)
+}
+
+// findURLEndIndex locates the end of a URL within content starting from startIdx.
+func findURLEndIndex(content string, startIdx int) int {
+	endIdx := startIdx
+
+	for i := startIdx; i < len(content); i++ {
+		// URL ends at any whitespace or common ending punctuation
+		if content[i] == '\n' || content[i] == '\r' || content[i] == ' ' ||
+			content[i] == '"' || content[i] == ')' || content[i] == ']' {
+			return i
+		}
+		endIdx = i
+	}
+
+	// If we reach end of content without finding endpoint
+	return endIdx + 1
+}
+
+// extractFrobFromURL attempts to extract the frob parameter from a URL.
+func extractFrobFromURL(authURL string) string {
+	// Look for the frob parameter
+	frobPrefix := "frob="
+	idx := strings.Index(authURL, frobPrefix)
+	if idx == -1 {
+		return ""
+	}
+
+	startIdx := idx + len(frobPrefix)
+	endIdx := startIdx
+
+	// Find the end of the frob value (& or end of string)
+	for i := startIdx; i < len(authURL); i++ {
+		if authURL[i] == '&' {
+			endIdx = i
+			break
+		}
+		endIdx = i + 1
+	}
+
+	return authURL[startIdx:endIdx]
+}
+
+// extractFrobFromContent tries to find a frob value within content using known patterns.
+func extractFrobFromContent(content string) string {
+	// Common patterns that precede a frob in content text
+	patterns := []string{
+		"frob ",
+		"frob: ",
+		"Frob: ",
+		"frob=",
+		"\"frob\": \"",
+	}
+
+	for _, pattern := range patterns {
+		idx := strings.Index(content, pattern)
+		if idx == -1 {
+			continue
+		}
+
+		startIdx := idx + len(pattern)
+		endIdx := findURLEndIndex(content, startIdx)
+
+		if endIdx > startIdx {
+			return content[startIdx:endIdx]
+		}
+	}
+
+	return ""
+}
+
+// ExtractAuthInfoFromContent attempts to extract auth URL and frob from content.
+func ExtractAuthInfoFromContent(content string) (string, string) {
+	// Look for URL in content
+	urlIdx := strings.Index(content, "https://www.rememberthemilk.com/services/auth/")
+	if urlIdx == -1 {
+		return "", ""
+	}
+
+	// Extract URL
+	endURLIdx := findURLEndIndex(content, urlIdx)
+	authURL := content[urlIdx:endURLIdx]
+
+	// Try to extract frob, first from URL then from content text
+	frob := extractFrobFromURL(authURL)
+
+	// If frob not found in URL, look in content text
+	if frob == "" {
+		frob = extractFrobFromContent(content)
+	}
+
+	return authURL, frob
 }
