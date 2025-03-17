@@ -37,7 +37,7 @@ func DefaultConfigFile() string {
 // If configPath is empty, it will try standard locations:
 // 1. Environment variables (RTM_API_KEY, RTM_SHARED_SECRET, etc.)
 // 2. ~/.config/cowgnition/test_config.json
-// 3. ./.cowgnition_test_config.json
+// 3. ./.cowgnition_test_config.json.
 func LoadTestConfig(configPath string) (*TestConfig, error) {
 	var config TestConfig
 

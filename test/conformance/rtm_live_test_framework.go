@@ -26,6 +26,8 @@ type RTMLiveTestFramework struct {
 
 // NewRTMLiveTestFramework creates a new framework for running tests with the real RTM API.
 func NewRTMLiveTestFramework(t *testing.T) (*RTMLiveTestFramework, error) {
+	t.Helper()
+
 	// Load test configuration.
 	testConfig, err := helpers.LoadTestConfig("")
 	if err != nil {
@@ -177,7 +179,11 @@ func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interac
 	fmt.Printf("3. After authorizing, enter any key to continue the test\n\n")
 
 	// Wait for user to authenticate.
-	fmt.Scanln()
+	_, err = fmt.Scanln() // Check error return value
+	if err != nil {
+		f.T.Logf("Error reading input: %v", err)
+		// Continue anyway since we just need any input
+	}
 
 	// Now that the user has authenticated, exchange the frob for a token.
 	token, err := f.RTMClient.GetToken(frob)

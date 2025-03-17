@@ -87,23 +87,83 @@ func ReadResource(ctx context.Context, client *helpers.MCPClient, uri string) (m
 	return nil, errors.New("resource not found")
 }
 
-// ExtractAuthInfoFromContent attempts to extract auth URL and frob from content.
-func ExtractAuthInfoFromContent(content string) (authURL, frob string) {
-	u, err := url.Parse(content)
+// findURLEndIndex locates the end of a URL within content starting from startIdx.
+// This helps reduce complexity in the main function.
+func findURLEndIndex(content string, startIdx int) int {
+	endIdx := startIdx
+
+	for i := startIdx; i < len(content); i++ {
+		// URL ends at any whitespace or common ending punctuation
+		if content[i] == '\n' || content[i] == '\r' || content[i] == ' ' ||
+			content[i] == '"' || content[i] == ')' || content[i] == ']' {
+			return i
+		}
+		endIdx = i
+	}
+
+	// If we reach end of content without finding endpoint
+	return endIdx + 1
+}
+
+// extractFrobFromURL attempts to extract the frob parameter from a URL.
+func extractFrobFromURL(authURL string) string {
+	parsedURL, err := url.Parse(authURL)
 	if err != nil {
+		return ""
+	}
+	return parsedURL.Query().Get("frob")
+}
+
+// extractFrobFromContent tries to find a frob value within content using known patterns.
+func extractFrobFromContent(content string) string {
+	// Common patterns that precede a frob in content text
+	patterns := []string{
+		"frob ",
+		"frob: ",
+		"Frob: ",
+		"frob=",
+		"\"frob\": \"",
+	}
+
+	for _, pattern := range patterns {
+		idx := strings.Index(content, pattern)
+		if idx == -1 {
+			continue
+		}
+
+		startIdx := idx + len(pattern)
+		endIdx := findURLEndIndex(content, startIdx)
+
+		if endIdx > startIdx {
+			return content[startIdx:endIdx]
+		}
+	}
+
+	return ""
+}
+
+// ExtractAuthInfoFromContent attempts to extract auth URL and frob from content.
+// It uses helper functions to reduce complexity.
+func ExtractAuthInfoFromContent(content string) (string, string) {
+	// Look for URL in content
+	urlIdx := strings.Index(content, "https://www.rememberthemilk.com/services/auth/")
+	if urlIdx == -1 {
 		return "", ""
 	}
 
-	// Check if "authURL=" is at the beginning of the string
-	if strings.HasPrefix(content, "authURL=") {
-		return strings.TrimPrefix(content, "authURL="), "FAKE_FROB" //Return a fake frob for the stub
+	// Extract URL
+	endURLIdx := findURLEndIndex(content, urlIdx)
+	authURL := content[urlIdx:endURLIdx]
+
+	// Try to extract frob, first from URL then from content text
+	frob := extractFrobFromURL(authURL)
+
+	// If frob not found in URL, look in content text
+	if frob == "" {
+		frob = extractFrobFromContent(content)
 	}
 
-	if f := u.Query().Get("frob"); f != "" {
-		return u.String(), f
-	}
-
-	return "", ""
+	return authURL, frob
 }
 
 // CallTool is a stub implementation of tool calling for testing.
