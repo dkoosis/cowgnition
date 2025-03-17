@@ -9,7 +9,6 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/conformance/stubs" // Import the stubs package.
 	"github.com/cowgnition/cowgnition/test/helpers"
 )
 
@@ -32,7 +31,7 @@ func NewRTMLiveTestFramework(t *testing.T) (*RTMLiveTestFramework, error) {
 	testConfig, err := helpers.LoadTestConfig("")
 	if err != nil {
 		t.Logf("Warning: Error loading test config: %v", err)
-		return nil, fmt.Errorf("failed to load test config: %w", err) // Return the error.
+		return nil, fmt.Errorf("failed to load test config: %w", err)
 	}
 
 	// Skip if live tests are disabled.
@@ -80,7 +79,7 @@ func NewRTMLiveTestFramework(t *testing.T) (*RTMLiveTestFramework, error) {
 	// Set authenticated token if available.
 	if testConfig.RTM.AuthToken != "" {
 		// Try to set the token on the server.
-		if err := stubs.SetAuthTokenOnServer(s, testConfig.RTM.AuthToken); err != nil {
+		if err := helpers.SetAuthTokenOnServer(s, testConfig.RTM.AuthToken); err != nil {
 			t.Logf("Warning: %v", err)
 
 			// Also try setting it on the RTM client.
@@ -128,7 +127,7 @@ func (f *RTMLiveTestFramework) Close() {
 // RequireAuthenticated ensures the server is authenticated with RTM.
 func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interactive bool) bool {
 	// Check if already authenticated.
-	if stubs.IsServerAuthenticated(ctx, f.Client) {
+	if helpers.IsServerAuthenticated(ctx, f.Client) {
 		f.T.Logf("Server is already authenticated")
 		return true
 	}
@@ -140,7 +139,7 @@ func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interac
 	}
 
 	// Get auth resource to start authentication flow.
-	resp, err := stubs.ReadResource(ctx, f.Client, "auth://rtm")
+	resp, err := helpers.ReadResource(ctx, f.Client, "auth://rtm")
 	if err != nil {
 		f.T.Logf("Failed to read auth resource: %v", err)
 		return false
@@ -153,7 +152,7 @@ func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interac
 	}
 
 	// Extract auth URL and frob from content.
-	authURL, frob := stubs.ExtractAuthInfoFromContent(content)
+	authURL, frob := helpers.ExtractAuthInfoFromContent(content)
 	if authURL == "" || frob == "" {
 		f.T.Logf("Could not extract auth URL and frob from content")
 
@@ -179,11 +178,7 @@ func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interac
 	fmt.Printf("3. After authorizing, enter any key to continue the test\n\n")
 
 	// Wait for user to authenticate.
-	_, err = fmt.Scanln() // Check error return value
-	if err != nil {
-		f.T.Logf("Error reading input: %v", err)
-		// Continue anyway since we just need any input
-	}
+	fmt.Scanln()
 
 	// Now that the user has authenticated, exchange the frob for a token.
 	token, err := f.RTMClient.GetToken(frob)
@@ -201,11 +196,11 @@ func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interac
 	}
 
 	// Set token on server.
-	if err := stubs.SetAuthTokenOnServer(f.Server, token); err != nil {
+	if err := helpers.SetAuthTokenOnServer(f.Server, token); err != nil {
 		f.T.Logf("Warning: %v", err)
 
 		// Complete authentication using the call_tool interface.
-		result, err := stubs.CallTool(ctx, f.Client, "authenticate", map[string]interface{}{
+		result, err := helpers.CallTool(ctx, f.Client, "authenticate", map[string]interface{}{
 			"frob": frob,
 		})
 		if err != nil {
@@ -219,7 +214,7 @@ func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interac
 	}
 
 	// Verify authentication was successful.
-	return stubs.IsServerAuthenticated(ctx, f.Client)
+	return helpers.IsServerAuthenticated(ctx, f.Client)
 }
 
 // RunAuthenticatedTest runs a test function that requires authentication.

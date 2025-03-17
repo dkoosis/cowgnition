@@ -2,6 +2,24 @@
 
 This document logs key decisions, tooling quirks, and findings to avoid revisiting the same issues in the future.
 
+## Testing Strategy Pivot - March 2025
+
+### Decision: Focus on Live API Testing
+
+We've decided to prioritize testing against the live RTM API instead of perfecting mock-based tests for several reasons:
+
+1. **Uncertain API behavior**: The documentation may not perfectly reflect actual API behavior
+2. **Mock maintenance cost**: Continuously refining mocks is time-consuming with diminishing returns
+3. **Real-world validation**: Only live testing can confirm our integration actually works as expected
+
+### Implementation approach:
+- Create a configurable test framework supporting both live and mock testing
+- Default to live API when credentials are available
+- Fall back to basic mocks for CI and cases without credentials
+- Focus test efforts on validating MCP server conformance with the spec
+
+This approach saves development time and provides more useful verification of our integration.
+
 ## Linting Configuration
 
 ### GoLangCI-Lint Version Quirks

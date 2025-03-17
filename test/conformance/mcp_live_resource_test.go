@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"reflect"
 	"strings"
 	"testing"
 	"time"

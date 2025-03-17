@@ -2,7 +2,10 @@
 package helpers
 
 import (
+	"context"
 	"log"
+	"net/http"
+	"net/url"
 	"reflect"
 	"time"
 
@@ -57,18 +60,25 @@ func SimulateAuthentication(s *server.MCPServer) error {
 // IsAuthenticated checks if the server is currently authenticated
 // by trying to access a protected resource.
 func IsAuthenticated(client *MCPClient) bool {
-	// Try to list resources as a quick check
-	result, err := client.ListResources(nil)
+	if client == nil {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		client.BaseURL+"/mcp/read_resource?name="+url.QueryEscape("tasks://all"), nil)
 	if err != nil {
 		return false
 	}
 
-	// Check for presence of authenticated resources
-	resources, ok := result["resources"].([]interface{})
-	if !ok {
+	resp, err := client.Client.Do(req)
+	if err != nil {
 		return false
 	}
+	defer resp.Body.Close()
 
-	// If we have more than just the auth resource, we're authenticated
-	return len(resources) > 1
+	// If we can access this resource, the server is authenticated
+	return resp.StatusCode == http.StatusOK
 }
