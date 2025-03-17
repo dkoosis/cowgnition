@@ -3,6 +3,10 @@ package conformance
 
 import (
 	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -60,18 +64,36 @@ func TestReadResourceLive(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		resp, err := client.ReadResource(t, ctx, "auth://rtm")
+		// Create a direct request instead of using a helper function
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+			client.BaseURL+"/mcp/read_resource?name="+url.QueryEscape("auth://rtm"), nil)
 		if err != nil {
-			t.Fatalf("Error reading auth resource: %v", err)
+			t.Fatalf("Error creating request: %v", err)
+		}
+
+		resp, err := client.Client.Do(req)
+		if err != nil {
+			t.Fatalf("Error sending request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Unexpected status code: %d - %s", resp.StatusCode, string(bodyBytes))
+		}
+
+		var result map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("Error decoding response: %v", err)
 		}
 
 		// Verify response has correct structure
-		content, ok := resp["content"].(string)
+		content, ok := result["content"].(string)
 		if !ok || content == "" {
 			t.Error("Auth resource should return non-empty content")
 		}
 
-		mimeType, ok := resp["mime_type"].(string)
+		mimeType, ok := result["mime_type"].(string)
 		if !ok || mimeType == "" {
 			t.Error("Auth resource should return non-empty mime_type")
 		}
@@ -92,9 +114,9 @@ func TestReadResourceLive(t *testing.T) {
 			t.Fatal("Failed to get RTM service")
 		}
 
-		rtmClient := helpers.NewRTMTestClient(testConfig.RTM.APIKey, testConfig.RTM.SharedSecret)
-		if rtmClient == nil {
-			t.Fatal("Failed to create RTM test client")
+		rtmClient, err := helpers.NewRTMTestClient(testConfig.RTM.APIKey, testConfig.RTM.SharedSecret)
+		if err != nil {
+			t.Fatalf("Failed to create RTM test client: %v", err)
 		}
 		defer rtmClient.Close()
 
