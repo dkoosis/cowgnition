@@ -1,4 +1,4 @@
-// test/helpers/mcp_client.go
+// Package helpers provides testing utilities for the CowGnition MCP server.
 package helpers
 
 import (
@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/server"
+	"github.com/cowgnition/cowgnition/internal/server" // Import the server package
 )
 
 // MCPClient is a test client for the MCP server.
@@ -24,10 +24,8 @@ type MCPClient struct {
 }
 
 // NewMCPClient creates a new MCP test client with the provided server.
-func NewMCPClient(t *testing.T, s *server.MCPServer) *MCPClient {
-	if t != nil {
-		t.Helper()
-	}
+func NewMCPClient(t *testing.T, s *server.MCPServer) *MCPClient { // Accept *server.MCPServer
+	t.Helper() // Mark this function as a test helper.
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Route requests to the MCP server based on path.
 		switch r.URL.Path {
@@ -63,9 +61,7 @@ func (c *MCPClient) Close() {
 
 // Initialize sends an initialization request to the MCP server.
 func (c *MCPClient) Initialize(t *testing.T, serverName, serverVersion string) (map[string]interface{}, error) {
-	if t != nil {
-		t.Helper()
-	}
+	t.Helper() // Mark this function as a test helper.
 	reqBody := map[string]interface{}{
 		"server_name":    serverName,
 		"server_version": serverVersion,
@@ -105,9 +101,7 @@ func (c *MCPClient) Initialize(t *testing.T, serverName, serverVersion string) (
 
 // ListResources sends a list_resources request to the MCP server.
 func (c *MCPClient) ListResources(t *testing.T) (map[string]interface{}, error) {
-	if t != nil {
-		t.Helper()
-	}
+	t.Helper() // Mark this function as a test helper.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -136,9 +130,7 @@ func (c *MCPClient) ListResources(t *testing.T) (map[string]interface{}, error) 
 
 // ReadResource sends a read_resource request to the MCP server.
 func (c *MCPClient) ReadResource(t *testing.T, resourceName string) (map[string]interface{}, error) {
-	if t != nil {
-		t.Helper()
-	}
+	t.Helper() // Mark this function as a test helper.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -169,9 +161,7 @@ func (c *MCPClient) ReadResource(t *testing.T, resourceName string) (map[string]
 
 // ListTools sends a list_tools request to the MCP server.
 func (c *MCPClient) ListTools(t *testing.T) (map[string]interface{}, error) {
-	if t != nil {
-		t.Helper()
-	}
+	t.Helper() // Mark this function as a test helper.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -200,9 +190,7 @@ func (c *MCPClient) ListTools(t *testing.T) (map[string]interface{}, error) {
 
 // CallTool sends a call_tool request to the MCP server.
 func (c *MCPClient) CallTool(t *testing.T, toolName string, args map[string]interface{}) (map[string]interface{}, error) {
-	if t != nil {
-		t.Helper()
-	}
+	t.Helper() // Mark this function as a test helper.
 	reqBody := map[string]interface{}{
 		"name":      toolName,
 		"arguments": args,
@@ -242,16 +230,16 @@ func (c *MCPClient) CallTool(t *testing.T, toolName string, args map[string]inte
 // RunServer starts a test server with the provided handler and returns a client.
 // This is useful for more complex integration tests.
 func RunServer(handler http.Handler) (*httptest.Server, string) {
+	// This function is not a test helper in the context of the testing package
+	// because it is not called with a *testing.T parameter.
 	server := httptest.NewServer(handler)
 	return server, server.URL
 }
 
 // CreateMCPTestServer creates a test server with the MCP server handler.
 // The returned function should be called to close the server when done.
-func CreateMCPTestServer(t *testing.T, s *server.MCPServer) (*httptest.Server, func()) {
-	if t != nil {
-		t.Helper()
-	}
+func CreateMCPTestServer(t *testing.T, s *server.MCPServer) (*httptest.Server, func()) { // Accept *server.MCPServer
+	t.Helper() // Corrected: This IS a helper function.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/mcp/initialize", s.HandleInitialize)
 	mux.HandleFunc("/mcp/list_resources", s.HandleListResources)
