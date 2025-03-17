@@ -64,7 +64,7 @@ func TestMCPResourceEndpointsEnhanced(t *testing.T) {
 	// Test list_resources endpoint.
 	t.Run("list_resources", func(t *testing.T) {
 		// Test cases to verify different aspects of the list_resources endpoint.
-		testCases := struct {
+		testCases := []struct {
 			name       string
 			method     string
 			wantStatus int
@@ -129,7 +129,7 @@ func TestMCPResourceEndpointsEnhanced(t *testing.T) {
 	// Test read_resource endpoint.
 	t.Run("read_resource", func(t *testing.T) {
 		// Test cases to verify different aspects of the read_resource endpoint.
-		testCases := struct {
+		testCases := []struct {
 			name         string
 			method       string
 			resourceName string
@@ -204,7 +204,7 @@ func TestMCPResourceEndpointsEnhanced(t *testing.T) {
 					}
 
 					// Validate resource response.
-					if !validateResourceResponse(t, result) {
+					if !validateResourceData(t, result) {
 						t.Errorf("Resource response validation failed")
 					}
 				}
@@ -243,7 +243,7 @@ func validateListResourcesResponse(t *testing.T, result map[string]interface{}) 
 	t.Helper()
 
 	// Check for resources field.
-	resources, ok := result["resources"].(interface{})
+	resources, ok := result["resources"].([]interface{})
 	if !ok {
 		t.Errorf("resources is not an array: %v", result["resources"])
 		return
@@ -257,7 +257,7 @@ func validateListResourcesResponse(t *testing.T, result map[string]interface{}) 
 
 	// Validate each resource.
 	for i, res := range resources {
-		if !validateMCPResource(t, res) {
+		if !validateResourceStructure(t, res) {
 			t.Errorf("Resource %d failed validation", i)
 		}
 	}
@@ -281,8 +281,9 @@ func validateListResourcesResponse(t *testing.T, result map[string]interface{}) 
 	}
 }
 
-// validateMCPResource validates the structure of a single MCP resource.
-func validateMCPResource(t *testing.T, res interface{}) bool {
+// validateResourceStructure validates the structure of a single MCP resource.
+// This is a local validator that doesn't conflict with validateMCPResource in resource_validator.go.
+func validateResourceStructure(t *testing.T, res interface{}) bool {
 	t.Helper()
 
 	resource, ok := res.(map[string]interface{})
@@ -291,25 +292,48 @@ func validateMCPResource(t *testing.T, res interface{}) bool {
 		return false
 	}
 
-	// Check for required fields like "name", "type", etc.
+	// Check for required fields like "name", "description", etc.
 	if _, ok := resource["name"].(string); !ok {
 		t.Error("Resource missing 'name' field or wrong type")
 		return false
 	}
 
-	if _, ok := resource["type"].(string); !ok {
-		t.Error("Resource missing 'type' field or wrong type")
+	if _, ok := resource["description"].(string); !ok {
+		t.Error("Resource missing 'description' field or wrong type")
 		return false
 	}
 
 	return true
 }
 
-// validateResourceResponse validates the response from read_resource.
-// NOTE: You need to implement the actual validation logic here based on
-// the expected structure of a resource response.
-func validateResourceResponse(t *testing.T, result map[string]interface{}) bool {
+// validateResourceData validates the response from read_resource.
+// Renamed from validateResourceResponse to avoid conflict with existing function.
+func validateResourceData(t *testing.T, result map[string]interface{}) bool {
 	t.Helper()
-	// Add your validation logic here. This is a placeholder.
+
+	// Check for required fields
+	requiredFields := []string{"content", "mime_type"}
+	for _, field := range requiredFields {
+		if result[field] == nil {
+			t.Errorf("Resource response missing required field: %s", field)
+			return false
+		}
+	}
+
+	// Validate field types
+	_, ok := result["content"].(string)
+	if !ok {
+		t.Errorf("Resource content is not a string: %v", result["content"])
+		return false
+	}
+
+	_, ok = result["mime_type"].(string)
+	if !ok {
+		t.Errorf("Resource mime_type is not a string: %v", result["mime_type"])
+		return false
+	}
+
+	// Additional validation can be added here if needed
+
 	return true
 }
