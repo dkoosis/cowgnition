@@ -56,6 +56,11 @@ func TestMCPToolEndpointsEnhanced(t *testing.T) {
 		t.Fatalf("Failed to create server: %v", err)
 	}
 
+	// Simulate authentication for testing
+	if err := helpers.SimulateAuthentication(s); err != nil {
+		t.Logf("Warning: Could not simulate authentication: %v", err)
+	}
+
 	// Create MCP test client.
 	client := helpers.NewMCPClient(t, s)
 	defer client.Close()

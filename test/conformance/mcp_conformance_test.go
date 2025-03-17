@@ -8,6 +8,7 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
+	"github.com/cowgnition/cowgnition/test/helpers"
 	"github.com/cowgnition/cowgnition/test/mocks"
 )
 
@@ -48,6 +49,11 @@ func TestMCPConformance(t *testing.T) {
 		t.Fatalf("Failed to create server: %v", err)
 	}
 	s.SetVersion("conformance-test-version")
+
+	// Simulate authentication for testing
+	if err := helpers.SimulateAuthentication(s); err != nil {
+		t.Logf("Warning: Could not simulate authentication: %v", err)
+	}
 
 	// Create a protocol tester.
 	tester := NewMCPProtocolTester(t, s)

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -30,7 +31,7 @@ type MCPProtocolTester struct {
 // NewMCPProtocolTester creates a new MCP protocol tester.
 func NewMCPProtocolTester(t *testing.T, server *server.MCPServer) *MCPProtocolTester {
 	t.Helper()
-	client := helpers.NewMCPClient(t, server)
+	client := helpers.NewMCPClient(t, server) // Pass the *server.MCPServer
 	return &MCPProtocolTester{
 		server: server,
 		client: client,
@@ -453,63 +454,329 @@ func (tester *MCPProtocolTester) RunComprehensiveTest() {
 	})
 }
 
-// validateMCPResource validates the structure of an MCP resource.
-// func validateMCPResource(t *testing.T, resource map[string]interface{}) bool {
-// 	t.Helper()
-// 	requiredFields := []string{"name", "kind", "mime_type"}
-// 	for _, field := range requiredFields {
-// 		if _, ok := resource[field]; !ok {
-// 			t.Errorf("Resource missing required field: %s", field)
-// 			return false
-// 		}
-// 	}
+// Constants for required field names.
+const (
+	resourceFieldName        = "name"
+	resourceFieldDescription = "description"
+	resourceFieldMimeType    = "mime_type"
+	resourceFieldContent     = "content"
 
-// 	if _, ok := resource["name"].(string); !ok {
-// 		t.Error("resource name is not a string")
-// 		return false
-// 	}
-// 	if _, ok := resource["kind"].(string); !ok {
-// 		t.Error("resource kind is not a string")
-// 		return false
-// 	}
+	argFieldName        = "name"
+	argFieldDescription = "description"
+	argFieldRequired    = "required"
 
-// 	if mimeType, ok := resource["mime_type"].(string); !ok {
-// 		t.Error("mime_type is not a string")
-// 		return false
-// 	} else if !validateMimeType(mimeType) {
-// 		t.Errorf("invalid mime_type: %v", mimeType)
-// 		return false
-// 	}
-// 	return true
-// }
+	toolFieldName        = "name"
+	toolFieldDescription = "description"
 
-// // validateMCPTool validates the structure of an MCP tool.
-// func validateMCPTool(t *testing.T, tool map[string]interface{}) bool {
-// 	t.Helper()
+	toolResponseFieldResult = "result"
+)
 
-// 	requiredFields := []string{"name", "arguments"}
-// 	for _, field := range requiredFields {
-// 		if _, ok := tool[field]; !ok {
-// 			t.Errorf("Tool missing required field: %s", field)
-// 			return false
-// 		}
-// 	}
-// 	if _, ok := tool["name"].(string); !ok {
-// 		t.Error("tool name is not a string")
-// 		return false
-// 	}
-// 	if _, ok := tool["arguments"].([]interface{}); !ok {
-// 		t.Error("tool arguments are not an array")
-// 		return false
-// 	}
-// 	return true
-// }
+// MCPResourceDefinition represents the expected structure of a resource
+// definition from the MCP protocol.
+type MCPResourceDefinition struct {
+	Name        string                `json:"name"`
+	Description string                `json:"description"`
+	Arguments   []MCPResourceArgument `json:"arguments,omitempty"`
+}
 
-// // validateMimeType validates an HTTP MIME type.  This is a very basic check.
-// func validateMimeType(mimeType string) bool {
-// 	parts := strings.Split(mimeType, "/")
-// 	if len(parts) != 2 {
-// 		return false
-// 	}
-// 	return strings.TrimSpace(parts[0]) != "" && strings.TrimSpace(parts[1]) != ""
-// }
+// MCPResourceArgument represents an argument for an MCP resource.
+type MCPResourceArgument struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Required    bool   `json:"required"`
+}
+
+// MCPResourceResponse represents the expected response structure for a resource.
+type MCPResourceResponse struct {
+	Content  string `json:"content"`
+	MimeType string `json:"mime_type"`
+}
+
+// validateMCPResource validates a resource definition from list_resources conforms
+// to the MCP protocol specification.
+func validateMCPResource(t *testing.T, resource interface{}) bool {
+	t.Helper()
+
+	// Cast the resource to a map.
+	resourceObj, ok := resource.(map[string]interface{})
+	if !ok {
+		t.Errorf("Resource is not an object; expected map[string]interface{}, got %T", resource)
+		return false
+	}
+
+	// Check required fields.
+	requiredFields := []string{resourceFieldName, resourceFieldDescription}
+	for _, field := range requiredFields {
+		if resourceObj[field] == nil {
+			t.Errorf("Resource missing required field: %s", field)
+			return false
+		}
+	}
+
+	// Validate field types.
+	name, ok := resourceObj[resourceFieldName].(string)
+	if !ok {
+		t.Errorf("Resource name is not a string: %v", resourceObj[resourceFieldName])
+		return false
+	}
+
+	if name == "" {
+		t.Errorf("Resource name cannot be empty")
+		return false
+	}
+
+	_, ok = resourceObj[resourceFieldDescription].(string)
+	if !ok {
+		t.Errorf("Resource description is not a string: %v", resourceObj[resourceFieldDescription])
+		return false
+	}
+
+	// Validate resource name format.
+	if !validateResourceNameFormat(name) {
+		t.Errorf("Invalid resource name format: %s (should be scheme://path or scheme://path/{param})", name)
+		return false
+	}
+
+	// Check arguments if present.
+	if args, ok := resourceObj["arguments"].([]interface{}); ok {
+		for i, arg := range args {
+			if !validateResourceArgument(t, i, arg) {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+// validateResourceArgument validates a single resource argument.
+func validateResourceArgument(t *testing.T, index int, arg interface{}) bool {
+	t.Helper()
+
+	argObj, ok := arg.(map[string]interface{})
+	if !ok {
+		t.Errorf("Argument %d is not an object; expected map[string]interface{}, got %T", index, arg)
+		return false
+	}
+
+	// Check required argument fields.
+	argFields := []string{argFieldName, argFieldDescription, argFieldRequired}
+	for _, field := range argFields {
+		if argObj[field] == nil {
+			t.Errorf("Argument %d missing required field: %s", index, field)
+			return false
+		}
+	}
+
+	// Validate field types.
+	_, ok = argObj[argFieldName].(string)
+	if !ok {
+		t.Errorf("Argument %d name is not a string", index)
+		return false
+	}
+
+	_, ok = argObj[argFieldDescription].(string)
+	if !ok {
+		t.Errorf("Argument %d description is not a string", index)
+		return false
+	}
+
+	_, ok = argObj[argFieldRequired].(bool)
+	if !ok {
+		t.Errorf("Argument %d required is not a boolean", index)
+		return false
+	}
+
+	return true
+}
+
+// validateResourceNameFormat checks if a resource name follows the MCP specification.
+func validateResourceNameFormat(name string) bool {
+	// Basic regex for scheme://path[/optional/path/segments][/{param}]
+	nameRegex := regexp.MustCompile(`^[a-z]+://[a-zA-Z0-9\-_\./]+(?:/\{[a-zA-Z0-9\-_]+\})?$`)
+	return nameRegex.MatchString(name)
+}
+
+// validateResourceResponse validates a response from read_resource.
+func validateResourceResponse(t *testing.T, response map[string]interface{}) bool {
+	t.Helper()
+
+	// Check for required fields.
+	requiredFields := []string{resourceFieldContent, resourceFieldMimeType}
+	for _, field := range requiredFields {
+		if response[field] == nil {
+			t.Errorf("Resource response missing required field: %s", field)
+			return false
+		}
+	}
+
+	// Validate field types.
+	content, ok := response[resourceFieldContent].(string)
+	if !ok {
+		t.Errorf("Resource content is not a string: %v", response[resourceFieldContent])
+		return false
+	}
+
+	mimeType, ok := response[resourceFieldMimeType].(string)
+	if !ok {
+		t.Errorf("Resource mime_type is not a string: %v", response[resourceFieldMimeType])
+		return false
+	}
+
+	// Validate mime type format.
+	if !validateMimeType(mimeType) {
+		t.Errorf("Invalid mime type: %s", mimeType)
+		return false
+	}
+
+	// Additional validation - content shouldn't be empty for most resources.
+	if content == "" {
+		t.Logf("Warning: Resource content is empty")
+	}
+
+	return true
+}
+
+// validateMimeType checks if a MIME type is in a valid format.
+func validateMimeType(mimeType string) bool {
+	// More robust MIME type validation using a regular expression.
+	mimeRegex := regexp.MustCompile(`^[a-z]+/[a-z0-9\-\.\+]*(;\s?[a-z0-9\-\.]+\s*=\s*[a-z0-9\-\.]+)*$`)
+	return mimeRegex.MatchString(mimeType)
+}
+
+// MCPToolDefinition represents the expected structure of a tool
+// definition from the MCP protocol.
+type MCPToolDefinition struct {
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	Arguments   []MCPToolArgument `json:"arguments,omitempty"`
+}
+
+// MCPToolArgument represents an argument for an MCP tool.
+type MCPToolArgument struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Required    bool   `json:"required"`
+}
+
+// MCPToolResponse represents the expected response structure for a tool.
+type MCPToolResponse struct {
+	Result string `json:"result"`
+}
+
+// validateMCPTool validates a tool definition from list_tools conforms
+// to the MCP protocol specification.
+func validateMCPTool(t *testing.T, tool interface{}) bool {
+	t.Helper()
+
+	// Cast the tool to a map.
+	toolObj, ok := tool.(map[string]interface{})
+	if !ok {
+		t.Errorf("Tool is not an object; expected map[string]interface{} got, %T", tool)
+		return false
+	}
+
+	// Check required fields.
+	requiredFields := []string{toolFieldName, toolFieldDescription}
+	for _, field := range requiredFields {
+		if toolObj[field] == nil {
+			t.Errorf("Tool missing required field: %s", field)
+			return false
+		}
+	}
+
+	// Validate field types.
+	name, ok := toolObj[toolFieldName].(string)
+	if !ok {
+		t.Errorf("Tool name is not a string: %v", toolObj[toolFieldName])
+		return false
+	}
+
+	if name == "" {
+		t.Errorf("Tool name cannot be empty")
+		return false
+	}
+
+	_, ok = toolObj[toolFieldDescription].(string)
+	if !ok {
+		t.Errorf("Tool description is not a string: %v", toolObj[toolFieldDescription])
+		return false
+	}
+
+	// Check arguments if present.
+	if args, ok := toolObj["arguments"].([]interface{}); ok {
+		for i, arg := range args {
+			if !validateToolArgument(t, i, arg) {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+// validateToolArgument validates a single tool argument.
+func validateToolArgument(t *testing.T, index int, arg interface{}) bool {
+	t.Helper()
+
+	argObj, ok := arg.(map[string]interface{})
+	if !ok {
+		t.Errorf("Tool argument %d is not an object; expected map[string]interface{}, got %T", index, arg)
+		return false
+	}
+
+	// Check required argument fields.
+	argFields := []string{argFieldName, argFieldDescription, argFieldRequired}
+	for _, field := range argFields {
+		if argObj[field] == nil {
+			t.Errorf("Tool argument %d missing required field: %s", index, field)
+			return false
+		}
+	}
+
+	// Validate field types.
+	_, ok = argObj[argFieldName].(string)
+	if !ok {
+		t.Errorf("Tool argument %d name is not a string", index)
+		return false
+	}
+
+	_, ok = argObj[argFieldDescription].(string)
+	if !ok {
+		t.Errorf("Tool argument %d description is not a string", index)
+		return false
+	}
+
+	_, ok = argObj[argFieldRequired].(bool)
+	if !ok {
+		t.Errorf("Tool argument %d required is not a boolean", index)
+		return false
+	}
+
+	return true
+}
+
+// validateToolResponse validates a response from call_tool.
+func validateToolResponse(t *testing.T, response map[string]interface{}) bool {
+	t.Helper()
+
+	// Check for required fields and handle nil result
+	result, ok := response[toolResponseFieldResult]
+	if !ok {
+		t.Errorf("Tool response missing required field: result")
+		return false
+	}
+	if result == nil {
+		t.Errorf("Tool response 'result' field is nil")
+		return false
+	}
+
+	// Validate field type
+	_, ok = result.(string)
+	if !ok {
+		t.Errorf("Tool result is not a string: %v", result)
+		return false
+	}
+
+	return true
+}
