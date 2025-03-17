@@ -221,12 +221,12 @@ func TestMCPErrorResponses(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
 
-				url := client.BaseURL + "/mcp/read_resource"
+				urlPath := client.BaseURL + "/mcp/read_resource"
 				if tc.resourceName != "" {
-					url += "?name=" + url.QueryEscape(tc.resourceName)
+					urlPath += "?name=" + url.QueryEscape(tc.resourceName)
 				}
 
-				req, err := http.NewRequestWithContext(ctx, tc.method, url, nil)
+				req, err := http.NewRequestWithContext(ctx, tc.method, urlPath, nil)
 				if err != nil {
 					t.Fatalf("Failed to create request: %v", err)
 				}
