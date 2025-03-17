@@ -127,7 +127,7 @@ func (f *RTMLiveTestFramework) Close() {
 // RequireAuthenticated ensures the server is authenticated with RTM.
 func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interactive bool) bool {
 	// Check if already authenticated.
-	if helpers.IsServerAuthenticated(ctx, f.Client) {
+	if helpers.IsAuthenticated(ctx, f.Client) {
 		f.T.Logf("Server is already authenticated")
 		return true
 	}
@@ -214,7 +214,7 @@ func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interac
 	}
 
 	// Verify authentication was successful.
-	return helpers.IsServerAuthenticated(ctx, f.Client)
+	return helpers.IsAuthenticated(ctx, f.Client)
 }
 
 // RunAuthenticatedTest runs a test function that requires authentication.
