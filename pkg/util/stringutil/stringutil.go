@@ -31,13 +31,13 @@ func ExtractBetween(s, startDelim, endDelim string) string {
 	if startIdx == -1 {
 		return ""
 	}
-	
+
 	startIdx += len(startDelim)
 	endIdx := strings.Index(s[startIdx:], endDelim)
 	if endIdx == -1 {
 		return ""
 	}
-	
+
 	return s[startIdx : startIdx+endIdx]
 }
 
@@ -52,7 +52,7 @@ func ExtractFromContent(content string, patterns []string) string {
 
 		startIdx := idx + len(pattern)
 		endIdx := startIdx
-		
+
 		// Find the end of the value.
 		for i := startIdx; i < len(content); i++ {
 			// Value ends at any whitespace or common ending punctuation.

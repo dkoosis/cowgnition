@@ -33,22 +33,22 @@ func ExtractPathParam(templatePath, actualPath string) (string, error) {
 	// Find the parameter name in the template.
 	startIndex := strings.Index(templatePath, "{")
 	endIndex := strings.Index(templatePath, "}")
-	
+
 	if startIndex == -1 || endIndex == -1 || startIndex >= endIndex {
 		return "", fmt.Errorf("template path does not contain a valid parameter: %s", templatePath)
 	}
-	
+
 	// Get the prefix before the parameter.
 	prefix := templatePath[:startIndex]
-	
+
 	// Make sure the actual path starts with the same prefix.
 	if !strings.HasPrefix(actualPath, prefix) {
 		return "", fmt.Errorf("actual path %s does not match template %s", actualPath, templatePath)
 	}
-	
+
 	// Extract the parameter value.
 	paramValue := actualPath[len(prefix):]
-	
+
 	// If there's content after the parameter in the template, handle that too.
 	if endIndex+1 < len(templatePath) {
 		suffix := templatePath[endIndex+1:]
@@ -57,7 +57,7 @@ func ExtractPathParam(templatePath, actualPath string) (string, error) {
 		}
 		paramValue = paramValue[:len(paramValue)-len(suffix)]
 	}
-	
+
 	return paramValue, nil
 }
 
@@ -84,6 +84,6 @@ func ExtractQueryParam(urlStr, param string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to parse URL: %w", err)
 	}
-	
+
 	return parsedURL.Query().Get(param), nil
 }

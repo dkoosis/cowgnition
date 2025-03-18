@@ -4,6 +4,7 @@ package rtm
 import (
 	"encoding/xml"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -50,8 +51,8 @@ type Task struct {
 	Postponed  int
 	Estimate   string
 	ListID     string
-	Tags      string
-	Notes     Note
+	Tags       []string // Changed to []string
+	Notes      []Note   // Changed to []Note
 }
 
 // Note represents an RTM task note.
@@ -199,7 +200,7 @@ func (s *Service) CleanupExpiredFlows() {
 }
 
 // GetAllLists returns all RTM lists.
-func (s *Service) GetAllLists() (List, error) {
+func (s *Service) GetAllLists() ([]List, error) { // Changed return type to []List
 	// Check authentication
 	if s.GetAuthStatus() != StatusAuthenticated {
 		return nil, fmt.Errorf("GetAllLists: not authenticated")
@@ -215,7 +216,7 @@ func (s *Service) GetAllLists() (List, error) {
 	var result struct {
 		XMLName xml.Name `xml:"rsp"`
 		Lists   struct {
-			Liststruct {
+			List []struct { // Changed to a slice of structs
 				ID       string `xml:"id,attr"`
 				Name     string `xml:"name,attr"`
 				Deleted  string `xml:"deleted,attr"`
@@ -233,7 +234,7 @@ func (s *Service) GetAllLists() (List, error) {
 	}
 
 	// Convert to List objects
-	lists := make(List, 0, len(result.Lists.List))
+	lists := make([]List, 0, len(result.Lists.List))
 	for _, list := range result.Lists.List {
 		lists = append(lists, List{
 			ID:       list.ID,
@@ -267,7 +268,7 @@ func (s *Service) GetList(listID string) (*List, error) {
 }
 
 // GetTasks returns tasks based on the provided filter.
-func (s *Service) GetTasks(filter TaskFilter) (Task, error) {
+func (s *Service) GetTasks(filter TaskFilter) ([]Task, error) { // Changed return type to []Task
 	// Check authentication
 	if s.GetAuthStatus() != StatusAuthenticated {
 		return nil, fmt.Errorf("GetTasks: not authenticated")
@@ -300,23 +301,23 @@ func (s *Service) GetTasks(filter TaskFilter) (Task, error) {
 }
 
 // parseTasks parses an RTM tasks API response into Task objects.
-func (s *Service) parseTasks(respbyte) (Task, error) {
+func (s *Service) parseTasks(resp []byte) ([]Task, error) { // Changed resp to []byte and return type
 	var result struct {
 		XMLName xml.Name `xml:"rsp"`
 		Tasks   struct {
-			Liststruct {
-				ID         string `xml:"id,attr"`
-				TaskSeriesstruct {
+			List []struct { // Changed to a slice
+				ID         string     `xml:"id,attr"`
+				TaskSeries []struct { // Changed to a slice
 					ID       string `xml:"id,attr"`
 					Created  string `xml:"created,attr"`
 					Modified string `xml:"modified,attr"`
 					Name     string `xml:"name,attr"`
 					Source   string `xml:"source,attr"`
 					Tags     struct {
-						Tagstring `xml:"tag"`
+						Tag []string `xml:"tag"` // Changed to a slice of strings
 					} `xml:"tags"`
 					Notes struct {
-						Notestruct {
+						Note []struct { // Changed to a slice
 							ID       string `xml:"id,attr"`
 							Created  string `xml:"created,attr"`
 							Modified string `xml:"modified,attr"`
@@ -324,7 +325,7 @@ func (s *Service) parseTasks(respbyte) (Task, error) {
 							Content  string `xml:",chardata"`
 						} `xml:"note"`
 					} `xml:"notes"`
-					Taskstruct {
+					Task []struct { // Changed to a slice
 						ID         string `xml:"id,attr"`
 						Due        string `xml:"due,attr"`
 						HasDueTime string `xml:"has_due_time,attr"`
@@ -345,7 +346,7 @@ func (s *Service) parseTasks(respbyte) (Task, error) {
 	}
 
 	// Convert to Task objects
-	var tasksTask
+	var tasks []Task // Changed to a slice
 
 	for _, list := range result.Tasks.List {
 		for _, series := range list.TaskSeries {
@@ -364,17 +365,13 @@ func (s *Service) parseTasks(respbyte) (Task, error) {
 					return nil, fmt.Errorf("parseTasks: error parsing task completed time: %w", parseErr)
 				}
 
-				// Parse tags
-				var tagsstring
-				if len(series.Tags.Tag) > 0 {
-					tags = make(string, len(series.Tags.Tag))
-					copy(tags, series.Tags.Tag)
-				}
+				// Parse tags (no need to make a new slice, just use the parsed one)
+				tags := series.Tags.Tag
 
 				// Parse notes
-				var notesNote
+				var notes []Note
 				if len(series.Notes.Note) > 0 {
-					notes = make(Note, 0, len(series.Notes.Note))
+					notes = make([]Note, 0, len(series.Notes.Note))
 					for _, noteData := range series.Notes.Note {
 						created, parseErr := parseRTMTime(noteData.Created)
 						if parseErr != nil {
@@ -420,27 +417,27 @@ func (s *Service) parseTasks(respbyte) (Task, error) {
 }
 
 // GetTasksForToday returns tasks due today.
-func (s *Service) GetTasksForToday() (Task, error) {
+func (s *Service) GetTasksForToday() ([]Task, error) { // Changed return type
 	return s.GetTasks(TaskFilter{DueFilter: "due:today"})
 }
 
 // GetTasksForTomorrow returns tasks due tomorrow.
-func (s *Service) GetTasksForTomorrow() (Task, error) {
+func (s *Service) GetTasksForTomorrow() ([]Task, error) { // Changed return type
 	return s.GetTasks(TaskFilter{DueFilter: "due:tomorrow"})
 }
 
 // GetTasksForWeek returns tasks due this week.
-func (s *Service) GetTasksForWeek() (Task, error) {
+func (s *Service) GetTasksForWeek() ([]Task, error) { // Changed return type
 	return s.GetTasks(TaskFilter{DueFilter: "dueBefore:today+7days dueAfter:today-1day"})
 }
 
 // GetOverdueTasks returns overdue tasks.
-func (s *Service) GetOverdueTasks() (Task, error) {
+func (s *Service) GetOverdueTasks() ([]Task, error) { // Changed return type
 	return s.GetTasks(TaskFilter{DueFilter: "due:before today AND status:incomplete"})
 }
 
 // GetCompletedTasks returns completed tasks.
-func (s *Service) GetCompletedTasks() (Task, error) {
+func (s *Service) GetCompletedTasks() ([]Task, error) { // Changed return type
 	return s.GetTasks(TaskFilter{DueFilter: "status:completed"})
 }
 
@@ -505,7 +502,7 @@ func (s *Service) CompleteTask(listID, taskseriesID, taskID string) (string, err
 	}
 
 	// Call the RTM API
-	resp, err := s.client.CompleteTask(s.timeline, listID, taskseriesID, taskID)
+	_, err := s.client.CompleteTask(s.timeline, listID, taskseriesID, taskID) // Removed resp
 	if err != nil {
 		return "", fmt.Errorf("CompleteTask: error completing task: %w", err)
 	}
@@ -530,7 +527,7 @@ func (s *Service) DeleteTask(listID, taskseriesID, taskID string) (string, error
 	}
 
 	// Call the RTM API
-	resp, err := s.client.DeleteTask(s.timeline, listID, taskseriesID, taskID)
+	_, err := s.client.DeleteTask(s.timeline, listID, taskseriesID, taskID) // Removed resp
 	if err != nil {
 		return "", fmt.Errorf("DeleteTask: error deleting task: %w", err)
 	}
@@ -555,7 +552,7 @@ func (s *Service) SetTaskDueDate(listID, taskseriesID, taskID, due string) (stri
 	}
 
 	// Call the RTM API
-	resp, err := s.client.SetTaskDueDate(s.timeline, listID, taskseriesID, taskID, due)
+	_, err := s.client.SetTaskDueDate(s.timeline, listID, taskseriesID, taskID, due) // Removed resp
 	if err != nil {
 		return "", fmt.Errorf("SetTaskDueDate: error setting due date: %w", err)
 	}
@@ -580,7 +577,7 @@ func (s *Service) SetTaskPriority(listID, taskseriesID, taskID, priority string)
 	}
 
 	// Call the RTM API
-	resp, err := s.client.SetTaskPriority(s.timeline, listID, taskseriesID, taskID, priority)
+	_, err := s.client.SetTaskPriority(s.timeline, listID, taskseriesID, taskID, priority) // Removed resp
 	if err != nil {
 		return "", fmt.Errorf("SetTaskPriority: error setting priority: %w", err)
 	}
@@ -605,7 +602,7 @@ func (s *Service) AddTags(listID, taskseriesID, taskID, tags string) (string, er
 	}
 
 	// Call the RTM API
-	resp, err := s.client.AddTags(s.timeline, listID, taskseriesID, taskID, tags)
+	_, err := s.client.AddTags(s.timeline, listID, taskseriesID, taskID, tags) // Removed resp
 	if err != nil {
 		return "", fmt.Errorf("AddTags: error adding tags: %w", err)
 	}
@@ -630,7 +627,7 @@ func (s *Service) RemoveTags(listID, taskseriesID, taskID, tags string) (string,
 	}
 
 	// Call the RTM API
-	resp, err := s.client.RemoveTags(s.timeline, listID, taskseriesID, taskID, tags)
+	_, err := s.client.RemoveTags(s.timeline, listID, taskseriesID, taskID, tags) //Removed resp
 	if err != nil {
 		return "", fmt.Errorf("RemoveTags: error removing tags: %w", err)
 	}
@@ -639,7 +636,7 @@ func (s *Service) RemoveTags(listID, taskseriesID, taskID, tags string) (string,
 }
 
 // GetAllTags returns all tags used in RTM.
-func (s *Service) GetAllTags() (string, error) {
+func (s *Service) GetAllTags() ([]string, error) { // Changed return type
 	// Check authentication
 	if s.GetAuthStatus() != StatusAuthenticated {
 		return nil, fmt.Errorf("GetAllTags: not authenticated")
@@ -655,7 +652,7 @@ func (s *Service) GetAllTags() (string, error) {
 	var result struct {
 		XMLName xml.Name `xml:"rsp"`
 		Tags    struct {
-			Tagstruct {
+			Tag []struct { // Changed to slice
 				Name string `xml:",chardata"`
 			} `xml:"tag"`
 		} `xml:"tags"`
@@ -666,7 +663,7 @@ func (s *Service) GetAllTags() (string, error) {
 	}
 
 	// Extract tag names
-	tagList := make(string, 0, len(result.Tags.Tag))
+	tagList := make([]string, 0, len(result.Tags.Tag))
 	for _, tag := range result.Tags.Tag {
 		tagList = append(tagList, tag.Name)
 	}
@@ -778,7 +775,7 @@ func parseRTMTime(timeStr string) (time.Time, error) {
 	}
 
 	// RTM API returns time in different formats
-	formats :=string{
+	formats := []string{ // Changed to a slice
 		"2006-01-02T15:04:05Z",
 		"2006-01-02T15:04:05",
 		"2006-01-02",
@@ -800,13 +797,10 @@ func atoi(s string, defaultVal int) int {
 		return defaultVal
 	}
 
-	val := 0
-	_, err := fmt.Sscanf(s, "%d", &val)
+	val, err := strconv.Atoi(s) // Simplified using strconv.Atoi
 	if err != nil {
 		return defaultVal
 	}
 
 	return val
 }
-
-// ErrorMsgEnhanced: 2024-02-29

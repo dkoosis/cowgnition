@@ -28,13 +28,13 @@ func ValidateJSON(jsonStr string) bool {
 	if jsonStr == "" {
 		return false
 	}
-	
+
 	// Very basic check - proper JSON should start with { or [ and end with } or ].
 	if (strings.HasPrefix(jsonStr, "{") && strings.HasSuffix(jsonStr, "}")) ||
-	   (strings.HasPrefix(jsonStr, "[") && strings.HasSuffix(jsonStr, "[")) {
+		(strings.HasPrefix(jsonStr, "[") && strings.HasSuffix(jsonStr, "[")) {
 		return true
 	}
-	
+
 	return false
 }
 
@@ -42,16 +42,16 @@ func ValidateJSON(jsonStr string) bool {
 // Returns a slice of missing field names, or nil if all fields are present.
 func ValidateRequired(data map[string]interface{}, requiredFields []string) []string {
 	var missing []string
-	
+
 	for _, field := range requiredFields {
 		if _, exists := data[field]; !exists {
 			missing = append(missing, field)
 		}
 	}
-	
+
 	if len(missing) == 0 {
 		return nil
 	}
-	
+
 	return missing
 }

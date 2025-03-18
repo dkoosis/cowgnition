@@ -15,7 +15,7 @@ import (
 // Returns the resource content and MIME type if successful, empty strings otherwise.
 func ReadResource(t *testing.T, client *http.Client, baseURL, resourceName string) (string, string) {
 	t.Helper()
-	
+
 	urlPath := fmt.Sprintf("%s/mcp/read_resource?name=%s",
 		baseURL, url.QueryEscape(resourceName))
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, urlPath, nil)
@@ -113,7 +113,7 @@ func ValidateToolResponse(t *testing.T, response map[string]interface{}) bool {
 // IsServerAuthenticated checks if the server is authenticated.
 func IsServerAuthenticated(t *testing.T, client *http.Client, baseURL string) bool {
 	t.Helper()
-	
+
 	// Try to access an authenticated resource.
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
 		baseURL+"/mcp/read_resource?name="+url.QueryEscape("tasks://all"), nil)

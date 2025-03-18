@@ -3,7 +3,7 @@ package conformance
 
 import (
 	"strings"
-	
+
 	"github.com/cowgnition/cowgnition/pkg/util/stringutil"
 	urlutil "github.com/cowgnition/cowgnition/pkg/util/url"
 )

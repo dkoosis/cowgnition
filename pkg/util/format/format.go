@@ -13,33 +13,33 @@ func FormatMarkdownTable(headers []string, rows [][]string) string {
 	if len(headers) == 0 || len(rows) == 0 {
 		return ""
 	}
-	
+
 	var buf strings.Builder
-	
+
 	// Write headers.
 	buf.WriteString("| ")
 	buf.WriteString(strings.Join(headers, " | "))
 	buf.WriteString(" |\n")
-	
+
 	// Write separator.
 	buf.WriteString("| ")
 	for range headers {
 		buf.WriteString("--- | ")
 	}
 	buf.WriteString("\n")
-	
+
 	// Write rows.
 	for _, row := range rows {
 		// Ensure row has the right number of columns.
 		for len(row) < len(headers) {
 			row = append(row, "")
 		}
-		
+
 		buf.WriteString("| ")
 		buf.WriteString(strings.Join(row, " | "))
 		buf.WriteString(" |\n")
 	}
-	
+
 	return buf.String()
 }
 
@@ -64,17 +64,17 @@ func FormatTaskPriority(priority string) string {
 func FormatColumns(headers []string, rows [][]string) string {
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	
+
 	// Write headers.
 	fmt.Fprintln(w, strings.Join(headers, "\t"))
-	
+
 	// Write a separator.
 	sep := make([]string, len(headers))
 	for i := range sep {
 		sep[i] = strings.Repeat("-", len(headers[i]))
 	}
 	fmt.Fprintln(w, strings.Join(sep, "\t"))
-	
+
 	// Write rows.
 	for _, row := range rows {
 		// Ensure row has the right number of columns.
@@ -83,7 +83,7 @@ func FormatColumns(headers []string, rows [][]string) string {
 		}
 		fmt.Fprintln(w, strings.Join(row, "\t"))
 	}
-	
+
 	w.Flush()
 	return buf.String()
 }
