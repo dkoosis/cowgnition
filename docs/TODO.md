@@ -181,7 +181,37 @@ Restructure the project to be more discoverable and reduce duplication, especial
    - Apply consistent casing (camelCase for unexported, PascalCase for exported)
 ```
 
-#### 1.9 Enhanced AI-Assistant Compatibility
+#### 1.9 Next Phase Steps for Code Reorganization
+
+```
+Continue the code reorganization with these specific steps:
+
+1. Update imports in affected files:
+   - Identify all files that would benefit from using the new utility packages
+   - Update their imports and replace duplicated code with utility calls
+   - Ensure consistent naming conventions across all imports
+   - Remove any redundant utility functions from original files
+
+2. Split the large protocol_validators.go file:
+   - Extract resource validation into resource_validator.go
+   - Extract tool validation into tool_validator.go
+   - Move generic response validation to response_validator.go
+   - Ensure proper imports and avoid circular dependencies
+
+3. Reorganize the test directory structure:
+   - Create subdirectories in test/conformance by test category
+   - Move error tests, resource tests, and tool tests to appropriate subdirectories
+   - Update imports and references in all test files
+   - Ensure tests continue to pass after reorganization
+
+4. Update documentation:
+   - Update PROJECT_ORGANIZATION.md with the new structure
+   - Create a UTILITY_FUNCTIONS.md to document available utilities
+   - Add package documentation for each new utility package
+   - Update examples to use the new utilities
+```
+
+#### 1.10 Enhanced AI-Assistant Compatibility
 
 ```
 Make additional structural improvements to optimize for AI assistance:
@@ -413,46 +443,55 @@ Enhance security, reliability, and performance:
 These tasks are well-suited for delegation to less capable AI assistants, with proper prompting:
 
 1. **Documentation Enhancements**
+
    - Creating prompt for adding godoc-style comments to existing functions
    - Standardizing comment formatting across the codebase
    - Creating usage examples for public functions
 
 2. **Test Case Expansion**
+
    - Creating prompt for adding more test cases to existing test functions
    - Developing table-driven tests for functions with simple inputs/outputs
    - Expanding test coverage for edge cases
 
 3. **Code Formatting and Style**
+
    - Creating prompt for ensuring consistent naming conventions
    - Standardizing import ordering
    - Adding proper package comments to all files
 
 4. **Simple Utility Functions**
+
    - Creating prompt for developing helper functions for common string operations
    - Adding validation functions for simple data structures
    - Implementing simple conversion utilities
 
 5. **Configuration File Templates**
+
    - Creating prompt for developing example configuration files
    - Adding comments to configuration templates
    - Creating different configuration profiles
 
 6. **Linting Issue Resolution**
+
    - Creating prompt for fixing simple linting errors like unused variables
    - Addressing naming convention issues
    - Removing dead code and unreachable branches
 
 7. **Enhancing Logging**
+
    - Creating prompt for adding consistent log patterns
    - Adding log levels to existing log statements
    - Standardizing log formats
 
 8. **Data Structure Documentation**
+
    - Creating prompt for documenting struct fields with clear descriptions
    - Creating relationship diagrams between different types
    - Adding examples of data structure usage
 
 9. **CLI Command Documentation**
+
    - Creating prompt for improving help text for command-line options
    - Developing usage examples for CLI commands
    - Creating a command reference guide

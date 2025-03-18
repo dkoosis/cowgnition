@@ -78,5 +78,3 @@ func (f *Flow) TimeRemaining() time.Duration {
 	}
 	return time.Until(f.ExpiresAt)
 }
-
-// ErrorMsgEnhanced: 2024-02-29
