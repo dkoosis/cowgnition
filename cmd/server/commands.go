@@ -19,7 +19,7 @@ import (
 type Command struct {
 	Name        string
 	Description string
-	Run         func(args []string) error
+	Run         func(argsstring) error
 }
 
 // RegisterCommands registers all available CLI commands.
@@ -51,13 +51,13 @@ func RegisterCommands() map[string]Command {
 
 // serveCommand starts the MCP server with the specified configuration.
 // It handles graceful shutdown on receiving termination signals.
-func serveCommand(args []string) error {
+func serveCommand(argsstring) error {
 	// Parse command-specific flags
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	configPath := fs.String("config", "", "Path to configuration file")
 	debugMode := fs.Bool("debug", false, "Enable debug logging")
 	if err := fs.Parse(args); err != nil {
-		return err
+		return fmt.Errorf("serveCommand: failed to parse flags: %w", err)
 	}
 
 	// Find config file if not specified
@@ -66,7 +66,7 @@ func serveCommand(args []string) error {
 	// Load config
 	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
-		return fmt.Errorf("error loading config: %w", err)
+		return fmt.Errorf("serveCommand: error loading config: %w", err)
 	}
 
 	// Set debug mode if requested
@@ -78,7 +78,7 @@ func serveCommand(args []string) error {
 	// Create and start server
 	srv, err := server.NewServer(cfg)
 	if err != nil {
-		return fmt.Errorf("error creating server: %w", err)
+		return fmt.Errorf("serveCommand: error creating server: %w", err)
 	}
 
 	// Set server version
@@ -98,7 +98,7 @@ func serveCommand(args []string) error {
 	// Wait for signal or error
 	select {
 	case err := <-errCh:
-		return fmt.Errorf("server error: %w", err)
+		return fmt.Errorf("serveCommand: server error: %w", err)
 	case sig := <-sigCh:
 		log.Printf("Received signal %s, shutting down...", sig)
 	}
@@ -108,7 +108,7 @@ func serveCommand(args []string) error {
 	defer cancel()
 
 	if err := srv.Stop(ctx); err != nil {
-		return fmt.Errorf("error stopping server: %w", err)
+		return fmt.Errorf("serveCommand: error stopping server: %w", err)
 	}
 
 	log.Println("Server shutdown complete")
@@ -117,18 +117,18 @@ func serveCommand(args []string) error {
 
 // versionCommand displays the current version information.
 // nolint:unused
-func versionCommand(_ []string) error {
+func versionCommand(_string) error {
 	printVersion()
 	return nil
 }
 
 // checkCommand checks the RTM authentication status.
-func checkCommand(args []string) error {
+func checkCommand(argsstring) error {
 	// Parse command-specific flags
 	fs := flag.NewFlagSet("check", flag.ExitOnError)
 	configPath := fs.String("config", "", "Path to configuration file")
 	if err := fs.Parse(args); err != nil {
-		return err
+		return fmt.Errorf("checkCommand: failed to parse flags: %w", err)
 	}
 
 	// Find config file if not specified
@@ -137,7 +137,7 @@ func checkCommand(args []string) error {
 	// Load config
 	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
-		return fmt.Errorf("error loading config: %w", err)
+		return fmt.Errorf("checkCommand: error loading config: %w", err)
 	}
 
 	fmt.Println("Checking RTM authentication status...")
@@ -145,7 +145,7 @@ func checkCommand(args []string) error {
 	// Create server (but don't start HTTP server)
 	svr, err := server.NewServer(cfg)
 	if err != nil {
-		return fmt.Errorf("error creating server: %w", err)
+		return fmt.Errorf("checkCommand: error creating server: %w", err)
 	}
 
 	// Check if authenticated using the RTM service
@@ -162,11 +162,11 @@ func checkCommand(args []string) error {
 }
 
 // helpCommand displays help information for all commands or a specific command.
-func helpCommand(args []string) error {
+func helpCommand(argsstring) error {
 	// Parse command-specific flags
 	fs := flag.NewFlagSet("help", flag.ExitOnError)
 	if err := fs.Parse(args); err != nil {
-		return err
+		return fmt.Errorf("helpCommand: failed to parse flags: %w", err)
 	}
 
 	// Get requested command
@@ -180,7 +180,7 @@ func helpCommand(args []string) error {
 	if cmdName != "" {
 		cmd, ok := cmds[cmdName]
 		if !ok {
-			return fmt.Errorf("unknown command: %s", cmdName)
+			return fmt.Errorf("helpCommand: unknown command: %s", cmdName)
 		}
 
 		// Show command help
