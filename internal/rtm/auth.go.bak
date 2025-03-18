@@ -1,22 +1,24 @@
 // Package rtm provides client functionality for the Remember The Milk API.
 package rtm
 
-// Status represents the authentication status of the RTM service.
+import (
+	"time"
+)
+
+// Status represents the current authentication status.
 type Status int
 
 const (
-	// StatusUnknown means the authentication status has not been determined.
+	// StatusUnknown indicates that the authentication status is not determined yet.
 	StatusUnknown Status = iota
-	// StatusNotAuthenticated means the user is not authenticated.
+	// StatusNotAuthenticated indicates that the user is not authenticated.
 	StatusNotAuthenticated
-	// StatusAuthenticating means authentication is in progress.
-	StatusAuthenticating
-	// StatusAuthenticated means the user is authenticated.
+	// StatusPending indicates that authentication is in progress.
+	StatusPending
+	// StatusAuthenticated indicates that the user is authenticated.
 	StatusAuthenticated
-	// StatusExpired means the authentication has expired.
+	// StatusExpired indicates that the authentication has expired.
 	StatusExpired
-	// StatusFailed means the authentication attempt failed.
-	StatusFailed
 )
 
 // String returns a string representation of the auth status.
@@ -26,14 +28,12 @@ func (s Status) String() string {
 		return "Unknown"
 	case StatusNotAuthenticated:
 		return "Not Authenticated"
-	case StatusAuthenticating:
+	case StatusPending:
 		return "Authentication Pending"
 	case StatusAuthenticated:
 		return "Authenticated"
 	case StatusExpired:
 		return "Authentication Expired"
-	case StatusFailed:
-		return "Authentication Failed"
 	default:
 		return "Invalid Status"
 	}
@@ -54,4 +54,27 @@ const (
 // String returns a string representation of the permission level.
 func (p Permission) String() string {
 	return string(p)
+}
+
+// Flow represents an ongoing authentication flow.
+type Flow struct {
+	Frob       string
+	StartTime  time.Time
+	Permission Permission
+	AuthURL    string
+	ExpiresAt  time.Time
+	CallerInfo string // Optional information about who initiated the flow
+}
+
+// IsExpired checks if the authentication flow has expired.
+func (f *Flow) IsExpired() bool {
+	return time.Now().After(f.ExpiresAt)
+}
+
+// TimeRemaining returns the time remaining before the flow expires.
+func (f *Flow) TimeRemaining() time.Duration {
+	if f.IsExpired() {
+		return 0
+	}
+	return time.Until(f.ExpiresAt)
 }
