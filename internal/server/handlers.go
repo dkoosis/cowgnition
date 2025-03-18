@@ -87,16 +87,16 @@ func (s *MCPServer) handleListResources(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var resourcesmcp.ResourceDefinition
+	var resources mcp.ResourceDefinition
 
 	// Check authentication
 	if !s.rtmService.IsAuthenticated() {
 		// Return authentication resource only
-		resources =mcp.ResourceDefinition{
+		resources := mcp.ResourceDefinition{
 			{
 				Name:        "auth://rtm",
 				Description: "Authentication for Remember The Milk",
-				Arguments:  mcp.ResourceArgument{},
+				Arguments:   mcp.ResourceArgument{},
 			},
 		}
 	} else {

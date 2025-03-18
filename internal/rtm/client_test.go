@@ -1,4 +1,3 @@
-
 package rtm
 
 import (
@@ -386,8 +385,7 @@ func TestDo(t *testing.T) {
 	// Test successful API call with POST
 	t.Run("SuccessPOST", func(t *testing.T) {
 		mockResp := `<rsp stat="ok"><echo>test</echo></rsp>`
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request)
-		{
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost {
 				// SUGGESTION (Readability): Include the actual method in the error message.
 				t.Errorf("%s: Expected POST request, got %s", t.Name(), r.Method)
@@ -395,7 +393,7 @@ func TestDo(t *testing.T) {
 			}
 			w.Header().Set("Content-Type", "application/xml")
 			w.WriteHeader(http.StatusOK)
-			_, err := w.Write(byte(mockResp))
+			_, err := w.Write([]byte(mockResp))
 			if err != nil {
 				// SUGGESTION (BestPractice): Use %w to wrap the error.
 				t.Fatalf("%s: Error writing response: %w", t.Name(), err)
