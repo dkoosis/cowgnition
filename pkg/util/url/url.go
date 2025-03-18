@@ -14,7 +14,7 @@ import (
 func ParseResourceURI(uri string) (scheme, path string, err error) {
 	parts := strings.SplitN(uri, "://", 2)
 	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid resource URI format: %s", uri)
+		return "", "", fmt.Errorf("ParseResourceURI: invalid resource URI format: %s", uri)
 	}
 	return parts[0], parts[1], nil
 }
@@ -35,7 +35,7 @@ func ExtractPathParam(templatePath, actualPath string) (string, error) {
 	endIndex := strings.Index(templatePath, "}")
 
 	if startIndex == -1 || endIndex == -1 || startIndex >= endIndex {
-		return "", fmt.Errorf("template path does not contain a valid parameter: %s", templatePath)
+		return "", fmt.Errorf("ExtractPathParam: template path does not contain a valid parameter: %s", templatePath)
 	}
 
 	// Get the prefix before the parameter.
@@ -43,7 +43,7 @@ func ExtractPathParam(templatePath, actualPath string) (string, error) {
 
 	// Make sure the actual path starts with the same prefix.
 	if !strings.HasPrefix(actualPath, prefix) {
-		return "", fmt.Errorf("actual path %s does not match template %s", actualPath, templatePath)
+		return "", fmt.Errorf("ExtractPathParam: actual path %s does not match template %s", actualPath, templatePath)
 	}
 
 	// Extract the parameter value.
@@ -53,7 +53,7 @@ func ExtractPathParam(templatePath, actualPath string) (string, error) {
 	if endIndex+1 < len(templatePath) {
 		suffix := templatePath[endIndex+1:]
 		if !strings.HasSuffix(paramValue, suffix) {
-			return "", fmt.Errorf("actual path %s does not match template %s", actualPath, templatePath)
+			return "", fmt.Errorf("ExtractPathParam: actual path %s does not match template %s", actualPath, templatePath)
 		}
 		paramValue = paramValue[:len(paramValue)-len(suffix)]
 	}
@@ -82,8 +82,10 @@ func FindURLEndIndex(content string, startIdx int) int {
 func ExtractQueryParam(urlStr, param string) (string, error) {
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse URL: %w", err)
+		return "", fmt.Errorf("ExtractQueryParam: failed to parse URL: %w", err)
 	}
 
 	return parsedURL.Query().Get(param), nil
 }
+
+// ErrorMsgEnhanced:2025-03-17

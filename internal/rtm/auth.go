@@ -18,13 +18,15 @@ func (s *Service) Initialize() error {
 			if err != nil || !valid {
 				s.authStatus = StatusNotAuthenticated
 				s.client.AuthToken = ""
-				return fmt.Errorf("existing token is invalid: %w", err)
+				// SUGGESTION (Ambiguous): Improve error message for clarity.
+				return fmt.Errorf("Initialize: existing token is invalid: %w", err)
 			}
 
 			// Token is valid, create timeline.
 			timeline, err := s.client.CreateTimeline()
 			if err != nil {
-				return fmt.Errorf("error creating timeline: %w", err)
+				// SUGGESTION (Ambiguous): Improve error message for clarity.
+				return fmt.Errorf("Initialize: error creating timeline: %w", err)
 			}
 			s.timeline = timeline
 			s.authStatus = StatusAuthenticated
@@ -44,7 +46,8 @@ func (s *Service) GetTimeline() (string, error) {
 		// Create a new timeline.
 		timeline, err := s.client.CreateTimeline()
 		if err != nil {
-			return "", fmt.Errorf("error creating timeline: %w", err)
+			// SUGGESTION (Ambiguous): Improve error message for clarity.
+			return "", fmt.Errorf("GetTimeline: error creating timeline: %w", err)
 		}
 		s.timeline = timeline
 	}
@@ -60,9 +63,12 @@ func (s *Service) RefreshTimeline() error {
 	// Create a new timeline.
 	timeline, err := s.client.CreateTimeline()
 	if err != nil {
-		return fmt.Errorf("error refreshing timeline: %w", err)
+		// SUGGESTION (Ambiguous): Improve error message for clarity.
+		return fmt.Errorf("RefreshTimeline: error refreshing timeline: %w", err)
 	}
 	s.timeline = timeline
 
 	return nil
 }
+
+// ErrorMsgEnhanced:2024-03-17

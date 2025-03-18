@@ -57,7 +57,7 @@ func serveCommand(argsstring) error {
 	configPath := fs.String("config", "", "Path to configuration file")
 	debugMode := fs.Bool("debug", false, "Enable debug logging")
 	if err := fs.Parse(args); err != nil {
-		return fmt.Errorf("serveCommand: failed to parse flags: %w", err)
+		return fmt.Errorf("fs.Parse: failed to parse arguments: %w", err)
 	}
 
 	// Find config file if not specified
@@ -66,7 +66,7 @@ func serveCommand(argsstring) error {
 	// Load config
 	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
-		return fmt.Errorf("serveCommand: error loading config: %w", err)
+		return fmt.Errorf("config.LoadConfig: error loading config: %w", err)
 	}
 
 	// Set debug mode if requested
@@ -78,7 +78,7 @@ func serveCommand(argsstring) error {
 	// Create and start server
 	srv, err := server.NewServer(cfg)
 	if err != nil {
-		return fmt.Errorf("serveCommand: error creating server: %w", err)
+		return fmt.Errorf("server.NewServer: error creating server: %w", err)
 	}
 
 	// Set server version
@@ -98,7 +98,7 @@ func serveCommand(argsstring) error {
 	// Wait for signal or error
 	select {
 	case err := <-errCh:
-		return fmt.Errorf("serveCommand: server error: %w", err)
+		return fmt.Errorf("srv.Start: server error: %w", err)
 	case sig := <-sigCh:
 		log.Printf("Received signal %s, shutting down...", sig)
 	}
@@ -108,7 +108,7 @@ func serveCommand(argsstring) error {
 	defer cancel()
 
 	if err := srv.Stop(ctx); err != nil {
-		return fmt.Errorf("serveCommand: error stopping server: %w", err)
+		return fmt.Errorf("srv.Stop: error stopping server: %w", err)
 	}
 
 	log.Println("Server shutdown complete")
@@ -128,7 +128,7 @@ func checkCommand(argsstring) error {
 	fs := flag.NewFlagSet("check", flag.ExitOnError)
 	configPath := fs.String("config", "", "Path to configuration file")
 	if err := fs.Parse(args); err != nil {
-		return fmt.Errorf("checkCommand: failed to parse flags: %w", err)
+		return fmt.Errorf("fs.Parse: failed to parse arguments: %w", err)
 	}
 
 	// Find config file if not specified
@@ -137,7 +137,7 @@ func checkCommand(argsstring) error {
 	// Load config
 	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
-		return fmt.Errorf("checkCommand: error loading config: %w", err)
+		return fmt.Errorf("config.LoadConfig: error loading config: %w", err)
 	}
 
 	fmt.Println("Checking RTM authentication status...")
@@ -145,7 +145,7 @@ func checkCommand(argsstring) error {
 	// Create server (but don't start HTTP server)
 	svr, err := server.NewServer(cfg)
 	if err != nil {
-		return fmt.Errorf("checkCommand: error creating server: %w", err)
+		return fmt.Errorf("server.NewServer: error creating server: %w", err)
 	}
 
 	// Check if authenticated using the RTM service
@@ -166,7 +166,7 @@ func helpCommand(argsstring) error {
 	// Parse command-specific flags
 	fs := flag.NewFlagSet("help", flag.ExitOnError)
 	if err := fs.Parse(args); err != nil {
-		return fmt.Errorf("helpCommand: failed to parse flags: %w", err)
+		return fmt.Errorf("fs.Parse: failed to parse arguments: %w", err)
 	}
 
 	// Get requested command
@@ -180,7 +180,7 @@ func helpCommand(argsstring) error {
 	if cmdName != "" {
 		cmd, ok := cmds[cmdName]
 		if !ok {
-			return fmt.Errorf("helpCommand: unknown command: %s", cmdName)
+			return fmt.Errorf("unknown command: %s", cmdName)
 		}
 
 		// Show command help
@@ -219,3 +219,5 @@ func helpCommand(argsstring) error {
 
 	return nil
 }
+
+// ErrorMsgEnhanced:2025-03-17

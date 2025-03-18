@@ -2,6 +2,7 @@
 package stringutil
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -25,25 +26,25 @@ func TruncateString(s string, maxLen int) string {
 }
 
 // ExtractBetween extracts a substring between two delimiter strings.
-// Returns an empty string if the delimiters are not found.
-func ExtractBetween(s, startDelim, endDelim string) string {
+// Returns an error with a message if the delimiters are not found.
+func ExtractBetween(s, startDelim, endDelim string) (string, error) {
 	startIdx := strings.Index(s, startDelim)
 	if startIdx == -1 {
-		return ""
+		return "", fmt.Errorf("ExtractBetween: start delimiter '%s' not found", startDelim)
 	}
 
 	startIdx += len(startDelim)
 	endIdx := strings.Index(s[startIdx:], endDelim)
 	if endIdx == -1 {
-		return ""
+		return "", fmt.Errorf("ExtractBetween: end delimiter '%s' not found after start delimiter", endDelim)
 	}
 
-	return s[startIdx : startIdx+endIdx]
+	return s[startIdx : startIdx+endIdx], nil
 }
 
 // ExtractFromContent tries to find a value using common patterns.
 // Useful for extracting values like frobs from content text.
-func ExtractFromContent(content string, patterns []string) string {
+func ExtractFromContent(content string, patternsstring) string {
 	for _, pattern := range patterns {
 		idx := strings.Index(content, pattern)
 		if idx == -1 {
@@ -71,3 +72,5 @@ func ExtractFromContent(content string, patterns []string) string {
 
 	return ""
 }
+
+// ErrorMsgEnhanced:2025-03-17

@@ -32,8 +32,9 @@ func main() {
 
 	// If no arguments, show help
 	if len(os.Args) < 2 {
-		if err := commands["help"].Run([]string{}); err != nil {
-			log.Fatalf("Error: %v", err)
+		err := commands["help"].Run(string{})
+		if err != nil {
+			log.Fatalf("main: error running help command: %v", err)
 		}
 		return
 	}
@@ -51,22 +52,24 @@ func main() {
 	cmd, ok := commands[cmdName]
 	if !ok {
 		fmt.Printf("Unknown command: %s\n\n", cmdName)
-		if err := commands["help"].Run([]string{}); err != nil {
-			log.Fatalf("Error: %v", err)
+		err := commands["help"].Run(string{})
+		if err != nil {
+			log.Fatalf("main: error running help command: %v", err)
 		}
 		os.Exit(1)
 	}
 
 	// Run command with arguments
-	if err := cmd.Run(os.Args[2:]); err != nil {
-		log.Fatalf("Error: %v", err)
+	err := cmd.Run(os.Args[2:])
+	if err != nil {
+		log.Fatalf("main: error running command: %v", err)
 	}
 }
 
 // printStartupInfo prints basic information about the application on startup.
 func printStartupInfo() {
 	execPath, err := os.Executable()
-	if err == nil {
+	if err != nil {
 		log.Printf("Starting CowGnition from: %s", execPath)
 	}
 	log.Printf("CowGnition version %s (build: %s)", version, buildDate)
@@ -87,20 +90,22 @@ func printVersion() {
 func findConfigFile(specifiedPath string) string {
 	// If a path is specified and exists, use it
 	if specifiedPath != "" {
-		if _, err := os.Stat(specifiedPath); err == nil {
+		_, err := os.Stat(specifiedPath)
+		if err == nil {
 			return specifiedPath
 		}
 		if !strings.Contains(specifiedPath, "/") && !strings.Contains(specifiedPath, "\\") {
 			// Try in the configs directory if just a filename was provided
 			configsPath := filepath.Join("configs", specifiedPath)
-			if _, err := os.Stat(configsPath); err == nil {
+			_, err := os.Stat(configsPath)
+			if err == nil {
 				return configsPath
 			}
 		}
 	}
 
 	// Standard locations to check
-	standardPaths := []string{
+	standardPaths := string{
 		"config.yaml",
 		"configs/config.yaml",
 		filepath.Join(os.Getenv("HOME"), ".config", "cowgnition", "config.yaml"),
@@ -108,7 +113,8 @@ func findConfigFile(specifiedPath string) string {
 	}
 
 	for _, path := range standardPaths {
-		if _, err := os.Stat(path); err == nil {
+		_, err := os.Stat(path)
+		if err == nil {
 			return path
 		}
 	}
@@ -121,3 +127,5 @@ func findConfigFile(specifiedPath string) string {
 	// Default to configs/config.yaml even if it doesn't exist
 	return "configs/config.yaml"
 }
+
+// ErrorMsgEnhanced:2025-03-18

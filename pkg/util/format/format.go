@@ -9,9 +9,13 @@ import (
 )
 
 // FormatMarkdownTable creates a markdown table from headers and rows.
-func FormatMarkdownTable(headers []string, rows [][]string) string {
-	if len(headers) == 0 || len(rows) == 0 {
-		return ""
+// Returns an error if headers or rows are empty.
+func FormatMarkdownTable(headersstring, rowsstring) (string, error) {
+	if len(headers) == 0 {
+		return "", fmt.Errorf("FormatMarkdownTable: headers are empty")
+	}
+	if len(rows) == 0 {
+		return "", fmt.Errorf("FormatMarkdownTable: rows are empty")
 	}
 
 	var buf strings.Builder
@@ -40,7 +44,7 @@ func FormatMarkdownTable(headers []string, rows [][]string) string {
 		buf.WriteString(" |\n")
 	}
 
-	return buf.String()
+	return buf.String(), nil
 }
 
 // FormatTaskPriority formats a task priority code as a human-readable string.
@@ -61,7 +65,15 @@ func FormatTaskPriority(priority string) string {
 }
 
 // FormatColumns formats text in evenly-spaced columns using tabwriter.
-func FormatColumns(headers []string, rows [][]string) string {
+// Returns an error if headers or rows are empty.
+func FormatColumns(headersstring, rowsstring) (string, error) {
+	if len(headers) == 0 {
+		return "", fmt.Errorf("FormatColumns: headers are empty")
+	}
+	if len(rows) == 0 {
+		return "", fmt.Errorf("FormatColumns: rows are empty")
+	}
+
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 
@@ -69,7 +81,7 @@ func FormatColumns(headers []string, rows [][]string) string {
 	fmt.Fprintln(w, strings.Join(headers, "\t"))
 
 	// Write a separator.
-	sep := make([]string, len(headers))
+	sep := make(string, len(headers))
 	for i := range sep {
 		sep[i] = strings.Repeat("-", len(headers[i]))
 	}
@@ -85,5 +97,7 @@ func FormatColumns(headers []string, rows [][]string) string {
 	}
 
 	w.Flush()
-	return buf.String()
+	return buf.String(), nil
 }
+
+// ErrorMsgEnhanced:2025-03-17

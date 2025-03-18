@@ -2,6 +2,7 @@
 package validation
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -40,8 +41,8 @@ func ValidateJSON(jsonStr string) bool {
 
 // ValidateRequired checks if all required fields exist in a map.
 // Returns a slice of missing field names, or nil if all fields are present.
-func ValidateRequired(data map[string]interface{}, requiredFields []string) []string {
-	var missing []string
+func ValidateRequired(data map[string]interface{}, requiredFieldsstring) (string, error) {
+	var missingstring
 
 	for _, field := range requiredFields {
 		if _, exists := data[field]; !exists {
@@ -50,8 +51,20 @@ func ValidateRequired(data map[string]interface{}, requiredFields []string) []st
 	}
 
 	if len(missing) == 0 {
-		return nil
+		return "", nil
 	}
 
-	return missing
+	// SUGGESTION (BestPractice): Consider returning an error here instead of a slice of strings.
+	// This would allow for more explicit error handling by the caller.
+	// For example:
+	//
+	//	if len(missing) > 0 {
+	//		 return fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
+	//	}
+	//	return nil
+	//
+	// The caller could then use errors.Is/As to check for specific validation errors.
+	return "", fmt.Errorf("ValidateRequired: missing required fields: %s", strings.Join(missing, ", "))
 }
+
+// ErrorMsgEnhanced:2025-03-17

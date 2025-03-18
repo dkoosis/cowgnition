@@ -1,3 +1,4 @@
+
 package rtm
 
 import (
@@ -22,7 +23,8 @@ func TestGenerateSignature(t *testing.T) {
 	actual := client.generateSignature(params)
 
 	if actual != expected {
-		t.Errorf("generateSignature() = %v, want %v", actual, expected)
+		// SUGGESTION (Readability): Added test name for context.
+		t.Errorf("%s: generateSignature() = %v, want %v", t.Name(), actual, expected)
 	}
 
 	// Test case 2: Different order of parameters should yield same signature
@@ -34,7 +36,8 @@ func TestGenerateSignature(t *testing.T) {
 	actual = client.generateSignature(params)
 
 	if actual != expected {
-		t.Errorf("generateSignature() with reordered params = %v, want %v", actual, expected)
+		// SUGGESTION (Readability): Added test name for context.
+		t.Errorf("%s: generateSignature() with reordered params = %v, want %v", t.Name(), actual, expected)
 	}
 }
 
@@ -45,11 +48,13 @@ func TestGetAuthURL(t *testing.T) {
 
 	// Check that URL contains the expected parts
 	if url == "" {
-		t.Error("GetAuthURL() returned empty string")
+		// SUGGESTION (Readability): Added test name for context.
+		t.Errorf("%s: GetAuthURL() returned empty string", t.Name())
 	}
 
 	if !strings.HasPrefix(url, authURL) {
-		t.Errorf("GetAuthURL() should start with %s, got %s", authURL, url)
+		// SUGGESTION (Readability): Added test name and expected value for context.
+		t.Errorf("%s: GetAuthURL() should start with %s, got %s", t.Name(), authURL, url)
 	}
 
 	// Check that params are included
@@ -62,7 +67,8 @@ func TestGetAuthURL(t *testing.T) {
 
 	for _, param := range requiredParams {
 		if !strings.Contains(url, param) {
-			t.Errorf("GetAuthURL() should contain %s, got %s", param, url)
+			// SUGGESTION (Readability): Added test name and missing parameter for context.
+			t.Errorf("%s: GetAuthURL() should contain %s, got %s", t.Name(), param, url)
 		}
 	}
 }
@@ -73,14 +79,16 @@ func setupMockServer(t *testing.T, expectedMethod string, response string) *http
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
-			t.Errorf("Expected GET request, got %s", r.Method)
+			// SUGGESTION (Readability): Include the actual method in the error message.
+			t.Errorf("%s: Expected GET request, got %s", t.Name(), r.Method)
 			return // Add return to stop processing on error
 		}
 
 		query := r.URL.Query()
 		method := query.Get("method")
 		if method != expectedMethod {
-			t.Errorf("Expected method %s, got %s", expectedMethod, method)
+			// SUGGESTION (Readability): Include the actual method in the error message.
+			t.Errorf("%s: Expected method %s, got %s", t.Name(), expectedMethod, method)
 			return // Add return to stop processing on error
 		}
 
@@ -88,7 +96,8 @@ func setupMockServer(t *testing.T, expectedMethod string, response string) *http
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write(byte(response)) // Check for write errors
 		if err != nil {
-			t.Fatalf("Error writing response: %v", err)
+			// SUGGESTION (BestPractice): Use %w to wrap the error.
+			t.Fatalf("%s: Error writing response: %w", t.Name(), err)
 		}
 	}))
 }
@@ -110,11 +119,13 @@ func TestGetFrob(t *testing.T) {
 	frob, err := client.GetFrob()
 
 	if err != nil {
-		t.Errorf("GetFrob() returned unexpected error: %v", err)
+		// SUGGESTION (Readability): Added test name for context.
+		t.Errorf("%s: GetFrob() returned unexpected error: %v", t.Name(), err)
 	}
 
 	if frob != "test_frob_123" {
-		t.Errorf("GetFrob() = %v, want %v", frob, "test_frob_123")
+		// SUGGESTION (Readability): Added test name and expected value for context.
+		t.Errorf("%s: GetFrob() = %v, want %v", t.Name(), frob, "test_frob_123")
 	}
 }
 
@@ -138,16 +149,19 @@ func TestGetToken(t *testing.T) {
 	token, err := client.GetToken("test_frob_123")
 
 	if err != nil {
-		t.Errorf("GetToken() returned unexpected error: %v", err)
+		// SUGGESTION (Readability): Added test name for context.
+		t.Errorf("%s: GetToken() returned unexpected error: %v", t.Name(), err)
 	}
 
 	if token != "test_token_abc" {
-		t.Errorf("GetToken() = %v, want %v", token, "test_token_abc")
+		// SUGGESTION (Readability): Added test name and expected value for context.
+		t.Errorf("%s: GetToken() = %v, want %v", t.Name(), token, "test_token_abc")
 	}
 
 	// Check that token was saved in client
 	if client.authToken != "test_token_abc" {
-		t.Errorf("GetToken() should set client.authToken to %v, got %v", "test_token_abc", client.authToken)
+		// SUGGESTION (Readability): Added test name and expected value for context.
+		t.Errorf("%s: GetToken() should set client.authToken to %v, got %v", t.Name(), "test_token_abc", client.authToken)
 	}
 }
 
@@ -172,11 +186,13 @@ func TestCheckToken(t *testing.T) {
 	valid, err := client.CheckToken()
 
 	if err != nil {
-		t.Errorf("CheckToken() returned unexpected error: %v", err)
+		// SUGGESTION (Readability): Added test name for context.
+		t.Errorf("%s: CheckToken() returned unexpected error: %v", t.Name(), err)
 	}
 
 	if !valid {
-		t.Errorf("CheckToken() = %v, want %v", valid, true)
+		// SUGGESTION (Readability): Added test name and expected value for context.
+		t.Errorf("%s: CheckToken() = %v, want %v", t.Name(), valid, true)
 	}
 
 	// Setup mock server with error response
@@ -198,7 +214,8 @@ func TestCheckToken(t *testing.T) {
 	// We expect valid to be false, but don't necessarily expect an error
 	// since the API might just return a "fail" status
 	if valid {
-		t.Errorf("CheckToken() with invalid token = %v, want %v", valid, false)
+		// SUGGESTION (Readability): Added test name and expected value for context.
+		t.Errorf("%s: CheckToken() with invalid token = %v, want %v", t.Name(), valid, false)
 	}
 }
 
@@ -218,11 +235,13 @@ func TestResponseGetError(t *testing.T) {
 	code, msg := resp.GetError()
 
 	if code != "123" {
-		t.Errorf("Response.GetError() code = %v, want %v", code, "123")
+		// SUGGESTION (Readability): Added test name and expected value for context.
+		t.Errorf("%s: Response.GetError() code = %v, want %v", t.Name(), code, "123")
 	}
 
 	if msg != "Test error" {
-		t.Errorf("Response.GetError() message = %v, want %v", msg, "Test error")
+		// SUGGESTION (Readability): Added test name and expected value for context.
+		t.Errorf("%s: Response.GetError() message = %v, want %v", t.Name(), msg, "Test error")
 	}
 
 	// Test with no error
@@ -234,11 +253,13 @@ func TestResponseGetError(t *testing.T) {
 	code, msg = resp.GetError()
 
 	if code != "" {
-		t.Errorf("Response.GetError() with no error code = %v, want %v", code, "")
+		// SUGGESTION (Readability): Added test name and expected value for context.
+		t.Errorf("%s: Response.GetError() with no error code = %v, want %v", t.Name(), code, "")
 	}
 
 	if msg != "" {
-		t.Errorf("Response.GetError() with no error message = %v, want %v", msg, "")
+		// SUGGESTION (Readability): Added test name and expected value for context.
+		t.Errorf("%s: Response.GetError() with no error message = %v, want %v", t.Name(), msg, "")
 	}
 }
 
@@ -261,11 +282,13 @@ func TestDo(t *testing.T) {
 		_, err := client.Do(params, &result)
 
 		if err != nil {
-			t.Errorf("Do() returned unexpected error: %v", err)
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Do() returned unexpected error: %v", t.Name(), err)
 		}
 
 		if result.Echo != "test" {
-			t.Errorf("Do() result.Echo = %v, want %v", result.Echo, "test")
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Do() result.Echo = %v, want %v", t.Name(), result.Echo, "test")
 		}
 	})
 
@@ -284,20 +307,24 @@ func TestDo(t *testing.T) {
 		_, err := client.Do(params, nil)
 
 		if err == nil {
-			t.Error("Do() should return an error for API fail response")
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Do() should return an error for API fail response", t.Name())
 		}
 
 		apiErr, ok := err.(APIError)
 		if !ok {
-			t.Errorf("Do() error type = %T, want APIError", err)
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Do() error type = %T, want APIError", t.Name(), err)
 		}
 
 		if apiErr.Code != 123 {
-			t.Errorf("Do() APIError.Code = %v, want %v", apiErr.Code, 123)
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Do() APIError.Code = %v, want %v", t.Name(), apiErr.Code, 123)
 		}
 
 		if apiErr.Message != "Test error" {
-			t.Errorf("Do() APIError.Message = %v, want %v", apiErr.Message, "Test error")
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Do() APIError.Message = %v, want %v", t.Name(), apiErr.Message, "Test error")
 		}
 	})
 
@@ -317,12 +344,14 @@ func TestDo(t *testing.T) {
 		_, err := client.Do(params, nil)
 
 		if err == nil {
-			t.Error("Do() should return an error for HTTP 500 response")
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Do() should return an error for HTTP 500 response", t.Name())
 		}
 
 		// Check if the error message contains the HTTP status
 		if !strings.Contains(err.Error(), "HTTP status: 500") {
-			t.Errorf("Do() error message should contain HTTP status, got: %v", err)
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Do() error message should contain HTTP status, got: %v", t.Name(), err)
 		}
 	})
 
@@ -344,27 +373,32 @@ func TestDo(t *testing.T) {
 		_, err := client.Do(params, &result)
 
 		if err == nil {
-			t.Error("Do() should return an error for invalid XML response")
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Do() should return an error for invalid XML response", t.Name())
 		}
 
 		if _, ok := err.(*xml.SyntaxError); !ok {
-			t.Errorf("Do() error type = %T, want xml.SyntaxError", err)
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Do() error type = %T, want xml.SyntaxError", t.Name(), err)
 		}
 	})
 
 	// Test successful API call with POST
 	t.Run("SuccessPOST", func(t *testing.T) {
 		mockResp := `<rsp stat="ok"><echo>test</echo></rsp>`
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request)
+		{
 			if r.Method != http.MethodPost {
-				t.Errorf("Expected POST request, got %s", r.Method)
+				// SUGGESTION (Readability): Include the actual method in the error message.
+				t.Errorf("%s: Expected POST request, got %s", t.Name(), r.Method)
 				return
 			}
 			w.Header().Set("Content-Type", "application/xml")
 			w.WriteHeader(http.StatusOK)
 			_, err := w.Write(byte(mockResp))
 			if err != nil {
-				t.Fatalf("Error writing response: %v", err)
+				// SUGGESTION (BestPractice): Use %w to wrap the error.
+				t.Fatalf("%s: Error writing response: %w", t.Name(), err)
 			}
 		}))
 		defer server.Close()
@@ -382,11 +416,13 @@ func TestDo(t *testing.T) {
 		_, err := client.Do(params, &result)
 
 		if err != nil {
-			t.Errorf("Do() returned unexpected error: %v", err)
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Do() returned unexpected error: %v", t.Name(), err)
 		}
 
 		if result.Echo != "test" {
-			t.Errorf("Do() result.Echo = %v, want %v", result.Echo, "test")
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Do() result.Echo = %v, want %v", t.Name(), result.Echo, "test")
 		}
 	})
 
@@ -395,13 +431,15 @@ func TestDo(t *testing.T) {
 		mockResp := `<rsp stat="ok"><photoid>12345</photoid></rsp>`
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost {
-				t.Errorf("Expected POST request, got %s", r.Method)
+				// SUGGESTION (Readability): Include the actual method in the error message.
+				t.Errorf("%s: Expected POST request, got %s", t.Name(), r.Method)
 				return
 			}
 
 			// Check Content-Type for multipart/form-data
 			if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-				t.Errorf("Expected multipart/form-data Content-Type, got %s", r.Header.Get("Content-Type"))
+				// SUGGESTION (Readability): Include subtest name in error message.
+				t.Errorf("%s: Expected multipart/form-data Content-Type, got %s", t.Name(), r.Header.Get("Content-Type"))
 				return
 			}
 
@@ -409,7 +447,8 @@ func TestDo(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			_, err := w.Write(byte(mockResp))
 			if err != nil {
-				t.Fatalf("Error writing response: %v", err)
+				// SUGGESTION (BestPractice): Use %w to wrap the error.
+				t.Fatalf("%s: Error writing response: %w", t.Name(), err)
 			}
 		}))
 		defer server.Close()
@@ -429,12 +468,14 @@ func TestDo(t *testing.T) {
 		result, err := client.Upload(params, "photo", fileName, file)
 
 		if err != nil {
-			t.Errorf("Upload() returned unexpected error: %v", err)
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Upload() returned unexpected error: %v", t.Name(), err)
 		}
 
 		photoID, ok := result["photoid"].(string)
 		if !ok || photoID != "12345" {
-			t.Errorf("Upload() result[photoid] = %v, want %v", result["photoid"], "12345")
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Upload() result[photoid] = %v, want %v", t.Name(), result["photoid"], "12345")
 		}
 	})
 
@@ -446,7 +487,8 @@ func TestDo(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			_, err := w.Write(byte(mockResp))
 			if err != nil {
-				t.Fatalf("Error writing response: %v", err)
+				// SUGGESTION (BestPractice): Use %w to wrap the error.
+				t.Fatalf("%s: Error writing response: %w", t.Name(), err)
 			}
 		}))
 		defer server.Close()
@@ -465,20 +507,24 @@ func TestDo(t *testing.T) {
 		_, err := client.Upload(params, "photo", fileName, file)
 
 		if err == nil {
-			t.Error("Upload() should return an error for API fail response")
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Upload() should return an error for API fail response", t.Name())
 		}
 
 		apiErr, ok := err.(APIError)
 		if !ok {
-			t.Errorf("Upload() error type = %T, want APIError", err)
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Upload() error type = %T, want APIError", t.Name(), err)
 		}
 
 		if apiErr.Code != 123 {
-			t.Errorf("Upload() APIError.Code = %v, want %v", apiErr.Code, 123)
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Upload() APIError.Code = %v, want %v", t.Name(), apiErr.Code, 123)
 		}
 
 		if apiErr.Message != "Upload failed" {
-			t.Errorf("Upload() APIError.Message = %v, want %v", apiErr.Message, "Upload failed")
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Upload() APIError.Message = %v, want %v", t.Name(), apiErr.Message, "Upload failed")
 		}
 	})
 
@@ -503,11 +549,13 @@ func TestDo(t *testing.T) {
 		_, err := client.Upload(params, "photo", fileName, file)
 
 		if err == nil {
-			t.Error("Upload() should return an error for HTTP 500 response")
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Upload() should return an error for HTTP 500 response", t.Name())
 		}
 
 		if !strings.Contains(err.Error(), "HTTP status: 500") {
-			t.Errorf("Upload() error message should contain HTTP status, got: %v", err)
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Upload() error message should contain HTTP status, got: %v", t.Name(), err)
 		}
 	})
 
@@ -519,7 +567,8 @@ func TestDo(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			_, err := w.Write(byte(mockResp))
 			if err != nil {
-				t.Fatalf("Error writing response: %v", err)
+				// SUGGESTION (BestPractice): Use %w to wrap the error.
+				t.Fatalf("%s: Error writing response: %w", t.Name(), err)
 			}
 		}))
 		defer server.Close()
@@ -538,11 +587,13 @@ func TestDo(t *testing.T) {
 		_, err := client.Upload(params, "photo", fileName, file)
 
 		if err == nil {
-			t.Error("Upload() should return an error for invalid XML response")
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Upload() should return an error for invalid XML response", t.Name())
 		}
 
 		if _, ok := err.(*xml.SyntaxError); !ok {
-			t.Errorf("Upload() error type = %T, want xml.SyntaxError", err)
+			// SUGGESTION (Readability): Include subtest name in error message.
+			t.Errorf("%s: Upload() error type = %T, want xml.SyntaxError", t.Name(), err)
 		}
 	})
 }

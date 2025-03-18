@@ -45,7 +45,7 @@ const (
 type Service struct {
 	client       *Client
 	authStatus   Status
-	authFlows    map[string]AuthFlow
+	authFlows    map[string]*Flow
 	lastRefresh  time.Time
 	timeline     string
 	mu           sync.Mutex
@@ -91,6 +91,7 @@ func (s *Service) StartAuthFlow() (authURL, frob string, err error) {
 	// Get a frob from the RTM API.
 	frob, err = s.client.GetFrob()
 	if err != nil {
+		// SUGGESTION (Ambiguous): Improve error message for clarity.
 		return "", "", fmt.Errorf("StartAuthFlow: error getting frob: %w", err)
 	}
 
@@ -120,12 +121,14 @@ func (s *Service) CompleteAuthFlow(frob string) error {
 	// Check if frob exists.
 	flow, exists := s.authFlows[frob]
 	if !exists {
+		// SUGGESTION (Ambiguous): Improve error message for clarity.
 		return fmt.Errorf("CompleteAuthFlow: invalid frob or auth flow expired")
 	}
 
 	// Exchange frob for token.
 	token, err := s.client.GetToken(flow.Frob)
 	if err != nil {
+		// SUGGESTION (Ambiguous): Improve error message for clarity.
 		return fmt.Errorf("CompleteAuthFlow: error getting token: %w", err)
 	}
 
@@ -142,6 +145,7 @@ func (s *Service) CompleteAuthFlow(frob string) error {
 	// Create timeline.
 	timeline, err := s.client.CreateTimeline()
 	if err != nil {
+		// SUGGESTION (Ambiguous): Improve error message for clarity.
 		return fmt.Errorf("CompleteAuthFlow: error creating timeline: %w", err)
 	}
 	s.timeline = timeline
@@ -165,15 +169,17 @@ func (s *Service) CleanupExpiredFlows() {
 }
 
 // GetAllLists returns all RTM lists.
-func (s *Service) GetAllLists() ([]List, error) {
+func (s *Service) GetAllLists() (List, error) {
 	// Check authentication.
 	if s.GetAuthStatus() != StatusAuthenticated {
+		// SUGGESTION (Readability): Added "GetAllLists:" prefix for context.
 		return nil, fmt.Errorf("GetAllLists: not authenticated")
 	}
 
 	// Call the RTM API.
 	resp, err := s.client.GetLists()
 	if err != nil {
+		// SUGGESTION (Ambiguous): Improve error message for clarity.
 		return nil, fmt.Errorf("GetAllLists: error getting lists: %w", err)
 	}
 
@@ -181,11 +187,12 @@ func (s *Service) GetAllLists() ([]List, error) {
 	var result struct {
 		XMLName xml.Name `xml:"rsp"`
 		Lists   struct {
-			List []List `xml:"list"`
+			ListList `xml:"list"`
 		} `xml:"lists"`
 	}
 
 	if err := xml.Unmarshal(resp, &result); err != nil {
+		// SUGGESTION (Ambiguous): Improve error message for clarity.
 		return nil, fmt.Errorf("GetAllLists: error parsing lists response: %w", err)
 	}
 
@@ -226,3 +233,5 @@ func (s *Service) formatTaskPriority(priority string) string {
 		return "None"
 	}
 }
+
+// ErrorMsgEnhanced:2024-03-17

@@ -1,3 +1,4 @@
+// ==START OF FILE SECTION server.go PART 1/1==
 // Package server implements the Model Context Protocol server for RTM integration.
 package server
 
@@ -35,7 +36,8 @@ func NewServer(cfg *config.Config) (*MCPServer, error) {
 	// Create token manager
 	tokenManager, err := auth.NewTokenManager(cfg.Auth.TokenPath)
 	if err != nil {
-		return nil, fmt.Errorf("error creating token manager: %w", err)
+		// SUGGESTION (Readability): Improved error message for creating token manager.
+		return nil, fmt.Errorf("NewServer: error creating token manager at path %s: %w", cfg.Auth.TokenPath, err)
 	}
 
 	// Create RTM service
@@ -47,7 +49,8 @@ func NewServer(cfg *config.Config) (*MCPServer, error) {
 
 	// Initialize RTM service
 	if err := rtmService.Initialize(); err != nil {
-		return nil, fmt.Errorf("error initializing RTM service: %w", err)
+		// SUGGESTION (Readability): Improved error message for initializing RTM service.
+		return nil, fmt.Errorf("NewServer: error initializing RTM service: %w", err)
 	}
 
 	// Generate unique instance ID
@@ -100,7 +103,8 @@ func (s *MCPServer) Start() error {
 	log.Printf("Starting MCP server '%s' version %s on port %d",
 		s.config.Server.Name, s.version, s.config.Server.Port)
 	if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
-		return fmt.Errorf("HTTP server error: %w", err)
+		// SUGGESTION (Readability): Improved HTTP server error message.
+		return fmt.Errorf("Start: HTTP server ListenAndServe error: %w", err)
 	}
 
 	return nil
@@ -121,7 +125,8 @@ func (s *MCPServer) GetUptime() time.Duration {
 func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
 	// Check if RTM service is healthy
 	if s.rtmService == nil {
-		http.Error(w, "RTM service not initialized", http.StatusServiceUnavailable)
+		// SUGGESTION (Readability): Improved health check error message.
+		http.Error(w, "handleHealthCheck: RTM service not initialized", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -130,7 +135,7 @@ func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	// Check the Write error to satisfy linter
-	if _, err := w.Write([]byte(`{"status":"healthy"}`)); err != nil {
+	if _, err := w.Write(byte(`{"status":"healthy"}`)); err != nil {
 		log.Printf("Error writing health check response: %v", err)
 	}
 }
@@ -141,7 +146,8 @@ func (s *MCPServer) handleStatusCheck(w http.ResponseWriter, r *http.Request) {
 	clientIP := r.RemoteAddr
 	if !strings.HasPrefix(clientIP, "127.0.0.1") && !strings.HasPrefix(clientIP, "[::1]") &&
 		r.Header.Get("X-Status-Secret") != s.config.Server.StatusSecret {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		// SUGGESTION (Readability): Improved status check error message.
+		http.Error(w, "handleStatusCheck: Forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -164,7 +170,8 @@ func (s *MCPServer) handleStatusCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(status); err != nil {
 		log.Printf("Error encoding status response: %v", err)
-		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		// SUGGESTION (Readability): Improved encoding error message.
+		http.Error(w, "handleStatusCheck: Error encoding JSON response", http.StatusInternalServerError)
 	}
 }
 
@@ -173,7 +180,8 @@ func (s *MCPServer) handleStatusCheck(w http.ResponseWriter, r *http.Request) {
 func (s *MCPServer) handleSendNotification(w http.ResponseWriter, r *http.Request) {
 	// Currently, we don't support notifications, so return appropriate error
 	if r.Method != http.MethodPost {
-		writeErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		// SUGGESTION (Readability): Clarified method not allowed message.
+		writeErrorResponse(w, http.StatusMethodNotAllowed, "handleSendNotification: Method not allowed. Must use POST for this endpoint.")
 		return
 	}
 
@@ -213,3 +221,5 @@ func corsMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// ErrorMsgEnhanced:2024-03-18

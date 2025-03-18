@@ -47,7 +47,7 @@ You are already authenticated with Remember The Milk. You can now:
 
 - View task lists with resources like ` + "`tasks://today`" + ` or ` + "`lists://all`" + `
 - Create new tasks using the ` + "`add_task`" + ` tool
-- Manage existing tasks with tools like ` + "`complete_task`" + ` and ` + "`set_due_date`" + `
+- Create new tasks using the ` + "`complete_task`" + ` and ` + "`set_due_date`" + `
 
 **Example**: Ask "What tasks are due today?" or "Add milk to my shopping list"
 `
@@ -99,7 +99,8 @@ func (s *MCPServer) handleAuthenticationTool(w http.ResponseWriter, args map[str
 	// Get frob from arguments
 	frob, ok := args["frob"].(string)
 	if !ok || frob == "" {
-		writeErrorResponse(w, http.StatusBadRequest, "Missing or invalid 'frob' argument. Please provide the frob from the authentication URL.")
+		// SUGGESTION (Readability): Improve error message for missing or invalid frob.
+		writeErrorResponse(w, http.StatusBadRequest, "Missing or invalid 'frob' argument. Please provide the 'frob' value from the authentication URL.")
 		return
 	}
 
@@ -110,14 +111,16 @@ func (s *MCPServer) handleAuthenticationTool(w http.ResponseWriter, args map[str
 		// Check for specific errors to provide more helpful messages
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "expired") {
+			// SUGGESTION (Readability): Clarify the message for an expired authentication flow.
 			writeErrorResponse(w, http.StatusBadRequest,
-				"Authentication flow expired. Please start a new authentication process by accessing the auth://rtm resource again.")
+				"Authentication flow expired. Please initiate a new authentication process by accessing the auth://rtm resource again.")
 			return
 		}
 
 		if strings.Contains(errMsg, "invalid frob") {
+			// SUGGESTION (Readability): Clarify the message for an invalid frob.
 			writeErrorResponse(w, http.StatusBadRequest,
-				"Invalid frob. Please make sure you're using the frob from the most recent authentication attempt.")
+				"Invalid 'frob' value provided. Ensure you are using the 'frob' from the most recent authentication attempt.")
 			return
 		}
 
@@ -148,7 +151,8 @@ func (s *MCPServer) handleLogoutTool(args map[string]interface{}) (string, error
 	// Check if confirmation is provided
 	confirm, _ := args["confirm"].(bool)
 	if !confirm {
-		return "To log out from Remember The Milk, please run this tool with `confirm: true` to prevent accidental logout.", nil
+		// SUGGESTION (Readability): Improve clarity of logout confirmation message.
+		return "To log out from Remember The Milk, please execute this tool with `confirm: true` to confirm the logout action.", nil
 	}
 
 	// Clear authentication
@@ -190,3 +194,5 @@ func (s *MCPServer) handleAuthStatusTool(_ map[string]interface{}) (string, erro
 
 	return result.String(), nil
 }
+
+// ErrorMsgEnhanced: 2024-03-18

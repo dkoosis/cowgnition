@@ -1,3 +1,4 @@
+// ==START OF FILE SECTION formatter.go PART 1/1==
 package testing
 
 import (
@@ -47,8 +48,8 @@ type TestResult struct {
 
 // TestRunner manages test execution and reporting.
 type TestRunner struct {
-	t       *testing.T
-	results []TestResult
+	t *testing.T
+	resultsTestResult
 }
 
 // NewTestRunner creates a new TestRunner instance.
@@ -56,7 +57,7 @@ func NewTestRunner(t *testing.T) *TestRunner {
 	t.Helper()
 	return &TestRunner{
 		t:       t,
-		results: []TestResult{},
+		results: TestResult{},
 	}
 }
 
@@ -93,7 +94,7 @@ func (r *TestRunner) Run(name string, fn func(t *testing.T)) {
 // Summary prints a summary of the test run.
 func (r *TestRunner) Summary() {
 	passed := 0
-	failedTests := []TestResult{}
+	failedTests := TestResult{}
 
 	for _, result := range r.results {
 		if result.Success {
@@ -131,42 +132,48 @@ func (r *TestRunner) Summary() {
 func AssertEquals(t *testing.T, expected, actual interface{}, message string) {
 	t.Helper()
 	if expected != actual {
-		t.Errorf("%s\nExpected: %v\nActual:   %v", message, expected, actual)
+		// SUGGESTION (Readability): Include expected and actual values in the message.
+		t.Errorf("%s: expected %v, got %v", message, expected, actual)
 	}
 }
 
 func AssertTrue(t *testing.T, condition bool, message string) {
 	t.Helper()
 	if !condition {
-		t.Errorf("%s\nExpected condition to be true", message)
+		// SUGGESTION (Readability): Added message for clarity.
+		t.Errorf("%s: Expected condition to be true", message)
 	}
 }
 
 func AssertFalse(t *testing.T, condition bool, message string) {
 	t.Helper()
 	if condition {
-		t.Errorf("%s\nExpected condition to be false", message)
+		// SUGGESTION (Readability): Added message for clarity.
+		t.Errorf("%s: Expected condition to be false", message)
 	}
 }
 
 func AssertNil(t *testing.T, value interface{}, message string) {
 	t.Helper()
 	if value != nil {
-		t.Errorf("%s\nExpected nil, got: %v", message, value)
+		// SUGGESTION (Readability): Include actual value in the message.
+		t.Errorf("%s: Expected nil, got: %v", message, value)
 	}
 }
 
 func AssertNotNil(t *testing.T, value interface{}, message string) {
 	t.Helper()
 	if value == nil {
-		t.Errorf("%s\nExpected non-nil value", message)
+		// SUGGESTION (Readability): Added message for clarity.
+		t.Errorf("%s: Expected non-nil value", message)
 	}
 }
 
 func AssertContains(t *testing.T, str, substr string, message string) {
 	t.Helper()
 	if !strings.Contains(str, substr) {
-		t.Errorf("%s\nExpected string to contain: %q\nString: %q", message, substr, str)
+		// SUGGESTION (Readability): Added details to the message.
+		t.Errorf("%s: Expected string to contain %q, but it does not. String: %q", message, substr, str)
 	}
 }
 
@@ -189,3 +196,5 @@ func WarningMessage(format string, args ...interface{}) string {
 func InfoMessage(format string, args ...interface{}) string {
 	return fmt.Sprintf("%s%s%s", Blue, fmt.Sprintf(format, args...), Reset)
 }
+
+// ErrorMsgEnhanced:2024-03-18
