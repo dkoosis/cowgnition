@@ -8,11 +8,44 @@ import (
 	"time"
 )
 
+// AuthFlow represents an ongoing authentication flow with RTM.
+type AuthFlow struct {
+	Frob      string
+	AuthURL   string
+	Timestamp time.Time
+}
+
+// List represents an RTM list.
+type List struct {
+	ID       string
+	Name     string
+	Deleted  bool
+	Locked   bool
+	Archived bool
+	Position int
+	Smart    bool
+	Filter   string
+}
+
+// Status represents the authentication status of the RTM service.
+type Status int
+
+const (
+	// StatusUnknown means the authentication status has not been determined.
+	StatusUnknown Status = iota
+	// StatusNotAuthenticated means the user is not authenticated.
+	StatusNotAuthenticated
+	// StatusAuthenticating means authentication is in progress.
+	StatusAuthenticating
+	// StatusAuthenticated means the user is authenticated.
+	StatusAuthenticated
+)
+
 // Service provides a wrapper around the RTM client with additional functionality.
 type Service struct {
 	client       *Client
 	authStatus   Status
-	authFlows    map[string]*Flow
+	authFlows    map[string]AuthFlow
 	lastRefresh  time.Time
 	timeline     string
 	mu           sync.Mutex
