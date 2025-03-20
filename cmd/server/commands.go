@@ -19,7 +19,7 @@ import (
 type Command struct {
 	Name        string
 	Description string
-	Run         func(argsstring) error
+	Run         func(args []string) error
 }
 
 // RegisterCommands registers all available CLI commands.
@@ -51,7 +51,7 @@ func RegisterCommands() map[string]Command {
 
 // serveCommand starts the MCP server with the specified configuration.
 // It handles graceful shutdown on receiving termination signals.
-func serveCommand(argsstring) error {
+func serveCommand(args []string) error {
 	// Parse command-specific flags
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	configPath := fs.String("config", "", "Path to configuration file")
@@ -116,14 +116,13 @@ func serveCommand(argsstring) error {
 }
 
 // versionCommand displays the current version information.
-// nolint:unused
-func versionCommand(_string) error {
+func versionCommand(_ []string) error {
 	printVersion()
 	return nil
 }
 
 // checkCommand checks the RTM authentication status.
-func checkCommand(argsstring) error {
+func checkCommand(args []string) error {
 	// Parse command-specific flags
 	fs := flag.NewFlagSet("check", flag.ExitOnError)
 	configPath := fs.String("config", "", "Path to configuration file")
@@ -162,7 +161,7 @@ func checkCommand(argsstring) error {
 }
 
 // helpCommand displays help information for all commands or a specific command.
-func helpCommand(argsstring) error {
+func helpCommand(args []string) error {
 	// Parse command-specific flags
 	fs := flag.NewFlagSet("help", flag.ExitOnError)
 	if err := fs.Parse(args); err != nil {
@@ -219,5 +218,3 @@ func helpCommand(argsstring) error {
 
 	return nil
 }
-
-// ErrorMsgEnhanced:2025-03-17

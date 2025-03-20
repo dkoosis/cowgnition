@@ -76,9 +76,13 @@ func ValidateResourceResponse(t *testing.T, response map[string]interface{}) boo
 		return false
 	}
 
-	// Additional validation - content shouldn't be empty for most resources.
+	// Check content and mimeType validity
 	if content == "" {
 		t.Logf("Warning: Resource content is empty.")
+	}
+
+	if mimeType == "" {
+		t.Logf("Warning: Resource MIME type is empty.")
 	}
 
 	return true

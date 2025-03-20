@@ -32,7 +32,7 @@ func main() {
 
 	// If no arguments, show help
 	if len(os.Args) < 2 {
-		err := commands["help"].Run(string{})
+		err := commands["help"].Run(nil)
 		if err != nil {
 			log.Fatalf("main: error running help command: %v", err)
 		}
@@ -52,7 +52,7 @@ func main() {
 	cmd, ok := commands[cmdName]
 	if !ok {
 		fmt.Printf("Unknown command: %s\n\n", cmdName)
-		err := commands["help"].Run(string{})
+		err := commands["help"].Run(nil)
 		if err != nil {
 			log.Fatalf("main: error running help command: %v", err)
 		}
@@ -105,7 +105,7 @@ func findConfigFile(specifiedPath string) string {
 	}
 
 	// Standard locations to check
-	standardPaths := string{
+	standardPaths := []string{
 		"config.yaml",
 		"configs/config.yaml",
 		filepath.Join(os.Getenv("HOME"), ".config", "cowgnition", "config.yaml"),
@@ -127,5 +127,3 @@ func findConfigFile(specifiedPath string) string {
 	// Default to configs/config.yaml even if it doesn't exist
 	return "configs/config.yaml"
 }
-
-// ErrorMsgEnhanced:2025-03-18

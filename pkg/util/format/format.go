@@ -32,7 +32,7 @@ func FormatMarkdownTable(headers []string, rows [][]string) (string, error) {
 	}
 	buf.WriteString("\n")
 
-	// Write rows.
+	// Add rows.
 	for _, row := range rows {
 		// Ensure row has the right number of columns.
 		for len(row) < len(headers) {
@@ -81,7 +81,7 @@ func FormatColumns(headers []string, rows [][]string) (string, error) {
 	fmt.Fprintln(w, strings.Join(headers, "\t"))
 
 	// Write a separator.
-	sep := make(string, len(headers))
+	sep := make([]string, len(headers))
 	for i := range sep {
 		sep[i] = strings.Repeat("-", len(headers[i]))
 	}
@@ -99,5 +99,3 @@ func FormatColumns(headers []string, rows [][]string) (string, error) {
 	w.Flush()
 	return buf.String(), nil
 }
-
-// ErrorMsgEnhanced:2025-03-17

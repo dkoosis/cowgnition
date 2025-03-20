@@ -3,8 +3,12 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"regexp"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -18,7 +22,7 @@ type ErrorResponse struct {
 }
 
 // writeJSONResponse writes a JSON response with the given status code and data.
-func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) { // nolint:unparam
+func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 
@@ -83,10 +87,6 @@ func formatDate(dateStr string) string {
 }
 
 // validateResourceName checks if a resource name is valid.
-//
-// TODO: Determine if validateResourceName is still needed. If not, remove it.
-//
-//lint:ignore U1000 This function is temporarily unused.
 func validateResourceName(name string) bool {
 	validResources := map[string]bool{
 		"auth://rtm":       true,
@@ -112,10 +112,6 @@ func validateResourceName(name string) bool {
 }
 
 // validateToolName checks if a tool name is valid.
-//
-// TODO: Determine if validateToolName is still needed. If not, remove it.
-//
-//lint:ignore U1000 This function is temporarily unused.
 func validateToolName(name string) bool {
 	validTools := map[string]bool{
 		"authenticate":    true,
@@ -128,6 +124,8 @@ func validateToolName(name string) bool {
 		"add_tags":        true,
 		"remove_tags":     true,
 		"add_note":        true,
+		"auth_status":     true,
+		"logout":          true,
 	}
 
 	return validTools[name]
@@ -135,10 +133,6 @@ func validateToolName(name string) bool {
 
 // extractPathParam extracts a path parameter from a resource name.
 // Example: extractPathParam("tasks://list/123", "tasks://list/") returns "123"
-//
-// TODO: Determine if extractPathParam is still needed. If not, remove it.
-//
-//lint:ignore U1000 This function is temporarily unused.
 func extractPathParam(name, prefix string) string {
 	if len(name) <= len(prefix) {
 		return ""
@@ -147,10 +141,6 @@ func extractPathParam(name, prefix string) string {
 }
 
 // formatTaskPriority returns a human-readable priority string.
-//
-// TODO: Determine if formatTaskPriority is still needed. If not, remove it.
-//
-//lint:ignore U1000 This function is temporarily unused.
 func formatTaskPriority(priority string) string {
 	switch priority {
 	case "1":
@@ -166,10 +156,6 @@ func formatTaskPriority(priority string) string {
 
 // coalesceString returns the first non-empty string from the provided arguments.
 // Useful for handling optional parameters with defaults.
-//
-// TODO: Determine if coalesceString is still needed. If not, remove it.
-//
-//lint:ignore U1000 This function is temporarily unused.
 func coalesceString(values ...string) string {
 	for _, v := range values {
 		if v != "" {
@@ -180,41 +166,86 @@ func coalesceString(values ...string) string {
 }
 
 // formatMarkdownTable formats data as a markdown table.
-//
-// TODO: Determine if formatMarkdownTable is still needed. If not, remove it.
-//
-//lint:ignore U1000 This function is temporarily unused.
 func formatMarkdownTable(headers []string, rows [][]string) string {
 	if len(headers) == 0 || len(rows) == 0 {
 		return ""
 	}
 
-	var result string
+	var result strings.Builder
 
 	// Add headers
-	result += "| "
-	for _, header := range headers {
-		result += header + " | "
-	}
-	result += "\n"
+	result.WriteString("| ")
+	result.WriteString(strings.Join(headers, " | "))
+	result.WriteString(" |\n")
 
 	// Add separator
-	result += "| "
+	result.WriteString("| ")
 	for range headers {
-		result += "--- | "
+		result.WriteString("--- | ")
 	}
-	result += "\n"
+	result.WriteString("\n")
 
 	// Add rows
 	for _, row := range rows {
-		result += "| "
-		for i, cell := range row {
-			if i < len(headers) {
-				result += cell + " | "
-			}
+		rowData := make([]string, len(headers))
+		copy(rowData, row)
+
+		// Ensure we have the right number of columns
+		for len(rowData) < len(headers) {
+			rowData = append(rowData, "")
 		}
-		result += "\n"
+
+		result.WriteString("| ")
+		result.WriteString(strings.Join(rowData[:len(headers)], " | "))
+		result.WriteString(" |\n")
 	}
 
-	return result
+	return result.String()
+}
+
+// validateMimeType checks if a MIME type is in a valid format.
+func validateMimeType(mimeType string) bool {
+	mimeRegex := regexp.MustCompile(`^[a-z]+/[a-z0-9\-\.\+]*(;\s?[a-z0-9\-\.]+\s*=\s*[a-z0-9\-\.]+)*$`)
+	return mimeRegex.MatchString(mimeType)
+}
+
+// formatTags formats a list of tags into a string.
+func formatTags(tags []string) string {
+	if len(tags) == 0 {
+		return ""
+	}
+
+	// Sort tags alphabetically for consistent output
+	sort.Strings(tags)
+
+	return fmt.Sprintf("[%s]", strings.Join(tags, ", "))
+}
+
+// parseTagArgument extracts tags from the tags argument, which can be a string or array.
+func parseTagArgument(tagsArg interface{}) ([]string, error) {
+	var tags []string
+
+	// Handle different tag formats
+	switch t := tagsArg.(type) {
+	case []interface{}:
+		for _, tagItem := range t {
+			if tagStr, ok := tagItem.(string); ok && tagStr != "" {
+				tags = append(tags, tagStr)
+			}
+		}
+	case string:
+		if t != "" {
+			tags = append(tags, t)
+		}
+	case nil:
+		return nil, fmt.Errorf("missing 'tags' argument")
+	default:
+		return nil, fmt.Errorf("invalid 'tags' argument type")
+	}
+
+	if len(tags) == 0 {
+		return nil, fmt.Errorf("no valid tags provided")
+	}
+
+	return tags, nil
 }

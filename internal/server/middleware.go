@@ -48,11 +48,25 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// corsMiddleware adds CORS headers for development scenarios.
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers for development
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight requests
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 // requestIDMiddleware adds a unique request ID to each request.
-//
-// TODO: Determine if requestIDMiddleware is still needed. If not, remove it.
-//
-//lint:ignore U1000 This function is temporarily unused.
 func requestIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Generate a request ID (in a production system, use a proper UUID)
