@@ -44,7 +44,7 @@ func ExtractBetween(s, startDelim, endDelim string) (string, error) {
 
 // ExtractFromContent tries to find a value using common patterns.
 // Useful for extracting values like frobs from content text.
-func ExtractFromContent(content string, patternsstring) string {
+func ExtractFromContent(content string, patterns []string) string {
 	for _, pattern := range patterns {
 		idx := strings.Index(content, pattern)
 		if idx == -1 {

@@ -41,9 +41,9 @@ func ValidateJSON(jsonStr string) bool {
 
 // ValidateRequired checks if all required fields exist in a map.
 // Returns a slice of missing field names, or nil if all fields are present.
-func ValidateRequired(data map[string]interface{}, requiredFieldsstring) (string, error) {
-	var missingstring
+func ValidateRequired(data map[string]interface{}, requiredFields []string) ([]string, error) {
 
+	var missing []string
 	for _, field := range requiredFields {
 		if _, exists := data[field]; !exists {
 			missing = append(missing, field)
