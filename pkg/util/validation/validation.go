@@ -32,7 +32,7 @@ func ValidateJSON(jsonStr string) bool {
 
 	// Very basic check - proper JSON should start with { or [ and end with } or ].
 	if (strings.HasPrefix(jsonStr, "{") && strings.HasSuffix(jsonStr, "}")) ||
-		(strings.HasPrefix(jsonStr, "[") && strings.HasSuffix(jsonStr, "[")) {
+		(strings.HasPrefix(jsonStr, "[") && strings.HasSuffix(jsonStr, "]")) {
 		return true
 	}
 
@@ -51,20 +51,7 @@ func ValidateRequired(data map[string]interface{}, requiredFields []string) ([]s
 	}
 
 	if len(missing) == 0 {
-		return "", nil
+		return nil, nil
 	}
-
-	// SUGGESTION (BestPractice): Consider returning an error here instead of a slice of strings.
-	// This would allow for more explicit error handling by the caller.
-	// For example:
-	//
-	//	if len(missing) > 0 {
-	//		 return fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
-	//	}
-	//	return nil
-	//
-	// The caller could then use errors.Is/As to check for specific validation errors.
-	return "", fmt.Errorf("ValidateRequired: missing required fields: %s", strings.Join(missing, ", "))
+	return missing, fmt.Errorf("ValidateRequired: missing required fields: %s", strings.Join(missing, ", "))
 }
-
-// ErrorMsgEnhanced:2025-03-17

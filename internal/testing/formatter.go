@@ -57,7 +57,7 @@ func NewTestRunner(t *testing.T) *TestRunner {
 	t.Helper()
 	return &TestRunner{
 		t:       t,
-		results: TestResult{},
+		results: []TestResult{},
 	}
 }
 

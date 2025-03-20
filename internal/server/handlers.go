@@ -87,45 +87,45 @@ func (s *MCPServer) handleListResources(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var resources mcp.ResourceDefinition
+	var resources []mcp.ResourceDefinition
 
 	// Check authentication
 	if !s.rtmService.IsAuthenticated() {
 		// Return authentication resource only
-		resources := mcp.ResourceDefinition{
+		resources = []mcp.ResourceDefinition{
 			{
 				Name:        "auth://rtm",
 				Description: "Authentication for Remember The Milk",
-				Arguments:   mcp.ResourceArgument{},
+				Arguments:   []mcp.ResourceArgument{},
 			},
 		}
 	} else {
 		// Return all available resources
-		resources =mcp.ResourceDefinition{
+		resources = []mcp.ResourceDefinition{
 			{
 				Name:        "tasks://all",
 				Description: "All tasks across all lists",
-				Arguments:  mcp.ResourceArgument{},
+				Arguments:   []mcp.ResourceArgument{},
 			},
 			{
 				Name:        "tasks://today",
 				Description: "Tasks due today",
-				Arguments:  mcp.ResourceArgument{},
+				Arguments:   []mcp.ResourceArgument{},
 			},
 			{
 				Name:        "tasks://tomorrow",
 				Description: "Tasks due tomorrow",
-				Arguments:  mcp.ResourceArgument{},
+				Arguments:   []mcp.ResourceArgument{},
 			},
 			{
 				Name:        "tasks://week",
 				Description: "Tasks due within the next 7 days",
-				Arguments:  mcp.ResourceArgument{},
+				Arguments:   []mcp.ResourceArgument{},
 			},
 			{
 				Name:        "tasks://list/{list_id}",
 				Description: "Tasks within a specific list",
-				Arguments:mcp.ResourceArgument{
+				Arguments: []mcp.ResourceArgument{
 					{
 						Name:        "list_id",
 						Description: "The ID of the list",
@@ -136,12 +136,12 @@ func (s *MCPServer) handleListResources(w http.ResponseWriter, r *http.Request) 
 			{
 				Name:        "lists://all",
 				Description: "All task lists",
-				Arguments:  mcp.ResourceArgument{},
+				Arguments:   []mcp.ResourceArgument{},
 			},
 			{
 				Name:        "tags://all",
 				Description: "All tags used in the system",
-				Arguments:  mcp.ResourceArgument{},
+				Arguments:   []mcp.ResourceArgument{},
 			},
 		}
 	}
@@ -240,16 +240,16 @@ func (s *MCPServer) handleListTools(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var toolsmcp.ToolDefinition
+	var tools []mcp.ToolDefinition
 
 	// Check authentication
 	if !s.rtmService.IsAuthenticated() {
 		// Return authentication tool only
-		tools =mcp.ToolDefinition{
+		tools = []mcp.ToolDefinition{
 			{
 				Name:        "authenticate",
 				Description: "Complete authentication with Remember The Milk",
-				Arguments:mcp.ToolArgument{
+				Arguments: []mcp.ToolArgument{
 					{
 						Name:        "frob",
 						Description: "The frob obtained after authorizing the application",
@@ -272,12 +272,12 @@ func (s *MCPServer) handleListTools(w http.ResponseWriter, r *http.Request) {
 
 // getAuthenticatedTools returns the list of available tools when authenticated.
 // This is extracted from handleListTools to reduce complexity.
-func getAuthenticatedTools()mcp.ToolDefinition {
-	returnmcp.ToolDefinition{
+func getAuthenticatedTools() []mcp.ToolDefinition {
+	return []mcp.ToolDefinition{
 		{
 			Name:        "add_task",
 			Description: "Add a new task",
-			Arguments:mcp.ToolArgument{
+			Arguments: []mcp.ToolArgument{
 				{
 					Name:        "name",
 					Description: "The name of the task",
@@ -298,7 +298,7 @@ func getAuthenticatedTools()mcp.ToolDefinition {
 		{
 			Name:        "complete_task",
 			Description: "Mark a task as completed",
-			Arguments:mcp.ToolArgument{
+			Arguments: []mcp.ToolArgument{
 				{
 					Name:        "list_id",
 					Description: "The ID of the list containing the task",
@@ -319,7 +319,7 @@ func getAuthenticatedTools()mcp.ToolDefinition {
 		{
 			Name:        "uncomplete_task",
 			Description: "Mark a completed task as incomplete",
-			Arguments:mcp.ToolArgument{
+			Arguments: []mcp.ToolArgument{
 				{
 					Name:        "list_id",
 					Description: "The ID of the list containing the task",
@@ -340,7 +340,7 @@ func getAuthenticatedTools()mcp.ToolDefinition {
 		{
 			Name:        "delete_task",
 			Description: "Delete a task",
-			Arguments:mcp.ToolArgument{
+			Arguments: []mcp.ToolArgument{
 				{
 					Name:        "list_id",
 					Description: "The ID of the list containing the task",
@@ -361,7 +361,7 @@ func getAuthenticatedTools()mcp.ToolDefinition {
 		{
 			Name:        "set_due_date",
 			Description: "Set or update a task's due date",
-			Arguments:mcp.ToolArgument{
+			Arguments: []mcp.ToolArgument{
 				{
 					Name:        "list_id",
 					Description: "The ID of the list containing the task",
@@ -392,7 +392,7 @@ func getAuthenticatedTools()mcp.ToolDefinition {
 		{
 			Name:        "set_priority",
 			Description: "Set a task's priority",
-			Arguments:mcp.ToolArgument{
+			Arguments: []mcp.ToolArgument{
 				{
 					Name:        "list_id",
 					Description: "The ID of the list containing the task",
@@ -418,7 +418,7 @@ func getAuthenticatedTools()mcp.ToolDefinition {
 		{
 			Name:        "add_tags",
 			Description: "Add tags to a task",
-			Arguments:mcp.ToolArgument{
+			Arguments: []mcp.ToolArgument{
 				{
 					Name:        "list_id",
 					Description: "The ID of the list containing the task",
@@ -444,12 +444,12 @@ func getAuthenticatedTools()mcp.ToolDefinition {
 		{
 			Name:        "auth_status",
 			Description: "Check authentication status with Remember The Milk",
-			Arguments:  mcp.ToolArgument{},
+			Arguments:   []mcp.ToolArgument{},
 		},
 		{
 			Name:        "logout",
 			Description: "Log out from Remember The Milk",
-			Arguments:mcp.ToolArgument{
+			Arguments: []mcp.ToolArgument{
 				{
 					Name:        "confirm",
 					Description: "Confirm logout to prevent accidental disconnection",
@@ -512,7 +512,7 @@ func (s *MCPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 
 // dispatchToolRequest routes the tool request to the appropriate handler.
 // This is extracted from handleCallTool to reduce complexity.
-func (s *MCPServer) dispatchToolRequest(toolName string, args map[string]interface{}){
+func (s *MCPServer) dispatchToolRequest(toolName string, args map[string]interface{}) (string, error) {
 	switch toolName {
 	case "add_task":
 		return s.handleAddTaskTool(args)
@@ -540,7 +540,7 @@ func (s *MCPServer) dispatchToolRequest(toolName string, args map[string]interfa
 // handleAuthResource handles the auth://rtm resource.
 // It redirects the user to the RTM authentication URL if not authenticated,
 // or returns a success message if already authenticated.
-func (s *MCPServer) handleAuthResource(w http.ResponseWriter, r *http.Request) {
+func (s *MCPServer) handleAuthResource(w http.ResponseWriter) {
 	if !s.rtmService.IsAuthenticated() {
 		// Generate the RTM authentication URL
 		authURL, err := s.rtmService.GetAuthURL()
@@ -550,8 +550,11 @@ func (s *MCPServer) handleAuthResource(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Redirect the user to the authentication URL
-		http.Redirect(w, r, authURL, http.StatusFound)
+		// Return auth instructions
+		writeJSONResponse(w, http.StatusOK, mcp.ResourceResponse{
+			Content:  fmt.Sprintf("Please visit this URL to authenticate: %s", authURL),
+			MimeType: "text/plain",
+		})
 	} else {
 		// Return a success message if already authenticated
 		writeJSONResponse(w, http.StatusOK, mcp.ResourceResponse{
@@ -617,7 +620,7 @@ func (s *MCPServer) handleAddTaskTool(args map[string]interface{}) (string, erro
 		return "", fmt.Errorf("invalid argument: 'name' is required")
 	}
 
-	listID, _ := args["list_id"].(string) // Optional
+	listID, _ := args["list_id"].(string)   // Optional
 	dueDate, _ := args["due_date"].(string) // Optional
 
 	if err := s.rtmService.AddTask(name, listID, dueDate); err != nil {
@@ -716,7 +719,7 @@ func (s *MCPServer) handleSetDueDateTool(args map[string]interface{}) (string, e
 		return "", fmt.Errorf("invalid argument: 'task_id' is required")
 	}
 
-	dueDate, _ := args["due_date"].(string)       // Optional
+	dueDate, _ := args["due_date"].(string)      // Optional
 	hasDueTime, _ := args["has_due_time"].(bool) // Optional
 
 	if err := s.rtmService.SetTaskDueDate(listID, taskseriesID, taskID, dueDate, hasDueTime); err != nil {

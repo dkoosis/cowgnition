@@ -10,7 +10,7 @@ import (
 
 // FormatMarkdownTable creates a markdown table from headers and rows.
 // Returns an error if headers or rows are empty.
-func FormatMarkdownTable(headersstring, rowsstring) (string, error) {
+func FormatMarkdownTable(headers []string, rows [][]string) (string, error) {
 	if len(headers) == 0 {
 		return "", fmt.Errorf("FormatMarkdownTable: headers are empty")
 	}
@@ -66,7 +66,7 @@ func FormatTaskPriority(priority string) string {
 
 // FormatColumns formats text in evenly-spaced columns using tabwriter.
 // Returns an error if headers or rows are empty.
-func FormatColumns(headersstring, rowsstring) (string, error) {
+func FormatColumns(headers []string, rows [][]string) (string, error) {
 	if len(headers) == 0 {
 		return "", fmt.Errorf("FormatColumns: headers are empty")
 	}

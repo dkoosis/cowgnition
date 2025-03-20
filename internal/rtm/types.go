@@ -1,6 +1,8 @@
 // Package rtm provides client functionality for the Remember The Milk API.
 package rtm
 
+import "time"
+
 // Status represents the authentication status of the RTM service.
 type Status int
 
@@ -56,4 +58,11 @@ func (p Permission) String() string {
 	return string(p)
 }
 
-// ErrorMsgEnhanced:2024-03-17
+// AuthFlow represents an ongoing authentication flow with RTM.
+type AuthFlow struct {
+	Frob       string
+	AuthURL    string
+	StartTime  time.Time
+	Permission Permission
+	ExpiresAt  time.Time
+}

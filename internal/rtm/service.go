@@ -8,13 +8,6 @@ import (
 	"time"
 )
 
-// AuthFlow represents an ongoing authentication flow with RTM.
-type AuthFlow struct {
-	Frob      string
-	AuthURL   string
-	Timestamp time.Time
-}
-
 // List represents an RTM list.
 type List struct {
 	ID       string
@@ -27,25 +20,11 @@ type List struct {
 	Filter   string
 }
 
-// Status represents the authentication status of the RTM service.
-type Status int
-
-const (
-	// StatusUnknown means the authentication status has not been determined.
-	StatusUnknown Status = iota
-	// StatusNotAuthenticated means the user is not authenticated.
-	StatusNotAuthenticated
-	// StatusAuthenticating means authentication is in progress.
-	StatusAuthenticating
-	// StatusAuthenticated means the user is authenticated.
-	StatusAuthenticated
-)
-
 // Service provides a wrapper around the RTM client with additional functionality.
 type Service struct {
 	client       *Client
 	authStatus   Status
-	authFlows    map[string]*Flow
+	authFlows    map[string]*AuthFlow // Changed from Flow to AuthFlow
 	lastRefresh  time.Time
 	timeline     string
 	mu           sync.Mutex
@@ -58,7 +37,7 @@ func NewService(apiKey, sharedSecret, permission string, tokenRefresh int) *Serv
 	return &Service{
 		client:       NewClient(apiKey, sharedSecret),
 		authStatus:   StatusUnknown,
-		authFlows:    make(map[string]*Flow),
+		authFlows:    make(map[string]*AuthFlow), // Changed from Flow to AuthFlow
 		permission:   permission,
 		tokenRefresh: tokenRefresh,
 	}
@@ -99,7 +78,7 @@ func (s *Service) StartAuthFlow() (authURL, frob string, err error) {
 	authURL = s.client.GetAuthURL(frob, s.permission)
 
 	// Store the authentication flow.
-	s.authFlows[frob] = &Flow{
+	s.authFlows[frob] = &AuthFlow{ // Changed from Flow to AuthFlow
 		Frob:       frob,
 		AuthURL:    authURL,
 		StartTime:  time.Now(),
@@ -169,7 +148,7 @@ func (s *Service) CleanupExpiredFlows() {
 }
 
 // GetAllLists returns all RTM lists.
-func (s *Service) GetAllLists() (List, error) {
+func (s *Service) GetAllLists() ([]List, error) { // Changed return type to make it clearer
 	// Check authentication.
 	if s.GetAuthStatus() != StatusAuthenticated {
 		// SUGGESTION (Readability): Added "GetAllLists:" prefix for context.
@@ -187,7 +166,7 @@ func (s *Service) GetAllLists() (List, error) {
 	var result struct {
 		XMLName xml.Name `xml:"rsp"`
 		Lists   struct {
-			ListList `xml:"list"`
+			List []List `xml:"list"` // Fixed the XML structure
 		} `xml:"lists"`
 	}
 
@@ -215,7 +194,7 @@ func (s *Service) ClearAuthentication() error {
 	s.client.SetAuthToken("")
 	s.timeline = ""
 	s.lastRefresh = time.Time{}
-	s.authFlows = make(map[string]*Flow)
+	s.authFlows = make(map[string]*AuthFlow) // Changed from Flow to AuthFlow
 
 	return nil
 }
@@ -233,5 +212,3 @@ func (s *Service) formatTaskPriority(priority string) string {
 		return "None"
 	}
 }
-
-// ErrorMsgEnhanced:2024-03-17

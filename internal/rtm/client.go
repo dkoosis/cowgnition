@@ -1,5 +1,4 @@
-// ==START OF FILE SECTION client.go PART 1/1==
-// Package rtm provides integration with the Remember The Milk API.
+// Package rtm provides client functionality for the Remember The Milk API.
 package rtm
 
 import (
@@ -55,7 +54,7 @@ func (c *Client) GetAuthURL(frob, perms string) string {
 // generateSignature creates an API signature for the given parameters.
 func (c *Client) generateSignature(params url.Values) string {
 	// Extract keys and sort them
-	keys := make(string, 0, len(params))
+	keys := make([]string, 0, len(params))
 	for k := range params {
 		keys = append(keys, k)
 	}
@@ -70,12 +69,12 @@ func (c *Client) generateSignature(params url.Values) string {
 	}
 
 	// Calculate MD5 hash
-	hash := md5.Sum(byte(sb.String()))
+	hash := md5.Sum([]byte(sb.String()))
 	return fmt.Sprintf("%x", hash)
 }
 
 // callMethod calls an RTM API method with the provided parameters.
-func (c *Client) callMethod(method string, params url.Values) (byte, error) {
+func (c *Client) callMethod(method string, params url.Values) ([]byte, error) {
 	// Add required parameters
 	if params == nil {
 		params = url.Values{}
@@ -125,7 +124,7 @@ func (c *Client) callMethod(method string, params url.Values) (byte, error) {
 }
 
 // checkResponseForError checks if the RTM API response contains an error.
-func (c *Client) checkResponseForError(response byte) error {
+func (c *Client) checkResponseForError(response []byte) error {
 	var respStruct struct {
 		Stat string `xml:"stat,attr"`
 		Err  struct {
@@ -229,16 +228,13 @@ func (c *Client) CreateTimeline() (string, error) {
 }
 
 // GetLists gets all lists from the RTM API.
-func (c *Client) GetLists() (byte, error) {
+func (c *Client) GetLists() ([]byte, error) {
 	return c.callMethod("rtm.lists.getList", nil)
 }
 
 // GetTasks gets tasks from the RTM API with optional filtering.
-func (c *Client) GetTasks(listID, filter string) (byte, error) {
+func (c *Client) GetTasks(filter string) ([]byte, error) {
 	params := url.Values{}
-	if listID != "" {
-		params.Set("list_id", listID)
-	}
 	if filter != "" {
 		params.Set("filter", filter)
 	}
@@ -247,7 +243,7 @@ func (c *Client) GetTasks(listID, filter string) (byte, error) {
 }
 
 // AddTask adds a new task to the specified list.
-func (c *Client) AddTask(timeline, name, listID string) (byte, error) {
+func (c *Client) AddTask(timeline, name, listID string) ([]byte, error) {
 	params := url.Values{}
 	params.Set("timeline", timeline)
 	params.Set("name", name)
@@ -259,7 +255,7 @@ func (c *Client) AddTask(timeline, name, listID string) (byte, error) {
 }
 
 // CompleteTask marks a task as complete.
-func (c *Client) CompleteTask(timeline, listID, taskseriesID, taskID string) (byte, error) {
+func (c *Client) CompleteTask(timeline, listID, taskseriesID, taskID string) ([]byte, error) {
 	params := url.Values{}
 	params.Set("timeline", timeline)
 	params.Set("list_id", listID)
@@ -270,7 +266,7 @@ func (c *Client) CompleteTask(timeline, listID, taskseriesID, taskID string) (by
 }
 
 // DeleteTask deletes a task.
-func (c *Client) DeleteTask(timeline, listID, taskseriesID, taskID string) (byte, error) {
+func (c *Client) DeleteTask(timeline, listID, taskseriesID, taskID string) ([]byte, error) {
 	params := url.Values{}
 	params.Set("timeline", timeline)
 	params.Set("list_id", listID)
@@ -281,7 +277,7 @@ func (c *Client) DeleteTask(timeline, listID, taskseriesID, taskID string) (byte
 }
 
 // SetTaskDueDate sets the due date for a task.
-func (c *Client) SetTaskDueDate(timeline, listID, taskseriesID, taskID, due string) (byte, error) {
+func (c *Client) SetTaskDueDate(timeline, listID, taskseriesID, taskID, due string) ([]byte, error) {
 	params := url.Values{}
 	params.Set("timeline", timeline)
 	params.Set("list_id", listID)
@@ -293,7 +289,7 @@ func (c *Client) SetTaskDueDate(timeline, listID, taskseriesID, taskID, due stri
 }
 
 // SetTaskPriority sets the priority for a task.
-func (c *Client) SetTaskPriority(timeline, listID, taskseriesID, taskID, priority string) (byte, error) {
+func (c *Client) SetTaskPriority(timeline, listID, taskseriesID, taskID, priority string) ([]byte, error) {
 	params := url.Values{}
 	params.Set("timeline", timeline)
 	params.Set("list_id", listID)
@@ -305,7 +301,7 @@ func (c *Client) SetTaskPriority(timeline, listID, taskseriesID, taskID, priorit
 }
 
 // AddTags adds tags to a task.
-func (c *Client) AddTags(timeline, listID, taskseriesID, taskID, tags string) (byte, error) {
+func (c *Client) AddTags(timeline, listID, taskseriesID, taskID, tags string) ([]byte, error) {
 	params := url.Values{}
 	params.Set("timeline", timeline)
 	params.Set("list_id", listID)
@@ -317,7 +313,7 @@ func (c *Client) AddTags(timeline, listID, taskseriesID, taskID, tags string) (b
 }
 
 // RemoveTags removes tags from a task.
-func (c *Client) RemoveTags(timeline, listID, taskseriesID, taskID, tags string) (byte, error) {
+func (c *Client) RemoveTags(timeline, listID, taskseriesID, taskID, tags string) ([]byte, error) {
 	params := url.Values{}
 	params.Set("timeline", timeline)
 	params.Set("list_id", listID)
@@ -329,8 +325,6 @@ func (c *Client) RemoveTags(timeline, listID, taskseriesID, taskID, tags string)
 }
 
 // GetTags gets all tags from the RTM API.
-func (c *Client) GetTags() (byte, error) {
+func (c *Client) GetTags() ([]byte, error) {
 	return c.callMethod("rtm.tags.getList", nil)
 }
-
-// ErrorMsgEnhanced:2024-03-18
