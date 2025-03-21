@@ -122,6 +122,28 @@ func (s *Service) ClearAuthentication() error {
 	return nil
 }
 
+// CreateTimeline creates a new timeline for operations.
+// Returns the timeline ID or an error if creation fails.
+func (s *Service) CreateTimeline() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// If we already have a timeline, return it
+	if s.timeline != "" {
+		return s.timeline, nil
+	}
+
+	// Create a new timeline via the client
+	timeline, err := s.client.CreateTimeline()
+	if err != nil {
+		return "", fmt.Errorf("CreateTimeline: error creating timeline: %w", err)
+	}
+
+	// Store the timeline and return it
+	s.timeline = timeline
+	return timeline, nil
+}
+
 // GetLists returns all RTM lists.
 func (s *Service) GetLists() ([]List, error) {
 	// Check authentication.
