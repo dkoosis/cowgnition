@@ -66,3 +66,15 @@ type AuthFlow struct {
 	Permission Permission
 	ExpiresAt  time.Time
 }
+
+// List represents a list in Remember The Milk.
+type List struct {
+	ID       string `xml:"id,attr"`
+	Name     string `xml:"name,attr"`
+	Deleted  string `xml:"deleted,attr"`
+	Locked   string `xml:"locked,attr"`
+	Archived string `xml:"archived,attr"`
+	Position string `xml:"position,attr"`
+	Smart    string `xml:"smart,attr"`
+	Filter   string `xml:"filter,omitempty"`
+}

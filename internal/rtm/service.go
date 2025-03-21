@@ -306,3 +306,22 @@ func (s *Service) FormatTaskPriority(priority string) string {
 		return "None"
 	}
 }
+
+// GetAuthStatus returns the current authentication status.
+func (s *Service) GetAuthStatus() Status {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.authStatus
+}
+
+// IsAuthenticated returns true if the user is authenticated.
+func (s *Service) IsAuthenticated() bool {
+	return s.GetAuthStatus() == StatusAuthenticated
+}
+
+// GetActiveAuthFlows returns the number of active authentication flows.
+func (s *Service) GetActiveAuthFlows() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.authFlows)
+}
