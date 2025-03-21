@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -361,4 +362,89 @@ type APIError struct {
 // Error implements the error interface for APIError.
 func (e APIError) Error() string {
 	return fmt.Sprintf("RTM API error %d: %s", e.Code, e.Message)
+}
+
+// Do executes an API request with the given parameters and unmarshals the result.
+func (c *Client) Do(params url.Values, result interface{}) ([]byte, error) {
+	// Add required parameters
+	if params == nil {
+		params = url.Values{}
+	}
+
+	// Add API key and format
+	params.Set("api_key", c.APIKey)
+	params.Set("format", "rest")
+
+	// Add authentication token if available
+	if c.AuthToken != "" {
+		params.Set("auth_token", c.AuthToken)
+	}
+
+	// Generate signature
+	apiSig := c.generateSignature(params)
+	params.Set("api_sig", apiSig)
+
+	// Determine request method
+	var req *http.Request
+	var err error
+	if c.usePOST {
+		// Create POST request
+		req, err = http.NewRequest(http.MethodPost, c.APIURL, strings.NewReader(params.Encode()))
+		if err != nil {
+			return nil, fmt.Errorf("error creating request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	} else {
+		// Create GET request
+		req, err = http.NewRequest(http.MethodGet, c.APIURL+"?"+params.Encode(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("error creating request: %w", err)
+		}
+	}
+
+	// Send request
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error sending request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check HTTP status
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP error: status code %d (HTTP status: %d)",
+			resp.StatusCode, resp.StatusCode)
+	}
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response body: %w", err)
+	}
+
+	// Parse response
+	var respStruct Response
+	if err := xml.Unmarshal(body, &respStruct); err != nil {
+		return nil, fmt.Errorf("error parsing response: %w", err)
+	}
+
+	// Check for API errors
+	if respStruct.Status == statusFail && respStruct.Error != nil {
+		code, err := strconv.Atoi(respStruct.Error.Code)
+		if err != nil {
+			code = 0
+		}
+		return nil, APIError{
+			Code:    code,
+			Message: respStruct.Error.Message,
+		}
+	}
+
+	// Unmarshal into result if provided
+	if result != nil {
+		if err := xml.Unmarshal(body, result); err != nil {
+			return nil, fmt.Errorf("error unmarshaling response: %w", err)
+		}
+	}
+
+	return body, nil
 }

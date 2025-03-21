@@ -3,7 +3,6 @@ package server
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -27,12 +26,12 @@ func (s *MCPServer) handleTasksResource(filter string) (string, error) {
 	// Process each list
 	for _, list := range tasksResp.Tasks.List {
 		// Skip empty lists
-		if len(list.Taskseries) == 0 {
+		if len(list.TaskSeries) == 0 {
 			continue
 		}
 
 		// Process each task series in the list
-		for _, ts := range list.Taskseries {
+		for _, ts := range list.TaskSeries {
 			for _, task := range ts.Tasks {
 				// Skip deleted tasks
 				if task.Deleted != "" {
@@ -126,56 +125,6 @@ func (s *MCPServer) handleListsResource() (string, error) {
 			list.ID,
 			listType,
 			archived))
-	}
-
-	return sb.String(), nil
-}
-
-// handleTagsResource retrieves and formats tags.
-func (s *MCPServer) handleTagsResource() (string, error) {
-	// Get tasks from RTM to extract tags
-	tasksResp, err := s.rtmService.GetTasks("")
-	if err != nil {
-		return "", fmt.Errorf("error getting tasks for tags: %w", err)
-	}
-
-	// Extract unique tags
-	tagMap := make(map[string]int)
-
-	for _, list := range tasksResp.Tasks.List {
-		for _, ts := range list.Taskseries {
-			for _, tag := range ts.Tags.Tag {
-				if tag != "" {
-					tagMap[tag]++
-				}
-			}
-		}
-	}
-
-	// Format tags for display
-	var sb strings.Builder
-	sb.WriteString("# Tags\n\n")
-
-	if len(tagMap) == 0 {
-		sb.WriteString("No tags found.\n")
-		return sb.String(), nil
-	}
-
-	// Sort tags alphabetically
-	tags := make([]string, 0, len(tagMap))
-	for tag := range tagMap {
-		tags = append(tags, tag)
-	}
-	sort.Strings(tags)
-
-	// Process each tag
-	for _, tag := range tags {
-		count := tagMap[tag]
-		sb.WriteString(fmt.Sprintf("- %s (%d task", tag, count))
-		if count != 1 {
-			sb.WriteString("s")
-		}
-		sb.WriteString(")\n")
 	}
 
 	return sb.String(), nil

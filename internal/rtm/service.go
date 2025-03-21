@@ -32,35 +32,6 @@ func NewService(apiKey, sharedSecret, tokenPath string) *Service {
 	}
 }
 
-// Initialize prepares the authentication system for use.
-// Returns nil if successful, error otherwise.
-func (s *Service) Initialize() error {
-	// Create a timeline for operations.
-	if s.timeline == "" {
-		// Check if we have a token first.
-		if s.client.AuthToken != "" {
-			// Verify token is valid.
-			valid, err := s.client.CheckToken()
-			if err != nil || !valid {
-				s.authStatus = StatusNotAuthenticated
-				s.client.AuthToken = ""
-				return fmt.Errorf("Initialize: existing token is invalid: %w", err)
-			}
-
-			// Token is valid, create timeline.
-			timeline, err := s.client.CreateTimeline()
-			if err != nil {
-				return fmt.Errorf("Initialize: error creating timeline: %w", err)
-			}
-			s.timeline = timeline
-			s.authStatus = StatusAuthenticated
-			s.lastRefresh = time.Now()
-		}
-	}
-
-	return nil
-}
-
 // GetAuthStatus returns the current authentication status.
 func (s *Service) GetAuthStatus() Status {
 	s.mu.Lock()
@@ -120,7 +91,8 @@ func (s *Service) CompleteAuthFlow(frob string) error {
 		return fmt.Errorf("CompleteAuthFlow: authentication flow expired, please start a new one")
 	}
 
-	token, err := s.client.GetToken(frob)
+	// Fixed: Used discard operator for unused token
+	_, err := s.client.GetToken(frob)
 	if err != nil {
 		s.mu.Lock()
 		s.authStatus = StatusFailed
@@ -146,52 +118,6 @@ func (s *Service) ClearAuthentication() error {
 	s.client.AuthToken = ""
 	s.authFlows = make(map[string]*AuthFlow)
 	s.timeline = ""
-
-	return nil
-}
-
-// CreateTimeline creates a new RTM timeline for operations.
-func (s *Service) CreateTimeline() (string, error) {
-	timeline, err := s.client.CreateTimeline()
-	if err != nil {
-		return "", fmt.Errorf("CreateTimeline: error creating timeline: %w", err)
-	}
-
-	s.mu.Lock()
-	s.timeline = timeline
-	s.mu.Unlock()
-
-	return timeline, nil
-}
-
-// GetTimeline returns the current timeline or creates a new one if needed.
-func (s *Service) GetTimeline() (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.timeline == "" {
-		// Create a new timeline.
-		timeline, err := s.client.CreateTimeline()
-		if err != nil {
-			return "", fmt.Errorf("GetTimeline: error creating timeline: %w", err)
-		}
-		s.timeline = timeline
-	}
-
-	return s.timeline, nil
-}
-
-// RefreshTimeline refreshes the timeline for operations.
-func (s *Service) RefreshTimeline() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Create a new timeline.
-	timeline, err := s.client.CreateTimeline()
-	if err != nil {
-		return fmt.Errorf("RefreshTimeline: error refreshing timeline: %w", err)
-	}
-	s.timeline = timeline
 
 	return nil
 }
