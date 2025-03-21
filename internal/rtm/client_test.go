@@ -1,3 +1,4 @@
+// Package rtm provides client functionality for the Remember The Milk API.
 package rtm
 
 import (
@@ -112,10 +113,9 @@ func TestGetFrob(t *testing.T) {
 	server := setupMockServer(t, "rtm.auth.getFrob", mockResp)
 	defer server.Close()
 
-	// Create client with baseURL pointing to mock server
-	// Pass server.URL directly to the client.
+	// Create client with APIURL pointing to mock server
 	client := NewClient("api_key_123", "shared_secret_abc")
-	client.baseURL = server.URL // Directly set the client's baseURL
+	client.APIURL = server.URL // Changed from baseURL to APIURL
 
 	// Test GetFrob
 	frob, err := client.GetFrob()
@@ -145,7 +145,7 @@ func TestGetToken(t *testing.T) {
 
 	// Create client, passing the mock server URL directly
 	client := NewClient("api_key_123", "shared_secret_abc")
-	client.baseURL = server.URL
+	client.APIURL = server.URL // Changed from baseURL to APIURL
 
 	// Test GetToken
 	token, err := client.GetToken("test_frob_123")
@@ -182,7 +182,7 @@ func TestCheckToken(t *testing.T) {
 	// Create client, passing the mock server URL directly
 	client := NewClient("api_key_123", "shared_secret_abc")
 	client.SetAuthToken("test_token_abc")
-	client.baseURL = server.URL // Set the baseURL
+	client.APIURL = server.URL // Changed from baseURL to APIURL
 
 	// Test CheckToken
 	valid, err := client.CheckToken()
@@ -208,7 +208,7 @@ func TestCheckToken(t *testing.T) {
 	// to avoid state leaking between tests.
 	clientErr := NewClient("api_key_123", "shared_secret_abc")
 	clientErr.SetAuthToken("test_token_abc") // Use a consistent token
-	clientErr.baseURL = serverErr.URL        // Set baseURL to the error server
+	clientErr.APIURL = serverErr.URL         // Changed from baseURL to APIURL
 
 	// Test CheckToken with invalid token
 	valid, _ = clientErr.CheckToken() // Use blank identifier to ignore the error
@@ -273,7 +273,7 @@ func TestDo(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient("api_key_123", "shared_secret_abc")
-		client.baseURL = server.URL
+		client.APIURL = server.URL // Changed from baseURL to APIURL
 
 		params := url.Values{}
 		params.Set("method", "rtm.test.echo")
@@ -301,7 +301,7 @@ func TestDo(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient("api_key_123", "shared_secret_abc")
-		client.baseURL = server.URL
+		client.APIURL = server.URL // Changed from baseURL to APIURL
 
 		params := url.Values{}
 		params.Set("method", "rtm.test.echo")
@@ -338,7 +338,7 @@ func TestDo(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient("api_key_123", "shared_secret_abc")
-		client.baseURL = server.URL
+		client.APIURL = server.URL // Changed from baseURL to APIURL
 
 		params := url.Values{}
 		params.Set("method", "rtm.test.echo")
@@ -364,7 +364,7 @@ func TestDo(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient("api_key_123", "shared_secret_abc")
-		client.baseURL = server.URL
+		client.APIURL = server.URL // Changed from baseURL to APIURL
 
 		params := url.Values{}
 		params.Set("method", "rtm.test.echo")
@@ -405,8 +405,8 @@ func TestDo(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient("api_key_123", "shared_secret_abc")
-		client.baseURL = server.URL
-		client.usePOST = true // Enable POST
+		client.APIURL = server.URL // Changed from baseURL to APIURL
+		client.usePOST = true      // Enable POST
 
 		params := url.Values{}
 		params.Set("method", "rtm.test.echo")
@@ -455,8 +455,8 @@ func TestDo(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient("api_key_123", "shared_secret_abc")
-		client.baseURL = server.URL
-		client.usePOST = true // Ensure POST is used
+		client.APIURL = server.URL // Changed from baseURL to APIURL
+		client.usePOST = true      // Ensure POST is used
 
 		params := url.Values{}
 		params.Set("method", "rtm.photos.upload")
@@ -495,7 +495,7 @@ func TestDo(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient("api_key_123", "shared_secret_abc")
-		client.baseURL = server.URL
+		client.APIURL = server.URL // Changed from baseURL to APIURL
 		client.usePOST = true
 
 		params := url.Values{}
@@ -537,7 +537,7 @@ func TestDo(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient("api_key_123", "shared_secret_abc")
-		client.baseURL = server.URL
+		client.APIURL = server.URL // Changed from baseURL to APIURL
 		client.usePOST = true
 
 		params := url.Values{}
@@ -575,7 +575,7 @@ func TestDo(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient("api_key_123", "shared_secret_abc")
-		client.baseURL = server.URL
+		client.APIURL = server.URL // Changed from baseURL to APIURL
 		client.usePOST = true
 
 		params := url.Values{}

@@ -1,14 +1,11 @@
-// ==START OF FILE SECTION server.go PART 1/1==
 // Package server implements the Model Context Protocol server for RTM integration.
 package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/cowgnition/cowgnition/internal/auth"
@@ -121,74 +118,6 @@ func (s *MCPServer) GetUptime() time.Duration {
 	return time.Since(s.startTime)
 }
 
-// handleHealthCheck provides a simple health check endpoint.
-func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
-	// Check if RTM service is healthy
-	if s.rtmService == nil {
-		// SUGGESTION (Readability): Improved health check error message.
-		http.Error(w, "handleHealthCheck: RTM service not initialized", http.StatusServiceUnavailable)
-		return
-	}
-
-	// Return simple health check response
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	// Check the Write error to satisfy linter
-	if _, err := w.Write(byte(`{"status":"healthy"}`)); err != nil {
-		log.Printf("Error writing health check response: %v", err)
-	}
-}
-
-// handleStatusCheck provides detailed status information for monitoring.
-func (s *MCPServer) handleStatusCheck(w http.ResponseWriter, r *http.Request) {
-	// Only allow access from localhost or if a special header is present
-	clientIP := r.RemoteAddr
-	if !strings.HasPrefix(clientIP, "127.0.0.1") && !strings.HasPrefix(clientIP, "[::1]") &&
-		r.Header.Get("X-Status-Secret") != s.config.Server.StatusSecret {
-		// SUGGESTION (Readability): Improved status check error message.
-		http.Error(w, "handleStatusCheck: Forbidden", http.StatusForbidden)
-		return
-	}
-
-	// Gather status information
-	status := map[string]interface{}{
-		"server": map[string]interface{}{
-			"name":        s.config.Server.Name,
-			"version":     s.version,
-			"uptime":      s.GetUptime().String(),
-			"started_at":  s.startTime.Format(time.RFC3339),
-			"instance_id": s.instanceID,
-		},
-		"auth": map[string]interface{}{
-			"status":        s.rtmService.GetAuthStatus(),
-			"authenticated": s.rtmService.IsAuthenticated(),
-			"pending_flows": s.rtmService.GetActiveAuthFlows(),
-		},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(status); err != nil {
-		log.Printf("Error encoding status response: %v", err)
-		// SUGGESTION (Readability): Improved encoding error message.
-		http.Error(w, "handleStatusCheck: Error encoding JSON response", http.StatusInternalServerError)
-	}
-}
-
-// handleSendNotification is a placeholder for notification support.
-// The MCP spec may evolve to include proper notification support.
-func (s *MCPServer) handleSendNotification(w http.ResponseWriter, r *http.Request) {
-	// Currently, we don't support notifications, so return appropriate error
-	if r.Method != http.MethodPost {
-		// SUGGESTION (Readability): Clarified method not allowed message.
-		writeErrorResponse(w, http.StatusMethodNotAllowed, "handleSendNotification: Method not allowed. Must use POST for this endpoint.")
-		return
-	}
-
-	// Return unsupported operation for now
-	writeErrorResponse(w, http.StatusNotImplemented, "Notifications not yet supported")
-}
-
 // GetVersion returns the server version.
 func (s *MCPServer) GetVersion() string {
 	return s.version
@@ -203,23 +132,3 @@ func (s *MCPServer) SetVersion(version string) {
 func (s *MCPServer) GetRTMService() *rtm.Service {
 	return s.rtmService
 }
-
-// corsMiddleware adds CORS headers for development scenarios.
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Add CORS headers for development
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		// Handle preflight requests
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-// ErrorMsgEnhanced:2024-03-18

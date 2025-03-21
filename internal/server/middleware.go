@@ -66,24 +66,6 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// requestIDMiddleware adds a unique request ID to each request.
-func requestIDMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Generate a request ID (in a production system, use a proper UUID)
-		requestID := fmt.Sprintf("%d", time.Now().UnixNano())
-
-		// Add request ID to response headers
-		w.Header().Set("X-Request-ID", requestID)
-
-		// Pass request ID in context
-		ctx := r.Context()
-		// In a real implementation, we would use context.WithValue here
-
-		// Call the next handler with the updated context
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
 // responseInterceptor wraps an http.ResponseWriter to capture the status code.
 type responseInterceptor struct {
 	http.ResponseWriter
