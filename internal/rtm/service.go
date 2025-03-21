@@ -21,70 +21,179 @@ type Service struct {
 	tokenRefresh int
 }
 
-// TasksResponse represents the response from the rtm.tasks.getList API method.
-type TasksResponse struct {
-	List []TaskList `xml:"list"`
-}
-
-// TaskList represents a list of tasks in the RTM API response.
-type TaskList struct {
-	ID         string       `xml:"id,attr"`
-	TaskSeries []TaskSeries `xml:"taskseries"`
-}
-
-// TaskSeries represents a series of tasks in RTM.
-type TaskSeries struct {
-	ID       string `xml:"id,attr"`
-	Created  string `xml:"created,attr"`
-	Modified string `xml:"modified,attr"`
-	Name     string `xml:"name,attr"`
-	Source   string `xml:"source,attr"`
-	Tags     Tags   `xml:"tags"`
-	Notes    Notes  `xml:"notes"`
-	Tasks    []Task `xml:"task"`
-}
-
-// Tags represents a collection of tags.
-type Tags struct {
-	Tag []string `xml:"tag"`
-}
-
-// Notes represents a collection of notes.
-type Notes struct {
-	Note []Note `xml:"note"`
-}
-
-// Note represents a note on a task.
-type Note struct {
-	ID       string `xml:"id,attr"`
-	Created  string `xml:"created,attr"`
-	Modified string `xml:"modified,attr"`
-	Title    string `xml:"title,attr"`
-	Text     string `xml:",chardata"`
-}
-
-// Task represents a task in RTM.
-type Task struct {
-	ID         string `xml:"id,attr"`
-	Due        string `xml:"due,attr"`
-	HasDueTime string `xml:"has_due_time,attr"`
-	Added      string `xml:"added,attr"`
-	Completed  string `xml:"completed,attr"`
-	Deleted    string `xml:"deleted,attr"`
-	Priority   string `xml:"priority,attr"`
-	Postponed  string `xml:"postponed,attr"`
-	Estimate   string `xml:"estimate,attr"`
-}
-
-// NewService creates a new RTM service with the provided client.
-func NewService(apiKey, sharedSecret, permission string, tokenRefresh int) *Service {
+// NewService creates a new RTM service.
+func NewService(apiKey, sharedSecret, tokenPath string) *Service {
 	return &Service{
 		client:       NewClient(apiKey, sharedSecret),
 		authStatus:   StatusUnknown,
 		authFlows:    make(map[string]*AuthFlow),
-		permission:   permission,
-		tokenRefresh: tokenRefresh,
+		permission:   string(PermDelete),
+		tokenRefresh: 24, // Default 24 hours
 	}
+}
+
+// Initialize prepares the authentication system for use.
+// Returns nil if successful, error otherwise.
+func (s *Service) Initialize() error {
+	// Create a timeline for operations.
+	if s.timeline == "" {
+		// Check if we have a token first.
+		if s.client.AuthToken != "" {
+			// Verify token is valid.
+			valid, err := s.client.CheckToken()
+			if err != nil || !valid {
+				s.authStatus = StatusNotAuthenticated
+				s.client.AuthToken = ""
+				return fmt.Errorf("Initialize: existing token is invalid: %w", err)
+			}
+
+			// Token is valid, create timeline.
+			timeline, err := s.client.CreateTimeline()
+			if err != nil {
+				return fmt.Errorf("Initialize: error creating timeline: %w", err)
+			}
+			s.timeline = timeline
+			s.authStatus = StatusAuthenticated
+			s.lastRefresh = time.Now()
+		}
+	}
+
+	return nil
+}
+
+// GetAuthStatus returns the current authentication status.
+func (s *Service) GetAuthStatus() Status {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.authStatus
+}
+
+// IsAuthenticated returns true if the user is authenticated.
+func (s *Service) IsAuthenticated() bool {
+	return s.GetAuthStatus() == StatusAuthenticated
+}
+
+// GetActiveAuthFlows returns the number of active authentication flows.
+func (s *Service) GetActiveAuthFlows() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.authFlows)
+}
+
+// StartAuthFlow begins a new authentication flow.
+func (s *Service) StartAuthFlow() (string, string, error) {
+	frob, err := s.client.GetFrob()
+	if err != nil {
+		return "", "", fmt.Errorf("StartAuthFlow: error getting frob: %w", err)
+	}
+
+	authURL := s.client.GetAuthURL(frob, s.permission)
+
+	s.mu.Lock()
+	s.authStatus = StatusAuthenticating
+	s.authFlows[frob] = &AuthFlow{
+		Frob:       frob,
+		AuthURL:    authURL,
+		StartTime:  time.Now(),
+		Permission: Permission(s.permission),
+		ExpiresAt:  time.Now().Add(24 * time.Hour),
+	}
+	s.mu.Unlock()
+
+	return authURL, frob, nil
+}
+
+// CompleteAuthFlow completes an authentication flow with the given frob.
+func (s *Service) CompleteAuthFlow(frob string) error {
+	s.mu.Lock()
+	flow, exists := s.authFlows[frob]
+	s.mu.Unlock()
+
+	if !exists {
+		return fmt.Errorf("CompleteAuthFlow: invalid frob, not found in active authentication flows")
+	}
+
+	if time.Now().After(flow.ExpiresAt) {
+		s.mu.Lock()
+		delete(s.authFlows, frob)
+		s.mu.Unlock()
+		return fmt.Errorf("CompleteAuthFlow: authentication flow expired, please start a new one")
+	}
+
+	token, err := s.client.GetToken(frob)
+	if err != nil {
+		s.mu.Lock()
+		s.authStatus = StatusFailed
+		s.mu.Unlock()
+		return fmt.Errorf("CompleteAuthFlow: error getting token: %w", err)
+	}
+
+	s.mu.Lock()
+	delete(s.authFlows, frob)
+	s.authStatus = StatusAuthenticated
+	s.lastRefresh = time.Now()
+	s.mu.Unlock()
+
+	return nil
+}
+
+// ClearAuthentication clears all authentication data.
+func (s *Service) ClearAuthentication() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.authStatus = StatusNotAuthenticated
+	s.client.AuthToken = ""
+	s.authFlows = make(map[string]*AuthFlow)
+	s.timeline = ""
+
+	return nil
+}
+
+// CreateTimeline creates a new RTM timeline for operations.
+func (s *Service) CreateTimeline() (string, error) {
+	timeline, err := s.client.CreateTimeline()
+	if err != nil {
+		return "", fmt.Errorf("CreateTimeline: error creating timeline: %w", err)
+	}
+
+	s.mu.Lock()
+	s.timeline = timeline
+	s.mu.Unlock()
+
+	return timeline, nil
+}
+
+// GetTimeline returns the current timeline or creates a new one if needed.
+func (s *Service) GetTimeline() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.timeline == "" {
+		// Create a new timeline.
+		timeline, err := s.client.CreateTimeline()
+		if err != nil {
+			return "", fmt.Errorf("GetTimeline: error creating timeline: %w", err)
+		}
+		s.timeline = timeline
+	}
+
+	return s.timeline, nil
+}
+
+// RefreshTimeline refreshes the timeline for operations.
+func (s *Service) RefreshTimeline() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Create a new timeline.
+	timeline, err := s.client.CreateTimeline()
+	if err != nil {
+		return fmt.Errorf("RefreshTimeline: error refreshing timeline: %w", err)
+	}
+	s.timeline = timeline
+
+	return nil
 }
 
 // GetLists returns all RTM lists.
@@ -274,7 +383,7 @@ func (s *Service) GetTags() ([]string, error) {
 
 	// Extract unique tags.
 	tagMap := make(map[string]bool)
-	for _, list := range tasksResp.List {
+	for _, list := range tasksResp.Tasks.List {
 		for _, ts := range list.TaskSeries {
 			for _, tag := range ts.Tags.Tag {
 				if tag != "" {
@@ -305,23 +414,4 @@ func (s *Service) FormatTaskPriority(priority string) string {
 	default:
 		return "None"
 	}
-}
-
-// GetAuthStatus returns the current authentication status.
-func (s *Service) GetAuthStatus() Status {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.authStatus
-}
-
-// IsAuthenticated returns true if the user is authenticated.
-func (s *Service) IsAuthenticated() bool {
-	return s.GetAuthStatus() == StatusAuthenticated
-}
-
-// GetActiveAuthFlows returns the number of active authentication flows.
-func (s *Service) GetActiveAuthFlows() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.authFlows)
 }
