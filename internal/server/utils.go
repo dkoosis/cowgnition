@@ -220,32 +220,3 @@ func formatTags(tags []string) string {
 
 	return fmt.Sprintf("[%s]", strings.Join(tags, ", "))
 }
-
-// parseTagArgument extracts tags from the tags argument, which can be a string or array.
-func parseTagArgument(tagsArg interface{}) ([]string, error) {
-	var tags []string
-
-	// Handle different tag formats
-	switch t := tagsArg.(type) {
-	case []interface{}:
-		for _, tagItem := range t {
-			if tagStr, ok := tagItem.(string); ok && tagStr != "" {
-				tags = append(tags, tagStr)
-			}
-		}
-	case string:
-		if t != "" {
-			tags = append(tags, t)
-		}
-	case nil:
-		return nil, fmt.Errorf("missing 'tags' argument")
-	default:
-		return nil, fmt.Errorf("invalid 'tags' argument type")
-	}
-
-	if len(tags) == 0 {
-		return nil, fmt.Errorf("no valid tags provided")
-	}
-
-	return tags, nil
-}
