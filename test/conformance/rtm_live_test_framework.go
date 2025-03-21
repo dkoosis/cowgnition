@@ -12,12 +12,10 @@ import (
 	"github.com/cowgnition/cowgnition/test/helpers"
 )
 
-// Import and use functions from mcp_live_resource_test.go
+// Import and use functions from the helpers package
 var (
-	// These variables will reference the functions from mcp_live_resource_test.go
-	// that have the same signature
-	readResourceFn = readResource
-	callToolFn     = callTool
+	readResourceFn = helpers.ReadResource
+	callToolFn     = helpers.CallTool
 )
 
 // RTMLiveTestFramework provides a framework for running tests with the real RTM API.

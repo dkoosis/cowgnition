@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -84,129 +83,6 @@ func formatDate(dateStr string) string {
 
 	// Default format
 	return t.Format("Jan 2")
-}
-
-// validateResourceName checks if a resource name is valid.
-func validateResourceName(name string) bool {
-	validResources := map[string]bool{
-		"auth://rtm":       true,
-		"tasks://all":      true,
-		"tasks://today":    true,
-		"tasks://tomorrow": true,
-		"tasks://week":     true,
-		"lists://all":      true,
-		"tags://all":       true,
-	}
-
-	// Direct match
-	if validResources[name] {
-		return true
-	}
-
-	// Pattern match for paths with parameters
-	if len(name) > 13 && name[:13] == "tasks://list/" {
-		return true
-	}
-
-	return false
-}
-
-// validateToolName checks if a tool name is valid.
-func validateToolName(name string) bool {
-	validTools := map[string]bool{
-		"authenticate":    true,
-		"add_task":        true,
-		"complete_task":   true,
-		"uncomplete_task": true,
-		"delete_task":     true,
-		"set_due_date":    true,
-		"set_priority":    true,
-		"add_tags":        true,
-		"remove_tags":     true,
-		"add_note":        true,
-		"auth_status":     true,
-		"logout":          true,
-	}
-
-	return validTools[name]
-}
-
-// extractPathParam extracts a path parameter from a resource name.
-// Example: extractPathParam("tasks://list/123", "tasks://list/") returns "123"
-func extractPathParam(name, prefix string) string {
-	if len(name) <= len(prefix) {
-		return ""
-	}
-	return name[len(prefix):]
-}
-
-// formatTaskPriority returns a human-readable priority string.
-func formatTaskPriority(priority string) string {
-	switch priority {
-	case "1":
-		return "High"
-	case "2":
-		return "Medium"
-	case "3":
-		return "Low"
-	default:
-		return "None"
-	}
-}
-
-// coalesceString returns the first non-empty string from the provided arguments.
-// Useful for handling optional parameters with defaults.
-func coalesceString(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-// formatMarkdownTable formats data as a markdown table.
-func formatMarkdownTable(headers []string, rows [][]string) string {
-	if len(headers) == 0 || len(rows) == 0 {
-		return ""
-	}
-
-	var result strings.Builder
-
-	// Add headers
-	result.WriteString("| ")
-	result.WriteString(strings.Join(headers, " | "))
-	result.WriteString(" |\n")
-
-	// Add separator
-	result.WriteString("| ")
-	for range headers {
-		result.WriteString("--- | ")
-	}
-	result.WriteString("\n")
-
-	// Add rows
-	for _, row := range rows {
-		rowData := make([]string, len(headers))
-		copy(rowData, row)
-
-		// Ensure we have the right number of columns
-		for len(rowData) < len(headers) {
-			rowData = append(rowData, "")
-		}
-
-		result.WriteString("| ")
-		result.WriteString(strings.Join(rowData[:len(headers)], " | "))
-		result.WriteString(" |\n")
-	}
-
-	return result.String()
-}
-
-// validateMimeType checks if a MIME type is in a valid format.
-func validateMimeType(mimeType string) bool {
-	mimeRegex := regexp.MustCompile(`^[a-z]+/[a-z0-9\-\.\+]*(;\s?[a-z0-9\-\.]+\s*=\s*[a-z0-9\-\.]+)*$`)
-	return mimeRegex.MatchString(mimeType)
 }
 
 // formatTags formats a list of tags into a string.
