@@ -16,6 +16,50 @@ Replace custom test runner with gotestsum for better test output:
 6. ✅ Remove custom test runner implementation
 ```
 
+#### Reorg
+
+# Project Structure Reorganization (PRIORITY FOCUS)
+
+The current structure has inconsistencies and duplication that create maintenance challenges:
+
+## 1. Utility Package Consolidation
+
+- Move `internal/server/utils.go` functions to appropriate `pkg/util/*` packages
+- Remove duplicate utility functions in:
+  - `internal/server/utils.go` vs. `pkg/util/format/format.go` (`formatMarkdownTable`)
+  - `internal/server/utils.go` vs. `pkg/util/validation/validation.go` (`validateMimeType`)
+  - `internal/server/utils.go` vs. `pkg/util/stringutil/stringutil.go` (`coalesceString`)
+  - `rtm/service.go` vs. `pkg/util/format/format.go` (`FormatTaskPriority`)
+
+## 2. Test Utilities Rationalization
+
+- Consolidate functions between `test/helpers/`, `test/util/testutil/`, and `test/conformance/`
+- Move functions used across packages to `pkg/testutil/`
+- Standardize functions needed in `mcp_live_resource_test.go` and `rtm_live_test_framework.go`
+
+## 3. Package Responsibility Clarification
+
+- `internal/testing/` → Move to `pkg/testutil/` or merge with `test/helpers/`
+- Separate HTTP helpers from MCP-specific test utilities
+- Create clear separation between general utilities and domain-specific ones
+
+## 4. Folder Structure Flattening
+
+- Replace `test/util/testutil/` with `pkg/testutil/`
+- Consider renaming `pkg/util/stringutil` to `pkg/util/strings` for brevity
+- Remove or merge nested test directories
+
+## 5. Implementation Steps
+
+- Create inventory of all utility functions and their locations
+- Identify canonical locations for each function type
+- Move functions to their canonical locations
+- Update imports and references
+- Remove duplicate functions from original locations
+- Add documentation explaining utility package organization
+
+This restructuring will improve maintainability, reduce duplication, and make the codebase more AI-friendly by establishing clear patterns and reducing path depth.
+
 #### 1.2 Testing Framework Setup (IN PROGRESS)
 
 ```
