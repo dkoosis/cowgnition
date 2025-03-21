@@ -22,6 +22,7 @@ type Client struct {
 	AuthToken    string
 	HTTPClient   *http.Client
 	APIURL       string
+	usePOST      bool // Controls whether to use POST or GET for requests.
 }
 
 // NewClient creates a new RTM client with the provided API key and shared secret.
@@ -31,6 +32,7 @@ func NewClient(apiKey, sharedSecret string) *Client {
 		SharedSecret: sharedSecret,
 		HTTPClient:   &http.Client{Timeout: 30 * time.Second},
 		APIURL:       "https://api.rememberthemilk.com/services/rest/",
+		usePOST:      false, // Default to GET requests.
 	}
 }
 
@@ -447,4 +449,118 @@ func (c *Client) Do(params url.Values, result interface{}) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+// SetUsePOST sets whether to use POST for API requests.
+func (c *Client) SetUsePOST(usePOST bool) {
+	c.usePOST = usePOST
+}
+
+// Upload uploads a file to RTM with the given parameters.
+func (c *Client) Upload(params url.Values, fileField, fileName string, fileContent io.Reader) (map[string]interface{}, error) {
+	// Add required parameters
+	if params == nil {
+		params = url.Values{}
+	}
+
+	// Add API key and format
+	params.Set("api_key", c.APIKey)
+	params.Set("format", "rest")
+
+	// Add authentication token if available
+	if c.AuthToken != "" {
+		params.Set("auth_token", c.AuthToken)
+	}
+
+	// Generate signature
+	apiSig := c.generateSignature(params)
+	params.Set("api_sig", apiSig)
+
+	// Create multipart form
+	body := &bytes.Buffer{}
+	writer := http.NewWriter(body)
+
+	// Add form fields
+	for key, values := range params {
+		for _, value := range values {
+			if err := writer.WriteField(key, value); err != nil {
+				return nil, fmt.Errorf("error writing form field: %w", err)
+			}
+		}
+	}
+
+	// Add file
+	part, err := writer.CreateFormFile(fileField, fileName)
+	if err != nil {
+		return nil, fmt.Errorf("error creating form file: %w", err)
+	}
+	if _, err := io.Copy(part, fileContent); err != nil {
+		return nil, fmt.Errorf("error copying file content: %w", err)
+	}
+
+	// Close writer
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("error closing multipart writer: %w", err)
+	}
+
+	// Create request
+	req, err := http.NewRequest(http.MethodPost, c.APIURL, body)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	// Send request
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error sending request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check HTTP status
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP error: status code %d", resp.StatusCode)
+	}
+
+	// Read response body
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response body: %w", err)
+	}
+
+	// Parse response
+	var respStruct Response
+	if err := xml.Unmarshal(respBody, &respStruct); err != nil {
+		return nil, fmt.Errorf("error parsing response: %w", err)
+	}
+
+	// Check for API errors
+	if respStruct.Status == statusFail && respStruct.Error != nil {
+		code, err := strconv.Atoi(respStruct.Error.Code)
+		if err != nil {
+			code = 0
+		}
+		return nil, APIError{
+			Code:    code,
+			Message: respStruct.Error.Message,
+		}
+	}
+
+	// Simple XML to map conversion for the result
+	// In a real implementation, this would be more sophisticated
+	result := make(map[string]interface{})
+	var mapData map[string]interface{}
+	if err := xml.Unmarshal(respBody, &mapData); err != nil {
+		return nil, fmt.Errorf("error unmarshaling response: %w", err)
+	}
+
+	// Extract relevant data
+	// This is a simple implementation; in practice, would need recursive traversal
+	for k, v := range mapData {
+		if k != "stat" && k != "err" {
+			result[k] = v
+		}
+	}
+
+	return result, nil
 }
