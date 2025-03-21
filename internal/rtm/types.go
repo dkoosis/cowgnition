@@ -78,3 +78,60 @@ type List struct {
 	Smart    string `xml:"smart,attr"`
 	Filter   string `xml:"filter,omitempty"`
 }
+
+// TasksResponse represents the response from the rtm.tasks.getList API method.
+type TasksResponse struct {
+	Tasks struct {
+		List []TaskList `xml:"list"`
+	} `xml:"tasks"`
+}
+
+// TaskList represents a list of tasks in the RTM API response.
+type TaskList struct {
+	ID         string       `xml:"id,attr"`
+	TaskSeries []TaskSeries `xml:"taskseries"`
+}
+
+// TaskSeries represents a series of tasks in RTM.
+type TaskSeries struct {
+	ID       string `xml:"id,attr"`
+	Created  string `xml:"created,attr"`
+	Modified string `xml:"modified,attr"`
+	Name     string `xml:"name,attr"`
+	Source   string `xml:"source,attr"`
+	Tags     Tags   `xml:"tags"`
+	Notes    Notes  `xml:"notes"`
+	Tasks    []Task `xml:"task"`
+}
+
+// Tags represents a collection of tags.
+type Tags struct {
+	Tag []string `xml:"tag"`
+}
+
+// Notes represents a collection of notes.
+type Notes struct {
+	Note []Note `xml:"note"`
+}
+
+// Note represents a note on a task.
+type Note struct {
+	ID       string `xml:"id,attr"`
+	Created  string `xml:"created,attr"`
+	Modified string `xml:"modified,attr"`
+	Title    string `xml:"title,attr"`
+	Text     string `xml:",chardata"`
+}
+
+// Task represents a task in RTM.
+type Task struct {
+	ID         string `xml:"id,attr"`
+	Due        string `xml:"due,attr"`
+	HasDueTime string `xml:"has_due_time,attr"`
+	Added      string `xml:"added,attr"`
+	Completed  string `xml:"completed,attr"`
+	Deleted    string `xml:"deleted,attr"`
+	Priority   string `xml:"priority,attr"`
+	Postponed  string `xml:"postponed,attr"`
+	Estimate   string `xml:"estimate,attr"`
+}

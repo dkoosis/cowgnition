@@ -328,3 +328,37 @@ func (c *Client) RemoveTags(timeline, listID, taskseriesID, taskID, tags string)
 func (c *Client) GetTags() ([]byte, error) {
 	return c.callMethod("rtm.tags.getList", nil)
 }
+
+// Response represents a generic RTM API response.
+type Response struct {
+	Status string `xml:"stat,attr"`
+	Error  *struct {
+		Code    string `xml:"code,attr"`
+		Message string `xml:"msg,attr"`
+	} `xml:"err"`
+}
+
+// GetError returns error code and message from a response.
+func (r Response) GetError() (string, string) {
+	if r.Error == nil {
+		return "", ""
+	}
+	return r.Error.Code, r.Error.Message
+}
+
+// Constants for response status.
+const (
+	statusOK   = "ok"
+	statusFail = "fail"
+)
+
+// APIError represents an error returned by the RTM API.
+type APIError struct {
+	Code    int
+	Message string
+}
+
+// Error implements the error interface for APIError.
+func (e APIError) Error() string {
+	return fmt.Sprintf("RTM API error %d: %s", e.Code, e.Message)
+}
