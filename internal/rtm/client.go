@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"sort"
@@ -478,7 +479,7 @@ func (c *Client) Upload(params url.Values, fileField, fileName string, fileConte
 
 	// Create multipart form
 	body := &bytes.Buffer{}
-	writer := http.NewWriter(body)
+	writer := multipart.NewWriter(body) // Fixed: Use multipart.NewWriter instead of http.NewWriter
 
 	// Add form fields
 	for key, values := range params {
