@@ -8,14 +8,14 @@ import (
 	"text/tabwriter"
 )
 
-// FormatMarkdownTable creates a markdown table from headers and rows.
+// MarkdownTable creates a markdown table from headers and rows.
 // Returns an error if headers or rows are empty.
-func FormatMarkdownTable(headers []string, rows [][]string) (string, error) {
+func MarkdownTable(headers []string, rows [][]string) (string, error) {
 	if len(headers) == 0 {
-		return "", fmt.Errorf("FormatMarkdownTable: headers are empty")
+		return "", fmt.Errorf("MarkdownTable: headers are empty")
 	}
 	if len(rows) == 0 {
-		return "", fmt.Errorf("FormatMarkdownTable: rows are empty")
+		return "", fmt.Errorf("MarkdownTable: rows are empty")
 	}
 
 	var buf strings.Builder
@@ -47,9 +47,9 @@ func FormatMarkdownTable(headers []string, rows [][]string) (string, error) {
 	return buf.String(), nil
 }
 
-// FormatTaskPriority formats a task priority code as a human-readable string.
+// TaskPriority formats a task priority code as a human-readable string.
 // RTM uses "1" for highest priority, "N" for no priority.
-func FormatTaskPriority(priority string) string {
+func TaskPriority(priority string) string {
 	switch priority {
 	case "1":
 		return "High"
@@ -64,14 +64,14 @@ func FormatTaskPriority(priority string) string {
 	}
 }
 
-// FormatColumns formats text in evenly-spaced columns using tabwriter.
+// Columns formats text in evenly-spaced columns using tabwriter.
 // Returns an error if headers or rows are empty.
-func FormatColumns(headers []string, rows [][]string) (string, error) {
+func Columns(headers []string, rows [][]string) (string, error) {
 	if len(headers) == 0 {
-		return "", fmt.Errorf("FormatColumns: headers are empty")
+		return "", fmt.Errorf("Columns: headers are empty")
 	}
 	if len(rows) == 0 {
-		return "", fmt.Errorf("FormatColumns: rows are empty")
+		return "", fmt.Errorf("Columns: rows are empty")
 	}
 
 	var buf bytes.Buffer

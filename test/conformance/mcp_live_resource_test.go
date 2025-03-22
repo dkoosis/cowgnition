@@ -150,7 +150,7 @@ func TestMCPResourceLive(t *testing.T) {
 		// or implement a headless browser to complete the flow.
 		fmt.Printf("\n\n")
 		fmt.Printf("┌────────────────────────────────────────────────────────────────────┐\n")
-		fmt.Printf("│                         AUTHENTICATION REQUIRED                     │\n")
+		fmt.Printf("│                         AUTHENTICATION REQUIRED                     │\n")
 		fmt.Printf("└────────────────────────────────────────────────────────────────────┘\n\n")
 		fmt.Printf("To proceed with live testing, please authenticate with Remember The Milk:\n\n")
 		fmt.Printf("1. Open this URL in your browser: %s\n\n", authURL)
@@ -158,7 +158,10 @@ func TestMCPResourceLive(t *testing.T) {
 		fmt.Printf("3. After authorizing, enter any key to continue the test\n\n")
 
 		// Wait for user to authenticate.
-		fmt.Scanln()
+		var input string
+		if _, err := fmt.Scanln(&input); err != nil {
+			t.Logf("Warning: Error reading user input: %v", err)
+		}
 
 		// Now that the user has authenticated, exchange the frob for a token.
 		token, err := rtmClient.GetToken(frob)
@@ -193,7 +196,6 @@ func TestMCPResourceLive(t *testing.T) {
 			t.Logf("Authentication result: %v", result["result"])
 		}
 		t.Logf("Successfully set authentication token on server")
-
 	})
 
 	// Test 2: Test if the server is authenticated.

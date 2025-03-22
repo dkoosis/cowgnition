@@ -12,7 +12,7 @@ import (
 	"github.com/cowgnition/cowgnition/test/helpers"
 )
 
-// Import and use functions from the helpers package
+// Import and use functions from the helpers package.
 var (
 	readResourceFn = helpers.ReadResource
 	callToolFn     = helpers.CallTool
@@ -184,7 +184,10 @@ func (f *RTMLiveTestFramework) RequireAuthenticated(ctx context.Context, interac
 	fmt.Printf("3. After authorizing, enter any key to continue the test\n\n")
 
 	// Wait for user to authenticate.
-	fmt.Scanln()
+	var input string
+	if _, err := fmt.Scanln(&input); err != nil {
+		f.T.Logf("Warning: Error reading user input: %v", err)
+	}
 
 	// Now that the user has authenticated, exchange the frob for a token.
 	token, err := f.RTMClient.GetToken(frob)
