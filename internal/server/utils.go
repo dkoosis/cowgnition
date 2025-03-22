@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// ErrorResponse represents a standardized error response.
+// ErrorResponse represents a standardized error response according to MCP protocol.
 type ErrorResponse struct {
 	Error     string `json:"error"`
 	Status    int    `json:"status"`
@@ -21,7 +21,7 @@ type ErrorResponse struct {
 }
 
 // writeJSONResponse writes a JSON response with the given status code and data.
-// The statusCode parameter allows different success codes to be used (200, 201, etc.)
+// Currently all calls use http.StatusOK, but parameter is kept for API consistency.
 // nolint:unparam
 func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
@@ -29,18 +29,19 @@ func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) 
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		log.Printf("Error encoding JSON response: %v", err)
-		// If we can't encode the intended response, fall back to a simple error
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, "Internal server error: JSON encoding failed", http.StatusInternalServerError)
 	}
 }
 
 // writeErrorResponse writes a JSON error response with the given status code and message.
 func writeErrorResponse(w http.ResponseWriter, statusCode int, message string) {
+	requestID := generateRequestID()
+
 	errorResponse := ErrorResponse{
 		Error:     message,
 		Status:    statusCode,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Path:      "", // Path could be populated from request if needed
+		RequestID: requestID,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -48,9 +49,21 @@ func writeErrorResponse(w http.ResponseWriter, statusCode int, message string) {
 
 	if err := json.NewEncoder(w).Encode(errorResponse); err != nil {
 		log.Printf("Error encoding error response: %v", err)
-		// If we can't encode the error response, fall back to a simple error
 		http.Error(w, message, statusCode)
 	}
+}
+
+// generateRequestID creates a unique ID for tracking request/error correlations.
+func generateRequestID() string {
+	return fmt.Sprintf("req-%d", time.Now().UnixNano())
+}
+
+// formatTimeComponent returns formatted time if present, empty string otherwise.
+func formatTimeComponent(t time.Time) string {
+	if t.Hour() > 0 || t.Minute() > 0 {
+		return fmt.Sprintf(" at %s", t.Format("3:04 PM"))
+	}
+	return ""
 }
 
 // formatDate formats an RTM date string for display.
@@ -62,29 +75,31 @@ func formatDate(dateStr string) string {
 	// Parse the date string (format: 2006-01-02T15:04:05Z)
 	t, err := time.Parse(time.RFC3339, dateStr)
 	if err != nil {
-		// If parsing fails, return the original string
-		return dateStr
+		return dateStr // Return original if parsing fails
 	}
 
-	// Today
+	// Get today's date for comparison
 	today := time.Now()
-	if t.Year() == today.Year() && t.Month() == today.Month() && t.Day() == today.Day() {
-		return "Today"
-	}
+	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location())
+	taskDate := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 
-	// Tomorrow
-	tomorrow := today.AddDate(0, 0, 1)
-	if t.Year() == tomorrow.Year() && t.Month() == tomorrow.Month() && t.Day() == tomorrow.Day() {
-		return "Tomorrow"
-	}
+	// Calculate days difference
+	daysDiff := int(taskDate.Sub(today).Hours() / 24)
+	timeComponent := formatTimeComponent(t)
 
-	// This week
-	if t.Before(today.AddDate(0, 0, 7)) {
-		return t.Format("Monday")
+	// Format based on proximity to today
+	switch {
+	case daysDiff == 0:
+		return "Today" + timeComponent
+	case daysDiff == 1:
+		return "Tomorrow" + timeComponent
+	case daysDiff > 1 && daysDiff < 7:
+		return t.Format("Monday") + timeComponent
+	case t.Year() == today.Year():
+		return t.Format("Jan 2") + timeComponent
+	default:
+		return t.Format("Jan 2, 2006") + timeComponent
 	}
-
-	// Default format
-	return t.Format("Jan 2")
 }
 
 // formatTags formats a list of tags into a string.
@@ -96,5 +111,16 @@ func formatTags(tags []string) string {
 	// Sort tags alphabetically for consistent output
 	sort.Strings(tags)
 
-	return fmt.Sprintf("[%s]", strings.Join(tags, ", "))
+	// If only a few tags, comma-separate them
+	if len(tags) <= 5 {
+		return strings.Join(tags, ", ")
+	}
+
+	// For many tags, use bullet points
+	var sb strings.Builder
+	for _, tag := range tags {
+		sb.WriteString("\n- ")
+		sb.WriteString(tag)
+	}
+	return sb.String()
 }

@@ -12,23 +12,24 @@ import (
 	"github.com/cowgnition/cowgnition/pkg/mcp"
 )
 
+// internal/server/handlers.go - focusing on the initialization part
+
 // handleInitialize handles the MCP initialize request.
-// It returns server information and capabilities.
+// It returns server information and capabilities according to MCP specifications.
 func (s *MCPServer) handleInitialize(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed. Initialize endpoint requires POST.")
 		return
 	}
 
 	// Parse request
 	var req mcp.InitializeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		// SUGGESTION (Ambiguous): Improve error message to indicate decoding failure
-		writeErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("handleInitialize: failed to decode request body: %v", err))
+		writeErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("Failed to decode initialize request: %v", err))
 		return
 	}
 
-	// Log initialization attempt
+	// Log initialization request with client info
 	log.Printf("MCP initialization requested by: %s (version: %s)",
 		req.ServerName, req.ServerVersion)
 
@@ -38,33 +39,40 @@ func (s *MCPServer) handleInitialize(w http.ResponseWriter, r *http.Request) {
 		Version: s.version,
 	}
 
-	// Define capabilities
+	// Define capabilities based on authentication state
+	resourcesCapability := map[string]interface{}{
+		"list":        true,
+		"read":        true,
+		"subscribe":   false,
+		"listChanged": true,
+	}
+
+	toolsCapability := map[string]interface{}{
+		"list":        true,
+		"call":        true,
+		"listChanged": true,
+	}
+
+	loggingCapability := map[string]interface{}{
+		"log":     true,
+		"warning": true,
+		"error":   true,
+	}
+
+	// Comprehensive capabilities map following MCP protocol specification
 	capabilities := map[string]interface{}{
-		"resources": map[string]interface{}{
-			"list": true,
-			"read": true,
-			// We don't support resource subscriptions yet
-			"subscribe":   false,
-			"listChanged": false,
-		},
-		"tools": map[string]interface{}{
-			"list":        true,
-			"call":        true,
-			"listChanged": false,
-		},
-		"logging": map[string]interface{}{
-			"log":     true,
-			"warning": true,
-			"error":   true,
-		},
-		// We don't support prompts yet
+		"resources": resourcesCapability,
+		"tools":     toolsCapability,
+		"logging":   loggingCapability,
 		"prompts": map[string]interface{}{
-			"list":        false,
+			"list":        false, // We don't currently support prompts
 			"get":         false,
 			"listChanged": false,
 		},
-		// We don't support completion yet
-		"completion": false,
+		"roots": map[string]interface{}{
+			"set": false, // We don't currently support roots management
+		},
+		"completion": false, // We don't support completion
 	}
 
 	// Construct response
