@@ -25,7 +25,6 @@
 ./internal/config/config.go
 ./internal/config/config_test.go
 ./internal/auth/token_manager.go
-./internal/auth/auth_manager.go
 ./internal/auth/token_manager_test.go
 ./internal/server/server.go
 ./internal/server/auth_handlers.go
