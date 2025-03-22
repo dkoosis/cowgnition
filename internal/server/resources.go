@@ -4,6 +4,9 @@ package server
 import (
 	"fmt"
 	"strings"
+	"time"
+
+	"github.com/cowgnition/cowgnition/internal/rtm"
 )
 
 // handleTasksResource retrieves and formats tasks based on the given filter.
@@ -16,15 +19,64 @@ func (s *MCPServer) handleTasksResource(filter string) (string, error) {
 
 	// Format tasks for display
 	var sb strings.Builder
-	sb.WriteString("# Tasks\n\n")
+
+	// Add a descriptive header
+	sb.WriteString(getTasksHeader(s, filter) + "\n\n")
 
 	if len(tasksResp.Tasks.List) == 0 {
 		sb.WriteString("No tasks found.\n")
 		return sb.String(), nil
 	}
 
+	// Format and write tasks
+	totalTasks, completedTasks := formatTasksList(&sb, tasksResp.Tasks.List)
+
+	// Add summary at the end
+	sb.WriteString(formatTasksSummary(totalTasks, completedTasks))
+
+	return sb.String(), nil
+}
+
+// getTasksHeader returns an appropriate header based on the filter.
+func getTasksHeader(s *MCPServer, filter string) string {
+	header := "# Tasks"
+	if filter == "" {
+		return header
+	}
+
+	if strings.Contains(filter, "due:today") {
+		return "# Tasks Due Today"
+	} else if strings.Contains(filter, "due:tomorrow") {
+		return "# Tasks Due Tomorrow"
+	} else if strings.Contains(filter, "due:\"within 7 days\"") {
+		return "# Tasks Due This Week"
+	} else if strings.HasPrefix(filter, "list:") {
+		listID := strings.TrimPrefix(filter, "list:")
+		// Try to get the list name if available
+		listName := listID
+		lists, err := s.rtmService.GetLists()
+		if err == nil {
+			for _, list := range lists {
+				if list.ID == listID {
+					listName = list.Name
+					break
+				}
+			}
+		}
+		return fmt.Sprintf("# Tasks in List: %s", listName)
+	}
+
+	return header
+}
+
+// formatTasksList writes formatted tasks to the string builder.
+// Returns total and completed task counts.
+func formatTasksList(sb *strings.Builder, lists []rtm.TaskList) (int, int) {
+	totalTasks := 0
+	completedTasks := 0
+
 	// Process each list
-	for _, list := range tasksResp.Tasks.List {
+	for _, list := range lists {
 		// Skip empty lists
 		if len(list.TaskSeries) == 0 {
 			continue
@@ -38,47 +90,125 @@ func (s *MCPServer) handleTasksResource(filter string) (string, error) {
 					continue
 				}
 
-				// Format priority
-				priority := ""
-				switch task.Priority {
-				case "1":
-					priority = "❗ "
-				case "2":
-					priority = "❕ "
-				case "3":
-					priority = "⚪ "
-				}
-
-				// Format completion status
-				completed := " "
+				totalTasks++
 				if task.Completed != "" {
-					completed = "✓ "
+					completedTasks++
 				}
 
-				// Format due date
-				dueDate := ""
-				if task.Due != "" {
-					dueDate = " (Due: " + formatDate(task.Due) + ")"
-				}
-
-				// Format tags
-				tags := ""
-				if len(ts.Tags.Tag) > 0 {
-					tags = " [" + strings.Join(ts.Tags.Tag, ", ") + "]"
-				}
-
-				// Write task line
-				sb.WriteString(fmt.Sprintf("%s%s%s%s%s\n",
-					priority,
-					completed,
-					ts.Name,
-					dueDate,
-					tags))
+				formatTask(sb, list.ID, ts, task)
 			}
 		}
 	}
 
-	return sb.String(), nil
+	return totalTasks, completedTasks
+}
+
+// formatTask writes a single formatted task to the string builder.
+func formatTask(sb *strings.Builder, listID string, ts rtm.TaskSeries, task rtm.Task) {
+	// Format priority
+	priority, prioritySymbol := formatTaskPriority(task.Priority)
+
+	// Format completion status
+	completionSymbol := "☐"
+	if task.Completed != "" {
+		completionSymbol = "✅"
+	}
+
+	// Format due date
+	dueDate, dueDateColor := formatTaskDueDate(task.Due)
+
+	// Format notes indicator
+	notesIndicator := ""
+	if len(ts.Notes.Note) > 0 {
+		notesIndicator = " 📝"
+	}
+
+	// Write task line
+	taskLine := fmt.Sprintf("%s %s **%s**%s", completionSymbol, prioritySymbol, ts.Name, notesIndicator)
+	sb.WriteString(taskLine + "\n")
+
+	// Add metadata
+	metadata := formatTaskMetadata(priority, dueDate, dueDateColor, ts.Tags.Tag)
+	if metadata != "" {
+		sb.WriteString(metadata + "\n")
+	}
+
+	// Add task ID information
+	idInfo := fmt.Sprintf("    <small>ID: list=%s, taskseries=%s, task=%s</small>",
+		listID, ts.ID, task.ID)
+	sb.WriteString(idInfo + "\n\n")
+}
+
+// formatTaskPriority returns formatted priority text and symbol.
+func formatTaskPriority(priorityCode string) (string, string) {
+	switch priorityCode {
+	case "1":
+		return "High", "❗"
+	case "2":
+		return "Medium", "❕"
+	case "3":
+		return "Low", "⚪"
+	default:
+		return "None", "  "
+	}
+}
+
+// formatTaskDueDate formats the due date with visual indicators.
+func formatTaskDueDate(dueDate string) (string, string) {
+	if dueDate == "" {
+		return "", ""
+	}
+
+	formatted := formatDate(dueDate)
+	dueDateColor := ""
+
+	// Add visual indicator for due date proximity
+	timeNow := time.Now()
+	parsedDate, err := time.Parse(time.RFC3339, dueDate)
+	if err == nil {
+		daysDiff := int(parsedDate.Sub(timeNow).Hours() / 24)
+		if daysDiff < 0 {
+			dueDateColor = " 🔴" // Overdue
+		} else if daysDiff == 0 {
+			dueDateColor = " 🟠" // Due today
+		} else if daysDiff <= 2 {
+			dueDateColor = " 🟡" // Due soon
+		}
+	}
+
+	return formatted, dueDateColor
+}
+
+// formatTaskMetadata creates the metadata line for a task.
+func formatTaskMetadata(priority, dueDate, dueDateColor string, tags []string) string {
+	metadataItems := []string{}
+
+	if dueDate != "" {
+		metadataItems = append(metadataItems, fmt.Sprintf("Due: %s%s", dueDate, dueDateColor))
+	}
+
+	if priority != "None" {
+		metadataItems = append(metadataItems, fmt.Sprintf("Priority: %s", priority))
+	}
+
+	if len(tags) > 0 {
+		metadataItems = append(metadataItems, fmt.Sprintf("Tags: %s", strings.Join(tags, ", ")))
+	}
+
+	if len(metadataItems) > 0 {
+		return fmt.Sprintf("    _%s_", strings.Join(metadataItems, " | "))
+	}
+
+	return ""
+}
+
+// formatTasksSummary returns a summary string of task counts.
+func formatTasksSummary(total, completed int) string {
+	summary := fmt.Sprintf("\n**Summary:** %d tasks total", total)
+	if completed > 0 {
+		summary += fmt.Sprintf(", %d completed", completed)
+	}
+	return summary + "\n"
 }
 
 // handleListsResource retrieves and formats lists.
@@ -108,9 +238,9 @@ func (s *MCPServer) handleListsResource() (string, error) {
 		// Format list type
 		listType := ""
 		if list.Smart == "1" {
-			listType = " (Smart List)"
+			listType = " 🔍" // Smart List
 		} else if list.Locked == "1" {
-			listType = " (System List)"
+			listType = " 🔒" // System List
 		}
 
 		// Format archived status
@@ -119,12 +249,12 @@ func (s *MCPServer) handleListsResource() (string, error) {
 			archived = " [Archived]"
 		}
 
-		// Write list line
-		sb.WriteString(fmt.Sprintf("- %s (ID: %s)%s%s\n",
+		// Write list line with improved formatting
+		sb.WriteString(fmt.Sprintf("- **%s**%s%s (ID: `%s`)\n",
 			list.Name,
-			list.ID,
 			listType,
-			archived))
+			archived,
+			list.ID))
 	}
 
 	return sb.String(), nil
