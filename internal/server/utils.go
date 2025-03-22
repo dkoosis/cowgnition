@@ -1,4 +1,4 @@
-// Package server implements the Model Context Protocol server for RTM integration.
+// internal/server/utils.go
 package server
 
 import (
@@ -21,6 +21,7 @@ type ErrorResponse struct {
 }
 
 // writeJSONResponse writes a JSON response with the given status code and data.
+// The statusCode parameter allows different success codes to be used (200, 201, etc.)
 func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
