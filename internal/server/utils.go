@@ -11,7 +11,8 @@ import (
 	"time"
 )
 
-// ErrorResponse represents a standardized error response according to MCP protocol.
+// ErrorResponse represents a legacy error response format.
+// Deprecated: Use MCPErrorResponse from errors.go instead.
 type ErrorResponse struct {
 	Error     string `json:"error"`
 	Status    int    `json:"status"`
@@ -20,12 +21,11 @@ type ErrorResponse struct {
 	Timestamp string `json:"timestamp"`
 }
 
-// writeJSONResponse writes a JSON response with the given status code and data.
-// Currently all calls use http.StatusOK, but parameter is kept for API consistency.
-// nolint:unparam
-func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
+// writeJSONResponse writes a JSON response with appropriate headers.
+// It always uses HTTP 200 OK status as per MCP protocol for successful responses.
+func writeJSONResponse(w http.ResponseWriter, _ int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
+	w.WriteHeader(http.StatusOK) // Always use 200 OK for successful responses
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		log.Printf("Error encoding JSON response: %v", err)
@@ -34,6 +34,8 @@ func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) 
 }
 
 // writeErrorResponse writes a JSON error response with the given status code and message.
+// Deprecated: Use writeStandardErrorResponse from errors.go instead.
+// This is kept for backward compatibility.
 func writeErrorResponse(w http.ResponseWriter, statusCode int, message string) {
 	requestID := generateRequestID()
 

@@ -165,14 +165,18 @@ func (s *MCPServer) handleListResources(w http.ResponseWriter, r *http.Request) 
 // It fetches and returns the content of the requested resource.
 func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeStandardErrorResponse(w, MethodNotFound,
+			"Method not allowed. Read resource endpoint requires GET.",
+			map[string]string{"allowed_method": "GET"})
 		return
 	}
 
 	// Get resource name from query parameters
 	name := r.URL.Query().Get("name")
 	if name == "" {
-		writeErrorResponse(w, http.StatusBadRequest, "Missing resource name parameter")
+		writeStandardErrorResponse(w, InvalidParams,
+			"Missing required resource name parameter.",
+			map[string]string{"required_parameter": "name"})
 		return
 	}
 
@@ -186,8 +190,9 @@ func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
 
 	// Check authentication for other resources
 	if !s.rtmService.IsAuthenticated() {
-		// SUGGESTION (Readability): Clarify authentication error message
-		writeErrorResponse(w, http.StatusUnauthorized, "Not authenticated with Remember The Milk. Please authenticate via the auth://rtm resource first.")
+		writeStandardErrorResponse(w, AuthError,
+			"Not authenticated with Remember The Milk. Please authenticate via the auth://rtm resource first.",
+			map[string]string{"auth_resource": "auth://rtm"})
 		return
 	}
 
@@ -217,8 +222,13 @@ func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
 	case name == "tags://all":
 		content, err = s.handleTagsResource()
 	default:
-		// SUGGESTION (Ambiguous): Improve error message to include valid resource examples
-		writeErrorResponse(w, http.StatusNotFound, fmt.Sprintf("Resource not found: %s. Valid resource examples: lists://all, tasks://today, etc.", name))
+		validResources := []string{"lists://all", "tasks://today", "tasks://tomorrow", "tasks://week", "tasks://list/{list_id}", "tags://all"}
+		writeStandardErrorResponse(w, ResourceError,
+			fmt.Sprintf("Resource not found: %s", name),
+			map[string]interface{}{
+				"resource_uri":    name,
+				"valid_resources": validResources,
+			})
 		return
 	}
 
@@ -227,8 +237,13 @@ func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Resource %s fetched in %v", name, duration)
 
 	if err != nil {
-		// SUGGESTION (Ambiguous): Add context to error message
-		writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("handleReadResource: failed to handle resource %s: %v", name, err))
+		writeStandardErrorResponse(w, RTMServiceError,
+			fmt.Sprintf("Failed to handle resource %s", name),
+			map[string]interface{}{
+				"resource_uri":  name,
+				"error_details": err.Error(),
+				"timing":        duration.String(),
+			})
 		return
 	}
 
