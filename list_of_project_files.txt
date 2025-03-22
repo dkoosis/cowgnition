@@ -16,7 +16,8 @@
 │   ├── MCP_CONFORMANCE_TESTING.md
 │   ├── PROJECT_ORGANIZATION.md
 │   ├── TESTING_GUIDELINES.md
-│   └── TODO.md
+│   ├── TODO.md
+│   └── llms-full.txt
 ├── go.mod
 ├── go.sum
 ├── internal
@@ -106,4 +107,4 @@
         └── testutil
             └── mcptest.go
 
-42 directories, 65 files
+42 directories, 66 files
