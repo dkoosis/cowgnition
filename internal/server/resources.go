@@ -10,11 +10,12 @@ import (
 )
 
 // handleTasksResource retrieves and formats tasks based on the given filter.
+// Returns formatted task content and any error encountered.
 func (s *MCPServer) handleTasksResource(filter string) (string, error) {
 	// Get tasks from RTM
 	tasksResp, err := s.rtmService.GetTasks(filter)
 	if err != nil {
-		return "", fmt.Errorf("error getting tasks: %w", err)
+		return "", fmt.Errorf("handleTasksResource: error getting tasks: %w", err)
 	}
 
 	// Format tasks for display
@@ -24,7 +25,7 @@ func (s *MCPServer) handleTasksResource(filter string) (string, error) {
 	sb.WriteString(getTasksHeader(s, filter) + "\n\n")
 
 	if len(tasksResp.Tasks.List) == 0 {
-		sb.WriteString("No tasks found.\n")
+		sb.WriteString("No tasks found for the specified filter.\n")
 		return sb.String(), nil
 	}
 
@@ -38,8 +39,9 @@ func (s *MCPServer) handleTasksResource(filter string) (string, error) {
 }
 
 // getTasksHeader returns an appropriate header based on the filter.
+// The header provides context about the tasks being displayed.
 func getTasksHeader(s *MCPServer, filter string) string {
-	header := "# Tasks"
+	header := "# All Tasks"
 	if filter == "" {
 		return header
 	}
@@ -64,13 +66,17 @@ func getTasksHeader(s *MCPServer, filter string) string {
 			}
 		}
 		return fmt.Sprintf("# Tasks in List: %s", listName)
+	} else if strings.Contains(filter, "tag:") {
+		tag := strings.TrimPrefix(strings.Split(filter, "tag:")[1], "\"")
+		tag = strings.TrimSuffix(tag, "\"")
+		return fmt.Sprintf("# Tasks Tagged with: %s", tag)
 	}
 
 	return header
 }
 
 // formatTasksList writes formatted tasks to the string builder.
-// Returns total and completed task counts.
+// Returns total and completed task counts for summary generation.
 func formatTasksList(sb *strings.Builder, lists []rtm.TaskList) (int, int) {
 	totalTasks := 0
 	completedTasks := 0
@@ -104,6 +110,7 @@ func formatTasksList(sb *strings.Builder, lists []rtm.TaskList) (int, int) {
 }
 
 // formatTask writes a single formatted task to the string builder.
+// Uses consistent formatting with appropriate markdown for MCP clients.
 func formatTask(sb *strings.Builder, listID string, ts rtm.TaskSeries, task rtm.Task) {
 	// Format priority
 	priority, prioritySymbol := formatTaskPriority(task.Priority)
@@ -133,13 +140,14 @@ func formatTask(sb *strings.Builder, listID string, ts rtm.TaskSeries, task rtm.
 		sb.WriteString(metadata + "\n")
 	}
 
-	// Add task ID information
+	// Add task ID information (needed for tool operations)
 	idInfo := fmt.Sprintf("    <small>ID: list=%s, taskseries=%s, task=%s</small>",
 		listID, ts.ID, task.ID)
 	sb.WriteString(idInfo + "\n\n")
 }
 
 // formatTaskPriority returns formatted priority text and symbol.
+// Provides visual indicators for different priority levels.
 func formatTaskPriority(priorityCode string) (string, string) {
 	switch priorityCode {
 	case "1":
@@ -154,6 +162,7 @@ func formatTaskPriority(priorityCode string) (string, string) {
 }
 
 // formatTaskDueDate formats the due date with visual indicators.
+// Adds color indicators based on due date proximity.
 func formatTaskDueDate(dueDate string) (string, string) {
 	if dueDate == "" {
 		return "", ""
@@ -180,6 +189,7 @@ func formatTaskDueDate(dueDate string) (string, string) {
 }
 
 // formatTaskMetadata creates the metadata line for a task.
+// Combines priority, due date, and tags information.
 func formatTaskMetadata(priority, dueDate, dueDateColor string, tags []string) string {
 	metadataItems := []string{}
 
@@ -192,7 +202,8 @@ func formatTaskMetadata(priority, dueDate, dueDateColor string, tags []string) s
 	}
 
 	if len(tags) > 0 {
-		metadataItems = append(metadataItems, fmt.Sprintf("Tags: %s", strings.Join(tags, ", ")))
+		tagsFormatted := strings.Join(tags, ", ")
+		metadataItems = append(metadataItems, fmt.Sprintf("Tags: %s", tagsFormatted))
 	}
 
 	if len(metadataItems) > 0 {
@@ -203,20 +214,36 @@ func formatTaskMetadata(priority, dueDate, dueDateColor string, tags []string) s
 }
 
 // formatTasksSummary returns a summary string of task counts.
+// Provides an overview of total and completed tasks.
 func formatTasksSummary(total, completed int) string {
-	summary := fmt.Sprintf("\n**Summary:** %d tasks total", total)
+	summary := fmt.Sprintf("\n**Summary:** %d task%s total",
+		total, pluralS(total))
+
 	if completed > 0 {
-		summary += fmt.Sprintf(", %d completed", completed)
+		remaining := total - completed
+		summary += fmt.Sprintf(", %d completed, %d remaining",
+			completed, remaining)
 	}
+
 	return summary + "\n"
 }
 
+// pluralS returns "s" if count is not 1, otherwise empty string.
+// Helper function for proper pluralization.
+func pluralS(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
+}
+
 // handleListsResource retrieves and formats lists.
+// Returns a formatted markdown representation of all RTM lists.
 func (s *MCPServer) handleListsResource() (string, error) {
 	// Get lists from RTM
 	lists, err := s.rtmService.GetLists()
 	if err != nil {
-		return "", fmt.Errorf("error getting lists: %w", err)
+		return "", fmt.Errorf("handleListsResource: error getting lists: %w", err)
 	}
 
 	// Format lists for display
@@ -224,38 +251,77 @@ func (s *MCPServer) handleListsResource() (string, error) {
 	sb.WriteString("# Lists\n\n")
 
 	if len(lists) == 0 {
-		sb.WriteString("No lists found.\n")
+		sb.WriteString("No lists found in your Remember The Milk account.\n")
 		return sb.String(), nil
 	}
 
-	// Process each list
+	// Group lists by type (smart, locked, normal)
+	var smartLists, systemLists, normalLists []rtm.List
 	for _, list := range lists {
 		// Skip deleted lists
 		if list.Deleted != "0" {
 			continue
 		}
 
-		// Format list type
-		listType := ""
 		if list.Smart == "1" {
-			listType = " 🔍" // Smart List
+			smartLists = append(smartLists, list)
 		} else if list.Locked == "1" {
-			listType = " 🔒" // System List
+			systemLists = append(systemLists, list)
+		} else {
+			normalLists = append(normalLists, list)
 		}
+	}
 
-		// Format archived status
-		archived := ""
-		if list.Archived == "1" {
-			archived = " [Archived]"
+	// Write normal lists
+	if len(normalLists) > 0 {
+		sb.WriteString("## Your Lists\n\n")
+		for _, list := range normalLists {
+			formatListItem(&sb, list)
 		}
+		sb.WriteString("\n")
+	}
 
-		// Write list line with improved formatting
-		sb.WriteString(fmt.Sprintf("- **%s**%s%s (ID: `%s`)\n",
-			list.Name,
-			listType,
-			archived,
-			list.ID))
+	// Write smart lists
+	if len(smartLists) > 0 {
+		sb.WriteString("## Smart Lists\n\n")
+		for _, list := range smartLists {
+			formatListItem(&sb, list)
+		}
+		sb.WriteString("\n")
+	}
+
+	// Write system lists
+	if len(systemLists) > 0 {
+		sb.WriteString("## System Lists\n\n")
+		for _, list := range systemLists {
+			formatListItem(&sb, list)
+		}
 	}
 
 	return sb.String(), nil
+}
+
+// formatListItem formats a single list item and writes it to the string builder.
+// Adds appropriate icons and status indicators.
+func formatListItem(sb *strings.Builder, list rtm.List) {
+	// Format list type
+	listType := ""
+	if list.Smart == "1" {
+		listType = " 🔍" // Smart List
+	} else if list.Locked == "1" {
+		listType = " 🔒" // System List
+	}
+
+	// Format archived status
+	archived := ""
+	if list.Archived == "1" {
+		archived = " [Archived]"
+	}
+
+	// Write list line with improved formatting
+	sb.WriteString(fmt.Sprintf("- **%s**%s%s (ID: `%s`)\n",
+		list.Name,
+		listType,
+		archived,
+		list.ID))
 }
