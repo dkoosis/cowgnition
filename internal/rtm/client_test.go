@@ -511,7 +511,7 @@ func TestDo(t *testing.T) {
 
 		if err == nil {
 			// Include subtest name in error message.
-			t.Errorf("%s: Upload() should return an error for API fail response", t.Name(), err)
+			t.Errorf("%s: Upload() should return an error for API fail response", t.Name())
 		}
 
 		var apiErr APIError
