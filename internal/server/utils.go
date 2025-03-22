@@ -22,6 +22,7 @@ type ErrorResponse struct {
 
 // writeJSONResponse writes a JSON response with the given status code and data.
 // The statusCode parameter allows different success codes to be used (200, 201, etc.)
+// nolint:unparam
 func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)

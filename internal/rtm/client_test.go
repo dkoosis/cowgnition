@@ -3,6 +3,7 @@ package rtm
 
 import (
 	"encoding/xml"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -10,7 +11,7 @@ import (
 	"testing"
 )
 
-// authURL is the base URL for the RTM auth endpoint
+// authURL is the base URL for the RTM auth endpoint.
 const authURL = "https://www.rememberthemilk.com/services/auth/"
 
 func TestGenerateSignature(t *testing.T) {
@@ -313,8 +314,8 @@ func TestDo(t *testing.T) {
 			t.Errorf("%s: Do() should return an error for API fail response", t.Name())
 		}
 
-		apiErr, ok := err.(APIError)
-		if !ok {
+		var apiErr APIError
+		if !errors.As(err, &apiErr) {
 			// Include subtest name in error message.
 			t.Errorf("%s: Do() error type = %T, want APIError", t.Name(), err)
 		}
@@ -379,7 +380,8 @@ func TestDo(t *testing.T) {
 			t.Errorf("%s: Do() should return an error for invalid XML response", t.Name())
 		}
 
-		if _, ok := err.(*xml.SyntaxError); !ok {
+		var syntaxErr *xml.SyntaxError
+		if !errors.As(err, &syntaxErr) {
 			// Include subtest name in error message.
 			t.Errorf("%s: Do() error type = %T, want xml.SyntaxError", t.Name(), err)
 		}
@@ -509,11 +511,11 @@ func TestDo(t *testing.T) {
 
 		if err == nil {
 			// Include subtest name in error message.
-			t.Errorf("%s: Upload() should return an error for API fail response", t.Name())
+			t.Errorf("%s: Upload() should return an error for API fail response", t.Name(), err)
 		}
 
-		apiErr, ok := err.(APIError)
-		if !ok {
+		var apiErr APIError
+		if !errors.As(err, &apiErr) {
 			// Include subtest name in error message.
 			t.Errorf("%s: Upload() error type = %T, want APIError", t.Name(), err)
 		}
@@ -592,7 +594,8 @@ func TestDo(t *testing.T) {
 			t.Errorf("%s: Upload() should return an error for invalid XML response", t.Name())
 		}
 
-		if _, ok := err.(*xml.SyntaxError); !ok {
+		var syntaxErr *xml.SyntaxError
+		if !errors.As(err, &syntaxErr) {
 			// Include subtest name in error message.
 			t.Errorf("%s: Upload() error type = %T, want xml.SyntaxError", t.Name(), err)
 		}
