@@ -59,12 +59,12 @@ func TestJSONRPCErrorValidation(t *testing.T) {
 
 	// Test error code mapping
 	t.Run("ErrorCodeMapping", func(t *testing.T) {
-		testErrorCodeMapping(t, client)
+		testErrorCodeMapping(t)
 	})
 
 	// Test error detail handling
 	t.Run("ErrorDetailHandling", func(t *testing.T) {
-		testErrorDetailHandling(t, client)
+		testErrorDetailHandling(t)
 	})
 
 	// Test complete error lifecycle
@@ -74,7 +74,7 @@ func TestJSONRPCErrorValidation(t *testing.T) {
 
 	// Test error response status code mapping
 	t.Run("StatusCodeMapping", func(t *testing.T) {
-		testStatusCodeMapping(t, client)
+		testStatusCodeMapping(t)
 	})
 }
 
@@ -206,7 +206,7 @@ func validateJSONRPCErrorSchema(t *testing.T, response map[string]interface{}) {
 }
 
 // testErrorCodeMapping validates that HTTP status codes are properly mapped to JSON-RPC error codes.
-func testErrorCodeMapping(t *testing.T, client *helpers.MCPClient) {
+func testErrorCodeMapping(t *testing.T) {
 	t.Helper()
 
 	// Define status code to error code mapping expectations
@@ -276,7 +276,7 @@ func testErrorCodeMapping(t *testing.T, client *helpers.MCPClient) {
 }
 
 // testErrorDetailHandling validates that sensitive information is not leaked in error responses.
-func testErrorDetailHandling(t *testing.T, client *helpers.MCPClient) {
+func testErrorDetailHandling(t *testing.T) {
 	t.Helper()
 
 	// Create a server with a handler that includes sensitive information in the error
@@ -449,7 +449,7 @@ func testErrorLifecycle(t *testing.T, client *helpers.MCPClient) {
 }
 
 // testStatusCodeMapping validates that error codes are properly translated to HTTP status codes.
-func testStatusCodeMapping(t *testing.T, client *helpers.MCPClient) {
+func testStatusCodeMapping(t *testing.T) {
 	t.Helper()
 
 	// Create test server that uses various error codes
