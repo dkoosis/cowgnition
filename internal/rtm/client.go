@@ -393,14 +393,8 @@ func (c *Client) Do(params url.Values, result interface{}) ([]byte, error) {
 	return c.DoWithContext(ctx, params, result)
 }
 
-// DoWithContext executes an API request with the given context, parameters and unmarshals the result.
-func (c *Client) DoWithContext(ctx context.Context, params url.Values, result interface{}) ([]byte, error) {
-	// Apply rate limiting
-	if err := c.rateLimiter.Wait(ctx); err != nil {
-		return nil, fmt.Errorf("DoWithContext: rate limit error: %w", err)
-	}
-
-	// Add required parameters
+// prepareRequest prepares the request parameters by adding common fields and generating a signature.
+func (c *Client) prepareRequest(params url.Values) url.Values {
 	if params == nil {
 		params = url.Values{}
 	}
@@ -418,29 +412,38 @@ func (c *Client) DoWithContext(ctx context.Context, params url.Values, result in
 	apiSig := c.generateSignature(params)
 	params.Set("api_sig", apiSig)
 
+	return params
+}
+
+// createRequest creates an HTTP request based on the client's configuration.
+func (c *Client) createRequest(ctx context.Context, params url.Values) (*http.Request, error) {
 	var req *http.Request
 	var err error
 
-	// Create appropriate request based on method
 	if c.usePOST {
 		req, err = http.NewRequestWithContext(ctx, http.MethodPost, c.APIURL,
 			strings.NewReader(params.Encode()))
 		if err != nil {
-			return nil, fmt.Errorf("error creating request: %w", err)
+			return nil, fmt.Errorf("createRequest: error creating POST request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	} else {
 		req, err = http.NewRequestWithContext(ctx, http.MethodGet,
 			c.APIURL+"?"+params.Encode(), nil)
 		if err != nil {
-			return nil, fmt.Errorf("error creating request: %w", err)
+			return nil, fmt.Errorf("createRequest: error creating GET request: %w", err)
 		}
 	}
 
+	return req, nil
+}
+
+// sendRequest sends an HTTP request and handles common error scenarios.
+func (c *Client) sendRequest(req *http.Request) ([]byte, error) {
 	// Send request
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("error sending request: %w", err)
+		return nil, fmt.Errorf("sendRequest: error sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -454,20 +457,25 @@ func (c *Client) DoWithContext(ctx context.Context, params url.Values, result in
 
 	// Check HTTP status
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP error: status code %d (HTTP status: %d)",
+		return nil, fmt.Errorf("sendRequest: HTTP error: status code %d (HTTP status: %d)",
 			resp.StatusCode, resp.StatusCode)
 	}
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %w", err)
+		return nil, fmt.Errorf("sendRequest: error reading response body: %w", err)
 	}
 
+	return body, nil
+}
+
+// processResponse processes the API response and checks for API errors.
+func (c *Client) processResponse(body []byte, result interface{}) error {
 	// Parse response
 	var respStruct Response
 	if err := xml.Unmarshal(body, &respStruct); err != nil {
-		return nil, fmt.Errorf("error parsing response: %w", err)
+		return fmt.Errorf("processResponse: error parsing response: %w", err)
 	}
 
 	// Check for API errors
@@ -476,7 +484,7 @@ func (c *Client) DoWithContext(ctx context.Context, params url.Values, result in
 		if err != nil {
 			code = 0
 		}
-		return nil, APIError{
+		return APIError{
 			Code:    code,
 			Message: respStruct.Error.Message,
 		}
@@ -485,8 +493,38 @@ func (c *Client) DoWithContext(ctx context.Context, params url.Values, result in
 	// Unmarshal into result if provided
 	if result != nil {
 		if err := xml.Unmarshal(body, result); err != nil {
-			return nil, fmt.Errorf("error unmarshaling response: %w", err)
+			return fmt.Errorf("processResponse: error unmarshaling response: %w", err)
 		}
+	}
+
+	return nil
+}
+
+// DoWithContext executes an API request with the given context, parameters and unmarshals the result.
+func (c *Client) DoWithContext(ctx context.Context, params url.Values, result interface{}) ([]byte, error) {
+	// Apply rate limiting
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("DoWithContext: rate limit error: %w", err)
+	}
+
+	// Prepare request parameters
+	params = c.prepareRequest(params)
+
+	// Create request
+	req, err := c.createRequest(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Send request and get response
+	body, err := c.sendRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process response
+	if err := c.processResponse(body, result); err != nil {
+		return nil, err
 	}
 
 	return body, nil
@@ -577,23 +615,8 @@ func (c *Client) UploadWithContext(ctx context.Context, params url.Values, fileF
 		return nil, fmt.Errorf("UploadWithContext: rate limit error: %w", err)
 	}
 
-	// Add required parameters
-	if params == nil {
-		params = url.Values{}
-	}
-
-	// Add API key and format
-	params.Set("api_key", c.APIKey)
-	params.Set("format", "rest")
-
-	// Add authentication token if available
-	if c.AuthToken != "" {
-		params.Set("auth_token", c.AuthToken)
-	}
-
-	// Generate signature
-	apiSig := c.generateSignature(params)
-	params.Set("api_sig", apiSig)
+	// Prepare request parameters
+	params = c.prepareRequest(params)
 
 	// Create multipart form
 	body, contentType, err := createMultipartForm(params, fileField, fileName, fileContent)
