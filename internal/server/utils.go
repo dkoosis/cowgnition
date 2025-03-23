@@ -1,4 +1,5 @@
-// internal/server/utils.go
+// Package server provides utility functions for handling server responses and formatting data.
+// file: internal/server/utils.go
 package server
 
 import (
@@ -13,6 +14,8 @@ import (
 
 // LegacyErrorResponse represents a legacy error response format.
 // Deprecated: Use ErrorResponse from errors.go instead for JSON-RPC 2.0 compliance.
+// This struct is maintained for backward compatibility during the transition to JSON-RPC 2.0
+// error handling.
 type LegacyErrorResponse struct {
 	Error     string `json:"error"`
 	Status    int    `json:"status"`
@@ -23,6 +26,8 @@ type LegacyErrorResponse struct {
 
 // writeJSONResponse writes a JSON response with appropriate headers.
 // It always uses HTTP 200 OK status as per MCP protocol for successful responses.
+// This function is designed to ensure that successful responses adhere to the MCP protocol
+// by consistently setting the HTTP status code to 200 OK.
 func writeJSONResponse(w http.ResponseWriter, _ int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK) // Always use 200 OK for successful responses
@@ -38,7 +43,9 @@ func writeJSONResponse(w http.ResponseWriter, _ int, data interface{}) {
 
 // writeErrorResponse writes a JSON error response with the given status code and message.
 // Deprecated: Use WriteJSONRPCError from errors.go instead.
-// This is kept for backward compatibility during transition.
+// This function is kept for backward compatibility during transition.
+// It is recommended to use WriteJSONRPCError for new implementations to ensure
+// compliance with JSON-RPC 2.0 standards.
 func writeErrorResponse(w http.ResponseWriter, statusCode int, message string) {
 	requestID := generateRequestID()
 
@@ -58,25 +65,30 @@ func writeErrorResponse(w http.ResponseWriter, statusCode int, message string) {
 }
 
 // mapHTTPToJSONRPCCode maps HTTP status codes to JSON-RPC error codes.
+// This mapping is crucial for converting HTTP status codes into their
+// corresponding JSON-RPC error codes, ensuring proper error representation
+// in the API responses.
 func mapHTTPToJSONRPCCode(httpStatus int) ErrorCode {
 	switch httpStatus {
 	case http.StatusBadRequest:
-		return InvalidParams
+		return InvalidParams // InvalidParams ( -32602 ) : Invalid method parameter(s).
 	case http.StatusNotFound:
-		return MethodNotFound
+		return MethodNotFound // MethodNotFound ( -32601 ) : The method does not exist / is not available.
 	case http.StatusMethodNotAllowed:
-		return MethodNotFound
+		return MethodNotFound // MethodNotFound ( -32601 ) : The method does not exist / is not available.
 	case http.StatusUnauthorized:
-		return AuthError
+		return AuthError // AuthError ( -32600 ) : Authentication failed.
 	case http.StatusForbidden:
-		return AuthError
+		return AuthError // AuthError ( -32600 ) : Authentication failed.
 	default:
-		return InternalError
+		return InternalError // InternalError ( -32603 ) : Internal JSON-RPC error.
 	}
 }
 
 // writeStandardErrorResponse is a convenient wrapper for WriteJSONRPCError.
 // It creates an ErrorResponse and writes it to the response writer.
+// This function simplifies the process of creating and writing standard JSON-RPC
+// error responses by encapsulating the error creation and writing logic.
 func writeStandardErrorResponse(w http.ResponseWriter, code ErrorCode, message string, data interface{}) {
 	// Create a detailed error context for logging
 	detailedContext := map[string]interface{}{
@@ -105,11 +117,16 @@ func writeStandardErrorResponse(w http.ResponseWriter, code ErrorCode, message s
 }
 
 // generateRequestID creates a unique ID for tracking request/error correlations.
+// This function generates a unique request ID to aid in tracing requests and
+// their associated errors, which is essential for debugging and monitoring.
 func generateRequestID() string {
 	return fmt.Sprintf("req-%d", time.Now().UnixNano())
 }
 
 // formatTimeComponent returns formatted time if present, empty string otherwise.
+// This function formats the time component of a time.Time value if it contains
+// hour or minute information; otherwise, it returns an empty string. This is used
+// to conditionally include time information in date/time strings.
 func formatTimeComponent(t time.Time) string {
 	if t.Hour() > 0 || t.Minute() > 0 {
 		return fmt.Sprintf(" at %s", t.Format("3:04 PM"))
@@ -118,6 +135,10 @@ func formatTimeComponent(t time.Time) string {
 }
 
 // formatDate formats an RTM date string for display.
+// This function formats a date string from Remember The Milk (RTM) into a
+// human-readable format. It handles cases where the date is today, tomorrow,
+// within the next week, within the same year, or a different year. If parsing
+// the date string fails, it returns the original string.
 func formatDate(dateStr string) string {
 	if dateStr == "" {
 		return ""
@@ -154,6 +175,9 @@ func formatDate(dateStr string) string {
 }
 
 // formatTags formats a list of tags into a string.
+// This function formats a slice of tags into a comma-separated string or a
+// bullet-point list, depending on the number of tags. It sorts the tags
+// alphabetically to ensure consistent output.
 func formatTags(tags []string) string {
 	if len(tags) == 0 {
 		return ""
@@ -175,3 +199,5 @@ func formatTags(tags []string) string {
 	}
 	return sb.String()
 }
+
+// DocEnhanced (2024-03-22)
