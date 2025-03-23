@@ -1,4 +1,4 @@
-// Package rtm provides client functionality for the Remember The Milk API.
+// internal/rtm/transport.go
 package rtm
 
 import (
@@ -13,6 +13,118 @@ import (
 	"strconv"
 	"strings"
 )
+
+// Response represents a generic RTM API response.
+type Response struct {
+	Status string `xml:"stat,attr"`
+	Error  *struct {
+		Code    string `xml:"code,attr"`
+		Message string `xml:"msg,attr"`
+	} `xml:"err"`
+}
+
+// Constants for response status.
+const (
+	statusOK   = "ok"
+	statusFail = "fail"
+)
+
+// APIError represents an error returned by the RTM API.
+type APIError struct {
+	Code    int
+	Message string
+}
+
+// Error implements the error interface for APIError.
+func (e APIError) Error() string {
+	return fmt.Sprintf("RTM API error %d: %s", e.Code, e.Message)
+}
+
+// GetError returns error code and message from a response.
+func (r Response) GetError() (string, string) {
+	if r.Error == nil {
+		return "", ""
+	}
+	return r.Error.Code, r.Error.Message
+}
+
+// callMethod calls an RTM API method with the provided parameters.
+func (c *Client) callMethod(ctx context.Context, method string, params url.Values) ([]byte, error) {
+	// Apply rate limiting
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("callMethod: rate limit error: %w", err)
+	}
+
+	// Add required parameters
+	if params == nil {
+		params = url.Values{}
+	}
+	params.Set("method", method)
+	params.Set("api_key", c.APIKey)
+	params.Set("format", "rest")
+
+	// Add authentication token if available
+	if c.AuthToken != "" {
+		params.Set("auth_token", c.AuthToken)
+	}
+
+	// Generate signature
+	apiSig := c.generateSignature(params)
+	params.Set("api_sig", apiSig)
+
+	// Create request
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.APIURL, bytes.NewBufferString(params.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("callMethod: failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	// Send request
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("callMethod: failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check for rate limit errors (HTTP 503)
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		return nil, fmt.Errorf("callMethod: service temporarily unavailable due to rate limiting")
+	}
+
+	// Read response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("callMethod: failed to read response body: %w", err)
+	}
+
+	// Check for API errors
+	if err := c.checkResponseForError(body); err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
+// checkResponseForError checks if the RTM API response contains an error.
+func (c *Client) checkResponseForError(response []byte) error {
+	var respStruct struct {
+		Stat string `xml:"stat,attr"`
+		Err  struct {
+			Code string `xml:"code,attr"`
+			Msg  string `xml:"msg,attr"`
+		} `xml:"err"`
+	}
+
+	if err := xml.Unmarshal(response, &respStruct); err != nil {
+		return fmt.Errorf("checkResponseForError: failed to parse response: %w", err)
+	}
+
+	if respStruct.Stat == "fail" {
+		return fmt.Errorf("checkResponseForError: RTM API error %s: %s", respStruct.Err.Code, respStruct.Err.Msg)
+	}
+
+	return nil
+}
 
 // prepareRequest prepares the request parameters by adding common fields and generating a signature.
 // It adds the API key, format, authentication token (if available), and generates a signature.
