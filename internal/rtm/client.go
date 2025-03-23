@@ -25,6 +25,7 @@ type Client struct {
 	HTTPClient   *http.Client
 	APIURL       string
 	usePOST      bool // Controls whether to use POST or GET for requests.
+	rateLimiter  *RateLimiter
 }
 
 // NewClient creates a new RTM client with the provided API key and shared secret.
@@ -34,7 +35,8 @@ func NewClient(apiKey, sharedSecret string) *Client {
 		SharedSecret: sharedSecret,
 		HTTPClient:   &http.Client{Timeout: 30 * time.Second},
 		APIURL:       "https://api.rememberthemilk.com/services/rest/",
-		usePOST:      false, // Default to GET requests.
+		usePOST:      false,                  // Default to GET requests.
+		rateLimiter:  NewRateLimiter(1.0, 3), // 1 req/sec with burst of 3
 	}
 }
 
@@ -81,6 +83,11 @@ func (c *Client) generateSignature(params url.Values) string {
 
 // callMethod calls an RTM API method with the provided parameters.
 func (c *Client) callMethod(ctx context.Context, method string, params url.Values) ([]byte, error) {
+	// Apply rate limiting
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("callMethod: rate limit error: %w", err)
+	}
+
 	// Add required parameters
 	if params == nil {
 		params = url.Values{}
@@ -111,6 +118,11 @@ func (c *Client) callMethod(ctx context.Context, method string, params url.Value
 		return nil, fmt.Errorf("callMethod: failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	// Check for rate limit errors (HTTP 503)
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		return nil, fmt.Errorf("callMethod: service temporarily unavailable due to rate limiting")
+	}
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
@@ -383,6 +395,11 @@ func (c *Client) Do(params url.Values, result interface{}) ([]byte, error) {
 
 // DoWithContext executes an API request with the given context, parameters and unmarshals the result.
 func (c *Client) DoWithContext(ctx context.Context, params url.Values, result interface{}) ([]byte, error) {
+	// Apply rate limiting
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("DoWithContext: rate limit error: %w", err)
+	}
+
 	// Add required parameters
 	if params == nil {
 		params = url.Values{}
@@ -426,6 +443,14 @@ func (c *Client) DoWithContext(ctx context.Context, params url.Values, result in
 		return nil, fmt.Errorf("error sending request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	// Check for rate limit errors (HTTP 503)
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		return nil, APIError{
+			Code:    503,
+			Message: "Service temporarily unavailable due to rate limiting",
+		}
+	}
 
 	// Check HTTP status
 	if resp.StatusCode != http.StatusOK {
@@ -547,6 +572,11 @@ func (c *Client) Upload(params url.Values, fileField, fileName string, fileConte
 
 // UploadWithContext uploads a file to RTM with the given parameters and context.
 func (c *Client) UploadWithContext(ctx context.Context, params url.Values, fileField, fileName string, fileContent io.Reader) (map[string]interface{}, error) {
+	// Apply rate limiting
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("UploadWithContext: rate limit error: %w", err)
+	}
+
 	// Add required parameters
 	if params == nil {
 		params = url.Values{}
@@ -585,6 +615,11 @@ func (c *Client) UploadWithContext(ctx context.Context, params url.Values, fileF
 	}
 	defer resp.Body.Close()
 
+	// Check for rate limit errors (HTTP 503)
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		return nil, fmt.Errorf("service temporarily unavailable due to rate limiting")
+	}
+
 	// Check HTTP status
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP error: status code %d", resp.StatusCode)
@@ -597,4 +632,14 @@ func (c *Client) UploadWithContext(ctx context.Context, params url.Values, fileF
 	}
 
 	return processUploadResponse(respBody)
+}
+
+// ConfigureRateLimit allows adjusting the rate limiting parameters.
+// This can be useful for different environments or based on API requirements changes.
+func (c *Client) ConfigureRateLimit(rate float64, burstLimit int) {
+	if c.rateLimiter != nil {
+		c.rateLimiter.SetRateLimit(rate, burstLimit)
+	} else {
+		c.rateLimiter = NewRateLimiter(rate, burstLimit)
+	}
 }

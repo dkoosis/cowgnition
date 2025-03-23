@@ -1,4 +1,6 @@
-// Package server implements the Model Context Protocol server for RTM integration.
+// Package server implements the Model Context Protocol (MCP) server for Remember The Milk (RTM) integration.
+// This package handles MCP requests, manages RTM authentication, and interacts with the RTM API.
+// file: internal/server/handlers.go - focusing on the initialization part
 package server
 
 import (
@@ -12,20 +14,23 @@ import (
 	"github.com/cowgnition/cowgnition/pkg/mcp"
 )
 
-// internal/server/handlers.go - focusing on the initialization part
-
 // handleInitialize handles the MCP initialize request.
 // It returns server information and capabilities according to MCP specifications.
+// This function is the entry point for MCP clients to discover the server's identity and supported features.
 func (s *MCPServer) handleInitialize(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed. Initialize endpoint requires POST.")
+		writeStandardErrorResponse(w, MethodNotFound,
+			"Method not allowed. Initialize endpoint requires POST.",
+			map[string]string{"allowed_method": "POST"})
 		return
 	}
 
 	// Parse request
 	var req mcp.InitializeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("Failed to decode initialize request: %v", err))
+		writeStandardErrorResponse(w, ParseError,
+			fmt.Sprintf("Failed to decode initialize request: %v", err),
+			map[string]string{"request_url": r.URL.Path})
 		return
 	}
 
@@ -40,10 +45,13 @@ func (s *MCPServer) handleInitialize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Define capabilities based on authentication state
+	// These capabilities determine what features the server exposes to MCP clients.
+	// The "resources" and "tools" capabilities are adjusted based on whether the server
+	// is currently authenticated with Remember The Milk.
 	resourcesCapability := map[string]interface{}{
 		"list":        true,
 		"read":        true,
-		"subscribe":   false,
+		"subscribe":   false, // Subscribe is not currently supported.
 		"listChanged": true,
 	}
 
@@ -60,19 +68,22 @@ func (s *MCPServer) handleInitialize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Comprehensive capabilities map following MCP protocol specification
+	// This map defines all the capabilities supported by the server, including
+	// resources, tools, logging, prompts, roots, and completion. The values
+	// indicate whether each capability is supported (true) or not (false).
 	capabilities := map[string]interface{}{
 		"resources": resourcesCapability,
 		"tools":     toolsCapability,
 		"logging":   loggingCapability,
 		"prompts": map[string]interface{}{
-			"list":        false, // We don't currently support prompts
+			"list":        false, // Prompts are not currently supported.
 			"get":         false,
 			"listChanged": false,
 		},
 		"roots": map[string]interface{}{
-			"set": false, // We don't currently support roots management
+			"set": false, // Roots management is not currently supported.
 		},
-		"completion": false, // We don't support completion
+		"completion": false, // Completion is not supported.
 	}
 
 	// Construct response
@@ -91,7 +102,9 @@ func (s *MCPServer) handleInitialize(w http.ResponseWriter, r *http.Request) {
 // It returns a list of available resources based on authentication status.
 func (s *MCPServer) handleListResources(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeStandardErrorResponse(w, MethodNotFound,
+			"Method not allowed. List resources endpoint requires GET.",
+			map[string]string{"allowed_method": "GET"})
 		return
 	}
 
@@ -259,7 +272,9 @@ func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
 // It returns a list of available tools based on authentication status.
 func (s *MCPServer) handleListTools(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeStandardErrorResponse(w, MethodNotFound,
+			"Method not allowed. List tools endpoint requires GET.",
+			map[string]string{"allowed_method": "GET"})
 		return
 	}
 
@@ -487,15 +502,18 @@ func getAuthenticatedTools() []mcp.ToolDefinition {
 // It executes the requested tool and returns the result.
 func (s *MCPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeStandardErrorResponse(w, MethodNotFound,
+			"Method not allowed. Call tool endpoint requires POST.",
+			map[string]string{"allowed_method": "POST"})
 		return
 	}
 
 	// Parse request
 	var req mcp.CallToolRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		// SUGGESTION (Ambiguous): Improve error message to indicate decoding failure
-		writeErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("handleCallTool: failed to decode request body: %v", err))
+		writeStandardErrorResponse(w, ParseError,
+			fmt.Sprintf("Failed to decode call_tool request: %v", err),
+			map[string]string{"request_path": r.URL.Path})
 		return
 	}
 
@@ -510,8 +528,9 @@ func (s *MCPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 
 	// Check authentication for other tools
 	if !s.rtmService.IsAuthenticated() {
-		// SUGGESTION (Readability): Clarify authentication error message
-		writeErrorResponse(w, http.StatusUnauthorized, "Not authenticated with Remember The Milk. Please authenticate first via the authenticate tool.")
+		writeStandardErrorResponse(w, AuthError,
+			"Not authenticated with Remember The Milk. Please authenticate first via the authenticate tool.",
+			map[string]string{"auth_tool": "authenticate"})
 		return
 	}
 
@@ -523,8 +542,13 @@ func (s *MCPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Tool %s executed in %v", req.Name, duration)
 
 	if err != nil {
-		// SUGGESTION (Ambiguous): Add context to error message
-		writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("handleCallTool: failed to handle tool %s: %v", req.Name, err))
+		writeStandardErrorResponse(w, ToolError,
+			fmt.Sprintf("Failed to execute tool %s: %v", req.Name, err),
+			map[string]interface{}{
+				"tool_name":    req.Name,
+				"error_reason": err.Error(),
+				"timing":       duration.String(),
+			})
 		return
 	}
 
@@ -561,22 +585,20 @@ func (s *MCPServer) dispatchToolRequest(toolName string, args map[string]interfa
 }
 
 // handleHealthCheck provides a simple health check endpoint.
-func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
+func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	// Check if RTM service is healthy
 	if s.rtmService == nil {
-		// SUGGESTION (Readability): Improved health check error message.
-		http.Error(w, "handleHealthCheck: RTM service not initialized", http.StatusServiceUnavailable)
+		writeStandardErrorResponse(w, InternalError,
+			"RTM service not initialized",
+			map[string]string{"component": "rtm_service"})
 		return
 	}
 
 	// Return simple health check response
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	// Check the Write error to satisfy linter
-	if _, err := w.Write([]byte(`{"status":"healthy"}`)); err != nil {
-		log.Printf("Error writing health check response: %v", err)
-	}
+	writeJSONResponse(w, http.StatusOK, map[string]string{
+		"status": "healthy",
+		"server": s.config.Server.Name,
+	})
 }
 
 // handleStatusCheck provides detailed status information for monitoring.
@@ -585,8 +607,12 @@ func (s *MCPServer) handleStatusCheck(w http.ResponseWriter, r *http.Request) {
 	clientIP := r.RemoteAddr
 	if !strings.HasPrefix(clientIP, "127.0.0.1") && !strings.HasPrefix(clientIP, "[::1]") &&
 		r.Header.Get("X-Status-Secret") != s.config.Server.StatusSecret {
-		// SUGGESTION (Readability): Improved status check error message.
-		http.Error(w, "handleStatusCheck: Forbidden", http.StatusForbidden)
+		writeStandardErrorResponse(w, AuthError,
+			"Forbidden: Status endpoint requires authentication",
+			map[string]string{
+				"required_header": "X-Status-Secret",
+				"remote_addr":     r.RemoteAddr,
+			})
 		return
 	}
 
@@ -606,12 +632,7 @@ func (s *MCPServer) handleStatusCheck(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(status); err != nil {
-		log.Printf("Error encoding status response: %v", err)
-		// SUGGESTION (Readability): Improved encoding error message.
-		http.Error(w, "handleStatusCheck: Error encoding JSON response", http.StatusInternalServerError)
-	}
+	writeJSONResponse(w, http.StatusOK, status)
 }
 
 // handleSendNotification is a placeholder for notification support.
@@ -619,20 +640,23 @@ func (s *MCPServer) handleStatusCheck(w http.ResponseWriter, r *http.Request) {
 func (s *MCPServer) handleSendNotification(w http.ResponseWriter, r *http.Request) {
 	// Currently, we don't support notifications, so return appropriate error
 	if r.Method != http.MethodPost {
-		// SUGGESTION (Readability): Clarified method not allowed message.
-		writeErrorResponse(w, http.StatusMethodNotAllowed, "handleSendNotification: Method not allowed. Must use POST for this endpoint.")
+		writeStandardErrorResponse(w, MethodNotFound,
+			"Method not allowed. Notification endpoint requires POST",
+			map[string]string{"allowed_method": "POST"})
 		return
 	}
 
 	// Return unsupported operation for now
-	writeErrorResponse(w, http.StatusNotImplemented, "Notifications not yet supported")
+	writeStandardErrorResponse(w, InternalError,
+		"Notifications not yet supported",
+		map[string]string{"feature_status": "planned"})
 }
 
 // handleTagsResource retrieves and formats all tags from RTM.
 func (s *MCPServer) handleTagsResource() (string, error) {
 	tags, err := s.rtmService.GetTags()
 	if err != nil {
-		return "", fmt.Errorf("rtmService.GetTags: %w", err)
+		return "", fmt.Errorf("failed to retrieve tags: %w", err)
 	}
 	return formatTags(tags), nil
 }
