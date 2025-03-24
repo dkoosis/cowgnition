@@ -6,7 +6,7 @@ This document provides a friendly tour of how CowGnition is organized and archit
 
 CowGnition follows the [standard Go project layout](https://github.com/golang-standards/project-layout) with the following structure:
 
-```
+````
 cowgnition/
 ├── cmd/                      # Command-line entry points
 │   └── server/               # Main server application
@@ -23,22 +23,60 @@ cowgnition/
 │   ├── server/               # MCP server implementation
 │   │   ├── server.go         # MCP server core
 │   │   ├── handlers.go       # HTTP handlers for MCP endpoints
+│   │   ├── mcp_handlers.go   # MCP-specific request handlers
+│   │   ├── auth_handlers.go  # Authentication-related handlers
 │   │   ├── resources.go      # Resource implementations
 │   │   ├── tools.go          # Tool implementations
 │   │   ├── middleware.go     # HTTP middleware
+│   │   ├── errors.go         # Custom error definitions
 │   │   └── utils.go          # Helper functions
 │   └── rtm/                  # RTM API client
 │       ├── client.go         # HTTP client for RTM API
 │       ├── service.go        # Business logic for RTM operations
-│       └── types.go          # RTM data models
+│       ├── types.go          # RTM data models
+│       ├── client_auth.go    # RTM authentication client
+│       ├── client_lists.go   # RTM lists API client
+│       ├── client_tasks.go   # RTM tasks API client
+│       ├── client_tags.go    # RTM tags API client
+│       └── rate_limiter.go   # Rate limiting for RTM API calls
 ├── pkg/                      # Shareable libraries
 │   └── mcp/                  # MCP protocol utilities
 │       └── types.go          # MCP type definitions
 ├── scripts/                  # Build and utility scripts
 │   └── setup.sh              # Development environment setup
+├── test/                     # Test code and utilities
+│   ├── mcp/                  # MCP conformance tests  <-- ADDED
+│   │   ├── conformance_test.go    # Main conformance test suite
+│   │   ├── initialization_test.go # Initialization endpoint tests
+│   │   ├── resources_test.go      # Resource endpoint tests
+│   │   ├── tools_test.go          # Tool endpoint tests
+│   │   ├── special_cases_test.go # Edge case tests
+│   │   ├── setup_test.go      # Mock RTM server setup for tests
+│   │   └── helpers/             # MCP-specific test utilities
+│   │       ├── mcp_client.go    # MCP test client
+│   │       ├── helpers.go       # General test helpers
+│   │       ├── rtm_test_client.go # RTM API test client
+│   │       └── test_config.go   # Test configuration loading
+│   ├── mocks/                # Mock implementations
+│   │   └── rtm_server.go     # Mock RTM server
+│   ├── fixtures/             # Test fixtures
+│   │   └── rtm/              # RTM API response fixtures
+│   │       └── fixtures.go
+│   ├── integration/           # Integration tests
+│   │   └── ...               # (Existing integration tests)
+│   ├── unit/                 # Unit tests
+│   │   └── ...               # (Existing unit tests)
+│   ├── testdata/             # Test data
+│       └── mcp
+│       │   ├── requests
+│       │   └── responses
+│       └── rtm
+│           └── responses
+│   └── util/                # General test utilities
+│        └── testutil/
+│           └── mcptest.go
 └── docs/                     # Documentation
-    └── PROJECT_ORGANIZATION.md  # This file
-```
+    └── PROJECT_ORGANIZATION.md  # This file```
 
 ## Component Architecture
 
@@ -143,3 +181,4 @@ These principles help us create a reliable bridge between Claude and your carefu
 - [README.md](../README.md) - Project overview and usage instructions
 - [GO_PRACTICES.md](../GO_PRACTICES.md) - Go development guidelines
 - [TODO.md](../TODO.md) - Development roadmap
+````
