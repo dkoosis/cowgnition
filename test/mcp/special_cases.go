@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cowgnition/cowgnition/test/helpers"
+	"github.com/cowgnition/cowgnition/test/mcp/helpers"
 )
 
 // SpecialCases tests special edge cases for MCP protocol compliance.

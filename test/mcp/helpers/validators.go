@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers"
+	"github.com/cowgnition/cowgnition/test/mcp/helpers"
 )
 
 // MCPProtocolVersion defines the version of the MCP protocol being tested.
