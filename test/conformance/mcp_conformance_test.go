@@ -91,12 +91,6 @@ func testInitialization(t *testing.T, client *helpers.MCPClient) {
 		_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		// Create initialization request
-		reqBody := map[string]interface{}{
-			"server_name":    "Test Client",
-			"server_version": "1.0.0",
-		}
-
 		// Send initialization request
 		resp, err := client.Initialize(t, "Test Client", "1.0.0")
 		if err != nil {
@@ -409,13 +403,12 @@ func validateResourceObject(t *testing.T, resource map[string]interface{}) {
 }
 
 // validateResourceResponseStructure validates a read_resource response.
-// Renamed from validateResourceResponse to avoid conflict
+// Renamed from validateResourceResponse to avoid conflict.
 func validateResourceResponseStructure(t *testing.T, response map[string]interface{}) {
 	t.Helper()
 
 	// Check required fields
-	content, ok := response["content"].(string)
-	if !ok {
+	if _, ok := response["content"].(string); !ok {
 		t.Error("Resource response missing content field")
 	}
 
