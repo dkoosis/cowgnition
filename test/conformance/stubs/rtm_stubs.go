@@ -1,5 +1,5 @@
 // Package stubs provides test utility functions for the RTM client.
-package stubs
+package helpers
 
 import (
 	"context"

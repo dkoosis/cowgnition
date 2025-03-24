@@ -1,5 +1,4 @@
-// Package conformance provides tests to verify MCP protocol compliance.
-package conformance
+package helpers
 
 import (
 	"strings"
