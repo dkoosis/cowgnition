@@ -1,5 +1,5 @@
 // Package helpers provides testing utilities for the CowGnition MCP server.
-package common
+package rtm
 
 import (
 	"bytes"

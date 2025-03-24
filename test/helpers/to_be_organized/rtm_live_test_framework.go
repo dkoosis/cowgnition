@@ -9,7 +9,7 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers"
+	"github.com/cowgnition/cowgnition/test/helpers/common"
 )
 
 // Import and use functions from the helpers package.

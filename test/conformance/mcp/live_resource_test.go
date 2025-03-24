@@ -17,7 +17,7 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers"
+	"github.com/cowgnition/cowgnition/test/helpers/common"
 )
 
 // TestMCPResourceLive tests the MCP server with a real RTM API connection.

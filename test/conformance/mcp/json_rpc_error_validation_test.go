@@ -17,8 +17,8 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers"
-	"github.com/cowgnition/cowgnition/test/mocks"
+	"github.com/cowgnition/cowgnition/test/helpers/common"
+	"github.com/cowgnition/cowgnition/test/mocks/common"
 )
 
 // TestJSONRPCErrorValidation provides comprehensive testing for the JSON-RPC 2.0

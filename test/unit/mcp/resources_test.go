@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cowgnition/cowgnition/test/helpers"
+	"github.com/cowgnition/cowgnition/test/helpers/common"
 	mcpvalidators "github.com/cowgnition/cowgnition/test/helpers/mcp"
 )
 

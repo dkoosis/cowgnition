@@ -12,7 +12,7 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers"
+	"github.com/cowgnition/cowgnition/test/helpers/common"
 )
 
 // TestReadResourceLive tests the read_resource endpoint with a real RTM API connection.
