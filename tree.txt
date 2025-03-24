@@ -78,14 +78,8 @@
 │   └── setup.sh*
 ├── test/
 │   ├── common/
-│   │   └── helpers/
-│   │       ├── auth_stub.go
-│   │       └── test_config.go
 │   ├── conformance/
-│   │   └── stubs/
-│   │       └── rtm_stubs.go
-│   ├── mcp/
-│   │   ├── conformance/
+│   │   ├── mcp/
 │   │   │   ├── auth_test.go
 │   │   │   ├── conformance_test.go
 │   │   │   ├── errors_test.go
@@ -94,31 +88,26 @@
 │   │   │   ├── live_resource_test.go
 │   │   │   ├── read_resource_live_test.go
 │   │   │   ├── resources_test.go
-│   │   │   └── tools_test.go
-│   │   ├── conformance_test.go
-│   │   ├── helpers/
-│   │   │   ├── client.go
-│   │   │   ├── resource_validator.go
+│   │   │   ├── tools_test.go
 │   │   │   └── validators.go
-│   │   ├── initialization_test.go
-│   │   ├── resources_test.go
-│   │   ├── setup_test.go
-│   │   ├── special_cases.go
-│   │   ├── tools_test.go
-│   │   └── util.go
-│   ├── rtm/
-│   │   ├── fixtures/
-│   │   │   └── fixtures.go
-│   │   ├── helpers/
-│   │   │   ├── client.go
-│   │   │   ├── rtm_helpers.go
-│   │   │   ├── rtm_live_helpers.go
-│   │   │   └── rtm_live_test_framework.go
-│   │   └── mocks/
-│   │       └── server.go
+│   │   └── stubs/
+│   │       ├── mcp/
+│   │       │   └── test_framework.go
+│   │       └── rtm_stubs.go
+│   ├── fixtures/
+│   │   └── fixtures.go
+│   ├── helpers/
+│   │   ├── auth_stub.go
+│   │   ├── client.go
+│   │   ├── rtm_helpers.go
+│   │   ├── rtm_live_helpers.go
+│   │   ├── rtm_live_test_framework.go
+│   │   └── test_config.go
+│   ├── mocks/
+│   │   └── server.go
 │   └── util/
 │       └── testutil/
 │           └── mcptest.go
 └── tree.txt
 
-38 directories, 84 files
+35 directories, 76 files
