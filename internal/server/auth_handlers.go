@@ -23,7 +23,12 @@ func (s *MCPServer) handleAuthResource(w http.ResponseWriter) {
 	authURL, frob, err := s.rtmService.StartAuthFlow()
 	if err != nil {
 		log.Printf("Error starting auth flow: %v", err)
-		writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Error starting authentication flow: %v", err))
+		writeStandardErrorResponse(w, InternalError,
+			fmt.Sprintf("Error starting authentication flow: %v", err),
+			map[string]interface{}{
+				"component": "rtm_service",
+				"function":  "StartAuthFlow",
+			})
 		return
 	}
 
@@ -99,7 +104,12 @@ func (s *MCPServer) handleAuthenticationTool(w http.ResponseWriter, args map[str
 	// Get frob from arguments
 	frob, ok := args["frob"].(string)
 	if !ok || frob == "" {
-		writeErrorResponse(w, http.StatusBadRequest, "Missing or invalid 'frob' argument. Please provide the 'frob' value from the authentication URL.")
+		writeStandardErrorResponse(w, InvalidParams,
+			"Missing or invalid 'frob' argument. Please provide the 'frob' value from the authentication URL.",
+			map[string]interface{}{
+				"required_parameter": "frob",
+				"parameter_type":     "string",
+			})
 		return
 	}
 
@@ -110,19 +120,32 @@ func (s *MCPServer) handleAuthenticationTool(w http.ResponseWriter, args map[str
 		// Check for specific errors to provide more helpful messages
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "expired") {
-			writeErrorResponse(w, http.StatusBadRequest,
-				"Authentication flow expired. Please initiate a new authentication process by accessing the auth://rtm resource again.")
+			writeStandardErrorResponse(w, AuthError,
+				"Authentication flow expired. Please initiate a new authentication process by accessing the auth://rtm resource again.",
+				map[string]interface{}{
+					"error_type":    "expired_flow",
+					"auth_resource": "auth://rtm",
+				})
 			return
 		}
 
 		if strings.Contains(errMsg, "invalid frob") {
-			writeErrorResponse(w, http.StatusBadRequest,
-				"Invalid 'frob' value provided. Ensure you are using the 'frob' from the most recent authentication attempt.")
+			writeStandardErrorResponse(w, InvalidParams,
+				"Invalid 'frob' value provided. Ensure you are using the 'frob' from the most recent authentication attempt.",
+				map[string]interface{}{
+					"error_type": "invalid_frob",
+					"parameter":  "frob",
+				})
 			return
 		}
 
-		writeErrorResponse(w, http.StatusInternalServerError,
-			fmt.Sprintf("Authentication failed: %v. Please try starting the authentication process again.", err))
+		writeStandardErrorResponse(w, RTMServiceError,
+			fmt.Sprintf("Authentication failed: %v. Please try starting the authentication process again.", err),
+			map[string]interface{}{
+				"component":     "rtm_service",
+				"function":      "CompleteAuthFlow",
+				"auth_resource": "auth://rtm",
+			})
 		return
 	}
 
