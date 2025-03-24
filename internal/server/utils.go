@@ -31,44 +31,6 @@ func writeJSONResponse(w http.ResponseWriter, _ int, data interface{}) {
 	}
 }
 
-// writeErrorResponse writes a JSON error response with the given status code and message.
-// Deprecated: Use WriteJSONRPCError or writeStandardErrorResponse instead.
-func writeErrorResponse(w http.ResponseWriter, statusCode int, message string) {
-	requestID := generateRequestID()
-
-	// Log the error with the request ID for traceability
-	log.Printf("[RequestID: %s] Error (%d): %s", requestID, statusCode, message)
-
-	// Map HTTP status to an appropriate JSON-RPC error code
-	errorCode := mapHTTPToJSONRPCCode(statusCode)
-
-	// Create and write the new JSON-RPC 2.0 error response
-	errResp := NewErrorResponse(errorCode, message, map[string]string{
-		"request_id": requestID,
-		"timestamp":  time.Now().UTC().Format(time.RFC3339),
-	})
-
-	WriteJSONRPCError(w, errResp)
-}
-
-// mapHTTPToJSONRPCCode maps HTTP status codes to JSON-RPC error codes.
-func mapHTTPToJSONRPCCode(httpStatus int) ErrorCode {
-	switch httpStatus {
-	case http.StatusBadRequest:
-		return InvalidParams
-	case http.StatusNotFound:
-		return MethodNotFound
-	case http.StatusMethodNotAllowed:
-		return MethodNotFound
-	case http.StatusUnauthorized:
-		return AuthError
-	case http.StatusForbidden:
-		return AuthError
-	default:
-		return InternalError
-	}
-}
-
 // writeStandardErrorResponse is a convenient wrapper for WriteJSONRPCError.
 // It adds consistent error response formatting with timestamp and contextual details,
 // logs the error with stack trace, and maps the error to the appropriate HTTP status code.
@@ -91,11 +53,6 @@ func writeStandardErrorResponse(w http.ResponseWriter, code ErrorCode, message s
 	// Send standard error response
 	errResp := NewErrorResponse(code, message, data)
 	WriteJSONRPCError(w, errResp)
-}
-
-// generateRequestID creates a unique ID for tracking request/error correlations.
-func generateRequestID() string {
-	return fmt.Sprintf("req-%d", time.Now().UnixNano())
 }
 
 // formatTimeComponent returns formatted time if present, empty string otherwise.

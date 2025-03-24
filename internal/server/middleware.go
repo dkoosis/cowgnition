@@ -10,6 +10,8 @@ import (
 )
 
 // logMiddleware adds request logging to the server.
+// It logs incoming requests with their method, path, and source IP,
+// measures response time, and logs the final status code.
 func logMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -31,6 +33,9 @@ func logMiddleware(next http.Handler) http.Handler {
 }
 
 // recoveryMiddleware adds panic recovery to prevent server crashes.
+// It captures any panics that occur during request handling,
+// logs detailed error information including stack traces,
+// and returns a standardized error response to the client.
 func recoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -39,9 +44,17 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 				stack := debug.Stack()
 				log.Printf("PANIC: %v\n%s", err, stack)
 
-				// Return a 500 error
-				writeErrorResponse(w, http.StatusInternalServerError,
-					fmt.Sprintf("Internal server error: %v", err))
+				// Return a 500 error with detailed context for debugging
+				context := map[string]interface{}{
+					"request_path":   r.URL.Path,
+					"request_method": r.Method,
+					"remote_addr":    r.RemoteAddr,
+					"panic_value":    fmt.Sprintf("%v", err),
+					"recovery":       "panic recovered by middleware",
+				}
+
+				writeStandardErrorResponse(w, InternalError,
+					"An unexpected error occurred while processing your request", context)
 			}
 		}()
 		next.ServeHTTP(w, r)
@@ -49,6 +62,8 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 }
 
 // corsMiddleware adds CORS headers for development scenarios.
+// It sets appropriate headers to allow cross-origin requests
+// and handles OPTIONS preflight requests automatically.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Add CORS headers for development
@@ -67,6 +82,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 // responseInterceptor wraps an http.ResponseWriter to capture the status code.
+// This allows middleware to log the actual status code that was sent to the client.
 type responseInterceptor struct {
 	http.ResponseWriter
 	statusCode int
