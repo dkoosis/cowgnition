@@ -70,6 +70,8 @@ func mapHTTPToJSONRPCCode(httpStatus int) ErrorCode {
 }
 
 // writeStandardErrorResponse is a convenient wrapper for WriteJSONRPCError.
+// It adds consistent error response formatting with timestamp and contextual details,
+// logs the error with stack trace, and maps the error to the appropriate HTTP status code.
 func writeStandardErrorResponse(w http.ResponseWriter, code ErrorCode, message string, data interface{}) {
 	// Create context for logging
 	context := map[string]interface{}{
