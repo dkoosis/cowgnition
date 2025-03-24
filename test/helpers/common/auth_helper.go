@@ -130,7 +130,7 @@ func SetAuthTokenOnServer(s *server.Server, token string) error {
 	// Check if authentication worked
 	client := NewMCPClient(nil, s)
 	defer client.Close()
-	
+
 	if IsAuthenticated(client) {
 		return nil
 	}

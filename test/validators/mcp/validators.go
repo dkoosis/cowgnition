@@ -4,7 +4,6 @@ package validators
 import (
 	"fmt"
 	"regexp"
-	"strings"
 	"testing"
 	"time"
 )
