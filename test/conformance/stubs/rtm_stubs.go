@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers"
+	"github.com/cowgnition/cowgnition/test/common/helpers"
 )
 
 // SetAuthTokenOnServer attempts to set the authentication token directly on the server's RTM service.
