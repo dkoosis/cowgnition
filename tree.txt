@@ -95,11 +95,16 @@
 │   │       │   └── test_framework.go
 │   │       └── rtm_stubs.go
 │   ├── fixtures/
-│   │   └── fixtures.go
+│   │   ├── common/
+│   │   ├── fixtures.go
+│   │   ├── mcp/
+│   │   └── rtm/
 │   ├── helpers/
+│   │   ├── common/
 │   │   ├── mcp/
 │   │   │   ├── resources_test.go
 │   │   │   └── validators.go
+│   │   ├── rtm/
 │   │   └── to_be_organized/
 │   │       ├── auth_stub.go
 │   │       ├── client.go
@@ -107,11 +112,20 @@
 │   │       ├── rtm_live_helpers.go
 │   │       ├── rtm_live_test_framework.go
 │   │       └── test_config.go
+│   ├── integration/
+│   │   ├── mcp/
+│   │   └── rtm/
 │   ├── mocks/
+│   │   ├── common/
+│   │   ├── rtm/
 │   │   └── server.go
+│   ├── unit/
+│   │   ├── auth/
+│   │   ├── mcp/
+│   │   └── rtm/
 │   └── util/
 │       └── testutil/
 │           └── mcptest.go
 └── tree.txt
 
-37 directories, 78 files
+51 directories, 78 files
