@@ -1,4 +1,5 @@
 // Package conformance provides tests to verify MCP protocol compliance.
+// file: test/conformance/mcp_initialize_endpoint_test.go
 package conformance
 
 import (

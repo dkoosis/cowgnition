@@ -1,4 +1,5 @@
 // Package conformance provides tests to verify MCP protocol compliance.
+// file: test/conformance/json_rpc_error_validation_test.go
 package conformance
 
 import (
