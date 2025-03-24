@@ -1,28 +1,28 @@
-// Package mcp provides validation utilities for MCP protocol testing.
-// file: test/conformance/mcp/validators.go
-package mcp
+// Package validators provides validation utilities for MCP protocol testing.
+package validators
 
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 )
 
-// Constants for validation
+// Constants for validation.
 const (
-	// Resource field names
+	// Resource field names.
 	FieldResourceName        = "name"
 	FieldResourceDescription = "description"
 	FieldResourceMimeType    = "mime_type"
 	FieldResourceContent     = "content"
 
-	// Argument field names
+	// Argument field names.
 	FieldArgName        = "name"
 	FieldArgDescription = "description"
 	FieldArgRequired    = "required"
 
-	// Tool field names
+	// Tool field names.
 	FieldToolName        = "name"
 	FieldToolDescription = "description"
 	FieldToolResult      = "result"
@@ -38,7 +38,7 @@ func ValidateMCPResource(t *testing.T, resource interface{}) bool {
 		return false
 	}
 
-	// Check required fields
+	// Check required fields.
 	requiredFields := []string{FieldResourceName, FieldResourceDescription}
 	for _, field := range requiredFields {
 		if resourceObj[field] == nil {
@@ -47,7 +47,7 @@ func ValidateMCPResource(t *testing.T, resource interface{}) bool {
 		}
 	}
 
-	// Validate field types
+	// Validate field types.
 	name, ok := resourceObj[FieldResourceName].(string)
 	if !ok {
 		t.Errorf("Resource name is not a string: %v", resourceObj[FieldResourceName])
@@ -65,16 +65,16 @@ func ValidateMCPResource(t *testing.T, resource interface{}) bool {
 		return false
 	}
 
-	// Validate resource name format
+	// Validate resource name format.
 	if !validateResourceNameFormat(name) {
 		t.Errorf("Invalid resource name format: %s", name)
 		return false
 	}
 
-	// Check arguments if present
+	// Check arguments if present.
 	if args, ok := resourceObj["arguments"].([]interface{}); ok {
 		for i, arg := range args {
-			if !validateArgument(t, i, arg) {
+			if !ValidateArgument(t, i, arg) {
 				return false
 			}
 		}
@@ -93,7 +93,7 @@ func ValidateMCPTool(t *testing.T, tool interface{}) bool {
 		return false
 	}
 
-	// Check required fields
+	// Check required fields.
 	requiredFields := []string{FieldToolName, FieldToolDescription}
 	for _, field := range requiredFields {
 		if toolObj[field] == nil {
@@ -102,7 +102,7 @@ func ValidateMCPTool(t *testing.T, tool interface{}) bool {
 		}
 	}
 
-	// Validate field types
+	// Validate field types.
 	name, ok := toolObj[FieldToolName].(string)
 	if !ok {
 		t.Errorf("Tool name is not a string: %v", toolObj[FieldToolName])
@@ -120,10 +120,10 @@ func ValidateMCPTool(t *testing.T, tool interface{}) bool {
 		return false
 	}
 
-	// Check arguments if present
+	// Check arguments if present.
 	if args, ok := toolObj["arguments"].([]interface{}); ok {
 		for i, arg := range args {
-			if !validateArgument(t, i, arg) {
+			if !ValidateArgument(t, i, arg) {
 				return false
 			}
 		}
@@ -136,7 +136,7 @@ func ValidateMCPTool(t *testing.T, tool interface{}) bool {
 func ValidateResourceResponse(t *testing.T, response map[string]interface{}) bool {
 	t.Helper()
 
-	// Check required fields
+	// Check required fields.
 	requiredFields := []string{FieldResourceContent, FieldResourceMimeType}
 	for _, field := range requiredFields {
 		if response[field] == nil {
@@ -145,7 +145,7 @@ func ValidateResourceResponse(t *testing.T, response map[string]interface{}) boo
 		}
 	}
 
-	// Validate field types
+	// Validate field types.
 	content, ok := response[FieldResourceContent].(string)
 	if !ok {
 		t.Errorf("Resource content is not a string: %v", response[FieldResourceContent])
@@ -158,13 +158,13 @@ func ValidateResourceResponse(t *testing.T, response map[string]interface{}) boo
 		return false
 	}
 
-	// Validate MIME type
+	// Validate MIME type.
 	if !validateMimeType(mimeType) {
 		t.Errorf("Invalid MIME type: %s", mimeType)
 		return false
 	}
 
-	// Content shouldn't be empty for most resources
+	// Content shouldn't be empty for most resources.
 	if content == "" {
 		t.Logf("Warning: Resource content is empty")
 	}
@@ -176,7 +176,7 @@ func ValidateResourceResponse(t *testing.T, response map[string]interface{}) boo
 func ValidateToolResponse(t *testing.T, response map[string]interface{}) bool {
 	t.Helper()
 
-	// Check result field
+	// Check result field.
 	result, ok := response[FieldToolResult]
 	if !ok {
 		t.Errorf("Tool response missing required field: %s", FieldToolResult)
@@ -188,7 +188,7 @@ func ValidateToolResponse(t *testing.T, response map[string]interface{}) bool {
 		return false
 	}
 
-	// Validate field type
+	// Validate field type.
 	_, ok = result.(string)
 	if !ok {
 		t.Errorf("Tool result is not a string: %v", result)
@@ -202,13 +202,13 @@ func ValidateToolResponse(t *testing.T, response map[string]interface{}) bool {
 func ValidateErrorResponse(t *testing.T, response map[string]interface{}) bool {
 	t.Helper()
 
-	// Check for error field or status field
+	// Check for error field or status field.
 	if response["error"] == nil && response["status"] == nil {
 		t.Error("Error response missing both error and status fields")
 		return false
 	}
 
-	// Check status code if present
+	// Check status code if present.
 	if status, ok := response["status"].(float64); ok {
 		if status < 400 {
 			t.Errorf("Error status code should be >= 400, got %v", status)
@@ -216,9 +216,9 @@ func ValidateErrorResponse(t *testing.T, response map[string]interface{}) bool {
 		}
 	}
 
-	// Check error object structure if present
+	// Check error object structure if present.
 	if errObj, ok := response["error"].(map[string]interface{}); ok {
-		// Check error code
+		// Check error code.
 		if code, ok := errObj["code"].(float64); !ok {
 			t.Error("Error object missing code field or code is not a number")
 			return false
@@ -227,16 +227,16 @@ func ValidateErrorResponse(t *testing.T, response map[string]interface{}) bool {
 			return false
 		}
 
-		// Check error message
+		// Check error message.
 		if msg, ok := errObj["message"].(string); !ok || msg == "" {
 			t.Error("Error object missing message field or message is empty")
 			return false
 		}
 	}
 
-	// Check timestamp if present
+	// Check timestamp if present.
 	if ts, ok := response["timestamp"].(string); ok {
-		// Validate timestamp format
+		// Validate timestamp format.
 		if _, err := time.Parse(time.RFC3339, ts); err != nil {
 			t.Errorf("Invalid timestamp format: %s", ts)
 			return false
@@ -248,8 +248,8 @@ func ValidateErrorResponse(t *testing.T, response map[string]interface{}) bool {
 
 // Helper functions
 
-// validateArgument validates an argument structure.
-func validateArgument(t *testing.T, index int, arg interface{}) bool {
+// ValidateArgument validates an argument structure.
+func ValidateArgument(t *testing.T, index int, arg interface{}) bool {
 	t.Helper()
 
 	argObj, ok := arg.(map[string]interface{})
@@ -258,7 +258,7 @@ func validateArgument(t *testing.T, index int, arg interface{}) bool {
 		return false
 	}
 
-	// Check required fields
+	// Check required fields.
 	requiredFields := []string{FieldArgName, FieldArgDescription, FieldArgRequired}
 	for _, field := range requiredFields {
 		if argObj[field] == nil {
@@ -267,7 +267,7 @@ func validateArgument(t *testing.T, index int, arg interface{}) bool {
 		}
 	}
 
-	// Validate field types
+	// Validate field types.
 	_, ok = argObj[FieldArgName].(string)
 	if !ok {
 		t.Errorf("Argument %d name is not a string", index)
@@ -291,14 +291,14 @@ func validateArgument(t *testing.T, index int, arg interface{}) bool {
 
 // validateResourceNameFormat validates resource name follows 'scheme://path' format.
 func validateResourceNameFormat(name string) bool {
-	// Check for scheme://path format
+	// Check for scheme://path format.
 	pattern := regexp.MustCompile(`^[a-z]+://[a-zA-Z0-9\-_\./]+(?:/\{[a-zA-Z0-9\-_]+\})?$`)
 	return pattern.MatchString(name)
 }
 
 // validateMimeType validates MIME type format.
 func validateMimeType(mimeType string) bool {
-	// Basic MIME type pattern
+	// Basic MIME type pattern.
 	pattern := regexp.MustCompile(`^[a-z]+/[a-z0-9\-\.\+]+`)
 	return pattern.MatchString(mimeType)
 }

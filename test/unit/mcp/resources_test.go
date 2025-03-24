@@ -1,6 +1,4 @@
-// test/mcp/resources_test.go
-// CONSOLIDATION-2024-03-24: Updated to use centralized validators from test/helpers/mcp
-
+// Package mcp provides unit tests for MCP protocol implementation.
 package mcp
 
 import (
@@ -8,11 +6,11 @@ import (
 	"testing"
 
 	"github.com/cowgnition/cowgnition/test/helpers/common"
-	mcpvalidators "github.com/cowgnition/cowgnition/test/helpers/mcp"
+	"github.com/cowgnition/cowgnition/test/validators/mcp"
 )
 
-// Resources verifies the MCP resource listing and reading capabilities.
-func Resources(t *testing.T, client *helpers.MCPClient) {
+// TestResources verifies the MCP resource listing and reading capabilities.
+func TestResources(t *testing.T, client *common.MCPClient) {
 	t.Helper()
 
 	// Test resource listing
@@ -42,7 +40,7 @@ func Resources(t *testing.T, client *helpers.MCPClient) {
 			}
 
 			// Use centralized validator
-			if !mcpvalidators.ValidateMCPResource(t, resource) {
+			if !validators.ValidateMCPResource(t, resource) {
 				t.Errorf("Resource %d failed validation", i)
 			}
 		}
@@ -75,7 +73,7 @@ func Resources(t *testing.T, client *helpers.MCPClient) {
 		}
 
 		// tasks://all should be available when authenticated
-		if helpers.IsAuthenticated(client) && !tasksAllResourceFound {
+		if common.IsAuthenticated(client) && !tasksAllResourceFound {
 			t.Error("tasks://all resource not found when authenticated")
 		}
 	})
@@ -89,12 +87,12 @@ func Resources(t *testing.T, client *helpers.MCPClient) {
 		}
 
 		// Validate response structure using centralized validator
-		if !mcpvalidators.ValidateResourceResponse(t, resp) {
+		if !validators.ValidateResourceResponse(t, resp) {
 			t.Error("Auth resource response failed validation")
 		}
 
 		// If authenticated, test task resources
-		if helpers.IsAuthenticated(client) {
+		if common.IsAuthenticated(client) {
 			// Test reading tasks resource
 			resp, err := client.ReadResource(t, "tasks://all")
 			if err != nil {
@@ -102,7 +100,7 @@ func Resources(t *testing.T, client *helpers.MCPClient) {
 			}
 
 			// Validate response structure using centralized validator
-			if !mcpvalidators.ValidateResourceResponse(t, resp) {
+			if !validators.ValidateResourceResponse(t, resp) {
 				t.Error("Tasks resource response failed validation")
 			}
 
