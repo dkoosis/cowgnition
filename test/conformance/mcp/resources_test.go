@@ -1,5 +1,5 @@
 // Package conformance provides tests to verify MCP protocol compliance.
-package conformance
+package mcp
 
 import (
 	"context"

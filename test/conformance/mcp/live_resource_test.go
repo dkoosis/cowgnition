@@ -1,6 +1,6 @@
 // Package conformance provides tests to verify MCP protocol compliance.
 // file: test/conformance/mcp_live_resource_test.go
-package conformance
+package mcp
 
 import (
 	"bytes"

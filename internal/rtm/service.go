@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cowgnition/cowgnition/internal/rtm/client"
 )
 
 // Service provides a wrapper around the RTM client with additional functionality.
@@ -24,7 +26,7 @@ type Service struct {
 // NewService creates a new RTM service.
 func NewService(apiKey, sharedSecret, tokenPath string) *Service {
 	return &Service{
-		client:       NewClient(apiKey, sharedSecret),
+		client:       client.NewClient(apiKey, sharedSecret),
 		authStatus:   StatusUnknown,
 		authFlows:    make(map[string]*AuthFlow),
 		permission:   string(PermDelete),

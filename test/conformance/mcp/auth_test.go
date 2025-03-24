@@ -1,6 +1,6 @@
 // Package conformance provides tests to verify MCP protocol compliance.
 // file: test/conformance/mcp_authenticated_resources.go
-package conformance
+package mcp
 
 import (
 	"bytes"
@@ -16,8 +16,8 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers/common"
-	"github.com/cowgnition/cowgnition/test/mocks/common"
+	"github.com/cowgnition/cowgnition/test/helpers"
+	"github.com/cowgnition/cowgnition/test/mocks"
 )
 
 // TestReadResourceAuthenticated tests the resource endpoints when authenticated.
