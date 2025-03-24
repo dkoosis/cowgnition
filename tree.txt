@@ -101,10 +101,16 @@
 │   │   └── rtm/
 │   ├── helpers/
 │   │   ├── common/
+│   │   │   ├── auth_stub.go
+│   │   │   ├── client.go
+│   │   │   └── test_config.go
 │   │   ├── mcp/
 │   │   │   ├── resources_test.go
 │   │   │   └── validators.go
 │   │   ├── rtm/
+│   │   │   ├── rtm_helpers.go
+│   │   │   ├── rtm_live_helpers.go
+│   │   │   └── rtm_live_test_framework.go
 │   │   └── to_be_organized/
 │   │       ├── auth_stub.go
 │   │       ├── client.go
@@ -128,4 +134,4 @@
 │           └── mcptest.go
 └── tree.txt
 
-51 directories, 78 files
+51 directories, 84 files
