@@ -1,3 +1,4 @@
+// file: test/unit/mcp/resources_test.go
 // Package mcp provides unit tests for MCP protocol implementation.
 package mcp
 
@@ -6,11 +7,21 @@ import (
 	"testing"
 
 	"github.com/cowgnition/cowgnition/test/helpers/common"
-	"github.com/cowgnition/cowgnition/test/validators/mcp"
+	validators "github.com/cowgnition/cowgnition/test/validators/mcp"
 )
 
 // TestResources verifies the MCP resource listing and reading capabilities.
-func TestResources(t *testing.T, client *common.MCPClient) {
+func TestResources(t *testing.T) {
+	// Create client for testing
+	client := common.NewMCPClient(t, nil)
+	defer client.Close()
+
+	// Run the implementation
+	testResourcesImpl(t, client)
+}
+
+// testResourcesImpl contains the actual test implementation
+func testResourcesImpl(t *testing.T, client *common.MCPClient) {
 	t.Helper()
 
 	// Test resource listing

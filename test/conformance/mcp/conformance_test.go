@@ -12,8 +12,7 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers/common"
-	"github.com/cowgnition/cowgnition/test/mocks/common"
+	"github.com/cowgnition/cowgnition/test/mocks"
 )
 
 // TestMCPComprehensiveConformance provides a comprehensive test suite for
