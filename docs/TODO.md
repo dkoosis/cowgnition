@@ -4,6 +4,25 @@
 
 CowGnition fully implements the MCP specification. This involved:
 
+# CowGnition - MCP Server Implementation Roadmap
+
+## TOP Priority: Test Directory Reorganization
+
+Next steps:
+
+1. Consolidate validator code between test/mcp/ and test/mcp/conformance/
+
+   - Focus on removing duplicate functions in validators.go and resources_test.go
+   - Create single source of truth for validators
+
+2. Resolve test package organization
+
+   - Clear separation between mcp/conformance and base mcp tests
+   - Fix import patterns to prevent circular dependencies
+
+3. Document test structure
+   - Create TESTING_GUIDELINES.md with organizational principles
+
 - **Validation against official MCP documentation:**
 
   - [x] Compared current implementation with protocol requirements.
