@@ -1,3 +1,4 @@
+// file: internal/server/middleware/auth.go
 // Package server implements the Model Context Protocol server for RTM integration.
 package server
 
@@ -11,7 +12,7 @@ import (
 
 // handleAuthResource handles the auth://rtm resource.
 // It provides authentication status and initiates the auth flow if needed.
-func (s *MCPServer) handleAuthResource(w http.ResponseWriter) {
+func (s *Server) handleAuthResource(w http.ResponseWriter) {
 	if s.rtmService.IsAuthenticated() {
 		// Already authenticated
 		response := formatAuthSuccessResponse()
@@ -93,7 +94,7 @@ This secure authentication process uses Remember The Milk's OAuth-like flow. Cow
 
 // handleAuthenticationTool handles the authenticate tool.
 // This completes the RTM authentication flow.
-func (s *MCPServer) handleAuthenticationTool(w http.ResponseWriter, args map[string]interface{}) {
+func (s *Server) handleAuthenticationTool(w http.ResponseWriter, args map[string]interface{}) {
 	if s.rtmService.IsAuthenticated() {
 		writeJSONResponse(w, http.StatusOK, map[string]interface{}{
 			"result": "✅ You're already authenticated with Remember The Milk! You can use all features now.",
@@ -167,7 +168,7 @@ Try asking about your tasks or creating a new one!`
 
 // handleLogoutTool handles the logout tool.
 // This removes the stored authentication token.
-func (s *MCPServer) handleLogoutTool(args map[string]interface{}) (string, error) {
+func (s *Server) handleLogoutTool(args map[string]interface{}) (string, error) {
 	// Check if confirmation is provided
 	confirm, _ := args["confirm"].(bool)
 	if !confirm {
@@ -183,7 +184,7 @@ func (s *MCPServer) handleLogoutTool(args map[string]interface{}) (string, error
 }
 
 // handleAuthStatusTool provides information about the current authentication status.
-func (s *MCPServer) handleAuthStatusTool(_ map[string]interface{}) (string, error) {
+func (s *Server) handleAuthStatusTool(_ map[string]interface{}) (string, error) {
 	var result strings.Builder
 
 	result.WriteString("# Remember The Milk Authentication Status\n\n")

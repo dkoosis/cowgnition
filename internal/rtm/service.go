@@ -1,3 +1,4 @@
+// file: internal/rtm/service.go
 // Package rtm provides integration with the Remember The Milk API.
 package rtm
 
@@ -13,7 +14,7 @@ import (
 
 // Service provides a wrapper around the RTM client with additional functionality.
 type Service struct {
-	client       *Client
+	client       *client.Client
 	authStatus   Status
 	authFlows    map[string]*AuthFlow
 	lastRefresh  time.Time

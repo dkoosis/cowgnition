@@ -15,7 +15,7 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers"
+	helpers "github.com/cowgnition/cowgnition/test/helpers/common"
 	"github.com/cowgnition/cowgnition/test/mocks"
 	validators "github.com/cowgnition/cowgnition/test/validators/mcp"
 )
