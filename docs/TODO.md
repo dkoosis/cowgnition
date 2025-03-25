@@ -1,68 +1,30 @@
-## TOP PRIORITY: Latest Build Errors (Tue Mar 25 17:53:27 EDT 2025)
-
+## TOP PRIORITY: Latest Build Errors (Tue Mar 25 18:04:44 EDT 2025)
 ```
 Capturing build errors for documentation...
-found packages middleware (auth.go) and server (middleware.go) in /Users/davidkoosis/projects/cowgnition/internal/server/middleware
-found packages middleware (auth.go) and server (middleware.go) in /Users/davidkoosis/projects/cowgnition/internal/server/middleware
+package github.com/cowgnition/cowgnition/cmd/server
+	imports github.com/cowgnition/cowgnition/internal/server from commands.go
+	imports github.com/cowgnition/cowgnition/internal/server/middleware from server.go
+	imports github.com/cowgnition/cowgnition/internal/server from auth.go: import cycle not allowed
+package github.com/cowgnition/cowgnition/cmd/server
+	imports github.com/cowgnition/cowgnition/internal/server from commands.go
+	imports github.com/cowgnition/cowgnition/internal/server/middleware from server.go
+	imports github.com/cowgnition/cowgnition/internal/server from auth.go: import cycle not allowed
 internal/rtm/auth.go:1: : # github.com/cowgnition/cowgnition/internal/rtm
 internal/rtm/service.go:12:2: "github.com/cowgnition/cowgnition/internal/rtm/client" imported as rtm and not used
 internal/rtm/service.go:17:16: undefined: client
 internal/rtm/service.go:30:17: undefined: client (typecheck)
 // Package rtm provides client functionality for the Remember The Milk API.
-internal/server/server.go:13:2: could not import github.com/cowgnition/cowgnition/internal/rtm (-: # github.com/cowgnition/cowgnition/internal/rtm
-internal/rtm/service.go:12:2: "github.com/cowgnition/cowgnition/internal/rtm/client" imported as rtm and not used
-internal/rtm/service.go:17:16: undefined: client
-internal/rtm/service.go:30:17: undefined: client) (typecheck)
-	"github.com/cowgnition/cowgnition/internal/rtm"
+internal/server/middleware/auth.go:12:2: could not import github.com/cowgnition/cowgnition/internal/server (-: import cycle not allowed: import stack: [github.com/cowgnition/cowgnition/cmd/server github.com/cowgnition/cowgnition/internal/server github.com/cowgnition/cowgnition/internal/server/middleware github.com/cowgnition/cowgnition/internal/server]) (typecheck)
+	"github.com/cowgnition/cowgnition/internal/server"
 	^
-internal/server/handlers.go:14:4: s.handleMCPInitialize undefined (type *MCPServer has no field or method handleMCPInitialize) (typecheck)
-	s.handleMCPInitialize(w, r)
-	  ^
-internal/server/handlers.go:19:4: s.handleMCPListResources undefined (type *MCPServer has no field or method handleMCPListResources) (typecheck)
-	s.handleMCPListResources(w, r)
-	  ^
-internal/server/handlers.go:24:4: s.handleMCPReadResource undefined (type *MCPServer has no field or method handleMCPReadResource) (typecheck)
-	s.handleMCPReadResource(w, r)
-	  ^
-internal/server/handlers.go:29:4: s.handleMCPListTools undefined (type *MCPServer has no field or method handleMCPListTools) (typecheck)
-	s.handleMCPListTools(w, r)
-	  ^
-internal/server/handlers.go:34:4: s.handleMCPCallTool undefined (type *MCPServer has no field or method handleMCPCallTool) (typecheck)
-	s.handleMCPCallTool(w, r)
-	  ^
-internal/server/handlers.go:39:4: s.handleMCPSendNotification undefined (type *MCPServer has no field or method handleMCPSendNotification) (typecheck)
-	s.handleMCPSendNotification(w, r)
-	  ^
-internal/server/handlers.go:98:12: s.handleAddTaskTool undefined (type *MCPServer has no field or method handleAddTaskTool) (typecheck)
-		return s.handleAddTaskTool(args)
-		         ^
-internal/server/handlers.go:100:12: s.handleCompleteTaskTool undefined (type *MCPServer has no field or method handleCompleteTaskTool) (typecheck)
-		return s.handleCompleteTaskTool(args)
-		         ^
-internal/server/handlers.go:102:12: s.handleUncompleteTaskTool undefined (type *MCPServer has no field or method handleUncompleteTaskTool) (typecheck)
-		return s.handleUncompleteTaskTool(args)
-		         ^
-internal/server/handlers.go:104:12: s.handleDeleteTaskTool undefined (type *MCPServer has no field or method handleDeleteTaskTool) (typecheck)
-		return s.handleDeleteTaskTool(args)
-		         ^
-internal/server/handlers.go:106:12: s.handleSetDueDateTool undefined (type *MCPServer has no field or method handleSetDueDateTool) (typecheck)
-		return s.handleSetDueDateTool(args)
-		         ^
-internal/server/handlers.go:108:12: s.handleSetPriorityTool undefined (type *MCPServer has no field or method handleSetPriorityTool) (typecheck)
-		return s.handleSetPriorityTool(args)
-		         ^
-internal/server/handlers.go:110:12: s.handleAddTagsTool undefined (type *MCPServer has no field or method handleAddTagsTool) (typecheck)
-		return s.handleAddTagsTool(args)
-		         ^
-internal/server/handlers.go:112:12: s.handleLogoutTool undefined (type *MCPServer has no field or method handleLogoutTool) (typecheck)
-		return s.handleLogoutTool(args)
-		         ^
-internal/server/handlers.go:114:12: s.handleAuthStatusTool undefined (type *MCPServer has no field or method handleAuthStatusTool) (typecheck)
-		return s.handleAuthStatusTool(args)
-		         ^
-internal/server/server.go:88:13: undefined: logMiddleware (typecheck)
-	handler := logMiddleware(recoveryMiddleware(corsMiddleware(mux)))
-	           ^
+internal/server/middleware/middleware.go:49:5: declared and not used: context (typecheck)
+				context := map[string]interface{}{
+				^
+internal/server/errors.go:1: : import cycle not allowed: import stack: [github.com/cowgnition/cowgnition/cmd/server github.com/cowgnition/cowgnition/internal/server github.com/cowgnition/cowgnition/internal/server/middleware github.com/cowgnition/cowgnition/internal/server] (typecheck)
+// Package server defines the core server-side logic for the Cowgnition MCP server.
+cmd/server/commands.go:16:2: could not import github.com/cowgnition/cowgnition/internal/server (-: import cycle not allowed: import stack: [github.com/cowgnition/cowgnition/cmd/server github.com/cowgnition/cowgnition/internal/server github.com/cowgnition/cowgnition/internal/server/middleware github.com/cowgnition/cowgnition/internal/server]) (typecheck)
+	"github.com/cowgnition/cowgnition/internal/server"
+	^
 cmd/server/commands.go:24:19: undefined: argsstring (typecheck)
 	Run         func(argsstring) error
 	                 ^
@@ -87,6 +49,9 @@ cmd/server/commands.go:228:21: undefined: args (typecheck)
 cmd/server/main.go:149:19: invalid composite literal type string (typecheck)
 	standardPaths := string{
 	                 ^
+internal/server/api/handlers.go:8:2: could not import github.com/cowgnition/cowgnition/internal/server (-: import cycle not allowed: import stack: [github.com/cowgnition/cowgnition/cmd/server github.com/cowgnition/cowgnition/internal/server github.com/cowgnition/cowgnition/internal/server/middleware github.com/cowgnition/cowgnition/internal/server]) (typecheck)
+	"github.com/cowgnition/cowgnition/internal/server"
+	^
 internal/server/mcp/resources.go:9:2: could not import github.com/cowgnition/cowgnition/internal/rtm (-: # github.com/cowgnition/cowgnition/internal/rtm
 internal/rtm/service.go:12:2: "github.com/cowgnition/cowgnition/internal/rtm/client" imported as rtm and not used
 internal/rtm/service.go:17:16: undefined: client
@@ -126,8 +91,6 @@ internal/server/mcp/handlers.go:394:9: undefined: formatTags (typecheck)
 internal/server/mcp/resources.go:171:15: undefined: formatDate (typecheck)
 	formatted := formatDate(dueDate)
 	             ^
-internal/server/middleware/auth.go:1: : found packages middleware (auth.go) and server (middleware.go) in internal/server/middleware (typecheck)
-// file: internal/server/middleware/auth.go
 test/helpers/common/auth_helper.go:13:2: could not import github.com/cowgnition/cowgnition/internal/rtm (-: # github.com/cowgnition/cowgnition/internal/rtm
 internal/rtm/service.go:12:2: "github.com/cowgnition/cowgnition/internal/rtm/client" imported as rtm and not used
 internal/rtm/service.go:17:16: undefined: client
@@ -164,6 +127,11 @@ func ReadResource(ctx context.Context, client *MCPClient, resourceName string) (
 test/helpers/rtm/rtm_live_helpers.go:48:44: undefined: MCPClient (typecheck)
 func CallTool(ctx context.Context, client *MCPClient, toolName string, args map[string]interface{}) (map[string]interface{}, error) {
                                            ^
+test/helpers/rtm/rtm_helpers.go:55:5: undefined: IsAuthenticated (typecheck)
+	if IsAuthenticated(NewMCPClient(nil, s)) {
+	   ^
+test/helpers/rtm/rtm_live_test_framework.go:161:19: undefined: ExtractAuthInfoFromContent (typecheck)
+	authURL, frob := ExtractAuthInfoFromContent(content)
+	                 ^
 ```
 
-# Task List & Build Errors (Tue Mar 25 14:34:14 EDT 2025)
