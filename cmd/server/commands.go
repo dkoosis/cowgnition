@@ -56,7 +56,7 @@ func RegisterCommands() map[string]Command {
 // serveCommand starts the MCP server with the specified configuration.
 // It handles graceful shutdown on receiving termination signals.
 // This command initializes the server, loads the configuration,
-// and starts the server, listening for MCP requests.  It also manages
+// and starts the server, listening for MCP requests. It also manages
 // graceful shutdown when the application receives an interrupt signal,
 // ensuring a clean exit.
 func serveCommand(argsstring) error {
@@ -139,7 +139,7 @@ func serveCommand(argsstring) error {
 
 	// Graceful shutdown
 	// It initiates a graceful shutdown of the server, allowing it to
-	// complete any ongoing requests before exiting.  A timeout is used
+	// complete any ongoing requests before exiting. A timeout is used
 	// to prevent the shutdown process from hanging indefinitely.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -202,7 +202,7 @@ func checkCommand(argsstring) error {
 
 	// Check if authenticated using the RTM service
 	// It retrieves the RTM service from the server instance and checks
-	// its authentication status.  The result of this check is then
+	// its authentication status. The result of this check is then
 	// printed to the console.
 	fmt.Println("Authentication status check:")
 	rtmService := svr.GetRTMService()
@@ -287,4 +287,4 @@ func helpCommand(argsstring) error {
 	return nil
 }
 
-// DocEnhanced (2024-02-29)
+// DocEnhanced: 2025-03-25
