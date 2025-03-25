@@ -1,5 +1,4 @@
 // internal/server/middleware/middleware.go
-// Package middleware provides HTTP middleware functions for the RTM server.
 package middleware
 
 import (
@@ -8,11 +7,11 @@ import (
 	"net/http"
 	"runtime/debug"
 	"time"
+
+	"github.com/cowgnition/cowgnition/internal/server/httputils"
 )
 
 // LogMiddleware adds request logging to the server.
-// It logs incoming requests with their method, path, and source IP,
-// measures response time, and logs the final status code.
 func LogMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -34,9 +33,6 @@ func LogMiddleware(next http.Handler) http.Handler {
 }
 
 // RecoveryMiddleware adds panic recovery to prevent server crashes.
-// It captures any panics that occur during request handling,
-// logs detailed error information including stack traces,
-// and returns a standardized error response to the client.
 func RecoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -45,19 +41,12 @@ func RecoveryMiddleware(next http.Handler) http.Handler {
 				stack := debug.Stack()
 				log.Printf("PANIC: %v\n%s", err, stack)
 
-				// Return a 500 error with detailed context for debugging
-				context := map[string]interface{}{
-					"request_path":   r.URL.Path,
-					"request_method": r.Method,
-					"remote_addr":    r.RemoteAddr,
-					"panic_value":    fmt.Sprintf("%v", err),
-					"recovery":       "panic recovered by middleware",
-				}
-
-				// Using WriteStandardErrorResponse from the errors package
-				// This will need to be fixed to use the correct imports
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, `{"error":"Internal Server Error","details":%q}`, fmt.Sprintf("%v", err))
+				// Return a 500 error
+				httputils.WriteStandardErrorResponse(w, httputils.InternalError,
+					"Internal server error: recovered from panic",
+					map[string]interface{}{
+						"panic_value": fmt.Sprintf("%v", err),
+					})
 			}
 		}()
 		next.ServeHTTP(w, r)
@@ -65,8 +54,6 @@ func RecoveryMiddleware(next http.Handler) http.Handler {
 }
 
 // CorsMiddleware adds CORS headers for development scenarios.
-// It sets appropriate headers to allow cross-origin requests
-// and handles OPTIONS preflight requests automatically.
 func CorsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Add CORS headers for development
@@ -85,7 +72,6 @@ func CorsMiddleware(next http.Handler) http.Handler {
 }
 
 // ResponseInterceptor wraps an http.ResponseWriter to capture the status code.
-// This allows middleware to log the actual status code that was sent to the client.
 type ResponseInterceptor struct {
 	http.ResponseWriter
 	statusCode int

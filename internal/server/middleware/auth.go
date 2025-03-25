@@ -1,5 +1,4 @@
-// file: internal/server/middleware/auth.go
-// Package middleware provides HTTP middleware functions for the RTM server.
+// internal/server/middleware/auth.go
 package middleware
 
 import (
@@ -9,17 +8,50 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/server"
+	"github.com/cowgnition/cowgnition/internal/server/httputils"
 )
 
-// AuthHandler holds methods for authentication handling.
+// AuthHandler holds methods for authentication handling
 type AuthHandler struct {
-	Server *server.MCPServer
+	Server httputils.ServerInterface
 }
 
-// NewAuthHandler creates a new auth handler with the given server.
-func NewAuthHandler(s *server.MCPServer) *AuthHandler {
+// NewAuthHandler creates a new auth handler with the given server
+func NewAuthHandler(s httputils.ServerInterface) *AuthHandler {
 	return &AuthHandler{Server: s}
+}
+
+// HandleAuthResource handles the auth://rtm resource
+func (h *AuthHandler) HandleAuthResource(w http.ResponseWriter, r *http.Request) {
+	if h.Server.GetRTMService().IsAuthenticated() {
+		// Already authenticated
+		response := h.formatAuthSuccessResponse()
+		httputils.WriteJSONResponse(w, http.StatusOK, response)
+		return
+	}
+
+	// Start authentication flow
+	authURL, frob, err := h.Server.GetRTMService().StartAuthFlow()
+	if err != nil {
+		log.Printf("Error starting auth flow: %v", err)
+		httputils.WriteStandardErrorResponse(w, httputils.InternalError,
+			fmt.Sprintf("Error starting authentication flow: %v", err),
+			map[string]interface{}{
+				"component": "rtm_service",
+				"function":  "StartAuthFlow",
+			})
+		return
+	}
+
+	// Return auth URL and instructions
+	content := h.formatAuthInstructions(authURL, frob)
+
+	response := map[string]interface{}{
+		"content":   content,
+		"mime_type": "text/markdown",
+	}
+
+	httputils.WriteJSONResponse(w, http.StatusOK, response)
 }
 
 // HandleAuthResource handles the auth://rtm resource.

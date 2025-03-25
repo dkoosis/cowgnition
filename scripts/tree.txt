@@ -45,6 +45,9 @@
 │   │   │   └── handlers.go
 │   │   ├── errors.go
 │   │   ├── handlers.go
+│   │   ├── httputils/
+│   │   │   ├── interfaces.go
+│   │   │   └── response.go
 │   │   ├── mcp/
 │   │   │   ├── handlers.go
 │   │   │   ├── resources.go
@@ -124,4 +127,4 @@
         └── mcp/
             └── validators.go
 
-50 directories, 75 files
+51 directories, 77 files
