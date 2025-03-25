@@ -1,6 +1,6 @@
 // file: internal/server/middleware/auth.go
-// Package server implements the Model Context Protocol server for RTM integration.
-package server
+// Package middleware provides HTTP middleware functions for the RTM server.
+package middleware
 
 import (
 	"fmt"
@@ -8,23 +8,35 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/cowgnition/cowgnition/internal/server"
 )
 
-// handleAuthResource handles the auth://rtm resource.
+// AuthHandler holds methods for authentication handling.
+type AuthHandler struct {
+	Server *server.MCPServer
+}
+
+// NewAuthHandler creates a new auth handler with the given server.
+func NewAuthHandler(s *server.MCPServer) *AuthHandler {
+	return &AuthHandler{Server: s}
+}
+
+// HandleAuthResource handles the auth://rtm resource.
 // It provides authentication status and initiates the auth flow if needed.
-func (s *Server) handleAuthResource(w http.ResponseWriter) {
-	if s.rtmService.IsAuthenticated() {
+func (h *AuthHandler) HandleAuthResource(w http.ResponseWriter, r *http.Request) {
+	if h.Server.GetRTMService().IsAuthenticated() {
 		// Already authenticated
-		response := formatAuthSuccessResponse()
-		writeJSONResponse(w, http.StatusOK, response)
+		response := h.formatAuthSuccessResponse()
+		server.WriteJSONResponse(w, http.StatusOK, response)
 		return
 	}
 
 	// Start authentication flow
-	authURL, frob, err := s.rtmService.StartAuthFlow()
+	authURL, frob, err := h.Server.GetRTMService().StartAuthFlow()
 	if err != nil {
 		log.Printf("Error starting auth flow: %v", err)
-		writeStandardErrorResponse(w, InternalError,
+		server.WriteStandardErrorResponse(w, server.InternalError,
 			fmt.Sprintf("Error starting authentication flow: %v", err),
 			map[string]interface{}{
 				"component": "rtm_service",
@@ -34,18 +46,18 @@ func (s *Server) handleAuthResource(w http.ResponseWriter) {
 	}
 
 	// Return auth URL and instructions
-	content := formatAuthInstructions(authURL, frob)
+	content := h.formatAuthInstructions(authURL, frob)
 
 	response := map[string]interface{}{
 		"content":   content,
 		"mime_type": "text/markdown",
 	}
 
-	writeJSONResponse(w, http.StatusOK, response)
+	server.WriteJSONResponse(w, http.StatusOK, response)
 }
 
 // formatAuthSuccessResponse creates a rich response for successful authentication.
-func formatAuthSuccessResponse() map[string]interface{} {
+func (h *AuthHandler) formatAuthSuccessResponse() map[string]interface{} {
 	// Create formatted content with emoji and rich formatting
 	content := `# ✅ Authentication Successful
 
@@ -65,7 +77,7 @@ You are already authenticated with Remember The Milk. You can now:
 }
 
 // formatAuthInstructions creates rich instructions for the authentication flow.
-func formatAuthInstructions(authURL, frob string) string {
+func (h *AuthHandler) formatAuthInstructions(authURL, frob string) string {
 	return fmt.Sprintf(`# 🔑 Remember The Milk Authentication
 
 To connect Claude with your Remember The Milk account, please follow these steps:
@@ -92,11 +104,11 @@ This secure authentication process uses Remember The Milk's OAuth-like flow. Cow
 `, authURL, authURL, frob, frob)
 }
 
-// handleAuthenticationTool handles the authenticate tool.
+// HandleAuthenticationTool handles the authenticate tool.
 // This completes the RTM authentication flow.
-func (s *Server) handleAuthenticationTool(w http.ResponseWriter, args map[string]interface{}) {
-	if s.rtmService.IsAuthenticated() {
-		writeJSONResponse(w, http.StatusOK, map[string]interface{}{
+func (h *AuthHandler) HandleAuthenticationTool(w http.ResponseWriter, args map[string]interface{}) {
+	if h.Server.GetRTMService().IsAuthenticated() {
+		server.WriteJSONResponse(w, http.StatusOK, map[string]interface{}{
 			"result": "✅ You're already authenticated with Remember The Milk! You can use all features now.",
 		})
 		return
@@ -105,7 +117,7 @@ func (s *Server) handleAuthenticationTool(w http.ResponseWriter, args map[string
 	// Get frob from arguments
 	frob, ok := args["frob"].(string)
 	if !ok || frob == "" {
-		writeStandardErrorResponse(w, InvalidParams,
+		server.WriteStandardErrorResponse(w, server.InvalidParams,
 			"Missing or invalid 'frob' argument. Please provide the 'frob' value from the authentication URL.",
 			map[string]interface{}{
 				"required_parameter": "frob",
@@ -115,13 +127,13 @@ func (s *Server) handleAuthenticationTool(w http.ResponseWriter, args map[string
 	}
 
 	// Complete authentication flow
-	if err := s.rtmService.CompleteAuthFlow(frob); err != nil {
+	if err := h.Server.GetRTMService().CompleteAuthFlow(frob); err != nil {
 		log.Printf("Error completing auth flow: %v", err)
 
 		// Check for specific errors to provide more helpful messages
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "expired") {
-			writeStandardErrorResponse(w, AuthError,
+			server.WriteStandardErrorResponse(w, server.AuthError,
 				"Authentication flow expired. Please initiate a new authentication process by accessing the auth://rtm resource again.",
 				map[string]interface{}{
 					"error_type":    "expired_flow",
@@ -131,7 +143,7 @@ func (s *Server) handleAuthenticationTool(w http.ResponseWriter, args map[string
 		}
 
 		if strings.Contains(errMsg, "invalid frob") {
-			writeStandardErrorResponse(w, InvalidParams,
+			server.WriteStandardErrorResponse(w, server.InvalidParams,
 				"Invalid 'frob' value provided. Ensure you are using the 'frob' from the most recent authentication attempt.",
 				map[string]interface{}{
 					"error_type": "invalid_frob",
@@ -140,7 +152,7 @@ func (s *Server) handleAuthenticationTool(w http.ResponseWriter, args map[string
 			return
 		}
 
-		writeStandardErrorResponse(w, RTMServiceError,
+		server.WriteStandardErrorResponse(w, server.RTMServiceError,
 			fmt.Sprintf("Authentication failed: %v. Please try starting the authentication process again.", err),
 			map[string]interface{}{
 				"component":     "rtm_service",
@@ -161,14 +173,14 @@ Your Remember The Milk account is now connected to Claude. You can now:
 
 Try asking about your tasks or creating a new one!`
 
-	writeJSONResponse(w, http.StatusOK, map[string]interface{}{
+	server.WriteJSONResponse(w, http.StatusOK, map[string]interface{}{
 		"result": successMsg,
 	})
 }
 
-// handleLogoutTool handles the logout tool.
+// HandleLogoutTool handles the logout tool.
 // This removes the stored authentication token.
-func (s *Server) handleLogoutTool(args map[string]interface{}) (string, error) {
+func (h *AuthHandler) HandleLogoutTool(args map[string]interface{}) (string, error) {
 	// Check if confirmation is provided
 	confirm, _ := args["confirm"].(bool)
 	if !confirm {
@@ -176,25 +188,25 @@ func (s *Server) handleLogoutTool(args map[string]interface{}) (string, error) {
 	}
 
 	// Clear authentication
-	if err := s.rtmService.ClearAuthentication(); err != nil {
+	if err := h.Server.GetRTMService().ClearAuthentication(); err != nil {
 		return "", fmt.Errorf("error logging out: %w", err)
 	}
 
 	return "You have been successfully logged out from Remember The Milk. To reconnect, access the auth://rtm resource.", nil
 }
 
-// handleAuthStatusTool provides information about the current authentication status.
-func (s *Server) handleAuthStatusTool(_ map[string]interface{}) (string, error) {
+// HandleAuthStatusTool provides information about the current authentication status.
+func (h *AuthHandler) HandleAuthStatusTool(_ map[string]interface{}) (string, error) {
 	var result strings.Builder
 
 	result.WriteString("# Remember The Milk Authentication Status\n\n")
 
-	if s.rtmService.IsAuthenticated() {
+	if h.Server.GetRTMService().IsAuthenticated() {
 		result.WriteString("✅ **Status:** Authenticated\n\n")
 
 		// Get token info if possible
-		if s.tokenManager != nil && s.tokenManager.HasToken() {
-			if fileInfo, err := s.tokenManager.GetTokenFileInfo(); err == nil {
+		if h.Server.GetTokenManager() != nil && h.Server.GetTokenManager().HasToken() {
+			if fileInfo, err := h.Server.GetTokenManager().GetTokenFileInfo(); err == nil {
 				result.WriteString(fmt.Sprintf("- **Last authenticated:** %s\n",
 					fileInfo.ModTime().Format(time.RFC1123)))
 			}
@@ -205,7 +217,7 @@ func (s *Server) handleAuthStatusTool(_ map[string]interface{}) (string, error) 
 		result.WriteString("❌ **Status:** Not authenticated\n\n")
 
 		// Check if there's a pending auth flow
-		if s.rtmService.GetActiveAuthFlows() > 0 {
+		if h.Server.GetRTMService().GetActiveAuthFlows() > 0 {
 			result.WriteString("There is a pending authentication flow. Please complete it or start a new one.\n\n")
 		}
 
