@@ -34,14 +34,17 @@ cd cowgnition
 make build
 # Optionally run tests to verify
 make test
-Configuration
+```
+
+## Configuration
+
 1. Get Your RTM Credentials
-Head over to the Remember The Milk API key page to get your API key and shared secret.
+   Head over to the Remember The Milk API key page to get your API key and shared secret.
 
 2. Create Your Config
-Create a configuration file at configs/config.yaml with the following content:
+   Create a configuration file at configs/config.yaml with the following content:
 
-YAML
+```YAML
 
 server:
   name: "CowGnition RTM"
@@ -55,25 +58,35 @@ auth:
   # Directory to store authentication tokens.
   # Ensure this directory exists or the application has permissions to create it.
   token_path: "~/.config/cowgnition/tokens"
+```
+
 (Note: The application may need the directory specified in auth.token_path to exist.)
 
 3. Start It Up
-Bash
+
+```Bash
 
 # Ensure you are in the cloned repository directory if built from source
 ./cowgnition serve --config configs/config.yaml
-4. Connect to Claude
-Install it in Claude Desktop:
+```
 
-Bash
+4. Connect to Claude
+   Install it in Claude Desktop:
+
+```Bash
 
 mcp install --name "Remember The Milk" --command cowgnition --args "serve --config configs/config.yaml"
+```
+
 Or test it first with:
 
-Bash
+```Bash
 
 mcp dev --command ./cowgnition --args "serve --config configs/config.yaml"
-What Can CowGnition Do?
+```
+
+## What Can CowGnition Do?
+
 Once connected to Claude Desktop, just start chatting naturally:
 
 "What's due today on RTM?"
@@ -81,7 +94,9 @@ Once connected to Claude Desktop, just start chatting naturally:
 "Show me all my tasks tagged as 'important'"
 "Set the dentist appointment for next Tuesday"
 "What's on my work list in Remember The Milk?"
-Authentication
+
+## Authentication
+
 First time connecting? Here's how it works:
 
 Ask Claude about your Remember The Milk tasks
@@ -92,16 +107,20 @@ Tell Claude this code
 You're connected!
 Your RTM credentials stay secure throughout this process using OAuth.
 
-Under the Hood
+## Under the Hood
+
 CowGnition uses the Model Context Protocol (MCP) to connect Claude with your RTM account. For the technically curious, here's what Claude can access:
 
-Resources
+### Resources
+
 auth://rtm - Your gateway to RTM
 tasks://today - See what's due today
 tasks://list/{list_id} - View tasks in specific lists
 lists://all - Browse your RTM lists
 tags://all - See all your organizational tags
-Tools
+
+### Tools
+
 CowGnition gives Claude these capabilities:
 
 Creating tasks in any list
@@ -109,17 +128,20 @@ Completing tasks
 Changing due dates
 Setting priorities
 Adding tags
-And more!
+
+## And more!
+
 For Developers
 Want to contribute? Check out the Development Overview and Project Organization. We follow standard Go project structure with clean architecture principles.
 
-License
+## License
+
 This project is licensed under the MIT License. See the LICENSE file for details.
 
-Thank You
+## Thank You
+
 The Remember The Milk team for their wonderful task system
 Anthropic for creating the Model Context Protocol
 The Go community for excellent development tools
-Moo-ve your productivity forward with CowGnition and Claude! 🐄 🧠
 
-```
+Moo-ve your productivity forward with CowGnition and Claude! 🐄 🧠
