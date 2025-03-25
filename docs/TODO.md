@@ -1,72 +1,72 @@
-## TOP PRIORITY: Latest Build Errors (Tue Mar 25 19:18:22 EDT 2025)
+## TOP PRIORITY: Latest Build Errors (Tue Mar 25 19:29:59 EDT 2025)
 ```
 Capturing build errors for documentation...
 github.com/cowgnition/cowgnition/internal/server
 github.com/cowgnition/cowgnition/internal/server/mcp
 # github.com/cowgnition/cowgnition/internal/server/mcp
-internal/server/mcp/handlers.go:17:10: undefined: MCPServer
-internal/server/mcp/handlers.go:93:10: undefined: MCPServer
-internal/server/mcp/handlers.go:180:10: undefined: MCPServer
-internal/server/mcp/handlers.go:274:10: undefined: MCPServer
-internal/server/mcp/handlers.go:314:10: undefined: MCPServer
-internal/server/mcp/handlers.go:373:10: undefined: MCPServer
-internal/server/mcp/handlers.go:389:10: undefined: MCPServer
-internal/server/mcp/resources.go:14:10: undefined: MCPServer
-internal/server/mcp/resources.go:43:24: undefined: MCPServer
-internal/server/mcp/resources.go:242:10: undefined: MCPServer
+internal/server/mcp/handlers.go:17:10: undefined: Server
+internal/server/mcp/handlers.go:93:10: undefined: Server
+internal/server/mcp/handlers.go:180:10: undefined: Server
+internal/server/mcp/handlers.go:274:10: undefined: Server
+internal/server/mcp/handlers.go:314:10: undefined: Server
+internal/server/mcp/handlers.go:373:10: undefined: Server
+internal/server/mcp/handlers.go:389:10: undefined: Server
+internal/server/mcp/resources.go:14:10: undefined: Server
+internal/server/mcp/resources.go:43:24: undefined: Server
+internal/server/mcp/resources.go:242:10: undefined: Server
 internal/server/mcp/resources.go:242:10: too many errors
 # github.com/cowgnition/cowgnition/internal/server
-internal/server/handlers.go:14:4: s.handleMCPInitialize undefined (type *MCPServer has no field or method handleMCPInitialize)
-internal/server/handlers.go:19:4: s.handleMCPListResources undefined (type *MCPServer has no field or method handleMCPListResources)
-internal/server/handlers.go:24:4: s.handleMCPReadResource undefined (type *MCPServer has no field or method handleMCPReadResource)
-internal/server/handlers.go:29:4: s.handleMCPListTools undefined (type *MCPServer has no field or method handleMCPListTools)
-internal/server/handlers.go:34:4: s.handleMCPCallTool undefined (type *MCPServer has no field or method handleMCPCallTool)
-internal/server/handlers.go:39:4: s.handleMCPSendNotification undefined (type *MCPServer has no field or method handleMCPSendNotification)
-internal/server/handlers.go:98:12: s.handleAddTaskTool undefined (type *MCPServer has no field or method handleAddTaskTool)
-internal/server/handlers.go:100:12: s.handleCompleteTaskTool undefined (type *MCPServer has no field or method handleCompleteTaskTool)
-internal/server/handlers.go:102:12: s.handleUncompleteTaskTool undefined (type *MCPServer has no field or method handleUncompleteTaskTool)
-internal/server/handlers.go:104:12: s.handleDeleteTaskTool undefined (type *MCPServer has no field or method handleDeleteTaskTool)
+internal/server/handlers.go:14:4: s.handleMCPInitialize undefined (type *Server has no field or method handleMCPInitialize)
+internal/server/handlers.go:19:4: s.handleMCPListResources undefined (type *Server has no field or method handleMCPListResources)
+internal/server/handlers.go:24:4: s.handleMCPReadResource undefined (type *Server has no field or method handleMCPReadResource)
+internal/server/handlers.go:29:4: s.handleMCPListTools undefined (type *Server has no field or method handleMCPListTools)
+internal/server/handlers.go:34:4: s.handleMCPCallTool undefined (type *Server has no field or method handleMCPCallTool)
+internal/server/handlers.go:39:4: s.handleMCPSendNotification undefined (type *Server has no field or method handleMCPSendNotification)
+internal/server/handlers.go:98:12: s.handleAddTaskTool undefined (type *Server has no field or method handleAddTaskTool)
+internal/server/handlers.go:100:12: s.handleCompleteTaskTool undefined (type *Server has no field or method handleCompleteTaskTool)
+internal/server/handlers.go:102:12: s.handleUncompleteTaskTool undefined (type *Server has no field or method handleUncompleteTaskTool)
+internal/server/handlers.go:104:12: s.handleDeleteTaskTool undefined (type *Server has no field or method handleDeleteTaskTool)
 internal/server/handlers.go:104:12: too many errors
 test/conformance/mcp/initialize_test.go:16:2: no required module provides package github.com/cowgnition/cowgnition/test/helpers; to add it:
 	go get github.com/cowgnition/cowgnition/test/helpers
 # github.com/cowgnition/cowgnition/internal/server
-internal/server/handlers.go:14:4: s.handleMCPInitialize undefined (type *MCPServer has no field or method handleMCPInitialize)
-internal/server/handlers.go:19:4: s.handleMCPListResources undefined (type *MCPServer has no field or method handleMCPListResources)
-internal/server/handlers.go:24:4: s.handleMCPReadResource undefined (type *MCPServer has no field or method handleMCPReadResource)
-internal/server/handlers.go:29:4: s.handleMCPListTools undefined (type *MCPServer has no field or method handleMCPListTools)
-internal/server/handlers.go:34:4: s.handleMCPCallTool undefined (type *MCPServer has no field or method handleMCPCallTool)
-internal/server/handlers.go:39:4: s.handleMCPSendNotification undefined (type *MCPServer has no field or method handleMCPSendNotification)
-internal/server/handlers.go:98:12: s.handleAddTaskTool undefined (type *MCPServer has no field or method handleAddTaskTool)
-internal/server/handlers.go:100:12: s.handleCompleteTaskTool undefined (type *MCPServer has no field or method handleCompleteTaskTool)
-internal/server/handlers.go:102:12: s.handleUncompleteTaskTool undefined (type *MCPServer has no field or method handleUncompleteTaskTool)
-internal/server/handlers.go:104:12: s.handleDeleteTaskTool undefined (type *MCPServer has no field or method handleDeleteTaskTool)
+internal/server/handlers.go:14:4: s.handleMCPInitialize undefined (type *Server has no field or method handleMCPInitialize)
+internal/server/handlers.go:19:4: s.handleMCPListResources undefined (type *Server has no field or method handleMCPListResources)
+internal/server/handlers.go:24:4: s.handleMCPReadResource undefined (type *Server has no field or method handleMCPReadResource)
+internal/server/handlers.go:29:4: s.handleMCPListTools undefined (type *Server has no field or method handleMCPListTools)
+internal/server/handlers.go:34:4: s.handleMCPCallTool undefined (type *Server has no field or method handleMCPCallTool)
+internal/server/handlers.go:39:4: s.handleMCPSendNotification undefined (type *Server has no field or method handleMCPSendNotification)
+internal/server/handlers.go:98:12: s.handleAddTaskTool undefined (type *Server has no field or method handleAddTaskTool)
+internal/server/handlers.go:100:12: s.handleCompleteTaskTool undefined (type *Server has no field or method handleCompleteTaskTool)
+internal/server/handlers.go:102:12: s.handleUncompleteTaskTool undefined (type *Server has no field or method handleUncompleteTaskTool)
+internal/server/handlers.go:104:12: s.handleDeleteTaskTool undefined (type *Server has no field or method handleDeleteTaskTool)
 internal/server/handlers.go:104:12: too many errors
 # github.com/cowgnition/cowgnition/internal/server/mcp
-vet: internal/server/mcp/handlers.go:17:10: undefined: MCPServer
+vet: internal/server/mcp/handlers.go:17:10: undefined: Server
 internal/server/errors.go:1: : # github.com/cowgnition/cowgnition/internal/server
-internal/server/handlers.go:14:4: s.handleMCPInitialize undefined (type *MCPServer has no field or method handleMCPInitialize)
-internal/server/handlers.go:19:4: s.handleMCPListResources undefined (type *MCPServer has no field or method handleMCPListResources)
-internal/server/handlers.go:24:4: s.handleMCPReadResource undefined (type *MCPServer has no field or method handleMCPReadResource)
-internal/server/handlers.go:29:4: s.handleMCPListTools undefined (type *MCPServer has no field or method handleMCPListTools)
-internal/server/handlers.go:34:4: s.handleMCPCallTool undefined (type *MCPServer has no field or method handleMCPCallTool)
-internal/server/handlers.go:39:4: s.handleMCPSendNotification undefined (type *MCPServer has no field or method handleMCPSendNotification)
-internal/server/handlers.go:98:12: s.handleAddTaskTool undefined (type *MCPServer has no field or method handleAddTaskTool)
-internal/server/handlers.go:100:12: s.handleCompleteTaskTool undefined (type *MCPServer has no field or method handleCompleteTaskTool)
-internal/server/handlers.go:102:12: s.handleUncompleteTaskTool undefined (type *MCPServer has no field or method handleUncompleteTaskTool)
-internal/server/handlers.go:104:12: s.handleDeleteTaskTool undefined (type *MCPServer has no field or method handleDeleteTaskTool)
+internal/server/handlers.go:14:4: s.handleMCPInitialize undefined (type *Server has no field or method handleMCPInitialize)
+internal/server/handlers.go:19:4: s.handleMCPListResources undefined (type *Server has no field or method handleMCPListResources)
+internal/server/handlers.go:24:4: s.handleMCPReadResource undefined (type *Server has no field or method handleMCPReadResource)
+internal/server/handlers.go:29:4: s.handleMCPListTools undefined (type *Server has no field or method handleMCPListTools)
+internal/server/handlers.go:34:4: s.handleMCPCallTool undefined (type *Server has no field or method handleMCPCallTool)
+internal/server/handlers.go:39:4: s.handleMCPSendNotification undefined (type *Server has no field or method handleMCPSendNotification)
+internal/server/handlers.go:98:12: s.handleAddTaskTool undefined (type *Server has no field or method handleAddTaskTool)
+internal/server/handlers.go:100:12: s.handleCompleteTaskTool undefined (type *Server has no field or method handleCompleteTaskTool)
+internal/server/handlers.go:102:12: s.handleUncompleteTaskTool undefined (type *Server has no field or method handleUncompleteTaskTool)
+internal/server/handlers.go:104:12: s.handleDeleteTaskTool undefined (type *Server has no field or method handleDeleteTaskTool)
 internal/server/handlers.go:104:12: too many errors (typecheck)
 // Package server defines the core server-side logic for the Cowgnition MCP server.
 cmd/server/commands.go:15:2: could not import github.com/cowgnition/cowgnition/internal/server (-: # github.com/cowgnition/cowgnition/internal/server
-internal/server/handlers.go:14:4: s.handleMCPInitialize undefined (type *MCPServer has no field or method handleMCPInitialize)
-internal/server/handlers.go:19:4: s.handleMCPListResources undefined (type *MCPServer has no field or method handleMCPListResources)
-internal/server/handlers.go:24:4: s.handleMCPReadResource undefined (type *MCPServer has no field or method handleMCPReadResource)
-internal/server/handlers.go:29:4: s.handleMCPListTools undefined (type *MCPServer has no field or method handleMCPListTools)
-internal/server/handlers.go:34:4: s.handleMCPCallTool undefined (type *MCPServer has no field or method handleMCPCallTool)
-internal/server/handlers.go:39:4: s.handleMCPSendNotification undefined (type *MCPServer has no field or method handleMCPSendNotification)
-internal/server/handlers.go:98:12: s.handleAddTaskTool undefined (type *MCPServer has no field or method handleAddTaskTool)
-internal/server/handlers.go:100:12: s.handleCompleteTaskTool undefined (type *MCPServer has no field or method handleCompleteTaskTool)
-internal/server/handlers.go:102:12: s.handleUncompleteTaskTool undefined (type *MCPServer has no field or method handleUncompleteTaskTool)
-internal/server/handlers.go:104:12: s.handleDeleteTaskTool undefined (type *MCPServer has no field or method handleDeleteTaskTool)
+internal/server/handlers.go:14:4: s.handleMCPInitialize undefined (type *Server has no field or method handleMCPInitialize)
+internal/server/handlers.go:19:4: s.handleMCPListResources undefined (type *Server has no field or method handleMCPListResources)
+internal/server/handlers.go:24:4: s.handleMCPReadResource undefined (type *Server has no field or method handleMCPReadResource)
+internal/server/handlers.go:29:4: s.handleMCPListTools undefined (type *Server has no field or method handleMCPListTools)
+internal/server/handlers.go:34:4: s.handleMCPCallTool undefined (type *Server has no field or method handleMCPCallTool)
+internal/server/handlers.go:39:4: s.handleMCPSendNotification undefined (type *Server has no field or method handleMCPSendNotification)
+internal/server/handlers.go:98:12: s.handleAddTaskTool undefined (type *Server has no field or method handleAddTaskTool)
+internal/server/handlers.go:100:12: s.handleCompleteTaskTool undefined (type *Server has no field or method handleCompleteTaskTool)
+internal/server/handlers.go:102:12: s.handleUncompleteTaskTool undefined (type *Server has no field or method handleUncompleteTaskTool)
+internal/server/handlers.go:104:12: s.handleDeleteTaskTool undefined (type *Server has no field or method handleDeleteTaskTool)
 internal/server/handlers.go:104:12: too many errors) (typecheck)
 	"github.com/cowgnition/cowgnition/internal/server"
 	^
@@ -86,48 +86,48 @@ cmd/server/main.go:149:19: invalid composite literal type string (typecheck)
 	standardPaths := string{
 	                 ^
 internal/server/api/handlers.go:8:2: could not import github.com/cowgnition/cowgnition/internal/server (-: # github.com/cowgnition/cowgnition/internal/server
-internal/server/handlers.go:14:4: s.handleMCPInitialize undefined (type *MCPServer has no field or method handleMCPInitialize)
-internal/server/handlers.go:19:4: s.handleMCPListResources undefined (type *MCPServer has no field or method handleMCPListResources)
-internal/server/handlers.go:24:4: s.handleMCPReadResource undefined (type *MCPServer has no field or method handleMCPReadResource)
-internal/server/handlers.go:29:4: s.handleMCPListTools undefined (type *MCPServer has no field or method handleMCPListTools)
-internal/server/handlers.go:34:4: s.handleMCPCallTool undefined (type *MCPServer has no field or method handleMCPCallTool)
-internal/server/handlers.go:39:4: s.handleMCPSendNotification undefined (type *MCPServer has no field or method handleMCPSendNotification)
-internal/server/handlers.go:98:12: s.handleAddTaskTool undefined (type *MCPServer has no field or method handleAddTaskTool)
-internal/server/handlers.go:100:12: s.handleCompleteTaskTool undefined (type *MCPServer has no field or method handleCompleteTaskTool)
-internal/server/handlers.go:102:12: s.handleUncompleteTaskTool undefined (type *MCPServer has no field or method handleUncompleteTaskTool)
-internal/server/handlers.go:104:12: s.handleDeleteTaskTool undefined (type *MCPServer has no field or method handleDeleteTaskTool)
+internal/server/handlers.go:14:4: s.handleMCPInitialize undefined (type *Server has no field or method handleMCPInitialize)
+internal/server/handlers.go:19:4: s.handleMCPListResources undefined (type *Server has no field or method handleMCPListResources)
+internal/server/handlers.go:24:4: s.handleMCPReadResource undefined (type *Server has no field or method handleMCPReadResource)
+internal/server/handlers.go:29:4: s.handleMCPListTools undefined (type *Server has no field or method handleMCPListTools)
+internal/server/handlers.go:34:4: s.handleMCPCallTool undefined (type *Server has no field or method handleMCPCallTool)
+internal/server/handlers.go:39:4: s.handleMCPSendNotification undefined (type *Server has no field or method handleMCPSendNotification)
+internal/server/handlers.go:98:12: s.handleAddTaskTool undefined (type *Server has no field or method handleAddTaskTool)
+internal/server/handlers.go:100:12: s.handleCompleteTaskTool undefined (type *Server has no field or method handleCompleteTaskTool)
+internal/server/handlers.go:102:12: s.handleUncompleteTaskTool undefined (type *Server has no field or method handleUncompleteTaskTool)
+internal/server/handlers.go:104:12: s.handleDeleteTaskTool undefined (type *Server has no field or method handleDeleteTaskTool)
 internal/server/handlers.go:104:12: too many errors) (typecheck)
 	"github.com/cowgnition/cowgnition/internal/server"
 	^
 internal/server/mcp/handlers.go:1: : # github.com/cowgnition/cowgnition/internal/server/mcp
-internal/server/mcp/handlers.go:17:10: undefined: MCPServer
-internal/server/mcp/handlers.go:93:10: undefined: MCPServer
-internal/server/mcp/handlers.go:180:10: undefined: MCPServer
-internal/server/mcp/handlers.go:274:10: undefined: MCPServer
-internal/server/mcp/handlers.go:314:10: undefined: MCPServer
-internal/server/mcp/handlers.go:373:10: undefined: MCPServer
-internal/server/mcp/handlers.go:389:10: undefined: MCPServer
-internal/server/mcp/resources.go:14:10: undefined: MCPServer
-internal/server/mcp/resources.go:43:24: undefined: MCPServer
-internal/server/mcp/resources.go:242:10: undefined: MCPServer
+internal/server/mcp/handlers.go:17:10: undefined: Server
+internal/server/mcp/handlers.go:93:10: undefined: Server
+internal/server/mcp/handlers.go:180:10: undefined: Server
+internal/server/mcp/handlers.go:274:10: undefined: Server
+internal/server/mcp/handlers.go:314:10: undefined: Server
+internal/server/mcp/handlers.go:373:10: undefined: Server
+internal/server/mcp/handlers.go:389:10: undefined: Server
+internal/server/mcp/resources.go:14:10: undefined: Server
+internal/server/mcp/resources.go:43:24: undefined: Server
+internal/server/mcp/resources.go:242:10: undefined: Server
 internal/server/mcp/resources.go:242:10: too many errors (typecheck)
 // Package server implements the Model Context Protocol server for RTM integration.
 test/helpers/common/auth_helper.go:14:2: could not import github.com/cowgnition/cowgnition/internal/server (-: # github.com/cowgnition/cowgnition/internal/server
-internal/server/handlers.go:14:4: s.handleMCPInitialize undefined (type *MCPServer has no field or method handleMCPInitialize)
-internal/server/handlers.go:19:4: s.handleMCPListResources undefined (type *MCPServer has no field or method handleMCPListResources)
-internal/server/handlers.go:24:4: s.handleMCPReadResource undefined (type *MCPServer has no field or method handleMCPReadResource)
-internal/server/handlers.go:29:4: s.handleMCPListTools undefined (type *MCPServer has no field or method handleMCPListTools)
-internal/server/handlers.go:34:4: s.handleMCPCallTool undefined (type *MCPServer has no field or method handleMCPCallTool)
-internal/server/handlers.go:39:4: s.handleMCPSendNotification undefined (type *MCPServer has no field or method handleMCPSendNotification)
-internal/server/handlers.go:98:12: s.handleAddTaskTool undefined (type *MCPServer has no field or method handleAddTaskTool)
-internal/server/handlers.go:100:12: s.handleCompleteTaskTool undefined (type *MCPServer has no field or method handleCompleteTaskTool)
-internal/server/handlers.go:102:12: s.handleUncompleteTaskTool undefined (type *MCPServer has no field or method handleUncompleteTaskTool)
-internal/server/handlers.go:104:12: s.handleDeleteTaskTool undefined (type *MCPServer has no field or method handleDeleteTaskTool)
+internal/server/handlers.go:14:4: s.handleMCPInitialize undefined (type *Server has no field or method handleMCPInitialize)
+internal/server/handlers.go:19:4: s.handleMCPListResources undefined (type *Server has no field or method handleMCPListResources)
+internal/server/handlers.go:24:4: s.handleMCPReadResource undefined (type *Server has no field or method handleMCPReadResource)
+internal/server/handlers.go:29:4: s.handleMCPListTools undefined (type *Server has no field or method handleMCPListTools)
+internal/server/handlers.go:34:4: s.handleMCPCallTool undefined (type *Server has no field or method handleMCPCallTool)
+internal/server/handlers.go:39:4: s.handleMCPSendNotification undefined (type *Server has no field or method handleMCPSendNotification)
+internal/server/handlers.go:98:12: s.handleAddTaskTool undefined (type *Server has no field or method handleAddTaskTool)
+internal/server/handlers.go:100:12: s.handleCompleteTaskTool undefined (type *Server has no field or method handleCompleteTaskTool)
+internal/server/handlers.go:102:12: s.handleUncompleteTaskTool undefined (type *Server has no field or method handleUncompleteTaskTool)
+internal/server/handlers.go:104:12: s.handleDeleteTaskTool undefined (type *Server has no field or method handleDeleteTaskTool)
 internal/server/handlers.go:104:12: too many errors) (typecheck)
 	"github.com/cowgnition/cowgnition/internal/server"
 	^
 test/helpers/common/auth_stub.go:19:6: SimulateAuthentication redeclared in this block (typecheck)
-func SimulateAuthentication(s *server.MCPServer) error {
+func SimulateAuthentication(s *server.Server) error {
      ^
 test/helpers/common/auth_helper.go:20:6: other declaration of SimulateAuthentication (typecheck)
 func SimulateAuthentication(s *server.Server) error {
@@ -153,13 +153,13 @@ test/helpers/common/auth_helper.go:131:12: undefined: NewMCPClient (typecheck)
 test/helpers/common/client.go:42:16: undefined: rtm.NewClient (typecheck)
 	client := rtm.NewClient(apiKey, sharedSecret)
 	              ^
-test/helpers/rtm/rtm_live_test_framework.go:25:19: undefined: helpers (typecheck)
+test/helpers/rtm/rtm_live_test_framework.go:24:19: undefined: helpers (typecheck)
 	Client          *helpers.MCPClient
 	                 ^
-test/helpers/rtm/rtm_live_test_framework.go:26:19: undefined: helpers (typecheck)
+test/helpers/rtm/rtm_live_test_framework.go:25:19: undefined: helpers (typecheck)
 	RTMClient       *helpers.RTMTestClient
 	                 ^
-test/helpers/rtm/rtm_live_test_framework.go:27:19: undefined: helpers (typecheck)
+test/helpers/rtm/rtm_live_test_framework.go:26:19: undefined: helpers (typecheck)
 	TestConfig      *helpers.TestConfig
 	                 ^
 test/helpers/rtm/rtm_live_helpers.go:16:48: undefined: MCPClient (typecheck)
@@ -171,7 +171,7 @@ func CallTool(ctx context.Context, client *MCPClient, toolName string, args map[
 test/helpers/rtm/rtm_helpers.go:55:5: undefined: IsAuthenticated (typecheck)
 	if IsAuthenticated(NewMCPClient(nil, s)) {
 	   ^
-test/helpers/rtm/rtm_live_test_framework.go:161:19: undefined: ExtractAuthInfoFromContent (typecheck)
+test/helpers/rtm/rtm_live_test_framework.go:160:19: undefined: ExtractAuthInfoFromContent (typecheck)
 	authURL, frob := ExtractAuthInfoFromContent(content)
 	                 ^
 ```

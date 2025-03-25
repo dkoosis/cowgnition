@@ -10,37 +10,37 @@ import (
 )
 
 // handleInitialize routes the MCP initialize request to specialized handler.
-func (s *MCPServer) handleInitialize(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleInitialize(w http.ResponseWriter, r *http.Request) {
 	s.handleMCPInitialize(w, r)
 }
 
 // handleListResources routes the MCP list_resources request to specialized handler.
-func (s *MCPServer) handleListResources(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleListResources(w http.ResponseWriter, r *http.Request) {
 	s.handleMCPListResources(w, r)
 }
 
 // handleReadResource routes the MCP read_resource request to specialized handler.
-func (s *MCPServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleReadResource(w http.ResponseWriter, r *http.Request) {
 	s.handleMCPReadResource(w, r)
 }
 
 // handleListTools routes the MCP list_tools request to specialized handler.
-func (s *MCPServer) handleListTools(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleListTools(w http.ResponseWriter, r *http.Request) {
 	s.handleMCPListTools(w, r)
 }
 
 // handleCallTool routes the MCP call_tool request to specialized handler.
-func (s *MCPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleCallTool(w http.ResponseWriter, r *http.Request) {
 	s.handleMCPCallTool(w, r)
 }
 
 // handleSendNotification routes the MCP send_notification request to specialized handler.
-func (s *MCPServer) handleSendNotification(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSendNotification(w http.ResponseWriter, r *http.Request) {
 	s.handleMCPSendNotification(w, r)
 }
 
 // handleHealthCheck provides a simple health check endpoint.
-func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	// Check if RTM service is healthy
 	if s.rtmService == nil {
 		writeStandardErrorResponse(w, InternalError,
@@ -57,7 +57,7 @@ func (s *MCPServer) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleStatusCheck provides detailed status information for monitoring.
-func (s *MCPServer) handleStatusCheck(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleStatusCheck(w http.ResponseWriter, r *http.Request) {
 	// Only allow access from localhost or if a special header is present
 	clientIP := r.RemoteAddr
 	if !strings.HasPrefix(clientIP, "127.0.0.1") && !strings.HasPrefix(clientIP, "[::1]") &&
@@ -92,7 +92,7 @@ func (s *MCPServer) handleStatusCheck(w http.ResponseWriter, r *http.Request) {
 
 // dispatchToolRequest routes the tool request to the appropriate handler.
 // This is extracted from handleCallTool to reduce complexity.
-func (s *MCPServer) dispatchToolRequest(toolName string, args map[string]interface{}) (string, error) {
+func (s *Server) dispatchToolRequest(toolName string, args map[string]interface{}) (string, error) {
 	switch toolName {
 	case "add_task":
 		return s.handleAddTaskTool(args)

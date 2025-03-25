@@ -14,7 +14,7 @@ import (
 
 // handleMCPInitialize handles the MCP initialize request.
 // It returns server information and capabilities according to MCP specifications.
-func (s *MCPServer) handleMCPInitialize(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMCPInitialize(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeStandardErrorResponse(w, MethodNotFound,
 			"Method not allowed. Initialize endpoint requires POST.",
@@ -90,7 +90,7 @@ func (s *MCPServer) handleMCPInitialize(w http.ResponseWriter, r *http.Request) 
 
 // handleMCPListResources handles the MCP list_resources request.
 // It returns a list of available resources based on authentication status.
-func (s *MCPServer) handleMCPListResources(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMCPListResources(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeStandardErrorResponse(w, MethodNotFound,
 			"Method not allowed. List resources endpoint requires GET.",
@@ -177,7 +177,7 @@ func getAuthenticatedResources() []mcp.ResourceDefinition {
 
 // handleMCPReadResource handles the MCP read_resource request.
 // It fetches and returns the content of the requested resource.
-func (s *MCPServer) handleMCPReadResource(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMCPReadResource(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeStandardErrorResponse(w, MethodNotFound,
 			"Method not allowed. Read resource endpoint requires GET.",
@@ -271,7 +271,7 @@ func (s *MCPServer) handleMCPReadResource(w http.ResponseWriter, r *http.Request
 
 // handleMCPListTools handles the MCP list_tools request.
 // It returns a list of available tools based on authentication status.
-func (s *MCPServer) handleMCPListTools(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMCPListTools(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeStandardErrorResponse(w, MethodNotFound,
 			"Method not allowed. List tools endpoint requires GET.",
@@ -311,7 +311,7 @@ func (s *MCPServer) handleMCPListTools(w http.ResponseWriter, r *http.Request) {
 
 // handleMCPCallTool handles the MCP call_tool request.
 // It executes the requested tool and returns the result.
-func (s *MCPServer) handleMCPCallTool(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMCPCallTool(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeStandardErrorResponse(w, MethodNotFound,
 			"Method not allowed. Call tool endpoint requires POST.",
@@ -370,7 +370,7 @@ func (s *MCPServer) handleMCPCallTool(w http.ResponseWriter, r *http.Request) {
 
 // handleMCPSendNotification is a placeholder for notification support.
 // The MCP spec may evolve to include proper notification support.
-func (s *MCPServer) handleMCPSendNotification(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMCPSendNotification(w http.ResponseWriter, r *http.Request) {
 	// Currently, we don't support notifications, so return appropriate error
 	if r.Method != http.MethodPost {
 		writeStandardErrorResponse(w, MethodNotFound,
@@ -386,7 +386,7 @@ func (s *MCPServer) handleMCPSendNotification(w http.ResponseWriter, r *http.Req
 }
 
 // handleTagsResource retrieves and formats all tags from RTM.
-func (s *MCPServer) handleTagsResource() (string, error) {
+func (s *Server) handleTagsResource() (string, error) {
 	tags, err := s.rtmService.GetTags()
 	if err != nil {
 		return "", fmt.Errorf("failed to retrieve tags: %w", err)

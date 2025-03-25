@@ -43,7 +43,7 @@ func extractTags(args map[string]interface{}) []string {
 
 // handleAddTaskTool handles the add_task tool.
 // It adds a new task to Remember The Milk.
-func (s *MCPServer) handleAddTaskTool(args map[string]interface{}) (string, error) {
+func (s *Server) handleAddTaskTool(args map[string]interface{}) (string, error) {
 	// Get required arguments
 	name, ok := args["name"].(string)
 	if !ok || name == "" {
@@ -84,7 +84,7 @@ func (s *MCPServer) handleAddTaskTool(args map[string]interface{}) (string, erro
 
 // handleCompleteTaskTool handles the complete_task tool.
 // It marks a task as completed in Remember The Milk.
-func (s *MCPServer) handleCompleteTaskTool(args map[string]interface{}) (string, error) {
+func (s *Server) handleCompleteTaskTool(args map[string]interface{}) (string, error) {
 	// Extract task IDs
 	listID, taskseriesID, taskID, err := extractTaskIDs(args)
 	if err != nil {
@@ -107,7 +107,7 @@ func (s *MCPServer) handleCompleteTaskTool(args map[string]interface{}) (string,
 
 // handleUncompleteTaskTool handles the uncomplete_task tool.
 // It marks a completed task as incomplete in Remember The Milk.
-func (s *MCPServer) handleUncompleteTaskTool(args map[string]interface{}) (string, error) {
+func (s *Server) handleUncompleteTaskTool(args map[string]interface{}) (string, error) {
 	// Extract task IDs
 	listID, taskseriesID, taskID, err := extractTaskIDs(args)
 	if err != nil {
@@ -130,7 +130,7 @@ func (s *MCPServer) handleUncompleteTaskTool(args map[string]interface{}) (strin
 
 // handleDeleteTaskTool handles the delete_task tool.
 // It deletes a task in Remember The Milk.
-func (s *MCPServer) handleDeleteTaskTool(args map[string]interface{}) (string, error) {
+func (s *Server) handleDeleteTaskTool(args map[string]interface{}) (string, error) {
 	// Extract task IDs
 	listID, taskseriesID, taskID, err := extractTaskIDs(args)
 	if err != nil {
@@ -153,7 +153,7 @@ func (s *MCPServer) handleDeleteTaskTool(args map[string]interface{}) (string, e
 
 // handleSetDueDateTool handles the set_due_date tool.
 // It sets or updates a task's due date in Remember The Milk.
-func (s *MCPServer) handleSetDueDateTool(args map[string]interface{}) (string, error) {
+func (s *Server) handleSetDueDateTool(args map[string]interface{}) (string, error) {
 	// Extract task IDs
 	listID, taskseriesID, taskID, err := extractTaskIDs(args)
 	if err != nil {
@@ -205,7 +205,7 @@ func formatDueDate(dueDate string, hasTime bool) string {
 
 // handleSetPriorityTool handles the set_priority tool.
 // It sets a task's priority in Remember The Milk.
-func (s *MCPServer) handleSetPriorityTool(args map[string]interface{}) (string, error) {
+func (s *Server) handleSetPriorityTool(args map[string]interface{}) (string, error) {
 	// Extract task IDs
 	listID, taskseriesID, taskID, err := extractTaskIDs(args)
 	if err != nil {
@@ -297,7 +297,7 @@ func parseTagArgument(tagsArg interface{}) ([]string, error) {
 
 // handleAddTagsTool handles the add_tags tool.
 // It adds tags to a task in Remember The Milk.
-func (s *MCPServer) handleAddTagsTool(args map[string]interface{}) (string, error) {
+func (s *Server) handleAddTagsTool(args map[string]interface{}) (string, error) {
 	// Extract task IDs first
 	listID, taskseriesID, taskID, err := extractTaskIDs(args)
 	if err != nil {

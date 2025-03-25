@@ -11,7 +11,7 @@ import (
 
 // handleTasksResource retrieves and formats tasks based on the given filter.
 // Returns formatted task content and any error encountered.
-func (s *MCPServer) handleTasksResource(filter string) (string, error) {
+func (s *Server) handleTasksResource(filter string) (string, error) {
 	// Get tasks from RTM
 	tasksResp, err := s.rtmService.GetTasks(filter)
 	if err != nil {
@@ -40,7 +40,7 @@ func (s *MCPServer) handleTasksResource(filter string) (string, error) {
 
 // getTasksHeader returns an appropriate header based on the filter.
 // The header provides context about the tasks being displayed.
-func getTasksHeader(s *MCPServer, filter string) string {
+func getTasksHeader(s *Server, filter string) string {
 	header := "# All Tasks"
 	if filter == "" {
 		return header
@@ -239,7 +239,7 @@ func pluralS(count int) string {
 
 // handleListsResource retrieves and formats lists.
 // Returns a formatted markdown representation of all RTM lists.
-func (s *MCPServer) handleListsResource() (string, error) {
+func (s *Server) handleListsResource() (string, error) {
 	// Get lists from RTM
 	lists, err := s.rtmService.GetLists()
 	if err != nil {

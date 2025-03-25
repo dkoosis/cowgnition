@@ -14,8 +14,8 @@ import (
 	"github.com/cowgnition/cowgnition/internal/server/middleware"
 )
 
-// MCPServer represents an MCP server for RTM integration.
-type MCPServer struct {
+// Server represents an MCP server for RTM integration.
+type Server struct {
 	config       *config.Config
 	rtmService   *rtm.Service
 	httpServer   *http.Server
@@ -30,7 +30,7 @@ type MCPServer struct {
 
 // NewServer creates a new MCP server with the provided configuration.
 // It initializes the RTM service and authentication token manager.
-func NewServer(cfg *config.Config) (*MCPServer, error) {
+func NewServer(cfg *config.Config) (*Server, error) {
 	// Create token manager
 	tokenManager, err := auth.NewTokenManager(cfg.Auth.TokenPath)
 	if err != nil {
@@ -54,7 +54,7 @@ func NewServer(cfg *config.Config) (*MCPServer, error) {
 	// Generate unique instance ID
 	instanceID := fmt.Sprintf("%s-%d", cfg.Server.Name, time.Now().UnixNano())
 
-	return &MCPServer{
+	return &Server{
 		config:       cfg,
 		rtmService:   rtmService,
 		tokenManager: tokenManager,
@@ -65,7 +65,7 @@ func NewServer(cfg *config.Config) (*MCPServer, error) {
 }
 
 // Start starts the MCP server and returns an error if it fails to start.
-func (s *MCPServer) Start() error {
+func (s *Server) Start() error {
 	// Create router
 	mux := http.NewServeMux()
 
@@ -109,27 +109,27 @@ func (s *MCPServer) Start() error {
 }
 
 // Stop gracefully stops the MCP server with the given context timeout.
-func (s *MCPServer) Stop(ctx context.Context) error {
+func (s *Server) Stop(ctx context.Context) error {
 	log.Println("Shutting down MCP server...")
 	return s.httpServer.Shutdown(ctx)
 }
 
 // GetUptime returns the server's uptime duration.
-func (s *MCPServer) GetUptime() time.Duration {
+func (s *Server) GetUptime() time.Duration {
 	return time.Since(s.startTime)
 }
 
 // GetVersion returns the server version.
-func (s *MCPServer) GetVersion() string {
+func (s *Server) GetVersion() string {
 	return s.version
 }
 
 // SetVersion sets the server version.
-func (s *MCPServer) SetVersion(version string) {
+func (s *Server) SetVersion(version string) {
 	s.version = version
 }
 
 // GetRTMService returns the server's RTM service.
-func (s *MCPServer) GetRTMService() *rtm.Service {
+func (s *Server) GetRTMService() *rtm.Service {
 	return s.rtmService
 }

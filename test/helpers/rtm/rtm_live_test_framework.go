@@ -9,7 +9,6 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers/common"
 )
 
 // Import and use functions from the helpers package.
@@ -21,7 +20,7 @@ var (
 // RTMLiveTestFramework provides a framework for running tests with the real RTM API.
 type RTMLiveTestFramework struct {
 	T               *testing.T
-	Server          *server.MCPServer
+	Server          *server.Server
 	Client          *helpers.MCPClient
 	RTMClient       *helpers.RTMTestClient
 	TestConfig      *helpers.TestConfig

@@ -10,7 +10,7 @@ import (
 
 // SetAuthTokenOnServer attempts to set the authentication token directly on the server's RTM service.
 // This uses reflection for testing purposes.
-func SetAuthTokenOnServer(s *server.MCPServer, token string) error {
+func SetAuthTokenOnServer(s *server.Server, token string) error {
 	// Get RTM service.
 	rtmService := s.GetRTMService()
 	if rtmService == nil {

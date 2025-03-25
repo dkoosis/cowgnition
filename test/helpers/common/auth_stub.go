@@ -16,7 +16,7 @@ import (
 // SimulateAuthentication sets up a server to be in an authenticated state for testing.
 // It uses reflection to directly modify the RTM service's state, bypassing the normal
 // authentication flow. This should ONLY be used in tests.
-func SimulateAuthentication(s *server.MCPServer) error {
+func SimulateAuthentication(s *server.Server) error {
 	// Get RTM service from the server
 	rtmService := s.GetRTMService()
 	if rtmService == nil {
