@@ -1,3 +1,4 @@
+// file: test/conformance/mcp/resources_test.go
 // Package conformance provides tests to verify MCP protocol compliance.
 package mcp
 
@@ -13,8 +14,9 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers/common"
-	"github.com/cowgnition/cowgnition/test/mocks/common"
+	"github.com/cowgnition/cowgnition/test/helpers"
+	"github.com/cowgnition/cowgnition/test/mocks"
+	validators "github.com/cowgnition/cowgnition/test/validators/mcp"
 )
 
 // TestMCPResourceEndpointsEnhanced provides comprehensive testing of the
@@ -125,7 +127,7 @@ func TestMCPResourceEndpointsEnhanced(t *testing.T) {
 					}
 
 					// Validate resources array.
-					validateListResourcesResponse(t, result)
+					checkListResourcesResponse(t, result)
 				}
 			})
 		}
@@ -209,7 +211,7 @@ func TestMCPResourceEndpointsEnhanced(t *testing.T) {
 					}
 
 					// Validate resource response.
-					if !validateResourceData(t, result) {
+					if !validators.ValidateResourceResponse(t, result) {
 						t.Errorf("Resource response validation failed")
 					}
 				}
@@ -243,8 +245,8 @@ func TestMCPResourceEndpointsEnhanced(t *testing.T) {
 	})
 }
 
-// validateListResourcesResponse validates the response from list_resources.
-func validateListResourcesResponse(t *testing.T, result map[string]interface{}) {
+// checkListResourcesResponse validates the response from list_resources.
+func checkListResourcesResponse(t *testing.T, result map[string]interface{}) {
 	t.Helper()
 
 	// Check for resources field.
@@ -262,7 +264,7 @@ func validateListResourcesResponse(t *testing.T, result map[string]interface{}) 
 
 	// Validate each resource.
 	for i, res := range resources {
-		if !validateResourceStructure(t, res) {
+		if !validators.ValidateMCPResource(t, res) {
 			t.Errorf("Resource %d failed validation", i)
 		}
 	}
@@ -284,61 +286,4 @@ func validateListResourcesResponse(t *testing.T, result map[string]interface{}) 
 	if !authResourceFound {
 		t.Error("auth://rtm resource not found in list_resources response")
 	}
-}
-
-// validateResourceStructure validates the structure of a single MCP resource.
-// This is a local validator that doesn't conflict with validateMCPResource in resource_validator.go.
-func validateResourceStructure(t *testing.T, res interface{}) bool {
-	t.Helper()
-
-	resource, ok := res.(map[string]interface{})
-	if !ok {
-		t.Errorf("Resource is not a map: %v", res)
-		return false
-	}
-
-	// Check for required fields like "name", "description", etc.
-	if _, ok := resource["name"].(string); !ok {
-		t.Error("Resource missing 'name' field or wrong type")
-		return false
-	}
-
-	if _, ok := resource["description"].(string); !ok {
-		t.Error("Resource missing 'description' field or wrong type")
-		return false
-	}
-
-	return true
-}
-
-// validateResourceData validates the response from read_resource.
-// Renamed from validateResourceResponse to avoid conflict with existing function.
-func validateResourceData(t *testing.T, result map[string]interface{}) bool {
-	t.Helper()
-
-	// Check for required fields
-	requiredFields := []string{"content", "mime_type"}
-	for _, field := range requiredFields {
-		if result[field] == nil {
-			t.Errorf("Resource response missing required field: %s", field)
-			return false
-		}
-	}
-
-	// Validate field types
-	_, ok := result["content"].(string)
-	if !ok {
-		t.Errorf("Resource content is not a string: %v", result["content"])
-		return false
-	}
-
-	_, ok = result["mime_type"].(string)
-	if !ok {
-		t.Errorf("Resource mime_type is not a string: %v", result["mime_type"])
-		return false
-	}
-
-	// Additional validation can be added here if needed
-
-	return true
 }
