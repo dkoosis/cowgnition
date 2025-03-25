@@ -1,3 +1,4 @@
+// file: test/util/testutil/mcptest.go
 // Package mcptest provides testing utilities for MCP protocol testing.
 package mcptest
 
@@ -8,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+
+	validators "github.com/cowgnition/cowgnition/test/validators/mcp"
 )
 
 // ReadResource sends a read_resource request to the MCP server.
@@ -54,63 +57,16 @@ func ReadResource(t *testing.T, client *http.Client, baseURL, resourceName strin
 func ValidateResourceResponse(t *testing.T, response map[string]interface{}) bool {
 	t.Helper()
 
-	// Check for required fields.
-	requiredFields := []string{"content", "mime_type"}
-	for _, field := range requiredFields {
-		if response[field] == nil {
-			t.Errorf("Resource response missing required field: %s.", field)
-			return false
-		}
-	}
-
-	// Validate field types.
-	content, ok := response["content"].(string)
-	if !ok {
-		t.Errorf("Resource content is not a string: %v.", response["content"])
-		return false
-	}
-
-	mimeType, ok := response["mime_type"].(string)
-	if !ok {
-		t.Errorf("Resource mime_type is not a string: %v.", response["mime_type"])
-		return false
-	}
-
-	// Check content and mimeType validity
-	if content == "" {
-		t.Logf("Warning: Resource content is empty.")
-	}
-
-	if mimeType == "" {
-		t.Logf("Warning: Resource MIME type is empty.")
-	}
-
-	return true
+	// Use the centralized validator function
+	return validators.ValidateResourceResponse(t, response)
 }
 
 // ValidateToolResponse validates a response from call_tool.
 func ValidateToolResponse(t *testing.T, response map[string]interface{}) bool {
 	t.Helper()
 
-	// Check for required fields and handle nil result.
-	result, ok := response["result"]
-	if !ok {
-		t.Errorf("Tool response missing required field: result.")
-		return false
-	}
-	if result == nil {
-		t.Errorf("Tool response 'result' field is nil.")
-		return false
-	}
-
-	// Validate field type.
-	_, ok = result.(string)
-	if !ok {
-		t.Errorf("Tool result is not a string: %v.", result)
-		return false
-	}
-
-	return true
+	// Use the centralized validator function
+	return validators.ValidateToolResponse(t, response)
 }
 
 // IsServerAuthenticated checks if the server is authenticated.

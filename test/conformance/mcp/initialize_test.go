@@ -1,5 +1,5 @@
+// file: test/conformance/mcp/initialize_test.go
 // Package conformance provides tests to verify MCP protocol compliance.
-// file: test/conformance/mcp_initialize_endpoint_test.go
 package mcp
 
 import (
@@ -13,8 +13,9 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers/common"
-	"github.com/cowgnition/cowgnition/test/mocks/common"
+	"github.com/cowgnition/cowgnition/test/helpers"
+	"github.com/cowgnition/cowgnition/test/mocks"
+	validators "github.com/cowgnition/cowgnition/test/validators/mcp"
 )
 
 // TestMCPInitializeEndpointEnhanced tests the /mcp/initialize endpoint with more
@@ -144,10 +145,20 @@ func TestMCPInitializeEndpointEnhanced(t *testing.T) {
 
 			// Validate response structure.
 			// 1. Verify server_info is present and correct.
-			validateServerInfo(t, result, cfg.Server.Name)
+			serverInfo, ok := result["server_info"].(map[string]interface{})
+			if !ok {
+				t.Error("Response missing server_info field")
+			} else if !validators.ValidateServerInfo(t, serverInfo, cfg.Server.Name) {
+				t.Error("server_info validation failed")
+			}
 
 			// 2. Verify capabilities structure follows the MCP specification.
-			validateCapabilities(t, result)
+			capabilities, ok := result["capabilities"].(map[string]interface{})
+			if !ok {
+				t.Error("Response missing capabilities field")
+			} else if !validators.ValidateCapabilities(t, capabilities) {
+				t.Error("capabilities validation failed")
+			}
 		})
 	}
 
@@ -197,240 +208,4 @@ func TestMCPInitializeEndpointEnhanced(t *testing.T) {
 			t.Errorf("Expected error status for wrong HTTP method, got %d", resp.StatusCode)
 		}
 	})
-}
-
-// validateServerInfo verifies that the server_info field in the initialization response
-// conforms to the MCP specification.
-func validateServerInfo(t *testing.T, result map[string]interface{}, expectedName string) {
-	t.Helper()
-
-	if result["server_info"] == nil {
-		t.Error("Response missing server_info field")
-		return
-	}
-
-	serverInfo, ok := result["server_info"].(map[string]interface{})
-	if !ok {
-		t.Error("server_info is not an object")
-		return
-	}
-
-	// Check required fields.
-	if serverInfo["name"] == nil {
-		t.Error("server_info missing required field: name")
-	}
-
-	if serverInfo["version"] == nil {
-		t.Error("server_info missing required field: version")
-	}
-
-	// Validate field types.
-	name, ok := serverInfo["name"].(string)
-	if !ok {
-		t.Error("server_info.name is not a string")
-	} else if name != expectedName {
-		t.Errorf("server_info.name mismatch: got %v, want %s", name, expectedName)
-	}
-
-	version, ok := serverInfo["version"].(string)
-	if !ok {
-		t.Error("server_info.version is not a string")
-	} else if version == "" {
-		t.Error("server_info.version cannot be empty")
-	}
-}
-
-// validateCapabilities verifies that the capabilities field in the initialization response
-// conforms to the MCP specification.
-func validateCapabilities(t *testing.T, result map[string]interface{}) {
-	t.Helper()
-
-	if result["capabilities"] == nil {
-		t.Error("Response missing capabilities field")
-		return
-	}
-
-	capabilities, ok := result["capabilities"].(map[string]interface{})
-	if !ok {
-		t.Error("capabilities is not an object")
-		return
-	}
-
-	// Verify required capabilities according to MCP spec.
-	// According to the spec, "resources" and "tools" capabilities are required.
-	requiredCaps := []string{"resources", "tools"}
-	for _, cap := range requiredCaps {
-		if capabilities[cap] == nil {
-			t.Errorf("Missing required capability: %s", cap)
-		}
-	}
-
-	// Validate resources capability structure.
-	validateResourcesCapability(t, capabilities)
-
-	// Validate tools capability structure.
-	validateToolsCapability(t, capabilities)
-
-	// Validate logging capability if present.
-	if logging, ok := capabilities["logging"].(map[string]interface{}); ok {
-		validateLoggingCapability(t, logging)
-	}
-
-	// Validate prompts capability if present.
-	if prompts, ok := capabilities["prompts"].(map[string]interface{}); ok {
-		validatePromptsCapability(t, prompts)
-	}
-
-	// Check for unknown capabilities.
-	// The MCP spec defines the allowed capabilities.
-	knownCaps := map[string]bool{
-		"resources":  true,
-		"tools":      true,
-		"logging":    true,
-		"prompts":    true,
-		"completion": true,
-	}
-
-	for cap := range capabilities {
-		if !knownCaps[cap] {
-			t.Logf("Warning: Unknown capability found: %s", cap)
-		}
-	}
-}
-
-// validateResourcesCapability validates the resources capability structure.
-func validateResourcesCapability(t *testing.T, capabilities map[string]interface{}) {
-	t.Helper()
-
-	resources, ok := capabilities["resources"].(map[string]interface{})
-	if !ok {
-		t.Error("resources capability is not an object")
-		return
-	}
-
-	// The resources capability should have at least these fields.
-	requiredFields := []string{"list", "read"}
-	for _, field := range requiredFields {
-		if resources[field] == nil {
-			t.Errorf("resources capability missing required field: %s", field)
-		}
-	}
-
-	// Validate field types - should be boolean values.
-	for field, value := range resources {
-		if _, ok := value.(bool); !ok {
-			t.Errorf("resources.%s is not a boolean", field)
-		}
-	}
-
-	// list and read should be true for a conformant server.
-	if list, ok := resources["list"].(bool); ok && !list {
-		t.Error("resources.list capability should be true")
-	}
-
-	if read, ok := resources["read"].(bool); ok && !read {
-		t.Error("resources.read capability should be true")
-	}
-
-	// Optional capabilities can be true or false.
-	optionalFields := []string{"subscribe", "listChanged"}
-	for _, field := range optionalFields {
-		if val, ok := resources[field].(bool); ok {
-			// Just check that it's a boolean, we don't enforce true/false.
-			_ = val
-		} else if resources[field] != nil {
-			// If it exists but isn't a boolean, that's an error.
-			t.Errorf("resources.%s is not a boolean", field)
-		}
-	}
-}
-
-// validateToolsCapability validates the tools capability structure.
-func validateToolsCapability(t *testing.T, capabilities map[string]interface{}) {
-	t.Helper()
-
-	tools, ok := capabilities["tools"].(map[string]interface{})
-	if !ok {
-		t.Error("tools capability is not an object")
-		return
-	}
-
-	// The tools capability should have at least these fields.
-	requiredFields := []string{"list", "call"}
-	for _, field := range requiredFields {
-		if tools[field] == nil {
-			t.Errorf("tools capability missing required field: %s", field)
-		}
-	}
-
-	// Validate field types - should be boolean values.
-	for field, value := range tools {
-		if _, ok := value.(bool); !ok {
-			t.Errorf("tools.%s is not a boolean", field)
-		}
-	}
-
-	// list and call should be true for a conformant server.
-	if list, ok := tools["list"].(bool); ok && !list {
-		t.Error("tools.list capability should be true")
-	}
-
-	if call, ok := tools["call"].(bool); ok && !call {
-		t.Error("tools.call capability should be true")
-	}
-
-	// Optional capabilities can be true or false.
-	optionalFields := []string{"listChanged"}
-	for _, field := range optionalFields {
-		if val, ok := tools[field].(bool); ok {
-			// Just check that it's a boolean, we don't enforce true/false.
-			_ = val
-		} else if tools[field] != nil {
-			// If it exists but isn't a boolean, that's an error.
-			t.Errorf("tools.%s is not a boolean", field)
-		}
-	}
-}
-
-// validateLoggingCapability validates the logging capability structure.
-func validateLoggingCapability(t *testing.T, logging map[string]interface{}) {
-	t.Helper()
-
-	// The logging capability should have these fields.
-	logFields := []string{"log", "warning", "error"}
-	for _, field := range logFields {
-		if val, ok := logging[field].(bool); ok {
-			// Just check that it's a boolean, we don't enforce true/false.
-			_ = val
-		} else if logging[field] != nil {
-			// If it exists but isn't a boolean, that's an error.
-			t.Errorf("logging.%s is not a boolean", field)
-		}
-	}
-}
-
-// validatePromptsCapability validates the prompts capability structure.
-func validatePromptsCapability(t *testing.T, prompts map[string]interface{}) {
-	t.Helper()
-
-	// The prompts capability should have at least these fields.
-	promptFields := []string{"list", "get"}
-	for _, field := range promptFields {
-		if val, ok := prompts[field].(bool); ok {
-			// Just check that it's a boolean, we don't enforce true/false.
-			_ = val
-		} else if prompts[field] != nil {
-			// If it exists but isn't a boolean, that's an error.
-			t.Errorf("prompts.%s is not a boolean", field)
-		}
-	}
-
-	// Optional capabilities.
-	if val, ok := prompts["listChanged"].(bool); ok {
-		// Just check that it's a boolean.
-		_ = val
-	} else if prompts["listChanged"] != nil {
-		// If it exists but isn't a boolean, that's an error.
-		t.Error("prompts.listChanged is not a boolean")
-	}
 }
