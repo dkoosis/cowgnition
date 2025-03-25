@@ -1,184 +1,65 @@
-# Project Organization 📂
+### Updated Draft 3: `docs/PROJECT_ORGANIZATION.md`
 
-This document provides a friendly tour of how CowGnition is organized and architected.
+```markdown
+# CowGnition Project Organization (Quick Start)
 
-## Directory Structure
+Welcome to CowGnition! This document provides a high-level overview to help new developers understand the project structure and get started quickly.
 
-CowGnition follows the [standard Go project layout](https://github.com/golang-standards/project-layout) with the following structure:
+For a comprehensive guide, please refer to the main [Development Overview](development_overview.md). For the user guide and basic setup, see the main [README.md](../README.md).
 
-````
+## Project Overview
+
+CowGnition is a server that connects [Remember The Milk](https://www.rememberthemilk.com/) (RTM) to AI assistants like Claude Desktop using the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). It allows users to manage their RTM tasks through natural conversation.
+
+Architecturally, the project follows a layered approach to separate concerns.
+
+## Directory Structure Essentials
+
+The project uses the [Standard Go Project Layout](https://github.com/golang-standards/project-layout). Key directories:
+
 cowgnition/
-├── cmd/                      # Command-line entry points
-│   └── server/               # Main server application
-│       ├── main.go           # Application entry point
-│       └── commands.go       # CLI command definitions
-├── configs/                  # Configuration files
-│   └── config.example.yaml   # Example configuration template
-├── internal/                 # Private application code
-│   ├── auth/                 # RTM authentication
-│   │   ├── auth_manager.go   # Authentication flow management
-│   │   └── token_manager.go  # Secure token storage
-│   ├── config/               # Configuration handling
-│   │   └── config.go         # Config loading and validation
-│   ├── server/               # MCP server implementation
-│   │   ├── server.go         # MCP server core
-│   │   ├── handlers.go       # HTTP handlers for MCP endpoints
-│   │   ├── mcp_handlers.go   # MCP-specific request handlers
-│   │   ├── auth_handlers.go  # Authentication-related handlers
-│   │   ├── resources.go      # Resource implementations
-│   │   ├── tools.go          # Tool implementations
-│   │   ├── middleware.go     # HTTP middleware
-│   │   ├── errors.go         # Custom error definitions
-│   │   └── utils.go          # Helper functions
-│   └── rtm/                  # RTM API client
-│       ├── client.go         # HTTP client for RTM API
-│       ├── service.go        # Business logic for RTM operations
-│       ├── types.go          # RTM data models
-│       ├── client_auth.go    # RTM authentication client
-│       ├── client_lists.go   # RTM lists API client
-│       ├── client_tasks.go   # RTM tasks API client
-│       ├── client_tags.go    # RTM tags API client
-│       └── rate_limiter.go   # Rate limiting for RTM API calls
-├── pkg/                      # Shareable libraries
-│   └── mcp/                  # MCP protocol utilities
-│       └── types.go          # MCP type definitions
-├── scripts/                  # Build and utility scripts
-│   └── setup.sh              # Development environment setup
-├── test/                     # Test code and utilities
-│   ├── mcp/                  # MCP conformance tests  <-- ADDED
-│   │   ├── conformance_test.go    # Main conformance test suite
-│   │   ├── initialization_test.go # Initialization endpoint tests
-│   │   ├── resources_test.go      # Resource endpoint tests
-│   │   ├── tools_test.go          # Tool endpoint tests
-│   │   ├── special_cases_test.go # Edge case tests
-│   │   ├── setup_test.go      # Mock RTM server setup for tests
-│   │   └── helpers/             # MCP-specific test utilities
-│   │       ├── mcp_client.go    # MCP test client
-│   │       ├── helpers.go       # General test helpers
-│   │       ├── rtm_test_client.go # RTM API test client
-│   │       └── test_config.go   # Test configuration loading
-│   ├── mocks/                # Mock implementations
-│   │   └── rtm_server.go     # Mock RTM server
-│   ├── fixtures/             # Test fixtures
-│   │   └── rtm/              # RTM API response fixtures
-│   │       └── fixtures.go
-│   ├── integration/           # Integration tests
-│   │   └── ...               # (Existing integration tests)
-│   ├── unit/                 # Unit tests
-│   │   └── ...               # (Existing unit tests)
-│   ├── testdata/             # Test data
-│       └── mcp
-│       │   ├── requests
-│       │   └── responses
-│       └── rtm
-│           └── responses
-│   └── util/                # General test utilities
-│        └── testutil/
-│           └── mcptest.go
-└── docs/                     # Documentation
-    └── PROJECT_ORGANIZATION.md  # This file```
+├── Makefile # Common tasks (build, test)
+├── README.md # User setup & usage guide
+├── cmd/ # Main application entry point
+├── configs/ # Example configuration files
+├── docs/ # Project documentation (you are here!)
+├── internal/ # Core application code (private)
+│ ├── ... (auth, client, config, mcp, server, service)
+└── test/ # Integration/conformance tests, mocks, helpers
 
-## Component Architecture
+- **`cmd/cowgnition`**: Application entry point.
+- **`internal/`**: Main Go code, organized by responsibility. Most development happens here.
+- **`configs/`**: Example configurations.
+- **`test/`**: Non-unit tests and support files. Unit tests (`_test.go`) are alongside code in `internal/`.
+- **`docs/`**: Detailed documentation ([Development Overview](development_overview.md), [Decision Log](decision_log.md), etc.).
 
-CowGnition follows a layered architecture with clear separation of concerns:
+See the [Directory Structure section in the Development Overview](development_overview.md#directory-structure) for full details.
 
-1. **Command Layer** (`cmd/server/`)
+## Getting Started Guide
 
-   - Handles parsing command-line arguments
-   - Initializes and manages application lifecycle
-   - Routes to appropriate commands
+Minimal steps for a development environment:
 
-2. **Server Layer** (`internal/server/`)
+1.  **Install Go:** Ensure Go (>= 1.21) is installed. ([go.dev/dl/](https://go.dev/dl/))
+2.  **Clone:** `git clone https://github.com/cowgnition/cowgnition.git`
+3.  **Navigate:** `cd cowgnition`
+4.  **Build:** `make build`
+5.  **Configure:** Create `configs/config.yaml` based on the example in the main [README.md](../README.md#configuration). You'll need RTM API keys from [Remember The Milk](https://www.rememberthemilk.com/services/api/keys.rtm).
+6.  **Run Basic Tests:** `make test`
 
-   - Implements the Model Context Protocol
-   - Exposes resources and tools
-   - Manages HTTP endpoints and request handling
+This allows running the server (`./cowgnition serve --config configs/config.yaml`) and basic development.
 
-3. **Service Layer** (`internal/rtm/service.go`)
+For full setup including all developer tools (linter, debugger, etc.), see the [Development Environment Setup in the Development Overview](development_overview.md#development-environment-setup).
 
-   - Implements business logic for RTM operations
-   - Manages authentication state
-   - Coordinates client calls
+## Contribution Workflow (Simplified)
 
-4. **Client Layer** (`internal/rtm/client.go`)
+1.  **Branch:** Create a branch off `develop` [TODO: Verify branch] (e.g., `feature/my-task-tool`).
+2.  **Develop & Test:** Write code and add tests. Ensure `make test` passes.
+3.  **Lint:** Ensure `make lint` passes.
+4.  **Commit:** Use format `area: description` (e.g., `mcp: add list tags tool`).
+5.  **PR:** Open a Pull Request against `develop` [TODO: Verify branch].
+6.  **Review & Merge:** Address feedback; PR gets merged upon approval.
 
-   - Handles HTTP communication with RTM API
-   - Implements API request signing
-   - Parses API responses
+For detailed guidelines consult the [Contributing section in the Development Overview](development_overview.md#contributing).
 
-5. **Auth Layer** (`internal/auth/`)
-
-   - Manages authentication flows
-   - Securely stores tokens
-   - Validates authentication state
-
-6. **Config Layer** (`internal/config/`)
-   - Loads and validates configuration
-   - Provides access to application settings
-
-## MCP Protocol Implementation
-
-The server implements the Model Context Protocol, which provides a standardized way for AI assistants to interact with external services:
-
-1. **Initialization**
-
-   - Server declares its capabilities
-   - Client establishes connection parameters
-
-2. **Resources**
-
-   - Read-only data sources
-   - Support parametrized paths
-   - Return formatted text content
-
-3. **Tools**
-   - Action-oriented capabilities
-   - Support arguments for customization
-   - Return operation results
-
-## Data Flow 🔄
-
-Here's how information flows when you ask Claude about your tasks:
-
-1. You ask Claude something like "What's due today?" in Claude Desktop
-2. Claude thinks "I need to check their RTM account"
-3. Claude calls CowGnition behind the scenes using MCP
-4. CowGnition quickly checks if you're logged in
-5. If you're not yet connected, CowGnition sends back auth instructions
-6. If you're all set, CowGnition fetches what you need from RTM
-7. CowGnition translates RTM's response into something Claude understands
-8. Claude presents your task information in a conversational way
-
-All this happens in seconds – the technical complexity stays hidden while you have a natural conversation with Claude.
-
-## Authentication Flow
-
-The Remember The Milk authentication implementation follows the OAuth-like flow described in the [RTM API documentation](https://www.rememberthemilk.com/services/api/authentication.rtm):
-
-1. User requests access to RTM resources
-2. Server generates auth URL with API key
-3. User visits URL and authorizes the application
-4. User receives a frob from RTM
-5. User provides frob to CowGnition via Claude
-6. CowGnition exchanges frob for permanent token
-7. Token is stored securely for future sessions
-
-## Design Principles 🧩
-
-CowGnition is built on these solid principles:
-
-1. **Separation of Concerns** - Everything has one job and does it well, like RTM's focused approach to task management
-2. **Clean API Boundaries** - Components talk to each other through clear channels, no confusion
-3. **Security First** - Your RTM connection is treated with care and respect
-4. **Friendly Failures** - When something goes wrong, you get helpful guidance, not cryptic errors
-5. **Flexibility** - Configuration options let you set things up your way
-6. **Testability** - Code that can be thoroughly tested is code you can trust
-
-These principles help us create a reliable bridge between Claude and your carefully curated RTM tasks.
-
-## Related Documentation
-
-- [README.md](../README.md) - Project overview and usage instructions
-- [GO_PRACTICES.md](../GO_PRACTICES.md) - Go development guidelines
-- [TODO.md](../TODO.md) - Development roadmap
-````
+---
+```
