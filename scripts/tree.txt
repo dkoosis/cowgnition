@@ -12,14 +12,12 @@
 ├── coverage.out
 ├── cowgnition*
 ├── docs/
-│   ├── DEVELOPMENT_NOTES.md
-│   ├── GO_PRACTICES.md
-│   ├── LINTING_NOTES.md
 │   ├── MCP_CONFORMANCE_TESTING.md
-│   ├── PROJECT_ORGANIZATION.md
-│   ├── TESTING_GUIDELINES.md
 │   ├── TODO.md
-│   └── llms_full.txt
+│   ├── decision_log.md
+│   ├── development_overview.md
+│   ├── llms_full.txt
+│   └── project_organization.md
 ├── go.mod
 ├── go.sum
 ├── internal/
@@ -127,4 +125,4 @@
         └── mcp/
             └── validators.go
 
-50 directories, 78 files
+50 directories, 76 files
