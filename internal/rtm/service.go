@@ -1,4 +1,4 @@
-// file: internal/rtm/service.go
+// internal/rtm/service.go
 // Package rtm provides integration with the Remember The Milk API.
 package rtm
 
@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/rtm/client"
+	client "github.com/cowgnition/cowgnition/internal/rtm/client"
 )
 
 // Service provides a wrapper around the RTM client with additional functionality.

@@ -54,40 +54,6 @@ func (h *AuthHandler) HandleAuthResource(w http.ResponseWriter, r *http.Request)
 	httputils.WriteJSONResponse(w, http.StatusOK, response)
 }
 
-// HandleAuthResource handles the auth://rtm resource.
-// It provides authentication status and initiates the auth flow if needed.
-func (h *AuthHandler) HandleAuthResource(w http.ResponseWriter, r *http.Request) {
-	if h.Server.GetRTMService().IsAuthenticated() {
-		// Already authenticated
-		response := h.formatAuthSuccessResponse()
-		server.WriteJSONResponse(w, http.StatusOK, response)
-		return
-	}
-
-	// Start authentication flow
-	authURL, frob, err := h.Server.GetRTMService().StartAuthFlow()
-	if err != nil {
-		log.Printf("Error starting auth flow: %v", err)
-		server.WriteStandardErrorResponse(w, server.InternalError,
-			fmt.Sprintf("Error starting authentication flow: %v", err),
-			map[string]interface{}{
-				"component": "rtm_service",
-				"function":  "StartAuthFlow",
-			})
-		return
-	}
-
-	// Return auth URL and instructions
-	content := h.formatAuthInstructions(authURL, frob)
-
-	response := map[string]interface{}{
-		"content":   content,
-		"mime_type": "text/markdown",
-	}
-
-	server.WriteJSONResponse(w, http.StatusOK, response)
-}
-
 // formatAuthSuccessResponse creates a rich response for successful authentication.
 func (h *AuthHandler) formatAuthSuccessResponse() map[string]interface{} {
 	// Create formatted content with emoji and rich formatting
@@ -140,7 +106,7 @@ This secure authentication process uses Remember The Milk's OAuth-like flow. Cow
 // This completes the RTM authentication flow.
 func (h *AuthHandler) HandleAuthenticationTool(w http.ResponseWriter, args map[string]interface{}) {
 	if h.Server.GetRTMService().IsAuthenticated() {
-		server.WriteJSONResponse(w, http.StatusOK, map[string]interface{}{
+		httputils.WriteJSONResponse(w, http.StatusOK, map[string]interface{}{
 			"result": "✅ You're already authenticated with Remember The Milk! You can use all features now.",
 		})
 		return
@@ -149,7 +115,7 @@ func (h *AuthHandler) HandleAuthenticationTool(w http.ResponseWriter, args map[s
 	// Get frob from arguments
 	frob, ok := args["frob"].(string)
 	if !ok || frob == "" {
-		server.WriteStandardErrorResponse(w, server.InvalidParams,
+		httputils.WriteStandardErrorResponse(w, httputils.InvalidParams,
 			"Missing or invalid 'frob' argument. Please provide the 'frob' value from the authentication URL.",
 			map[string]interface{}{
 				"required_parameter": "frob",
@@ -165,7 +131,7 @@ func (h *AuthHandler) HandleAuthenticationTool(w http.ResponseWriter, args map[s
 		// Check for specific errors to provide more helpful messages
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "expired") {
-			server.WriteStandardErrorResponse(w, server.AuthError,
+			httputils.WriteStandardErrorResponse(w, httputils.AuthError,
 				"Authentication flow expired. Please initiate a new authentication process by accessing the auth://rtm resource again.",
 				map[string]interface{}{
 					"error_type":    "expired_flow",
@@ -175,7 +141,7 @@ func (h *AuthHandler) HandleAuthenticationTool(w http.ResponseWriter, args map[s
 		}
 
 		if strings.Contains(errMsg, "invalid frob") {
-			server.WriteStandardErrorResponse(w, server.InvalidParams,
+			httputils.WriteStandardErrorResponse(w, httputils.InvalidParams,
 				"Invalid 'frob' value provided. Ensure you are using the 'frob' from the most recent authentication attempt.",
 				map[string]interface{}{
 					"error_type": "invalid_frob",
@@ -184,7 +150,7 @@ func (h *AuthHandler) HandleAuthenticationTool(w http.ResponseWriter, args map[s
 			return
 		}
 
-		server.WriteStandardErrorResponse(w, server.RTMServiceError,
+		httputils.WriteStandardErrorResponse(w, httputils.RTMServiceError,
 			fmt.Sprintf("Authentication failed: %v. Please try starting the authentication process again.", err),
 			map[string]interface{}{
 				"component":     "rtm_service",
@@ -205,7 +171,7 @@ Your Remember The Milk account is now connected to Claude. You can now:
 
 Try asking about your tasks or creating a new one!`
 
-	server.WriteJSONResponse(w, http.StatusOK, map[string]interface{}{
+	httputils.WriteJSONResponse(w, http.StatusOK, map[string]interface{}{
 		"result": successMsg,
 	})
 }
