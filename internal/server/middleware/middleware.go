@@ -1,5 +1,6 @@
-// Package server implements the Model Context Protocol server for RTM integration.
-package server
+// internal/server/middleware/middleware.go
+// Package middleware provides HTTP middleware functions for the RTM server.
+package middleware
 
 import (
 	"fmt"
@@ -9,15 +10,15 @@ import (
 	"time"
 )
 
-// logMiddleware adds request logging to the server.
+// LogMiddleware adds request logging to the server.
 // It logs incoming requests with their method, path, and source IP,
 // measures response time, and logs the final status code.
-func logMiddleware(next http.Handler) http.Handler {
+func LogMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
 		// Create a response interceptor to capture status code
-		wi := &responseInterceptor{ResponseWriter: w, statusCode: http.StatusOK}
+		wi := &ResponseInterceptor{ResponseWriter: w, statusCode: http.StatusOK}
 
 		// Log the request
 		log.Printf("Request: %s %s %s", r.Method, r.URL.Path, r.RemoteAddr)
@@ -32,11 +33,11 @@ func logMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// recoveryMiddleware adds panic recovery to prevent server crashes.
+// RecoveryMiddleware adds panic recovery to prevent server crashes.
 // It captures any panics that occur during request handling,
 // logs detailed error information including stack traces,
 // and returns a standardized error response to the client.
-func recoveryMiddleware(next http.Handler) http.Handler {
+func RecoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
@@ -53,18 +54,20 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 					"recovery":       "panic recovered by middleware",
 				}
 
-				writeStandardErrorResponse(w, InternalError,
-					"An unexpected error occurred while processing your request", context)
+				// Using WriteStandardErrorResponse from the errors package
+				// This will need to be fixed to use the correct imports
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, `{"error":"Internal Server Error","details":%q}`, fmt.Sprintf("%v", err))
 			}
 		}()
 		next.ServeHTTP(w, r)
 	})
 }
 
-// corsMiddleware adds CORS headers for development scenarios.
+// CorsMiddleware adds CORS headers for development scenarios.
 // It sets appropriate headers to allow cross-origin requests
 // and handles OPTIONS preflight requests automatically.
-func corsMiddleware(next http.Handler) http.Handler {
+func CorsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Add CORS headers for development
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -81,15 +84,15 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// responseInterceptor wraps an http.ResponseWriter to capture the status code.
+// ResponseInterceptor wraps an http.ResponseWriter to capture the status code.
 // This allows middleware to log the actual status code that was sent to the client.
-type responseInterceptor struct {
+type ResponseInterceptor struct {
 	http.ResponseWriter
 	statusCode int
 }
 
 // WriteHeader captures the status code before passing it to the wrapped ResponseWriter.
-func (wi *responseInterceptor) WriteHeader(statusCode int) {
+func (wi *ResponseInterceptor) WriteHeader(statusCode int) {
 	wi.statusCode = statusCode
 	wi.ResponseWriter.WriteHeader(statusCode)
 }

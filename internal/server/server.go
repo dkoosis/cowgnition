@@ -11,6 +11,7 @@ import (
 	"github.com/cowgnition/cowgnition/internal/auth"
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/rtm"
+	"github.com/cowgnition/cowgnition/internal/server/middleware"
 )
 
 // MCPServer represents an MCP server for RTM integration.
@@ -85,7 +86,7 @@ func (s *MCPServer) Start() error {
 	mux.HandleFunc("/status", s.handleStatusCheck)
 
 	// Add middleware
-	handler := logMiddleware(recoveryMiddleware(corsMiddleware(mux)))
+	handler := middleware.LogMiddleware(middleware.RecoveryMiddleware(middleware.CorsMiddleware(mux)))
 
 	// Create HTTP server
 	s.httpServer = &http.Server{
