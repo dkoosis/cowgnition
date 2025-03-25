@@ -1,5 +1,5 @@
+// file: test/conformance/mcp/conformance_test.go
 // Package conformance provides tests to verify MCP protocol compliance.
-// file: test/conformance/mcp_conformance_test.go
 package mcp
 
 import (
@@ -13,6 +13,7 @@ import (
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
 	"github.com/cowgnition/cowgnition/test/mocks"
+	validators "github.com/cowgnition/cowgnition/test/validators/mcp"
 )
 
 // TestMCPComprehensiveConformance provides a comprehensive test suite for
@@ -103,7 +104,7 @@ func testInitialization(t *testing.T, client *helpers.MCPClient) {
 			t.Error("Response missing server_info field")
 		} else {
 			// Validate server_info structure
-			validateServerInfoStructure(t, serverInfo)
+			validators.ValidateServerInfo(t, serverInfo, "")
 		}
 
 		// Check capabilities field
@@ -112,7 +113,7 @@ func testInitialization(t *testing.T, client *helpers.MCPClient) {
 			t.Error("Response missing capabilities field")
 		} else {
 			// Validate capabilities structure
-			validateCapabilitiesStructure(t, capabilities)
+			validators.ValidateCapabilities(t, capabilities)
 		}
 	})
 
@@ -131,109 +132,6 @@ func testInitialization(t *testing.T, client *helpers.MCPClient) {
 			t.Error("Response missing capabilities field with minimal params")
 		}
 	})
-}
-
-// validateServerInfoStructure validates the server_info object structure.
-func validateServerInfoStructure(t *testing.T, serverInfo map[string]interface{}) {
-	t.Helper()
-
-	// Check name field
-	name, ok := serverInfo["name"].(string)
-	if !ok || name == "" {
-		t.Error("server_info missing or empty name field")
-	}
-
-	// Check version field
-	version, ok := serverInfo["version"].(string)
-	if !ok || version == "" {
-		t.Error("server_info missing or empty version field")
-	}
-}
-
-// validateCapabilitiesStructure validates the capabilities object structure.
-func validateCapabilitiesStructure(t *testing.T, capabilities map[string]interface{}) {
-	t.Helper()
-
-	// Required capabilities
-	requiredCapabilities := []string{
-		"resources",
-		"tools",
-	}
-
-	for _, capName := range requiredCapabilities {
-		cap, ok := capabilities[capName].(map[string]interface{})
-		if !ok {
-			t.Errorf("capabilities missing required capability: %s", capName)
-			continue
-		}
-
-		// Validate resources capability
-		if capName == "resources" {
-			validateResourcesCapabilityStructure(t, cap)
-		}
-
-		// Validate tools capability
-		if capName == "tools" {
-			validateToolsCapabilityStructure(t, cap)
-		}
-	}
-
-	// Optional capabilities (validate if present)
-	optionalCapabilities := []string{
-		"logging",
-		"prompts",
-	}
-
-	for _, capName := range optionalCapabilities {
-		if cap, ok := capabilities[capName].(map[string]interface{}); ok {
-			// If present, validate structure
-			for key, val := range cap {
-				if _, ok := val.(bool); !ok {
-					t.Errorf("capabilities.%s.%s is not a boolean", capName, key)
-				}
-			}
-		}
-	}
-}
-
-// validateResourcesCapabilityStructure validates the resources capability structure.
-func validateResourcesCapabilityStructure(t *testing.T, resources map[string]interface{}) {
-	t.Helper()
-
-	// Required operations
-	requiredOps := []string{
-		"list",
-		"read",
-	}
-
-	for _, op := range requiredOps {
-		val, ok := resources[op].(bool)
-		if !ok {
-			t.Errorf("resources.%s is not a boolean", op)
-		} else if !val {
-			t.Errorf("resources.%s should be true for a conformant server", op)
-		}
-	}
-}
-
-// validateToolsCapabilityStructure validates the tools capability structure.
-func validateToolsCapabilityStructure(t *testing.T, tools map[string]interface{}) {
-	t.Helper()
-
-	// Required operations
-	requiredOps := []string{
-		"list",
-		"call",
-	}
-
-	for _, op := range requiredOps {
-		val, ok := tools[op].(bool)
-		if !ok {
-			t.Errorf("tools.%s is not a boolean", op)
-		} else if !val {
-			t.Errorf("tools.%s should be true for a conformant server", op)
-		}
-	}
 }
 
 // testResources verifies the MCP resource listing and reading capabilities.
@@ -266,7 +164,7 @@ func testResources(t *testing.T, client *helpers.MCPClient) {
 				continue
 			}
 
-			validateResourceObject(t, resource)
+			validators.ValidateMCPResource(t, resource)
 		}
 
 		// Test for specific expected resources
@@ -311,7 +209,7 @@ func testResources(t *testing.T, client *helpers.MCPClient) {
 		}
 
 		// Validate response structure
-		validateResourceResponseStructure(t, resp)
+		validators.ValidateResourceResponse(t, resp)
 
 		// If authenticated, test task resources
 		if helpers.IsAuthenticated(client) {
@@ -322,7 +220,7 @@ func testResources(t *testing.T, client *helpers.MCPClient) {
 			}
 
 			// Validate response structure
-			validateResourceResponseStructure(t, resp)
+			validators.ValidateResourceResponse(t, resp)
 
 			// Validate task-specific content
 			content, ok := resp["content"].(string)
@@ -356,82 +254,6 @@ func testResources(t *testing.T, client *helpers.MCPClient) {
 	})
 }
 
-// validateResourceObject validates an individual resource object structure.
-func validateResourceObject(t *testing.T, resource map[string]interface{}) {
-	t.Helper()
-
-	// Check required fields
-	required := []string{"name", "description"}
-	for _, field := range required {
-		val, ok := resource[field].(string)
-		if !ok {
-			t.Errorf("Resource missing required field: %s", field)
-		} else if val == "" {
-			t.Errorf("Resource has empty %s", field)
-		}
-	}
-
-	// Check name format (scheme://path or scheme://path/{param})
-	name, _ := resource["name"].(string)
-	if !strings.Contains(name, "://") {
-		t.Errorf("Resource name does not follow scheme://path format: %s", name)
-	}
-
-	// Check arguments if present
-	if args, ok := resource["arguments"].([]interface{}); ok {
-		for i, arg := range args {
-			argObj, ok := arg.(map[string]interface{})
-			if !ok {
-				t.Errorf("Resource argument %d is not an object", i)
-				continue
-			}
-
-			// Check required argument fields
-			argRequired := []string{"name", "description"}
-			for _, field := range argRequired {
-				if _, ok := argObj[field].(string); !ok {
-					t.Errorf("Resource argument %d missing required field: %s", i, field)
-				}
-			}
-
-			// Check required flag is a boolean
-			if _, ok := argObj["required"].(bool); !ok {
-				t.Errorf("Resource argument %d required field is not a boolean", i)
-			}
-		}
-	}
-}
-
-// validateResourceResponseStructure validates a read_resource response.
-// Renamed from validateResourceResponse to avoid conflict.
-func validateResourceResponseStructure(t *testing.T, response map[string]interface{}) {
-	t.Helper()
-
-	// Check required fields
-	if _, ok := response["content"].(string); !ok {
-		t.Error("Resource response missing content field")
-	}
-
-	mimeType, ok := response["mime_type"].(string)
-	if !ok {
-		t.Error("Resource response missing mime_type field")
-	} else if mimeType == "" {
-		t.Error("Resource response has empty mime_type")
-	} else {
-		// Common MIME types for MCP resources
-		validMimeTypes := map[string]bool{
-			"text/plain":       true,
-			"text/markdown":    true,
-			"text/html":        true,
-			"application/json": true,
-		}
-
-		if !validMimeTypes[mimeType] && !strings.Contains(mimeType, "/") {
-			t.Errorf("Resource response has invalid mime_type: %s", mimeType)
-		}
-	}
-}
-
 // testTools verifies the MCP tool listing and calling capabilities.
 func testTools(t *testing.T, client *helpers.MCPClient) {
 	t.Helper()
@@ -462,7 +284,7 @@ func testTools(t *testing.T, client *helpers.MCPClient) {
 				continue
 			}
 
-			validateToolObject(t, tool)
+			validators.ValidateMCPTool(t, tool)
 		}
 
 		// Check for expected authentication tools
@@ -508,6 +330,8 @@ func testTools(t *testing.T, client *helpers.MCPClient) {
 			}
 
 			// Validate response structure
+			validators.ValidateToolResponse(t, resp)
+
 			result, ok := resp["result"].(string)
 			if !ok {
 				t.Error("Tool response missing result field")
@@ -539,46 +363,6 @@ func testTools(t *testing.T, client *helpers.MCPClient) {
 			}
 		}
 	})
-}
-
-// validateToolObject validates an individual tool object structure.
-func validateToolObject(t *testing.T, tool map[string]interface{}) {
-	t.Helper()
-
-	// Check required fields
-	required := []string{"name", "description"}
-	for _, field := range required {
-		val, ok := tool[field].(string)
-		if !ok {
-			t.Errorf("Tool missing required field: %s", field)
-		} else if val == "" {
-			t.Errorf("Tool has empty %s", field)
-		}
-	}
-
-	// Check arguments if present
-	if args, ok := tool["arguments"].([]interface{}); ok {
-		for i, arg := range args {
-			argObj, ok := arg.(map[string]interface{})
-			if !ok {
-				t.Errorf("Tool argument %d is not an object", i)
-				continue
-			}
-
-			// Check required argument fields
-			argRequired := []string{"name", "description"}
-			for _, field := range argRequired {
-				if _, ok := argObj[field].(string); !ok {
-					t.Errorf("Tool argument %d missing required field: %s", i, field)
-				}
-			}
-
-			// Check required flag is a boolean
-			if _, ok := argObj["required"].(bool); !ok {
-				t.Errorf("Tool argument %d required field is not a boolean", i)
-			}
-		}
-	}
 }
 
 // testErrorHandling verifies proper error handling according to MCP protocol.
@@ -613,7 +397,7 @@ func testErrorHandling(t *testing.T, client *helpers.MCPClient) {
 			t.Fatalf("Failed to decode error response: %v", err)
 		}
 
-		validateErrorResponse(t, errorResp)
+		validators.ValidateErrorResponse(t, errorResp)
 	})
 
 	// Test method not allowed
@@ -644,7 +428,7 @@ func testErrorHandling(t *testing.T, client *helpers.MCPClient) {
 			t.Fatalf("Failed to decode error response: %v", err)
 		}
 
-		validateErrorResponse(t, errorResp)
+		validators.ValidateErrorResponse(t, errorResp)
 	})
 
 	// Test malformed JSON
@@ -676,47 +460,8 @@ func testErrorHandling(t *testing.T, client *helpers.MCPClient) {
 			t.Fatalf("Failed to decode error response: %v", err)
 		}
 
-		validateErrorResponse(t, errorResp)
+		validators.ValidateErrorResponse(t, errorResp)
 	})
-}
-
-// validateErrorResponse validates an error response structure.
-func validateErrorResponse(t *testing.T, response map[string]interface{}) {
-	t.Helper()
-
-	// Check for error field or status field (required in MCP error responses)
-	if response["error"] == nil && response["status"] == nil {
-		t.Error("Error response missing both error and status fields")
-	}
-
-	// MCP spec requires status field in standardized error responses
-	if status, ok := response["status"].(float64); ok {
-		if status < 400 {
-			t.Errorf("Error status code should be >= 400, got %v", status)
-		}
-	}
-
-	// If error field is an object, validate its structure
-	if errObj, ok := response["error"].(map[string]interface{}); ok {
-		// Check for required error fields
-		if code, ok := errObj["code"].(float64); !ok {
-			t.Error("Error object missing code field or code is not a number")
-		} else if code == 0 {
-			t.Error("Error code should not be 0")
-		}
-
-		if msg, ok := errObj["message"].(string); !ok || msg == "" {
-			t.Error("Error object missing message field or message is empty")
-		}
-	}
-
-	// Check for timestamp field (recommended in errors)
-	if ts, ok := response["timestamp"].(string); ok {
-		// Attempt to parse timestamp to validate format
-		if _, err := time.Parse(time.RFC3339, ts); err != nil {
-			t.Errorf("Invalid timestamp format: %s", ts)
-		}
-	}
 }
 
 // testSpecialScenarios tests special edge cases for MCP protocol compliance.
@@ -735,7 +480,7 @@ func testSpecialScenarios(t *testing.T, client *helpers.MCPClient) {
 
 		// Or return an error response if err is nil
 		if err == nil && resp != nil {
-			validateErrorResponse(t, resp)
+			validators.ValidateErrorResponse(t, resp)
 		}
 	})
 
