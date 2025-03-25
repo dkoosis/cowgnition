@@ -1,3 +1,4 @@
+// file: test/conformance/mcp/tools_test.go
 // Package conformance provides tests to verify MCP protocol compliance.
 package mcp
 
@@ -13,8 +14,9 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers/common"
-	"github.com/cowgnition/cowgnition/test/mocks/common"
+	"github.com/cowgnition/cowgnition/test/helpers"
+	"github.com/cowgnition/cowgnition/test/mocks"
+	validators "github.com/cowgnition/cowgnition/test/validators/mcp"
 )
 
 // TestMCPToolEndpointsEnhanced provides comprehensive testing of the
@@ -124,7 +126,7 @@ func TestMCPToolEndpointsEnhanced(t *testing.T) {
 					}
 
 					// Validate tools array.
-					validateListToolsResponse(t, result)
+					validators.ValidateListToolsResponse(t, result)
 				}
 			})
 		}
@@ -203,7 +205,7 @@ func TestMCPToolEndpointsEnhanced(t *testing.T) {
 				// Verify status code.
 				// Note: The exact error status code may vary by implementation,
 				// so we're being somewhat lenient here.
-				if tc.wantStatus == http.StatusOK && resp.StatusCode != http.StatusOK {
+				if tc.wantStatus == http.StatusOK && resp.StatusCode != tc.wantStatus {
 					t.Errorf("Expected OK status, got %d", resp.StatusCode)
 				} else if tc.wantStatus != http.StatusOK && resp.StatusCode == http.StatusOK {
 					t.Errorf("Expected error status, got %d", resp.StatusCode)
@@ -217,7 +219,7 @@ func TestMCPToolEndpointsEnhanced(t *testing.T) {
 					}
 
 					// Validate tool response.
-					if !validateToolResponse(t, result) {
+					if !validators.ValidateToolResponse(t, result) {
 						t.Errorf("Tool response validation failed")
 					}
 				}
@@ -287,74 +289,4 @@ func TestMCPToolEndpointsEnhanced(t *testing.T) {
 			t.Errorf("Server returned 500 for missing Content-Type, should be more graceful")
 		}
 	})
-}
-
-// validateListToolsResponse validates the response from list_tools.
-func validateListToolsResponse(t *testing.T, result map[string]interface{}) {
-	t.Helper()
-
-	// Check for tools field.
-	tools, ok := result["tools"].([]interface{})
-	if !ok {
-		t.Errorf("tools is not an array: %v", result["tools"])
-		return
-	}
-
-	// At minimum, we should have at least one tool (authenticate).
-	if len(tools) < 1 {
-		t.Error("Expected at least one tool")
-		return
-	}
-
-	// Validate each tool.
-	for i, tool := range tools {
-		if !validateMCPTool(t, tool) {
-			t.Errorf("Tool %d failed validation", i)
-		}
-	}
-
-	// Check for authenticate tool specifically.
-	authenticateToolFound := false
-	for _, tool := range tools {
-		toolObj, ok := tool.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		if name, ok := toolObj["name"].(string); ok && name == "authenticate" {
-			authenticateToolFound = true
-
-			// Verify authenticate tool has a frob argument.
-			if args, ok := toolObj["arguments"].([]interface{}); ok {
-				frobArgFound := false
-				for _, arg := range args {
-					argObj, ok := arg.(map[string]interface{})
-					if !ok {
-						continue
-					}
-
-					if name, ok := argObj["name"].(string); ok && name == "frob" {
-						frobArgFound = true
-
-						// Verify frob argument is required.
-						if required, ok := argObj["required"].(bool); ok && !required {
-							t.Error("frob argument for authenticate tool should be required")
-						}
-
-						break
-					}
-				}
-
-				if !frobArgFound {
-					t.Error("authenticate tool is missing frob argument")
-				}
-			}
-
-			break
-		}
-	}
-
-	if !authenticateToolFound {
-		t.Error("authenticate tool not found in list_tools response")
-	}
 }

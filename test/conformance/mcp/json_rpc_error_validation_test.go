@@ -1,5 +1,5 @@
+// file: test/conformance/mcp/json_rpc_error_validation_test.go
 // Package conformance provides tests to verify MCP protocol compliance.
-// file: test/conformance/json_rpc_error_validation_test.go
 package mcp
 
 import (
@@ -17,8 +17,8 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers/common"
-	"github.com/cowgnition/cowgnition/test/mocks/common"
+	"github.com/cowgnition/cowgnition/test/mocks"
+	validators "github.com/cowgnition/cowgnition/test/validators/mcp"
 )
 
 // TestJSONRPCErrorValidation provides comprehensive testing for the JSON-RPC 2.0
@@ -156,53 +156,8 @@ func testErrorResponseSchema(t *testing.T, client *helpers.MCPClient) {
 			}
 
 			// Validate response schema against JSON-RPC 2.0 specification
-			validateJSONRPCErrorSchema(t, result)
+			validators.ValidateJSONRPCErrorSchema(t, result)
 		})
-	}
-}
-
-// validateJSONRPCErrorSchema checks if a response follows the JSON-RPC 2.0 error format.
-func validateJSONRPCErrorSchema(t *testing.T, response map[string]interface{}) {
-	t.Helper()
-
-	// Check error field exists
-	errObj, ok := response["error"]
-	if !ok {
-		t.Error("Error response missing 'error' field")
-		return
-	}
-
-	// Check error is an object
-	errMap, ok := errObj.(map[string]interface{})
-	if !ok {
-		t.Errorf("Error field is not an object: %T", errObj)
-		return
-	}
-
-	// Check required error object fields
-	requiredFields := []string{"code", "message"}
-	for _, field := range requiredFields {
-		if _, ok := errMap[field]; !ok {
-			t.Errorf("Error object missing required field: %s", field)
-		}
-	}
-
-	// Validate field types
-	if code, ok := errMap["code"].(float64); !ok {
-		t.Errorf("Error code is not a number: %T", errMap["code"])
-	} else if code == 0 {
-		t.Error("Error code should not be 0")
-	}
-
-	if msg, ok := errMap["message"].(string); !ok {
-		t.Errorf("Error message is not a string: %T", errMap["message"])
-	} else if msg == "" {
-		t.Error("Error message should not be empty")
-	}
-
-	// Check timestamp exists
-	if _, ok := response["timestamp"]; !ok {
-		t.Error("Error response missing 'timestamp' field")
 	}
 }
 
@@ -444,7 +399,7 @@ func testErrorLifecycle(t *testing.T, client *helpers.MCPClient) {
 			}
 
 			// Validate JSON-RPC error schema
-			validateJSONRPCErrorSchema(t, result)
+			validators.ValidateJSONRPCErrorSchema(t, result)
 		})
 	}
 }

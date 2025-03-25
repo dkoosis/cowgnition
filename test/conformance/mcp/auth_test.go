@@ -1,5 +1,5 @@
+// file: test/conformance/mcp/auth_test.go
 // Package conformance provides tests to verify MCP protocol compliance.
-// file: test/conformance/mcp_authenticated_resources.go
 package mcp
 
 import (
@@ -17,6 +17,7 @@ import (
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
 	"github.com/cowgnition/cowgnition/test/mocks"
+	validators "github.com/cowgnition/cowgnition/test/validators/mcp"
 )
 
 // TestReadResourceAuthenticated tests the resource endpoints when authenticated.
@@ -144,7 +145,7 @@ func TestReadResourceAuthenticated(t *testing.T) {
 			}
 
 			// Validate each resource conforms to MCP spec.
-			if !validateMCPResource(t, resource) {
+			if !validators.ValidateMCPResource(t, resource) {
 				t.Errorf("Resource %s failed validation", name)
 			}
 		}
@@ -217,7 +218,7 @@ func TestReadResourceAuthenticated(t *testing.T) {
 				}
 
 				// Validate resource response.
-				if !validateResourceResponse(t, result) {
+				if !validators.ValidateResourceResponse(t, result) {
 					t.Errorf("Resource response validation failed")
 				}
 
