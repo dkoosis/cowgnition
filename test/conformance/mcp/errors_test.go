@@ -16,8 +16,8 @@ import (
 
 	"github.com/cowgnition/cowgnition/internal/config"
 	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers/common"
-	"github.com/cowgnition/cowgnition/test/mocks/common"
+	"github.com/cowgnition/cowgnition/test/helpers"
+	"github.com/cowgnition/cowgnition/test/mocks"
 )
 
 // TestMCPErrorResponses tests error handling and response formatting in the MCP server.
