@@ -1,4 +1,4 @@
-.PHONY: all build clean test test-coverage lint fmt dev help check static-analysis
+.PHONY: all build clean test test-coverage lint fmt dev help check static-analysis update-todo
 
 # Colors for output formatting
 GREEN := \033[0;32m
@@ -16,16 +16,27 @@ COMMIT_HASH := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 LDFLAGS := -ldflags "-X main.version=${VERSION} -X main.commitHash=${COMMIT_HASH} -X main.buildDate=${BUILD_DATE}"
 
-# Default target - run all checks and build.  Stop on first failure.
-all: check fmt static-analysis lint test build
+# Run update-todo first, always
+.PHONY: pre-all
+pre-all: update-todo
+
+# Default target - run all checks and build. Stop on first failure.
+all: pre-all check fmt static-analysis lint test build
 	@printf "${GREEN}✓ All checks passed and build completed successfully!${NC}\n"
 
-# Build the application
-build:
+# Make build, test, etc. depend on pre-all so update-todo runs first
+build: pre-all
 	@printf "${BLUE}▶ Building ${BINARY_NAME}...${NC}\n"
 	@go build ${LDFLAGS} -o ${BINARY_NAME} ${MAIN_PACKAGE} && \
 		printf "${GREEN}✓ Build successful${NC}\n" || \
 		(printf "${RED}✗ Build failed${NC}\n" && exit 1)
+
+# Update TODO.md with build errors and tree.txt
+update-todo:
+	@printf "${BLUE}▶ Updating documentation...${NC}\n"
+	@./scripts/update_todo.sh && \
+		printf "${GREEN}✓ Documentation updated${NC}\n" || \
+		(printf "${YELLOW}⚠ Documentation update had issues${NC}\n")
 
 # Clean build artifacts
 clean:
@@ -35,7 +46,7 @@ clean:
 	@printf "${GREEN}✓ Cleaned${NC}\n"
 
 # Run tests using gotestsum
-test:
+test: pre-all
 	@printf "${BLUE}▶ Running tests with gotestsum...${NC}\n"
 	@if command -v gotestsum >/dev/null 2>&1; then \
 		gotestsum --format pkgname -- ./...; \
@@ -45,7 +56,7 @@ test:
 	fi
 
 # Run tests with coverage using gotestsum
-test-coverage:
+test-coverage: pre-all
 	@printf "${BLUE}▶ Running tests with coverage...${NC}\n"
 	@if command -v gotestsum >/dev/null 2>&1; then \
 		gotestsum --format pkgname -- -coverprofile=coverage.out ./...; \
@@ -58,7 +69,7 @@ test-coverage:
 	@go tool cover -func=coverage.out
 
 # Run linters
-lint:
+lint: pre-all
 	@printf "${BLUE}▶ Running linters...${NC}\n"
 	@if ! command -v golangci-lint >/dev/null 2>&1; then \
 		printf "${RED}✗ golangci-lint not found. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest${NC}\n"; \
@@ -69,7 +80,7 @@ lint:
 		(printf "${RED}✗ Linting issues found${NC}\n" && exit 1)
 
 # Run gofmt and goimports
-fmt:
+fmt: pre-all
 	@printf "${BLUE}▶ Formatting code...${NC}\n"
 	@if ! command -v goimports >/dev/null 2>&1; then \
 		printf "${RED}✗ goimports not found. Install with: go install golang.org/x/tools/cmd/goimports@latest${NC}\n"; \
@@ -80,7 +91,7 @@ fmt:
 	@printf "${GREEN}✓ Code formatted${NC}\n"
 
 # Development mode with hot reload
-dev:
+dev: pre-all
 	@printf "${BLUE}▶ Starting development server with hot reload...${NC}\n"
 	@if ! command -v entr >/dev/null 2>&1; then \
 		printf "${RED}✗ entr not found. Install with: brew install entr${NC}\n"; \
@@ -89,7 +100,7 @@ dev:
 	@find . -name "*.go" | entr -r go run ${LDFLAGS} ${MAIN_PACKAGE} serve --config configs/config.yaml
 
 # Check for required tools
-check:
+check: pre-all
 	@printf "${BLUE}▶ Checking for required tools...${NC}\n"
 	@printf "  Go:            "
 	@if command -v go >/dev/null 2>&1; then printf "${GREEN}✓${NC}\n"; else printf "${RED}✗${NC}\n"; fi
@@ -105,7 +116,7 @@ check:
 	@if command -v gotestsum >/dev/null 2>&1; then printf "${GREEN}✓${NC}\n"; else printf "${RED}✗${NC}\n"; fi
 
 # Static analysis using go vet and staticcheck
-static-analysis:
+static-analysis: pre-all
 	@printf "${BLUE}▶ Running static analysis...${NC}\n"
 	@go vet ./... && \
 		printf "${GREEN}✓ go vet passed${NC}\n" || \
@@ -140,5 +151,6 @@ help:
 	@printf "  %-16s %s\n" "dev" "Run with hot reloading (requires entr)"
 	@printf "  %-16s %s\n" "check" "Check for required tools"
 	@printf "  %-16s %s\n" "static-analysis" "Run static analysis (go vet and staticcheck)"
+	@printf "  %-16s %s\n" "update-todo" "Update documentation (TODO.md and tree.txt)"
 	@printf "  %-16s %s\n" "setup-tools" "Install development tools"
 	@printf "  %-16s %s\n" "help" "Show this help message"
