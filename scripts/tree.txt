@@ -45,6 +45,7 @@
 │   │   │   └── handlers.go
 │   │   ├── errors.go
 │   │   ├── handlers.go
+│   │   ├── handlers_mcp.go
 │   │   ├── httputils/
 │   │   │   ├── interfaces.go
 │   │   │   └── response.go
@@ -55,7 +56,9 @@
 │   │   ├── middleware/
 │   │   │   ├── auth.go
 │   │   │   └── middleware.go
+│   │   ├── resources_mcp.go
 │   │   ├── server.go
+│   │   ├── tools_mcp.go
 │   │   └── utils.go
 │   └── testing/
 │       └── formatter.go
@@ -129,4 +132,4 @@
 │           └── validators.go
 └── tst.patch
 
-51 directories, 79 files
+51 directories, 82 files
