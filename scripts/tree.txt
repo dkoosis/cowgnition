@@ -72,59 +72,61 @@
 │       └── validation/
 │           └── validation.go
 ├── scripts/
+│   ├── apply.sh*
 │   ├── restructure-script.sh*
 │   ├── run_live_tests.sh*
 │   ├── setup.sh*
 │   ├── tree.txt
 │   └── update_todo.sh*
-└── test/
-    ├── README.md
-    ├── common/
-    ├── conformance/
-    │   └── mcp/
-    │       ├── auth_test.go
-    │       ├── conformance_test.go
-    │       ├── errors_test.go
-    │       ├── initialize_test.go
-    │       ├── json_rpc_error_validation_test.go
-    │       ├── live_resource_test.go
-    │       ├── read_resource_live_test.go
-    │       ├── resources_test.go
-    │       └── tools_test.go
-    ├── fixtures/
-    │   ├── common/
-    │   ├── fixtures.go
-    │   ├── mcp/
-    │   └── rtm/
-    ├── helpers/
-    │   ├── common/
-    │   │   ├── auth_helper.go
-    │   │   ├── auth_stub.go
-    │   │   ├── client.go
-    │   │   └── test_config.go
-    │   ├── mcp/
-    │   │   └── client.go
-    │   └── rtm/
-    │       ├── rtm_helpers.go
-    │       ├── rtm_live_helpers.go
-    │       └── rtm_live_test_framework.go
-    ├── integration/
-    │   ├── mcp/
-    │   └── rtm/
-    ├── mocks/
-    │   ├── common/
-    │   ├── rtm/
-    │   └── server.go
-    ├── unit/
-    │   ├── auth/
-    │   ├── mcp/
-    │   │   └── resources_test.go
-    │   └── rtm/
-    ├── util/
-    │   └── testutil/
-    │       └── mcptest.go
-    └── validators/
-        └── mcp/
-            └── validators.go
+├── test/
+│   ├── README.md
+│   ├── common/
+│   ├── conformance/
+│   │   └── mcp/
+│   │       ├── auth_test.go
+│   │       ├── conformance_test.go
+│   │       ├── errors_test.go
+│   │       ├── initialize_test.go
+│   │       ├── json_rpc_error_validation_test.go
+│   │       ├── live_resource_test.go
+│   │       ├── read_resource_live_test.go
+│   │       ├── resources_test.go
+│   │       └── tools_test.go
+│   ├── fixtures/
+│   │   ├── common/
+│   │   ├── fixtures.go
+│   │   ├── mcp/
+│   │   └── rtm/
+│   ├── helpers/
+│   │   ├── common/
+│   │   │   ├── auth_helper.go
+│   │   │   ├── auth_stub.go
+│   │   │   ├── client.go
+│   │   │   └── test_config.go
+│   │   ├── mcp/
+│   │   │   └── client.go
+│   │   └── rtm/
+│   │       ├── rtm_helpers.go
+│   │       ├── rtm_live_helpers.go
+│   │       └── rtm_live_test_framework.go
+│   ├── integration/
+│   │   ├── mcp/
+│   │   └── rtm/
+│   ├── mocks/
+│   │   ├── common/
+│   │   ├── rtm/
+│   │   └── server.go
+│   ├── unit/
+│   │   ├── auth/
+│   │   ├── mcp/
+│   │   │   └── resources_test.go
+│   │   └── rtm/
+│   ├── util/
+│   │   └── testutil/
+│   │       └── mcptest.go
+│   └── validators/
+│       └── mcp/
+│           └── validators.go
+└── tst.patch
 
-51 directories, 77 files
+51 directories, 79 files
