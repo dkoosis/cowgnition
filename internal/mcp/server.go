@@ -11,7 +11,7 @@ import (
 
 // Server represents an MCP server.
 type Server struct {
-	config          *config.Config
+	config          *config.Settings
 	httpServer      *http.Server
 	version         string
 	startTime       time.Time
@@ -20,7 +20,7 @@ type Server struct {
 }
 
 // NewServer creates a new MCP server.
-func NewServer(cfg *config.Config) (*Server, error) {
+func NewServer(cfg *config.Settings) (*Server, error) {
 	return &Server{
 		config:          cfg,
 		version:         "1.0.0", // Default version
