@@ -1,55 +1,91 @@
-## TOP PRIORITY: Latest Build Errors (Tue Mar 25 20:58:23 EDT 2025)
+## TOP PRIORITY: Latest Build Errors (Tue Mar 25 20:59:48 EDT 2025)
 ```
 Capturing build errors for documentation...
-internal/server/handlers_mcp.go:13:2: no required module provides package github.com/cowgnition/cowgnition/internal/middleware; to add it:
-	go get github.com/cowgnition/cowgnition/internal/middleware
-internal/server/handlers_mcp.go:13:2: no required module provides package github.com/cowgnition/cowgnition/internal/middleware; to add it:
-	go get github.com/cowgnition/cowgnition/internal/middleware
-internal/server/utils.go:59:6: formatTimeComponent redeclared in this block (typecheck)
-func formatTimeComponent(t time.Time) string {
-     ^
-internal/server/resources_mcp.go:189:6: other declaration of formatTimeComponent (typecheck)
-func formatTimeComponent(t time.Time) string {
-     ^
-internal/server/utils.go:69:6: formatDate redeclared in this block (typecheck)
-func formatDate(dateStr string) string {
-     ^
-internal/server/resources_mcp.go:153:6: other declaration of formatDate (typecheck)
-func formatDate(dueDate string) string {
-     ^
-internal/server/handlers.go:108:12: s.handleSetPriorityTool undefined (type *Server has no field or method handleSetPriorityTool) (typecheck)
-		return s.handleSetPriorityTool(args)
-		         ^
-internal/server/handlers.go:110:12: s.handleAddTagsTool undefined (type *Server has no field or method handleAddTagsTool) (typecheck)
-		return s.handleAddTagsTool(args)
-		         ^
-internal/server/handlers.go:112:12: s.handleLogoutTool undefined (type *Server has no field or method handleLogoutTool) (typecheck)
-		return s.handleLogoutTool(args)
-		         ^
-internal/server/handlers.go:114:12: s.handleAuthStatusTool undefined (type *Server has no field or method handleAuthStatusTool) (typecheck)
-		return s.handleAuthStatusTool(args)
-		         ^
-internal/server/handlers_mcp.go:203:5: s.handleAuthResource undefined (type *Server has no field or method handleAuthResource) (typecheck)
-		s.handleAuthResource(w, r)
-		  ^
-internal/server/handlers_mcp.go:225:20: s.handleListsResource undefined (type *Server has no field or method handleListsResource) (typecheck)
-		content, err = s.handleListsResource()
-		                 ^
-internal/server/resources_mcp.go:37:17: undefined: formatTasksSummary (typecheck)
-	sb.WriteString(formatTasksSummary(totalTasks, completedTasks))
-	               ^
-internal/server/resources_mcp.go:117:30: undefined: formatTaskPriority (typecheck)
-	priority, prioritySymbol := formatTaskPriority(task.Priority)
-	                            ^
-internal/server/resources_mcp.go:126:27: undefined: formatTaskDueDate (typecheck)
-	dueDate, dueDateColor := formatTaskDueDate(task.Due)
-	                         ^
-internal/server/resources_mcp.go:139:14: undefined: formatTaskMetadata (typecheck)
-	metadata := formatTaskMetadata(priority, dueDate, dueDateColor, ts.Tags.Tag)
-	            ^
-internal/server/tools_mcp.go:155:53: undefined: formatDueDate (typecheck)
-	return fmt.Sprintf("Due date has been set to %s.", formatDueDate(dueDate, hasDueTime)), nil
-	                                                   ^
+github.com/cowgnition/cowgnition/internal/server/mcp
+github.com/cowgnition/cowgnition/internal/server
+# github.com/cowgnition/cowgnition/internal/server/mcp
+internal/server/mcp/handlers.go:17:10: undefined: Server
+internal/server/mcp/handlers.go:93:10: undefined: Server
+internal/server/mcp/handlers.go:180:10: undefined: Server
+internal/server/mcp/handlers.go:274:10: undefined: Server
+internal/server/mcp/handlers.go:314:10: undefined: Server
+internal/server/mcp/handlers.go:373:10: undefined: Server
+internal/server/mcp/handlers.go:389:10: undefined: Server
+internal/server/mcp/resources.go:14:10: undefined: Server
+internal/server/mcp/resources.go:43:24: undefined: Server
+internal/server/mcp/resources.go:242:10: undefined: Server
+internal/server/mcp/resources.go:242:10: too many errors
+# github.com/cowgnition/cowgnition/internal/server
+internal/server/utils.go:59:6: formatTimeComponent redeclared in this block
+	internal/server/resources_mcp.go:189:6: other declaration of formatTimeComponent
+internal/server/utils.go:69:6: formatDate redeclared in this block
+	internal/server/resources_mcp.go:153:6: other declaration of formatDate
+internal/server/handlers.go:108:12: s.handleSetPriorityTool undefined (type *Server has no field or method handleSetPriorityTool)
+internal/server/handlers.go:110:12: s.handleAddTagsTool undefined (type *Server has no field or method handleAddTagsTool)
+internal/server/handlers.go:112:12: s.handleLogoutTool undefined (type *Server has no field or method handleLogoutTool)
+internal/server/handlers.go:114:12: s.handleAuthStatusTool undefined (type *Server has no field or method handleAuthStatusTool)
+internal/server/handlers_mcp.go:203:5: s.handleAuthResource undefined (type *Server has no field or method handleAuthResource)
+internal/server/handlers_mcp.go:225:20: s.handleListsResource undefined (type *Server has no field or method handleListsResource)
+internal/server/handlers_mcp.go:338:44: cannot use s (variable of type *Server) as httputils.ServerInterface value in argument to middleware.NewAuthHandler: *Server does not implement httputils.ServerInterface (wrong type for method GetRTMService)
+		have GetRTMService() *"github.com/cowgnition/cowgnition/internal/rtm".Service
+		want GetRTMService() httputils.RTMServiceInterface
+internal/server/resources_mcp.go:37:17: undefined: formatTasksSummary
+internal/server/resources_mcp.go:37:17: too many errors
+test/conformance/mcp/initialize_test.go:16:2: no required module provides package github.com/cowgnition/cowgnition/test/helpers; to add it:
+	go get github.com/cowgnition/cowgnition/test/helpers
+# github.com/cowgnition/cowgnition/internal/server
+internal/server/utils.go:59:6: formatTimeComponent redeclared in this block
+	internal/server/resources_mcp.go:189:6: other declaration of formatTimeComponent
+internal/server/utils.go:69:6: formatDate redeclared in this block
+	internal/server/resources_mcp.go:153:6: other declaration of formatDate
+internal/server/handlers.go:108:12: s.handleSetPriorityTool undefined (type *Server has no field or method handleSetPriorityTool)
+internal/server/handlers.go:110:12: s.handleAddTagsTool undefined (type *Server has no field or method handleAddTagsTool)
+internal/server/handlers.go:112:12: s.handleLogoutTool undefined (type *Server has no field or method handleLogoutTool)
+internal/server/handlers.go:114:12: s.handleAuthStatusTool undefined (type *Server has no field or method handleAuthStatusTool)
+internal/server/handlers_mcp.go:203:5: s.handleAuthResource undefined (type *Server has no field or method handleAuthResource)
+internal/server/handlers_mcp.go:225:20: s.handleListsResource undefined (type *Server has no field or method handleListsResource)
+internal/server/handlers_mcp.go:338:44: cannot use s (variable of type *Server) as httputils.ServerInterface value in argument to middleware.NewAuthHandler: *Server does not implement httputils.ServerInterface (wrong type for method GetRTMService)
+		have GetRTMService() *"github.com/cowgnition/cowgnition/internal/rtm".Service
+		want GetRTMService() httputils.RTMServiceInterface
+internal/server/resources_mcp.go:37:17: undefined: formatTasksSummary
+internal/server/resources_mcp.go:37:17: too many errors
+# github.com/cowgnition/cowgnition/internal/server/mcp
+vet: internal/server/mcp/handlers.go:17:10: undefined: Server
+internal/server/errors.go:1: : # github.com/cowgnition/cowgnition/internal/server
+internal/server/utils.go:59:6: formatTimeComponent redeclared in this block
+	internal/server/resources_mcp.go:189:6: other declaration of formatTimeComponent
+internal/server/utils.go:69:6: formatDate redeclared in this block
+	internal/server/resources_mcp.go:153:6: other declaration of formatDate
+internal/server/handlers.go:108:12: s.handleSetPriorityTool undefined (type *Server has no field or method handleSetPriorityTool)
+internal/server/handlers.go:110:12: s.handleAddTagsTool undefined (type *Server has no field or method handleAddTagsTool)
+internal/server/handlers.go:112:12: s.handleLogoutTool undefined (type *Server has no field or method handleLogoutTool)
+internal/server/handlers.go:114:12: s.handleAuthStatusTool undefined (type *Server has no field or method handleAuthStatusTool)
+internal/server/handlers_mcp.go:203:5: s.handleAuthResource undefined (type *Server has no field or method handleAuthResource)
+internal/server/handlers_mcp.go:225:20: s.handleListsResource undefined (type *Server has no field or method handleListsResource)
+internal/server/handlers_mcp.go:338:44: cannot use s (variable of type *Server) as httputils.ServerInterface value in argument to middleware.NewAuthHandler: *Server does not implement httputils.ServerInterface (wrong type for method GetRTMService)
+		have GetRTMService() *"github.com/cowgnition/cowgnition/internal/rtm".Service
+		want GetRTMService() httputils.RTMServiceInterface
+internal/server/resources_mcp.go:37:17: undefined: formatTasksSummary
+internal/server/resources_mcp.go:37:17: too many errors (typecheck)
+// Package server defines the core server-side logic for the Cowgnition MCP server.
+cmd/server/commands.go:15:2: could not import github.com/cowgnition/cowgnition/internal/server (-: # github.com/cowgnition/cowgnition/internal/server
+internal/server/utils.go:59:6: formatTimeComponent redeclared in this block
+	internal/server/resources_mcp.go:189:6: other declaration of formatTimeComponent
+internal/server/utils.go:69:6: formatDate redeclared in this block
+	internal/server/resources_mcp.go:153:6: other declaration of formatDate
+internal/server/handlers.go:108:12: s.handleSetPriorityTool undefined (type *Server has no field or method handleSetPriorityTool)
+internal/server/handlers.go:110:12: s.handleAddTagsTool undefined (type *Server has no field or method handleAddTagsTool)
+internal/server/handlers.go:112:12: s.handleLogoutTool undefined (type *Server has no field or method handleLogoutTool)
+internal/server/handlers.go:114:12: s.handleAuthStatusTool undefined (type *Server has no field or method handleAuthStatusTool)
+internal/server/handlers_mcp.go:203:5: s.handleAuthResource undefined (type *Server has no field or method handleAuthResource)
+internal/server/handlers_mcp.go:225:20: s.handleListsResource undefined (type *Server has no field or method handleListsResource)
+internal/server/handlers_mcp.go:338:44: cannot use s (variable of type *Server) as httputils.ServerInterface value in argument to middleware.NewAuthHandler: *Server does not implement httputils.ServerInterface (wrong type for method GetRTMService)
+		have GetRTMService() *"github.com/cowgnition/cowgnition/internal/rtm".Service
+		want GetRTMService() httputils.RTMServiceInterface
+internal/server/resources_mcp.go:37:17: undefined: formatTasksSummary
+internal/server/resources_mcp.go:37:17: too many errors) (typecheck)
+	"github.com/cowgnition/cowgnition/internal/server"
+	^
 cmd/server/main.go:18:2: version redeclared in this block (typecheck)
 	version    = "dev"
 	^
@@ -65,6 +101,24 @@ cmd/server/main.go:41:14: undefined: RegisterCommands (typecheck)
 cmd/server/main.go:149:19: invalid composite literal type string (typecheck)
 	standardPaths := string{
 	                 ^
+internal/server/api/handlers.go:8:2: could not import github.com/cowgnition/cowgnition/internal/server (-: # github.com/cowgnition/cowgnition/internal/server
+internal/server/utils.go:59:6: formatTimeComponent redeclared in this block
+	internal/server/resources_mcp.go:189:6: other declaration of formatTimeComponent
+internal/server/utils.go:69:6: formatDate redeclared in this block
+	internal/server/resources_mcp.go:153:6: other declaration of formatDate
+internal/server/handlers.go:108:12: s.handleSetPriorityTool undefined (type *Server has no field or method handleSetPriorityTool)
+internal/server/handlers.go:110:12: s.handleAddTagsTool undefined (type *Server has no field or method handleAddTagsTool)
+internal/server/handlers.go:112:12: s.handleLogoutTool undefined (type *Server has no field or method handleLogoutTool)
+internal/server/handlers.go:114:12: s.handleAuthStatusTool undefined (type *Server has no field or method handleAuthStatusTool)
+internal/server/handlers_mcp.go:203:5: s.handleAuthResource undefined (type *Server has no field or method handleAuthResource)
+internal/server/handlers_mcp.go:225:20: s.handleListsResource undefined (type *Server has no field or method handleListsResource)
+internal/server/handlers_mcp.go:338:44: cannot use s (variable of type *Server) as httputils.ServerInterface value in argument to middleware.NewAuthHandler: *Server does not implement httputils.ServerInterface (wrong type for method GetRTMService)
+		have GetRTMService() *"github.com/cowgnition/cowgnition/internal/rtm".Service
+		want GetRTMService() httputils.RTMServiceInterface
+internal/server/resources_mcp.go:37:17: undefined: formatTasksSummary
+internal/server/resources_mcp.go:37:17: too many errors) (typecheck)
+	"github.com/cowgnition/cowgnition/internal/server"
+	^
 internal/server/mcp/handlers.go:1: : # github.com/cowgnition/cowgnition/internal/server/mcp
 internal/server/mcp/handlers.go:17:10: undefined: Server
 internal/server/mcp/handlers.go:93:10: undefined: Server
@@ -78,6 +132,24 @@ internal/server/mcp/resources.go:43:24: undefined: Server
 internal/server/mcp/resources.go:242:10: undefined: Server
 internal/server/mcp/resources.go:242:10: too many errors (typecheck)
 // Package server implements the Model Context Protocol server for RTM integration.
+test/helpers/common/auth_helper.go:14:2: could not import github.com/cowgnition/cowgnition/internal/server (-: # github.com/cowgnition/cowgnition/internal/server
+internal/server/utils.go:59:6: formatTimeComponent redeclared in this block
+	internal/server/resources_mcp.go:189:6: other declaration of formatTimeComponent
+internal/server/utils.go:69:6: formatDate redeclared in this block
+	internal/server/resources_mcp.go:153:6: other declaration of formatDate
+internal/server/handlers.go:108:12: s.handleSetPriorityTool undefined (type *Server has no field or method handleSetPriorityTool)
+internal/server/handlers.go:110:12: s.handleAddTagsTool undefined (type *Server has no field or method handleAddTagsTool)
+internal/server/handlers.go:112:12: s.handleLogoutTool undefined (type *Server has no field or method handleLogoutTool)
+internal/server/handlers.go:114:12: s.handleAuthStatusTool undefined (type *Server has no field or method handleAuthStatusTool)
+internal/server/handlers_mcp.go:203:5: s.handleAuthResource undefined (type *Server has no field or method handleAuthResource)
+internal/server/handlers_mcp.go:225:20: s.handleListsResource undefined (type *Server has no field or method handleListsResource)
+internal/server/handlers_mcp.go:338:44: cannot use s (variable of type *Server) as httputils.ServerInterface value in argument to middleware.NewAuthHandler: *Server does not implement httputils.ServerInterface (wrong type for method GetRTMService)
+		have GetRTMService() *"github.com/cowgnition/cowgnition/internal/rtm".Service
+		want GetRTMService() httputils.RTMServiceInterface
+internal/server/resources_mcp.go:37:17: undefined: formatTasksSummary
+internal/server/resources_mcp.go:37:17: too many errors) (typecheck)
+	"github.com/cowgnition/cowgnition/internal/server"
+	^
 test/helpers/common/auth_stub.go:19:6: SimulateAuthentication redeclared in this block (typecheck)
 func SimulateAuthentication(s *server.Server) error {
      ^

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/middleware"
+	"github.com/cowgnition/cowgnition/internal/server/middleware"
 	"github.com/cowgnition/cowgnition/pkg/mcp"
 )
 
