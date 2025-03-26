@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/yourusername/cowgnition/internal/config"
+	"github.com/dkoosis/cowgnition/internal/config"
 )
 
 // Server represents an MCP server.

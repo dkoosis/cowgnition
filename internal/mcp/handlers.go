@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/yourusername/cowgnition/internal/httputils"
+	"github.com/dkoosis/cowgnition/internal/httputils"
 )
 
 // handleInitialize handles the MCP initialize request.

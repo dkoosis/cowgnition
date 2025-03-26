@@ -7,8 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/yourusername/cowgnition/internal/config"
-	"github.com/yourusername/cowgnition/internal/mcp"
+	"github.com/dkoosis/cowgnition/internal/config"
+	"github.com/dkoosis/cowgnition/internal/mcp"
 )
 
 func main() {
