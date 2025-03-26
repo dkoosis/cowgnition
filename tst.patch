@@ -1,15 +1,12 @@
---- a/internal/server/handlers.go
-+++ b/internal/server/handlers.go
-@@ -7,10 +7,12 @@ import (
-     "net/http"
-     "strings"
-     "time"
-+
-+    "github.com/cowgnition/cowgnition/internal/server/mcp"
- )
-
- // handleInitialize routes the MCP initialize request to specialized handler.
- func (s *Server) handleInitialize(w http.ResponseWriter, r *http.Request) {
--    s.handleMCPInitialize(w, r)
-+    mcp.HandleInitialize(s, w, r)
+--- a/internal/server/server.go
++++ b/internal/server/server.go
+@@ -88,4 +88,10 @@ func (s *Server) SetVersion(version string) {
+ func (s *Server) GetRTMService() *rtm.Service {
+     return s.rtmService
  }
++
++// GetConfig returns the server's configuration.
++func (s *Server) GetConfig() *config.Config {
++    return s.config
++}
++
