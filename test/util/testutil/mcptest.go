@@ -10,11 +10,15 @@ import (
 	"net/url"
 	"testing"
 
-	validators "github.com/cowgnition/cowgnition/test/validators/mcp"
+	validators "github.com/dkoosis/cowgnition/test/validators/mcp"
 )
 
 // ReadResource sends a read_resource request to the MCP server.
 // Returns the resource content and MIME type if successful, empty strings otherwise.
+// It constructs a read_resource request to the MCP server's specified baseURL.
+// The resourceName parameter is URL-escaped to ensure safe inclusion in the request.
+// If the request is successful (HTTP status 200), it parses the JSON response to extract the resource content and MIME type.
+// Empty strings are returned if the request fails or if content/MIME type extraction encounters an error.
 func ReadResource(t *testing.T, client *http.Client, baseURL, resourceName string) (string, string) {
 	t.Helper()
 
@@ -54,6 +58,7 @@ func ReadResource(t *testing.T, client *http.Client, baseURL, resourceName strin
 }
 
 // ValidateResourceResponse validates a response from read_resource.
+// It leverages the centralized validator function `validators.ValidateResourceResponse` to perform the validation.
 func ValidateResourceResponse(t *testing.T, response map[string]interface{}) bool {
 	t.Helper()
 
@@ -62,6 +67,7 @@ func ValidateResourceResponse(t *testing.T, response map[string]interface{}) boo
 }
 
 // ValidateToolResponse validates a response from call_tool.
+// It uses the `validators.ValidateToolResponse` function to validate the tool call response.
 func ValidateToolResponse(t *testing.T, response map[string]interface{}) bool {
 	t.Helper()
 
@@ -70,6 +76,8 @@ func ValidateToolResponse(t *testing.T, response map[string]interface{}) bool {
 }
 
 // IsServerAuthenticated checks if the server is authenticated.
+// It attempts to access a protected resource ("tasks://all") to determine authentication status.
+// If the server returns a 200 OK status, it implies the server is authenticated.
 func IsServerAuthenticated(t *testing.T, client *http.Client, baseURL string) bool {
 	t.Helper()
 
@@ -91,3 +99,5 @@ func IsServerAuthenticated(t *testing.T, client *http.Client, baseURL string) bo
 	// If we can access tasks, the server is authenticated.
 	return resp.StatusCode == http.StatusOK
 }
+
+// DocEnhanced: 2025-03-25

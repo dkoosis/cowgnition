@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	client "github.com/cowgnition/cowgnition/internal/rtm/client"
+	client "github.com/dkoosis/cowgnition/internal/rtm/client"
 )
 
 // Service provides a wrapper around the RTM client with additional functionality.

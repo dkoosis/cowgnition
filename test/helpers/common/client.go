@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/rtm"
+	"github.com/dkoosis/cowgnition/internal/rtm"
 )
 
 // RTMTestClient provides a wrapper around the RTM client for testing,

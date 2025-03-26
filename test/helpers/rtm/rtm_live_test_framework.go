@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/config"
-	"github.com/cowgnition/cowgnition/internal/server"
+	"github.com/dkoosis/cowgnition/internal/config"
+	"github.com/dkoosis/cowgnition/internal/server"
 )
 
 // Import and use functions from the helpers package.

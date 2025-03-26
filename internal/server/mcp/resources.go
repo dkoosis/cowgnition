@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/rtm"
+	"github.com/dkoosis/cowgnition/internal/rtm"
 )
 
 // handleTasksResource retrieves and formats tasks based on the given filter.

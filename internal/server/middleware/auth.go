@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/server/httputils"
+	"github.com/dkoosis/cowgnition/internal/server/httputils"
 )
 
 // AuthHandler holds methods for authentication handling

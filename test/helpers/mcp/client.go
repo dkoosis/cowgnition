@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/server"
+	"github.com/dkoosis/cowgnition/internal/server"
 )
 
 // MCPClient is a client for interacting with MCP servers in tests.

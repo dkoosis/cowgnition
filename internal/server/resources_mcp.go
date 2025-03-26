@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/rtm"
+	"github.com/dkoosis/cowgnition/internal/rtm"
 )
 
 // handleTasksResource retrieves and formats tasks based on the given filter.
@@ -145,52 +145,6 @@ func formatTask(sb *strings.Builder, listID string, ts rtm.TaskSeries, task rtm.
 	idInfo := fmt.Sprintf("    <small>ID: list=%s, taskseries=%s, task=%s</small>",
 		listID, ts.ID, task.ID)
 	sb.WriteString(idInfo + "\n\n")
-}
-
-// Rest of the implementation...
-
-// formatDate formats an RTM date string for display.
-func formatDate(dueDate string) string {
-	if dueDate == "" {
-		return ""
-	}
-
-	// Parse the date string (format: 2006-01-02T15:04:05Z)
-	t, err := time.Parse(time.RFC3339, dueDate)
-	if err != nil {
-		return dueDate // Return original if parsing fails
-	}
-
-	// Get today's date for comparison
-	today := time.Now()
-	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location())
-	taskDate := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
-
-	// Calculate days difference
-	daysDiff := int(taskDate.Sub(today).Hours() / 24)
-	timeComponent := formatTimeComponent(t)
-
-	// Format based on proximity to today
-	switch {
-	case daysDiff == 0:
-		return "Today" + timeComponent
-	case daysDiff == 1:
-		return "Tomorrow" + timeComponent
-	case daysDiff > 1 && daysDiff < 7:
-		return t.Format("Monday") + timeComponent
-	case t.Year() == today.Year():
-		return t.Format("Jan 2") + timeComponent
-	default:
-		return t.Format("Jan 2, 2006") + timeComponent
-	}
-}
-
-// formatTimeComponent returns formatted time if present, empty string otherwise.
-func formatTimeComponent(t time.Time) string {
-	if t.Hour() > 0 || t.Minute() > 0 {
-		return fmt.Sprintf(" at %s", t.Format("3:04 PM"))
-	}
-	return ""
 }
 
 // handleListsResource retrieves and formats lists.

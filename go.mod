@@ -1,4 +1,4 @@
-module github.com/cowgnition/cowgnition
+module github.com/dkoosis/cowgnition
 
 go 1.24.1
 

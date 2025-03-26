@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/server/middleware"
-	"github.com/cowgnition/cowgnition/pkg/mcp"
+	"github.com/dkoosis/cowgnition/internal/server/middleware"
+	"github.com/dkoosis/cowgnition/pkg/mcp"
 )
 
 // handleMCPInitialize handles the MCP initialize request.

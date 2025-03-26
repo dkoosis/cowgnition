@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/rtm"
-	"github.com/cowgnition/cowgnition/internal/server"
+	"github.com/dkoosis/cowgnition/internal/rtm"
+	"github.com/dkoosis/cowgnition/internal/server"
 )
 
 // SimulateAuthentication sets up a server to be in an authenticated state for testing.

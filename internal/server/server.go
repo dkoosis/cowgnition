@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/auth"
-	"github.com/cowgnition/cowgnition/internal/config"
-	"github.com/cowgnition/cowgnition/internal/rtm"
-	"github.com/cowgnition/cowgnition/internal/server/middleware"
+	"github.com/dkoosis/cowgnition/internal/auth"
+	"github.com/dkoosis/cowgnition/internal/config"
+	"github.com/dkoosis/cowgnition/internal/rtm"
+	"github.com/dkoosis/cowgnition/internal/server/middleware"
 )
 
 // Server represents an MCP server for RTM integration.

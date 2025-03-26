@@ -11,7 +11,7 @@ apply_patch() {
   echo "Applying patch '$patch_file' from starting directory..."
 
   # Apply the patch directly without changing directories
-  if ! patch -p1 < "$patch_file"; then
+  if ! patch --ignore-whitespace --fuzz=3 -p1 < "$patch_file"; then
     patch_exit_code=$?
     echo "Error: Failed to apply patch '$patch_file' (exit code: $patch_exit_code)"
     return 1

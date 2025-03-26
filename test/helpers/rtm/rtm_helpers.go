@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/cowgnition/cowgnition/internal/server"
+	"github.com/dkoosis/cowgnition/internal/server"
 )
 
 // SetAuthTokenOnServer attempts to set the authentication token directly on the server's RTM service.

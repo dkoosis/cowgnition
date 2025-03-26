@@ -10,9 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/config"
-	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers/common"
+	"github.com/dkoosis/cowgnition/internal/config"
+	"github.com/dkoosis/cowgnition/internal/server"
 )
 
 // TestReadResourceLive tests the read_resource endpoint with a real RTM API connection.

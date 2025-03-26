@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cowgnition/cowgnition/pkg/mcp"
+	"github.com/dkoosis/cowgnition/pkg/mcp"
 )
 
 // handleMCPInitialize handles the MCP initialize request.

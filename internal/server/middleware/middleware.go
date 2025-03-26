@@ -8,7 +8,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/server/httputils"
+	"github.com/dkoosis/cowgnition/internal/server/httputils"
 )
 
 // LogMiddleware adds request logging to the server.

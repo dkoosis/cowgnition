@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cowgnition/cowgnition/test/helpers/common"
-	validators "github.com/cowgnition/cowgnition/test/validators/mcp"
+	"github.com/dkoosis/cowgnition/test/helpers/common"
+	validators "github.com/dkoosis/cowgnition/test/validators/mcp"
 )
 
 // TestResources verifies the MCP resource listing and reading capabilities.

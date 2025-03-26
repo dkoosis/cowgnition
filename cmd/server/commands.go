@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/config"
-	"github.com/cowgnition/cowgnition/internal/server"
+	"github.com/dkoosis/cowgnition/internal/config"
+	"github.com/dkoosis/cowgnition/internal/server"
 )
 
 // Command-line variables set during build

@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cowgnition/cowgnition/internal/config"
-	"github.com/cowgnition/cowgnition/internal/server"
-	"github.com/cowgnition/cowgnition/test/helpers"
-	"github.com/cowgnition/cowgnition/test/mocks"
-	validators "github.com/cowgnition/cowgnition/test/validators/mcp"
+	"github.com/dkoosis/cowgnition/internal/config"
+	"github.com/dkoosis/cowgnition/internal/server"
+	"github.com/dkoosis/cowgnition/test/helpers"
+	"github.com/dkoosis/cowgnition/test/mocks"
+	validators "github.com/dkoosis/cowgnition/test/validators/mcp"
 )
 
 // TestMCPInitializeEndpointEnhanced tests the /mcp/initialize endpoint with more
