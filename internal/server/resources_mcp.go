@@ -192,3 +192,176 @@ func formatTimeComponent(t time.Time) string {
 	}
 	return ""
 }
+
+// handleListsResource retrieves and formats lists.
+func (s *Server) handleListsResource() (string, error) {
+	// Get lists from RTM
+	lists, err := s.rtmService.GetLists()
+	if err != nil {
+		return "", fmt.Errorf("handleListsResource: error getting lists: %w", err)
+	}
+
+	// Format lists for display
+	var sb strings.Builder
+	sb.WriteString("# Lists\n\n")
+
+	if len(lists) == 0 {
+		sb.WriteString("No lists found in your Remember The Milk account.\n")
+		return sb.String(), nil
+	}
+
+	// Group lists by type (smart, locked, normal)
+	var smartLists, systemLists, normalLists []rtm.List
+	for _, list := range lists {
+		// Skip deleted lists
+		if list.Deleted != "0" {
+			continue
+		}
+
+		if list.Smart == "1" {
+			smartLists = append(smartLists, list)
+		} else if list.Locked == "1" {
+			systemLists = append(systemLists, list)
+		} else {
+			normalLists = append(normalLists, list)
+		}
+	}
+
+	// Write normal lists
+	if len(normalLists) > 0 {
+		sb.WriteString("## Your Lists\n\n")
+		for _, list := range normalLists {
+			formatListItem(&sb, list)
+		}
+		sb.WriteString("\n")
+	}
+
+	// Write smart lists
+	if len(smartLists) > 0 {
+		sb.WriteString("## Smart Lists\n\n")
+		for _, list := range smartLists {
+			formatListItem(&sb, list)
+		}
+		sb.WriteString("\n")
+	}
+
+	// Write system lists
+	if len(systemLists) > 0 {
+		sb.WriteString("## System Lists\n\n")
+		for _, list := range systemLists {
+			formatListItem(&sb, list)
+		}
+	}
+
+	return sb.String(), nil
+}
+
+// formatListItem formats a single list item and writes it to the string builder.
+func formatListItem(sb *strings.Builder, list rtm.List) {
+	// Format list type
+	listType := ""
+	if list.Smart == "1" {
+		listType = " 🔍" // Smart List
+	} else if list.Locked == "1" {
+		listType = " 🔒" // System List
+	}
+
+	// Format archived status
+	archived := ""
+	if list.Archived == "1" {
+		archived = " [Archived]"
+	}
+
+	// Write list line with improved formatting
+	sb.WriteString(fmt.Sprintf("- **%s**%s%s (ID: `%s`)\n",
+		list.Name,
+		listType,
+		archived,
+		list.ID))
+}
+
+// formatTasksSummary returns a summary string of task counts.
+func formatTasksSummary(total, completed int) string {
+	summary := fmt.Sprintf("\n**Summary:** %d task%s total",
+		total, pluralS(total))
+
+	if completed > 0 {
+		remaining := total - completed
+		summary += fmt.Sprintf(", %d completed, %d remaining",
+			completed, remaining)
+	}
+
+	return summary + "\n"
+}
+
+// pluralS returns "s" if count is not 1, otherwise empty string.
+func pluralS(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
+}
+
+// formatTaskPriority returns formatted priority text and symbol.
+func formatTaskPriority(priorityCode string) (string, string) {
+	switch priorityCode {
+	case "1":
+		return "High", "❗"
+	case "2":
+		return "Medium", "❕"
+	case "3":
+		return "Low", "⚪"
+	default:
+		return "None", "  "
+	}
+}
+
+// formatTaskDueDate formats the due date with visual indicators.
+func formatTaskDueDate(dueDate string) (string, string) {
+	if dueDate == "" {
+		return "", ""
+	}
+
+	formatted := formatDate(dueDate)
+	dueDateColor := ""
+
+	// Add visual indicator for due date proximity
+	timeNow := time.Now()
+	parsedDate, err := time.Parse(time.RFC3339, dueDate)
+	if err == nil {
+		daysDiff := int(parsedDate.Sub(timeNow).Hours() / 24)
+		if daysDiff < 0 {
+			dueDateColor = " 🔴" // Overdue
+		} else if daysDiff == 0 {
+			dueDateColor = " 🟠" // Due today
+		} else if daysDiff <= 2 {
+			dueDateColor = " 🟡" // Due soon
+		}
+	}
+
+	return formatted, dueDateColor
+}
+
+// formatTaskMetadata creates the metadata line for a task.
+func formatTaskMetadata(priority, dueDate, dueDateColor string, tags []string) string {
+	metadataItems := []string{}
+
+	if dueDate != "" {
+		metadataItems = append(metadataItems, fmt.Sprintf("Due: %s%s", dueDate, dueDateColor))
+	}
+
+	if priority != "None" {
+		metadataItems = append(metadataItems, fmt.Sprintf("Priority: %s", priority))
+	}
+
+	if len(tags) > 0 {
+		tagsFormatted := strings.Join(tags, ", ")
+		metadataItems = append(metadataItems, fmt.Sprintf("Tags: %s", tagsFormatted))
+	}
+
+	if len(metadataItems) > 0 {
+		return fmt.Sprintf("    _%s_", strings.Join(metadataItems, " | "))
+	}
+
+	return ""
+}

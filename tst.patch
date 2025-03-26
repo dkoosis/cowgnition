@@ -1,12 +1,15 @@
 --- a/internal/server/server.go
 +++ b/internal/server/server.go
-@@ -88,4 +88,10 @@ func (s *Server) SetVersion(version string) {
- func (s *Server) GetRTMService() *rtm.Service {
+@@ -111,7 +111,12 @@ func (s *Server) SetVersion(version string) {
+ }
+
+ // GetRTMService returns the server's RTM service.
+-func (s *Server) GetRTMService() *rtm.Service {
++func (s *Server) GetRTMService() httputils.RTMServiceInterface {
      return s.rtmService
  }
 +
-+// GetConfig returns the server's configuration.
-+func (s *Server) GetConfig() *config.Config {
-+    return s.config
++// GetTokenManager returns the token manager.
++func (s *Server) GetTokenManager() httputils.TokenManagerInterface {
++    return s.tokenManager
 +}
-+
