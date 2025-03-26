@@ -1,0 +1,14 @@
+@@ -7,10 +7,12 @@
+     "net/http"
+     "strings"
+     "time"
++
++    "github.com/cowgnition/cowgnition/internal/server/mcp"
+ )
+ 
+ // handleInitialize routes the MCP initialize request to specialized handler.
+ func (s *Server) handleInitialize(w http.ResponseWriter, r *http.Request) {
+-    s.handleMCPInitialize(w, r)
++    mcp.HandleInitialize(s, w, r)
+ }
+ 

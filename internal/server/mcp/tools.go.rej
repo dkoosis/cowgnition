@@ -1,0 +1,17 @@
+@@ -1,5 +1,5 @@
+-// Package server implements the Model Context Protocol server for RTM integration.
+-package server
++// Package mcp implements the Model Context Protocol server for RTM integration.
++package mcp
+ 
+ import (
+     "fmt"
+@@ -9,7 +9,7 @@
+ )
+ 
+ // extractStringArg safely extracts a string argument with default value.
+-func extractStringArg(args map[string]interface{}, key string, defaultVal string) string {
++func ExtractStringArg(args map[string]interface{}, key string, defaultVal string) string {
+     if val, ok := args[key].(string); ok && val != "" {
+         return val
+     }
