@@ -11,18 +11,22 @@ import (
 
 // Server represents an MCP server.
 type Server struct {
-	config     *config.Config
-	httpServer *http.Server
-	version    string
-	startTime  time.Time
+	config          *config.Config
+	httpServer      *http.Server
+	version         string
+	startTime       time.Time
+	resourceManager *ResourceManager
+	toolManager     *ToolManager
 }
 
 // NewServer creates a new MCP server.
 func NewServer(cfg *config.Config) (*Server, error) {
 	return &Server{
-		config:    cfg,
-		version:   "1.0.0", // Default version
-		startTime: time.Now(),
+		config:          cfg,
+		version:         "1.0.0", // Default version
+		startTime:       time.Now(),
+		resourceManager: NewResourceManager(),
+		toolManager:     NewToolManager(),
 	}, nil
 }
 
@@ -67,4 +71,14 @@ func (s *Server) SetVersion(version string) {
 // GetUptime returns the server's uptime.
 func (s *Server) GetUptime() time.Duration {
 	return time.Since(s.startTime)
+}
+
+// RegisterResourceProvider registers a resource provider.
+func (s *Server) RegisterResourceProvider(provider ResourceProvider) {
+	s.resourceManager.RegisterProvider(provider)
+}
+
+// RegisterToolProvider registers a tool provider.
+func (s *Server) RegisterToolProvider(provider ToolProvider) {
+	s.toolManager.RegisterProvider(provider)
 }

@@ -68,8 +68,8 @@ func (s *Server) handleListResources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Initially return empty list
-	resources := []ResourceDefinition{}
+	// Get resources from all registered providers
+	resources := s.resourceManager.GetAllResourceDefinitions()
 
 	response := ListResourcesResponse{
 		Resources: resources,
@@ -96,12 +96,41 @@ func (s *Server) handleReadResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Initially just return resource not found for any resource
-	httputils.WriteErrorResponse(w, httputils.ResourceError,
-		fmt.Sprintf("Resource not found: %s", name),
-		map[string]interface{}{
-			"resource_uri": name,
-		})
+	// Parse additional arguments
+	queryParams := r.URL.Query()
+	args := make(map[string]string)
+	for k, v := range queryParams {
+		if k != "name" && len(v) > 0 {
+			args[k] = v[0]
+		}
+	}
+
+	// Read the resource
+	content, mimeType, err := s.resourceManager.ReadResource(r.Context(), name, args)
+	if err != nil {
+		code := httputils.InternalError
+		if err == ErrResourceNotFound {
+			code = httputils.ResourceError
+		} else if err == ErrInvalidArguments {
+			code = httputils.InvalidParams
+		}
+
+		httputils.WriteErrorResponse(w, code,
+			fmt.Sprintf("Failed to read resource: %v", err),
+			map[string]interface{}{
+				"resource_name": name,
+				"args":          args,
+			})
+		return
+	}
+
+	// Return the resource content
+	response := ResourceResponse{
+		Content:  content,
+		MimeType: mimeType,
+	}
+
+	httputils.WriteJSONResponse(w, response)
 }
 
 // handleListTools handles the MCP list_tools request.
@@ -113,8 +142,8 @@ func (s *Server) handleListTools(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Initially return empty list
-	tools := []ToolDefinition{}
+	// Get tools from all registered providers
+	tools := s.toolManager.GetAllToolDefinitions()
 
 	response := ListToolsResponse{
 		Tools: tools,
@@ -141,10 +170,29 @@ func (s *Server) handleCallTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Initially just return tool not found for any tool
-	httputils.WriteErrorResponse(w, httputils.ToolError,
-		fmt.Sprintf("Tool not found: %s", req.Name),
-		map[string]interface{}{
-			"tool_name": req.Name,
-		})
+	// Call the tool
+	result, err := s.toolManager.CallTool(r.Context(), req.Name, req.Arguments)
+	if err != nil {
+		code := httputils.InternalError
+		if err == ErrToolNotFound {
+			code = httputils.ToolError
+		} else if err == ErrInvalidArguments {
+			code = httputils.InvalidParams
+		}
+
+		httputils.WriteErrorResponse(w, code,
+			fmt.Sprintf("Failed to call tool: %v", err),
+			map[string]interface{}{
+				"tool_name": req.Name,
+				"args":      req.Arguments,
+			})
+		return
+	}
+
+	// Return the tool result
+	response := ToolResponse{
+		Result: result,
+	}
+
+	httputils.WriteJSONResponse(w, response)
 }

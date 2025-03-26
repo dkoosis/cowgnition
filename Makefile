@@ -1,4 +1,4 @@
-.PHONY: all build clean test lint fmt check update-docs update-errors
+.PHONY: all build clean test lint golangci-lint fmt check deps install-tools help
 
 # Colors for output formatting
 GREEN := \033[0;32m
@@ -16,21 +16,9 @@ COMMIT_HASH := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 LDFLAGS := -ldflags "-X main.version=${VERSION} -X main.commitHash=${COMMIT_HASH} -X main.buildDate=${BUILD_DATE}"
 
-# Default target - run all checks and build.
-all: update-docs check fmt lint test build update-errors
+# Default target - run all checks and build
+all: check deps fmt lint test build
 	@printf "${GREEN}✓ All checks passed and build completed successfully!${NC}\n"
-
-# Update docs before build
-update-docs:
-	@printf "${BLUE}▶ Preparing documentation...${NC}\n"
-	@./scripts/update_todo.sh && \
-		printf "${GREEN}✓ Documentation prepared${NC}\n"
-
-# Update errors after build
-update-errors:
-	@printf "${BLUE}▶ Updating error documentation...${NC}\n"
-	@./scripts/update_todo.sh && \
-		printf "${GREEN}✓ Error documentation updated${NC}\n"
 
 # Build the application
 build:
@@ -46,6 +34,19 @@ clean:
 	@go clean -cache -testcache
 	@printf "${GREEN}✓ Cleaned${NC}\n"
 
+# Download dependencies
+# Download dependencies
+deps:
+	@printf "${BLUE}▶ Downloading dependencies...${NC}\n"
+	@go mod download > /dev/null 2>&1; \
+	if [ $$? -eq 0 ]; then \
+		printf "  ${BLUE}No new dependencies needed${NC}\n"; \
+	else \
+		printf "${RED}✗ Failed to download dependencies${NC}\n"; \
+		exit 1; \
+	fi
+	@printf "${GREEN}✓ Dependencies downloaded${NC}\n"
+
 # Run tests
 test:
 	@printf "${BLUE}▶ Running tests...${NC}\n"
@@ -60,17 +61,43 @@ lint:
 		printf "${GREEN}✓ Code looks good${NC}\n" || \
 		(printf "${RED}✗ Linting issues found${NC}\n" && exit 1)
 
+# Run golangci-lint
+golangci-lint:
+	@printf "${BLUE}▶ Running golangci-lint...${NC}\n"
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run && \
+		printf "${GREEN}✓ golangci-lint passed${NC}\n" || \
+		(printf "${RED}✗ golangci-lint failed${NC}\n" && exit 1); \
+	else \
+		printf "${YELLOW}⚠ golangci-lint not found, run 'make install-tools' to install${NC}\n"; \
+		exit 1; \
+	fi
+
 # Run gofmt
 fmt:
 	@printf "${BLUE}▶ Formatting code...${NC}\n"
 	@go fmt ./...
 	@printf "${GREEN}✓ Code formatted${NC}\n"
 
+# Install required tools
+install-tools:
+	@printf "${BLUE}▶ Installing required tools...${NC}\n"
+	@printf "  golangci-lint: "
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		printf "${GREEN}✓ Already installed${NC}\n"; \
+	else \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && \
+		printf "${GREEN}✓ Installed${NC}\n" || \
+		printf "${RED}✗ Installation failed${NC}\n"; \
+	fi
+	@printf "${GREEN}✓ Tools installation complete${NC}\n"
+
 # Check for required tools
 check:
 	@printf "${BLUE}▶ Checking for required tools...${NC}\n"
 	@printf "  Go:            "
-	@if command -v go >/dev/null 2>&1; then printf "${GREEN}✓${NC}\n"; else printf "${RED}✗${NC}\n"; fi
+	@if command -v go >/dev/null 2>&1; then \
+		printf "${GREEN}✓ $(shell go version)${NC}\n"; else printf "${RED}✗${NC}\n"; fi
 	@printf "${GREEN}✓ Tool check complete${NC}\n"
 
 # Help target
@@ -81,6 +108,7 @@ help:
 	@printf "  %-16s %s\n" "clean" "Clean build artifacts"
 	@printf "  %-16s %s\n" "test" "Run tests"
 	@printf "  %-16s %s\n" "lint" "Run linters"
+	@printf "  %-16s %s\n" "golangci-lint" "Run golangci-lint specifically"
 	@printf "  %-16s %s\n" "fmt" "Format code"
-	@printf "  %-16s %s\n" "check" "Check for required tools"
-	@printf "  %-16s %s\n" "update-docs" "Update documentation files"
+	@printf "  %-16s %s\n" "deps" "Download dependencies"
+	@printf "  %-16s %s\n" "install-tools" "Install required development tools"
