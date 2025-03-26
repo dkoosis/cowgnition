@@ -22,7 +22,7 @@ func main() {
 	// The server orchestrates MCP communication.
 	server, err := mcp.NewServer(cfg)
 	if err != nil {
-		log.Fatalf("Failed to create server: %v", err) // Terminate on fatal error.
+		log.Fatalf("main: failed to create server: %v", err) // Terminate on fatal error. [cite: 11]
 	}
 
 	// Set version.
@@ -44,7 +44,7 @@ func main() {
 	// Ensure API key and shared secret are available.
 	// These are essential for RTM communication.
 	if apiKey == "" || sharedSecret == "" {
-		log.Fatalf("RTM API key and shared secret must be provided in config or environment variables") // Terminate if missing.
+		log.Fatalf("main: missing RTM API credentials: API key and shared secret must be provided in config or environment variables") // Terminate if missing. [cite: 11, 12]
 	}
 
 	// Get token path from config or env.
@@ -58,7 +58,7 @@ func main() {
 	// This allows using home directory shorthand.
 	expandedPath, err := config.ExpandPath(tokenPath)
 	if err != nil {
-		log.Fatalf("Failed to expand token path: %v", err) // Terminate on error.
+		log.Fatalf("main: failed to expand token path: %v", err) // Terminate on error. [cite: 11]
 	}
 	tokenPath = expandedPath
 
@@ -66,7 +66,7 @@ func main() {
 	// This handles RTM authentication within the server.
 	authProvider, err := rtm.NewAuthProvider(apiKey, sharedSecret, tokenPath)
 	if err != nil {
-		log.Fatalf("Failed to create RTM auth provider: %v", err) // Terminate on error.
+		log.Fatalf("main: failed to create RTM auth provider: %v", err) // Terminate on error. [cite: 11]
 	}
 	server.RegisterResourceProvider(authProvider) // Register with the server.
 
@@ -78,7 +78,7 @@ func main() {
 		<-signals                                               // Block until a signal is received.
 		log.Println("Shutting down server...")
 		if err := server.Stop(); err != nil {
-			log.Printf("Error stopping server: %v", err) // Log any shutdown errors.
+			log.Printf("main: error stopping server: %v", err) // Log any shutdown errors. [cite: 11]
 		}
 	}()
 
@@ -86,8 +86,8 @@ func main() {
 	// This begins the main execution loop.
 	log.Printf("Starting CowGnition MCP server on %s", cfg.GetServerAddress())
 	if err := server.Start(); err != nil {
-		log.Fatalf("Server failed: %v", err) // Terminate if server fails to start.
+		log.Fatalf("main: server failed to start: %v", err) // Terminate if server fails to start. [cite: 11]
 	}
 }
 
-// DocEnhanced: 2025-03-25
+// ErrorMsgEnhanced:2025-03-26

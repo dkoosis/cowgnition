@@ -3,6 +3,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 )
 
 // ToolProvider defines an interface for components that provide MCP tools.
@@ -50,14 +51,16 @@ func (tm *ToolManager) FindToolProvider(name string) (ToolProvider, error) {
 			}
 		}
 	}
-	return nil, ErrToolNotFound
+	return nil, fmt.Errorf("ToolManager.FindToolProvider: tool '%s' not found", name)
 }
 
 // CallTool calls a tool across all providers.
 func (tm *ToolManager) CallTool(ctx context.Context, name string, args map[string]interface{}) (string, error) {
 	provider, err := tm.FindToolProvider(name)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("ToolManager.CallTool: %w", err)
 	}
 	return provider.CallTool(ctx, name, args)
 }
+
+// ErrorMsgEnhanced:2025-03-26

@@ -3,6 +3,7 @@
 package mcp
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -69,8 +70,11 @@ func (s *Server) Start() error {
 	}
 
 	// Start HTTP server
-	log.Printf("Starting MCP server on %s", s.httpServer.Addr) // Log the server start.
-	return s.httpServer.ListenAndServe()                       // Start the server and listen for requests.
+	log.Printf("Server.Start: starting MCP server on %s", s.httpServer.Addr) // Log the server start.
+	if err := s.httpServer.ListenAndServe(); err != nil {
+		return fmt.Errorf("Server.Start: failed to start server: %w", err)
+	}
+	return nil // Start the server and listen for requests.
 }
 
 // Stop stops the MCP server.
@@ -81,7 +85,9 @@ func (s *Server) Start() error {
 //	error: An error if the server fails to stop.
 func (s *Server) Stop() error {
 	if s.httpServer != nil {
-		return s.httpServer.Close() // Close the HTTP server.
+		if err := s.httpServer.Close(); err != nil {
+			return fmt.Errorf("Server.Stop: failed to stop server: %w", err)
+		}
 	}
 	return nil
 }
@@ -120,4 +126,4 @@ func (s *Server) RegisterToolProvider(provider ToolProvider) {
 	s.toolManager.RegisterProvider(provider) // Register the provider.
 }
 
-// DocEnhanced: 2025-03-26
+// ErrorMsgEnhanced: 2025-03-26

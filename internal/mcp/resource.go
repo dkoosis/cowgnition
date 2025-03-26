@@ -3,6 +3,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 )
 
 // ResourceProvider defines an interface for components that provide MCP resources.
@@ -50,14 +51,16 @@ func (rm *ResourceManager) FindResourceProvider(name string) (ResourceProvider, 
 			}
 		}
 	}
-	return nil, ErrResourceNotFound
+	return nil, fmt.Errorf("ResourceManager.FindResourceProvider: resource '%s' not found", name)
 }
 
 // ReadResource reads a resource across all providers.
 func (rm *ResourceManager) ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error) {
 	provider, err := rm.FindResourceProvider(name)
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("ResourceManager.ReadResource: %w", err)
 	}
 	return provider.ReadResource(ctx, name, args)
 }
+
+// ErrorMsgEnhanced:2025-03-26

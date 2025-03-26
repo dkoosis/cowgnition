@@ -54,7 +54,7 @@ func (c *Client) GetFrob() (string, error) {
 	params := map[string]string{}                          // No parameters needed for getting a frob.
 	resp, err := c.MakeRequest("rtm.auth.getFrob", params) // Make the API request.
 	if err != nil {
-		return "", fmt.Errorf("failed to get frob: %w", err) // Wrap the error with context.
+		return "", fmt.Errorf("Client.GetFrob: failed to get frob: %w", err) // Wrap the error with context.
 	}
 
 	var response struct { // Define a struct to unmarshal the API response.
@@ -66,14 +66,14 @@ func (c *Client) GetFrob() (string, error) {
 	}
 
 	if err := json.Unmarshal(resp, &response); err != nil {
-		return "", fmt.Errorf("failed to unmarshal frob response: %w", err) // Handle unmarshaling errors.
+		return "", fmt.Errorf("Client.GetFrob: failed to unmarshal frob response: %w", err) // Handle unmarshaling errors.
 	}
 
 	if response.Rsp.Stat != "ok" { // Check if the API call was successful.
 		if response.Rsp.Error != nil {
-			return "", fmt.Errorf("RTM API error: %d - %s", response.Rsp.Error.Code, response.Rsp.Error.Msg) // Return RTM API error.
+			return "", fmt.Errorf("Client.GetFrob: RTM API error: %d - %s", response.Rsp.Error.Code, response.Rsp.Error.Msg) // Return RTM API error.
 		}
-		return "", fmt.Errorf("RTM API returned non-ok status: %s", response.Rsp.Stat) // Return non-ok status error.
+		return "", fmt.Errorf("Client.GetFrob: RTM API returned non-ok status: %s", response.Rsp.Stat) // Return non-ok status error.
 	}
 
 	return response.Rsp.Frob, nil // Return the frob.
@@ -124,7 +124,7 @@ func (c *Client) GetToken(frob string) (*Auth, error) {
 
 	resp, err := c.MakeRequest("rtm.auth.getToken", params) // Make the API request.
 	if err != nil {
-		return nil, fmt.Errorf("failed to get token: %w", err) // Wrap the error with context.
+		return nil, fmt.Errorf("Client.GetToken: failed to get token: %w", err) // Wrap the error with context.
 	}
 
 	var response struct { // Define a struct to unmarshal the API response.
@@ -136,18 +136,18 @@ func (c *Client) GetToken(frob string) (*Auth, error) {
 	}
 
 	if err := json.Unmarshal(resp, &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal token response: %w", err) // Handle unmarshaling errors.
+		return nil, fmt.Errorf("Client.GetToken: failed to unmarshal token response: %w", err) // Handle unmarshaling errors.
 	}
 
 	if response.Rsp.Stat != "ok" { // Check if the API call was successful.
 		if response.Rsp.Error != nil {
-			return nil, fmt.Errorf("RTM API error: %d - %s", response.Rsp.Error.Code, response.Rsp.Error.Msg) // Return RTM API error.
+			return nil, fmt.Errorf("Client.GetToken: RTM API error: %d - %s", response.Rsp.Error.Code, response.Rsp.Error.Msg) // Return RTM API error.
 		}
-		return nil, fmt.Errorf("RTM API returned non-ok status: %s", response.Rsp.Stat) // Return non-ok status error.
+		return nil, fmt.Errorf("Client.GetToken: RTM API returned non-ok status: %s", response.Rsp.Stat) // Return non-ok status error.
 	}
 
 	if response.Rsp.Auth == nil {
-		return nil, fmt.Errorf("no auth information in response") // Handle missing auth information.
+		return nil, fmt.Errorf("Client.GetToken: no auth information in response") // Handle missing auth information.
 	}
 
 	return response.Rsp.Auth, nil // Return the authentication information.
@@ -162,13 +162,13 @@ func (c *Client) GetToken(frob string) (*Auth, error) {
 //	error: An error if no auth token is set, the API request fails, the response is invalid, or the token is invalid.
 func (c *Client) CheckToken() (*Auth, error) {
 	if c.AuthToken == "" {
-		return nil, fmt.Errorf("no auth token set") // Return an error if no auth token is set.
+		return nil, fmt.Errorf("Client.CheckToken: no auth token set") // Return an error if no auth token is set.
 	}
 
 	params := map[string]string{}                             // No parameters needed for checking the token.
 	resp, err := c.MakeRequest("rtm.auth.checkToken", params) // Make the API request.
 	if err != nil {
-		return nil, fmt.Errorf("failed to check token: %w", err) // Wrap the error with context.
+		return nil, fmt.Errorf("Client.CheckToken: failed to check token: %w", err) // Wrap the error with context.
 	}
 
 	var response struct { // Define a struct to unmarshal the API response.
@@ -180,21 +180,21 @@ func (c *Client) CheckToken() (*Auth, error) {
 	}
 
 	if err := json.Unmarshal(resp, &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal token response: %w", err) // Handle unmarshaling errors.
+		return nil, fmt.Errorf("Client.CheckToken: failed to unmarshal token response: %w", err) // Handle unmarshaling errors.
 	}
 
 	if response.Rsp.Stat != "ok" { // Check if the API call was successful.
 		if response.Rsp.Error != nil {
-			return nil, fmt.Errorf("RTM API error: %d - %s", response.Rsp.Error.Code, response.Rsp.Error.Msg) // Return RTM API error.
+			return nil, fmt.Errorf("Client.CheckToken: RTM API error: %d - %s", response.Rsp.Error.Code, response.Rsp.Error.Msg) // Return RTM API error.
 		}
-		return nil, fmt.Errorf("RTM API returned non-ok status: %s", response.Rsp.Stat) // Return non-ok status error.
+		return nil, fmt.Errorf("Client.CheckToken: RTM API returned non-ok status: %s", response.Rsp.Stat) // Return non-ok status error.
 	}
 
 	if response.Rsp.Auth == nil {
-		return nil, fmt.Errorf("no auth information in response") // Handle missing auth information.
+		return nil, fmt.Errorf("Client.CheckToken: no auth information in response") // Handle missing auth information.
 	}
 
 	return response.Rsp.Auth, nil // Return the authentication information.
 }
 
-// DocEnhanced: 2025-03-26
+// ErrorMsgEnhanced:2025-03-26

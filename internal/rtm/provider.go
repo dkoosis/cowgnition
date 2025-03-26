@@ -33,7 +33,7 @@ type AuthProvider struct {
 func NewAuthProvider(apiKey, sharedSecret, tokenPath string) (*AuthProvider, error) {
 	storage, err := NewTokenStorage(tokenPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create token storage: %w", err)
+		return nil, fmt.Errorf("AuthProvider.NewAuthProvider: failed to create token storage: %w", err)
 	}
 
 	client := NewClient(apiKey, sharedSecret)
@@ -76,7 +76,7 @@ func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[s
 	// Check if a token is already stored
 	token, err := p.storage.LoadToken()
 	if err != nil {
-		log.Printf("Error loading token: %v", err)
+		log.Printf("AuthProvider.ReadResource: error loading token: %v", err)
 		// Continue with auth flow even if loading fails
 	}
 
@@ -94,12 +94,12 @@ func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[s
 			}
 			responseJSON, err := json.MarshalIndent(response, "", "  ")
 			if err != nil {
-				return "", "", fmt.Errorf("error marshaling response: %w", err)
+				return "", "", fmt.Errorf("AuthProvider.ReadResource: failed to marshal response: %w", err)
 			}
 			return string(responseJSON), "application/json", nil
 		}
 		// Token is invalid, continue with auth flow
-		log.Printf("Invalid token, starting new auth flow")
+		log.Printf("AuthProvider.ReadResource: invalid token, starting new auth flow")
 	}
 
 	// Handle frob parameter if provided
@@ -107,12 +107,12 @@ func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[s
 		// Try to get token for frob
 		auth, err := p.client.GetToken(frob)
 		if err != nil {
-			return "", "", fmt.Errorf("error getting token: %w", err)
+			return "", "", fmt.Errorf("AuthProvider.ReadResource: failed to get token: %w", err)
 		}
 
 		// Store the token
 		if err := p.storage.SaveToken(auth.Token); err != nil {
-			log.Printf("Error saving token: %v", err)
+			log.Printf("AuthProvider.ReadResource: error saving token: %v", err)
 			// Continue even if saving fails
 		}
 
@@ -128,7 +128,7 @@ func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[s
 		}
 		responseJSON, err := json.MarshalIndent(response, "", "  ")
 		if err != nil {
-			return "", "", fmt.Errorf("error marshaling response: %w", err)
+			return "", "", fmt.Errorf("AuthProvider.ReadResource: failed to marshal response: %w", err)
 		}
 		return string(responseJSON), "application/json", nil
 	}
@@ -142,7 +142,7 @@ func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[s
 	// Start desktop authentication flow
 	frob, err := p.client.GetFrob()
 	if err != nil {
-		return "", "", fmt.Errorf("error getting frob: %w", err)
+		return "", "", fmt.Errorf("AuthProvider.ReadResource: failed to get frob: %w", err)
 	}
 
 	// Store frob with requested permissions
@@ -163,7 +163,9 @@ func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[s
 	}
 	responseJSON, err := json.MarshalIndent(response, "", "  ")
 	if err != nil {
-		return "", "", fmt.Errorf("error marshaling response: %w", err)
+		return "", "", fmt.Errorf("AuthProvider.ReadResource: failed to marshal response: %w", err)
 	}
 	return string(responseJSON), "application/json", nil
 }
+
+// ErrorMsgEnhanced:2025-03-26

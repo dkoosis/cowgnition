@@ -19,7 +19,7 @@ func NewTokenStorage(tokenPath string) (*TokenStorage, error) {
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(tokenPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create token directory: %w", err)
+		return nil, fmt.Errorf("TokenStorage.NewTokenStorage: failed to create token directory: %w", err)
 	}
 
 	return &TokenStorage{
@@ -32,7 +32,10 @@ func (s *TokenStorage) SaveToken(token string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return os.WriteFile(s.TokenPath, []byte(token), 0600)
+	if err := os.WriteFile(s.TokenPath, []byte(token), 0600); err != nil {
+		return fmt.Errorf("TokenStorage.SaveToken: failed to write token file: %w", err)
+	}
+	return nil
 }
 
 // LoadToken loads a token from the token file.
@@ -45,8 +48,10 @@ func (s *TokenStorage) LoadToken() (string, error) {
 		if os.IsNotExist(err) {
 			return "", nil
 		}
-		return "", fmt.Errorf("failed to read token file: %w", err)
+		return "", fmt.Errorf("TokenStorage.LoadToken: failed to read token file: %w", err)
 	}
 
 	return string(data), nil
 }
+
+// ErrorMsgEnhanced:2025-03-26

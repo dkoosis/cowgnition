@@ -102,15 +102,17 @@ func (c *Client) MakeRequest(method string, params map[string]string) ([]byte, e
 	// Make HTTP request
 	resp, err := c.HTTPClient.Get(requestURL)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, fmt.Errorf("Client.MakeRequest: failed to execute HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, fmt.Errorf("Client.MakeRequest: failed to read response body: %w", err)
 	}
 
 	return body, nil
 }
+
+// ErrorMsgEnhanced:2025-03-26

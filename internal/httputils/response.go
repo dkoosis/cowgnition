@@ -47,8 +47,8 @@ func WriteJSONResponse(w http.ResponseWriter, data interface{}) {
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		log.Printf("Error encoding JSON response: %v", err)
-		WriteErrorResponse(w, InternalError, "Error encoding response", nil)
+		log.Printf("httputils.WriteJSONResponse: failed to encode JSON response: %v", err)
+		WriteErrorResponse(w, InternalError, "failed to encode response", nil)
 	}
 }
 
@@ -68,7 +68,7 @@ func WriteErrorResponse(w http.ResponseWriter, code ErrorCode, message string, d
 	w.WriteHeader(httpStatus)
 
 	if err := json.NewEncoder(w).Encode(errResp); err != nil {
-		log.Printf("Failed to encode error response: %v", err)
+		log.Printf("httputils.WriteErrorResponse: failed to encode error response: %v", err)
 		http.Error(w, fmt.Sprintf("Internal error: %v", err), http.StatusInternalServerError)
 	}
 }
@@ -88,3 +88,5 @@ func httpStatusFromErrorCode(code ErrorCode) int {
 		return http.StatusInternalServerError
 	}
 }
+
+// ErrorMsgEnhanced:2025-03-26
