@@ -30,7 +30,7 @@ fi
 # 3. Initialize Go module (if it doesn't exist)
 echo "Setting up Go module..."
 if [ ! -f go.mod ]; then
-  go mod init github.com/cowgnition/cowgnition
+  go mod init github.com/dkoosis/cowgnition
 fi
 
 # 4. Create example config file

@@ -26,10 +26,10 @@ CowGnition connects your [Remember The Milk](https://www.rememberthemilk.com/) (
 
 ```bash
 # Install directly (easiest)
-go install [github.com/cowgnition/cowgnition@latest](https://www.google.com/search?q=https://github.com/cowgnition/cowgnition%40latest)
+go install [github.com/dkoosis/cowgnition@latest](https://www.google.com/search?q=https://github.com/dkoosis/cowgnition%40latest)
 
 # Or build from source
-git clone [https://github.com/cowgnition/cowgnition.git](https://github.com/cowgnition/cowgnition.git)
+git clone [https://github.com/dkoosis/cowgnition.git](https://github.com/dkoosis/cowgnition.git)
 cd cowgnition
 make build
 # Optionally run tests to verify

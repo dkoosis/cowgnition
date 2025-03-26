@@ -70,7 +70,7 @@ Our standard toolset ensures consistency and quality. (See [Decision Log](decisi
 
 1.  **Install Go:** Ensure you have Go version 1.21 or later installed. Verify with `go version`.
 2.  **Install Tools:** Install the required Go tools listed above using the `go install` commands. Ensure your `$(go env GOPATH)/bin` directory is in your system's `PATH`. Install `make` and `entr` via your OS package manager if needed.
-3.  **Clone Repository:** `git clone https://github.com/cowgnition/cowgnition.git`
+3.  **Clone Repository:** `git clone https://github.com/dkoosis/cowgnition.git`
 4.  **Navigate to Directory:** `cd cowgnition`
 5.  **Environment Variables:** [TODO: List any required environment variables, e.g., for specific RTM API endpoints if not default, or development flags.]
 6.  **Dependencies:** Dependencies are managed using Go modules. They will be downloaded automatically when building or testing. You can explicitly download them with `go mod download`.

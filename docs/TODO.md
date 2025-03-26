@@ -1,22 +1,19 @@
-## TOP PRIORITY: Latest Build Errors (Tue Mar 25 22:45:47 EDT 2025)
-
+## TOP PRIORITY: Latest Build Errors (Wed Mar 26 00:36:46 EDT 2025)
 ```
 Capturing build errors for documentation...
-github.com/dkoosis/cowgnition/internal/server/mcp
+github.com/dkoosis/cowgnition/pkg/mcp
+github.com/dkoosis/cowgnition/internal/config
+github.com/dkoosis/cowgnition/internal/auth
+github.com/dkoosis/cowgnition/pkg/util/stringutil
+github.com/dkoosis/cowgnition/pkg/util/format
+github.com/dkoosis/cowgnition/internal/testing
+github.com/dkoosis/cowgnition/pkg/util/url
+github.com/dkoosis/cowgnition/pkg/util/validation
+github.com/dkoosis/cowgnition/test/fixtures
+github.com/dkoosis/cowgnition/test/validators/mcp
+github.com/dkoosis/cowgnition/internal/server/httputils
+github.com/dkoosis/cowgnition/internal/rtm/client
 github.com/dkoosis/cowgnition/test/mocks
-github.com/dkoosis/cowgnition/internal/server
-# github.com/dkoosis/cowgnition/internal/server/mcp
-internal/server/mcp/handlers.go:17:10: undefined: Server
-internal/server/mcp/handlers.go:93:10: undefined: Server
-internal/server/mcp/handlers.go:180:10: undefined: Server
-internal/server/mcp/handlers.go:274:10: undefined: Server
-internal/server/mcp/handlers.go:314:10: undefined: Server
-internal/server/mcp/handlers.go:373:10: undefined: Server
-internal/server/mcp/handlers.go:389:10: undefined: Server
-internal/server/mcp/resources.go:14:10: undefined: Server
-internal/server/mcp/resources.go:43:24: undefined: Server
-internal/server/mcp/resources.go:242:10: undefined: Server
-internal/server/mcp/resources.go:242:10: too many errors
 # github.com/dkoosis/cowgnition/test/mocks
 test/mocks/server.go:51:20: invalid argument: cannot make RequestRecord; type must be slice, map, or channel
 test/mocks/server.go:179:16: first argument to append must be a slice; have RequestRecord{} (value of struct type RequestRecord)
@@ -29,6 +26,23 @@ test/mocks/server.go:255:29: cannot convert fmt.Sprintf(`<rsp stat="fail"><err c
 test/mocks/server.go:266:28: cannot convert response (variable of type string) to type byte
 test/mocks/server.go:284:9: invalid argument: requests (variable of struct type RequestRecord) for built-in len
 test/mocks/server.go:284:9: too many errors
+github.com/dkoosis/cowgnition/test/util/testutil
+github.com/dkoosis/cowgnition/internal/server/middleware
+github.com/dkoosis/cowgnition/internal/rtm
+github.com/dkoosis/cowgnition/internal/server
+github.com/dkoosis/cowgnition/internal/server/mcp
+# github.com/dkoosis/cowgnition/internal/server/mcp
+internal/server/mcp/handlers.go:17:10: undefined: Server
+internal/server/mcp/handlers.go:93:10: undefined: Server
+internal/server/mcp/handlers.go:180:10: undefined: Server
+internal/server/mcp/handlers.go:274:10: undefined: Server
+internal/server/mcp/handlers.go:314:10: undefined: Server
+internal/server/mcp/handlers.go:373:10: undefined: Server
+internal/server/mcp/handlers.go:389:10: undefined: Server
+internal/server/mcp/resources.go:14:10: undefined: Server
+internal/server/mcp/resources.go:43:24: undefined: Server
+internal/server/mcp/resources.go:242:10: undefined: Server
+internal/server/mcp/resources.go:242:10: too many errors
 # github.com/dkoosis/cowgnition/internal/server
 internal/server/handlers_mcp.go:203:5: s.handleAuthResource undefined (type *Server has no field or method handleAuthResource)
 internal/server/handlers_mcp.go:338:44: cannot use s (variable of type *Server) as httputils.ServerInterface value in argument to middleware.NewAuthHandler: *Server does not implement httputils.ServerInterface (wrong type for method GetRTMService)
@@ -43,10 +57,10 @@ internal/server/handlers_mcp.go:338:44: cannot use s (variable of type *Server) 
 		have GetRTMService() *"github.com/dkoosis/cowgnition/internal/rtm".Service
 		want GetRTMService() httputils.RTMServiceInterface
 internal/server/tools_mcp.go:156:53: undefined: formatDueDate
-# github.com/dkoosis/cowgnition/internal/server/mcp
-vet: internal/server/mcp/handlers.go:17:10: undefined: Server
 # github.com/dkoosis/cowgnition/test/mocks
 vet: test/mocks/server.go:51:20: invalid argument: cannot make RequestRecord; type must be slice, map, or channel
+# github.com/dkoosis/cowgnition/internal/server/mcp
+vet: internal/server/mcp/handlers.go:17:10: undefined: Server
 internal/server/errors.go:1: : # github.com/dkoosis/cowgnition/internal/server
 internal/server/handlers_mcp.go:203:5: s.handleAuthResource undefined (type *Server has no field or method handleAuthResource)
 internal/server/handlers_mcp.go:338:44: cannot use s (variable of type *Server) as httputils.ServerInterface value in argument to middleware.NewAuthHandler: *Server does not implement httputils.ServerInterface (wrong type for method GetRTMService)
@@ -167,7 +181,7 @@ test/mocks/server.go:266:28: cannot convert response (variable of type string) t
 test/mocks/server.go:284:9: invalid argument: requests (variable of struct type RequestRecord) for built-in len
 test/mocks/server.go:284:9: too many errors (typecheck)
 // Package mocks provides mock implementations for external services.
-test/conformance/mcp/auth_test.go:19:2: could not import github.com/dkoosis/cowgnition/test/mocks (-: # github.com/dkoosis/cowgnition/test/mocks
+test/conformance/mcp/auth_test.go:20:2: could not import github.com/dkoosis/cowgnition/test/mocks (-: # github.com/dkoosis/cowgnition/test/mocks
 test/mocks/server.go:51:20: invalid argument: cannot make RequestRecord; type must be slice, map, or channel
 test/mocks/server.go:179:16: first argument to append must be a slice; have RequestRecord{} (value of struct type RequestRecord)
 test/mocks/server.go:187:20: invalid argument: cannot make RequestRecord; type must be slice, map, or channel
@@ -182,3 +196,4 @@ test/mocks/server.go:284:9: too many errors) (typecheck)
 	"github.com/dkoosis/cowgnition/test/mocks"
 	^
 ```
+

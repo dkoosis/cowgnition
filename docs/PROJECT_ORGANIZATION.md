@@ -40,7 +40,7 @@ See the [Directory Structure section in the Development Overview](development_ov
 Minimal steps for a development environment:
 
 1.  **Install Go:** Ensure Go (>= 1.21) is installed. ([go.dev/dl/](https://go.dev/dl/))
-2.  **Clone:** `git clone https://github.com/cowgnition/cowgnition.git`
+2.  **Clone:** `git clone https://github.com/dkoosis/cowgnition.git`
 3.  **Navigate:** `cd cowgnition`
 4.  **Build:** `make build`
 5.  **Configure:** Create `configs/config.yaml` based on the example in the main [README.md](../README.md#configuration). You'll need RTM API keys from [Remember The Milk](https://www.rememberthemilk.com/services/api/keys.rtm).

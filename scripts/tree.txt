@@ -11,6 +11,7 @@
 │   └── config.example.yaml
 ├── coverage.out
 ├── cowgnition*
+├── deps.txt
 ├── docs/
 │   ├── TODO.md
 │   ├── decision_log.md
@@ -74,8 +75,10 @@
 │       │   └── url.go
 │       └── validation/
 │           └── validation.go
+├── pkgdep.sh*
 ├── scripts/
 │   ├── apply.sh*
+│   ├── pkgdep.sh*
 │   ├── restructure-script.sh*
 │   ├── run_live_tests.sh*
 │   ├── setup.sh*
@@ -132,4 +135,4 @@
 │           └── validators.go
 └── tst.patch
 
-51 directories, 82 files
+51 directories, 85 files

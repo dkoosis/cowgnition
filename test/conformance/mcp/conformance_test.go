@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	helpers "github.com/cowgnition/cowgnition/test/helpers/common"
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/server"
+	helpers "github.com/dkoosis/cowgnition/test/helpers/common"
 	"github.com/dkoosis/cowgnition/test/mocks"
 	validators "github.com/dkoosis/cowgnition/test/validators/mcp"
 )
