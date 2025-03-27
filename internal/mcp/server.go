@@ -23,6 +23,7 @@ type Server struct {
 	startTime       time.Time        // startTime: The server's start time, used for uptime calculations.
 	resourceManager *ResourceManager // resourceManager: Manages resource providers and resources.
 	toolManager     *ToolManager     // toolManager: Manages tool providers and tools.
+	transport       string           // transport: The transport type (http or stdio).
 }
 
 // NewServer creates a new MCP server.
@@ -42,18 +43,46 @@ func NewServer(cfg *config.Settings) (*Server, error) {
 		startTime:       time.Now(),           // Record the start time.
 		resourceManager: NewResourceManager(), // Initialize the resource manager.
 		toolManager:     NewToolManager(),     // Initialize the tool manager.
+		transport:       "http",               // Default transport type.
 	}, nil
 }
 
-// Start starts the MCP server.
-// This function sets up the HTTP server, registers the MCP handlers,
-// and begins listening for incoming requests.
-// It uses the server's configuration to determine the address to listen on.
+// SetTransport sets the transport type for the server.
+// Valid values are "http" and "stdio".
+func (s *Server) SetTransport(transport string) error {
+	if transport != "http" && transport != "stdio" {
+		return fmt.Errorf("Server.SetTransport: invalid transport type: %s. Valid values are 'http' and 'stdio'", transport)
+	}
+	s.transport = transport
+	return nil
+}
+
+// Start starts the MCP server using the configured transport.
+// This is the main entry point for starting the server, which will use
+// either HTTP or stdio transport based on the configuration.
 //
 // Returns:
 //
 //	error: An error if the server fails to start.
 func (s *Server) Start() error {
+	switch s.transport {
+	case "http":
+		return s.startHTTP()
+	case "stdio":
+		return s.startStdio()
+	default:
+		return fmt.Errorf("Server.Start: unsupported transport type: %s", s.transport)
+	}
+}
+
+// startHTTP starts the MCP server using HTTP transport.
+// This function sets up the HTTP server, registers the MCP handlers,
+// and begins listening for incoming requests.
+//
+// Returns:
+//
+//	error: An error if the server fails to start.
+func (s *Server) startHTTP() error {
 	mux := http.NewServeMux() // Create a new HTTP multiplexer.
 
 	// Register MCP protocol handlers
@@ -73,25 +102,55 @@ func (s *Server) Start() error {
 	}
 
 	// Start HTTP server
-	log.Printf("Server.Start: starting MCP server on %s", s.httpServer.Addr) // Log the server start.
-	if err := s.httpServer.ListenAndServe(); err != nil {
-		return fmt.Errorf("Server.Start: failed to start server: %w", err)
+	log.Printf("Server.startHTTP: starting MCP server with HTTP transport on %s", s.httpServer.Addr) // Log the server start.
+	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("Server.startHTTP: failed to start server: %w", err)
 	}
 	return nil // Start the server and listen for requests.
 }
 
+// startStdio starts the MCP server using stdio transport.
+// This function sets up the stdio-based JSON-RPC server for MCP communication.
+// It's particularly useful for process-based integration like with Claude Desktop.
+//
+// Returns:
+//
+//	error: An error if the server fails to start.
+func (s *Server) startStdio() error {
+	// Create a JSON-RPC adapter
+	adapter := jsonrpc.NewAdapter()
+
+	// Register the MCP handlers
+	s.RegisterJSONRPCHandlers(adapter)
+
+	// Start the stdio server
+	log.Printf("Server.startStdio: starting MCP server with stdio transport")
+	if err := jsonrpc.RunStdioServer(adapter); err != nil {
+		return fmt.Errorf("Server.startStdio: failed to start stdio server: %w", err)
+	}
+
+	return nil
+}
+
 // Stop stops the MCP server.
-// This function gracefully shuts down the HTTP server.
+// This function gracefully shuts down the server regardless of transport type.
 //
 // Returns:
 //
 //	error: An error if the server fails to stop.
 func (s *Server) Stop() error {
-	if s.httpServer != nil {
-		if err := s.httpServer.Close(); err != nil {
-			return fmt.Errorf("Server.Stop: failed to stop server: %w", err)
+	if s.transport == "http" && s.httpServer != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := s.httpServer.Shutdown(ctx); err != nil {
+			return fmt.Errorf("Server.Stop: failed to stop HTTP server: %w", err)
 		}
 	}
+
+	// For stdio, there's nothing special to stop as the process itself
+	// will be terminated when the parent process stops.
+
 	return nil
 }
 

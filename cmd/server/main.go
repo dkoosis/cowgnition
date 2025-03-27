@@ -3,6 +3,7 @@
 package main
 
 import (
+	"flag"      // Command-line flag parsing.
 	"log"       // Standard logging for output.
 	"os"        // OS-level interactions like environment variables.
 	"os/signal" // Signal handling for graceful shutdown.
@@ -14,20 +15,36 @@ import (
 )
 
 func main() {
+	// Parse command-line flags
+	transportType := flag.String("transport", "http", "Transport type (http or stdio)")
+	configPath := flag.String("config", "", "Path to configuration file")
+	flag.Parse()
+
 	// Load configuration.
 	// This is done early to ensure settings are available.
 	cfg := config.New()
+
+	// TODO: Load configuration from file if specified
+	if *configPath != "" {
+		log.Printf("Configuration file loading not yet implemented. Using default configuration.")
+	}
 
 	// Create and start MCP server.
 	// The server orchestrates MCP communication.
 	server, err := mcp.NewServer(cfg)
 	if err != nil {
-		log.Fatalf("main: failed to create server: %v", err) // Terminate on fatal error. [cite: 11]
+		log.Fatalf("main: failed to create server: %v", err) // Terminate on fatal error.
 	}
 
 	// Set version.
 	// Provides server identification to clients.
 	server.SetVersion("1.0.0")
+
+	// Set transport type.
+	// Determines how the server communicates (HTTP or stdio).
+	if err := server.SetTransport(*transportType); err != nil {
+		log.Fatalf("main: failed to set transport: %v", err) // Terminate on invalid transport.
+	}
 
 	// Get RTM API credentials from environment or config.
 	// Environment variables override config for flexibility.
@@ -44,7 +61,7 @@ func main() {
 	// Ensure API key and shared secret are available.
 	// These are essential for RTM communication.
 	if apiKey == "" || sharedSecret == "" {
-		log.Fatalf("main: missing RTM API credentials: API key and shared secret must be provided in config or environment variables") // Terminate if missing. [cite: 11, 12]
+		log.Fatalf("main: missing RTM API credentials: API key and shared secret must be provided in config or environment variables") // Terminate if missing.
 	}
 
 	// Get token path from config or env.
@@ -58,7 +75,7 @@ func main() {
 	// This allows using home directory shorthand.
 	expandedPath, err := config.ExpandPath(tokenPath)
 	if err != nil {
-		log.Fatalf("main: failed to expand token path: %v", err) // Terminate on error. [cite: 11]
+		log.Fatalf("main: failed to expand token path: %v", err) // Terminate on error.
 	}
 	tokenPath = expandedPath
 
@@ -66,28 +83,28 @@ func main() {
 	// This handles RTM authentication within the server.
 	authProvider, err := rtm.NewAuthProvider(apiKey, sharedSecret, tokenPath)
 	if err != nil {
-		log.Fatalf("main: failed to create RTM auth provider: %v", err) // Terminate on error. [cite: 11]
+		log.Fatalf("main: failed to create RTM auth provider: %v", err) // Terminate on error.
 	}
 	server.RegisterResourceProvider(authProvider) // Register with the server.
 
 	// Handle graceful shutdown.
 	// This ensures the server can stop cleanly.
-	go func() {
-		signals := make(chan os.Signal, 1)
-		signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM) // Listen for interrupt or terminate.
-		<-signals                                               // Block until a signal is received.
-		log.Println("Shutting down server...")
-		if err := server.Stop(); err != nil {
-			log.Printf("main: error stopping server: %v", err) // Log any shutdown errors. [cite: 11]
-		}
-	}()
+	if *transportType == "http" {
+		go func() {
+			signals := make(chan os.Signal, 1)
+			signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM) // Listen for interrupt or terminate.
+			<-signals                                               // Block until a signal is received.
+			log.Println("Shutting down server...")
+			if err := server.Stop(); err != nil {
+				log.Printf("main: error stopping server: %v", err) // Log any shutdown errors.
+			}
+		}()
+	}
 
 	// Start server.
 	// This begins the main execution loop.
-	log.Printf("Starting CowGnition MCP server on %s", cfg.GetServerAddress())
+	log.Printf("Starting CowGnition MCP server with %s transport", *transportType)
 	if err := server.Start(); err != nil {
-		log.Fatalf("main: server failed to start: %v", err) // Terminate if server fails to start. [cite: 11]
+		log.Fatalf("main: server failed to start: %v", err) // Terminate if server fails to start.
 	}
 }
-
-// ErrorMsgEnhanced:2025-03-26
