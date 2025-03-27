@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	// Resource URIs
+	// Resource URIs.
 	AuthResourceURI = "auth://rtm"
 
-	// Permissions
+	// Permissions.
 	PermRead   = "read"
 	PermWrite  = "write"
 	PermDelete = "delete"

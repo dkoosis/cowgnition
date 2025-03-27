@@ -12,14 +12,14 @@ import (
 type ErrorCode int
 
 const (
-	// Standard JSON-RPC 2.0 error codes
+	// Standard JSON-RPC 2.0 error codes.
 	ParseError     ErrorCode = -32700 // Invalid JSON
 	InvalidRequest ErrorCode = -32600 // Request object invalid
 	MethodNotFound ErrorCode = -32601 // Method doesn't exist
 	InvalidParams  ErrorCode = -32602 // Invalid method parameters
 	InternalError  ErrorCode = -32603 // Internal JSON-RPC error
 
-	// Custom MCP-specific error codes
+	// Custom MCP-specific error codes.
 	AuthError       ErrorCode = -31000 // Authentication errors
 	ResourceError   ErrorCode = -31001 // Resource not found or unavailable
 	ServiceError    ErrorCode = -31002 // External service errors

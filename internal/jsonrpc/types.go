@@ -19,7 +19,7 @@ type Error struct {
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
-// Standard JSON-RPC 2.0 error codes
+// Standard JSON-RPC 2.0 error codes.
 const (
 	CodeParseError     = -32700
 	CodeInvalidRequest = -32600
@@ -27,18 +27,6 @@ const (
 	CodeInvalidParams  = -32602
 	CodeInternalError  = -32603
 )
-
-// Message represents a JSON-RPC message.
-// It can be either a Request, Response, or Notification.
-type Message struct {
-	// Common fields for all message types
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
-	Method  string          `json:"method,omitempty"`
-	Params  json.RawMessage `json:"params,omitempty"`
-	Result  json.RawMessage `json:"result,omitempty"`
-	Error   *Error          `json:"error,omitempty"`
-}
 
 // Message represents a JSON-RPC message.
 // It can be either a Request, Response, or Notification.

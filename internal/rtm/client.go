@@ -15,11 +15,11 @@ import (
 )
 
 const (
-	// API endpoints
+	// API endpoints.
 	APIURL  = "https://api.rememberthemilk.com/services/rest/"
 	AuthURL = "https://www.rememberthemilk.com/services/auth/"
 
-	// Timeout for API requests
+	// Timeout for API requests.
 	DefaultTimeout = 30 * time.Second
 )
 
@@ -55,7 +55,7 @@ func (c *Client) Sign(params map[string]string) string {
 	}
 	sort.Strings(keys)
 
-	// Step 2: Concatenate shared secret with sorted key-value pairs
+	// Step 2: Concatenate shared secret with sorted key-value pairs.
 	var sb strings.Builder
 	sb.WriteString(c.SharedSecret)
 	for _, k := range keys {
@@ -64,7 +64,7 @@ func (c *Client) Sign(params map[string]string) string {
 	}
 
 	// Step 3: Calculate MD5 hash
-	// #nosec G401 - RTM API specifically requires MD5 for request signing
+	// #nosec G401 - RTM API specifically requires MD5 for request signing.
 	hash := md5.Sum([]byte(sb.String()))
 	return hex.EncodeToString(hash[:])
 }
@@ -77,20 +77,20 @@ func (c *Client) MakeRequest(method string, params map[string]string) ([]byte, e
 		reqParams[k] = v
 	}
 
-	// Add common parameters
+	// Add common parameters.
 	reqParams["method"] = method
 	reqParams["api_key"] = c.APIKey
 	reqParams["format"] = "json" // Use JSON format
 
-	// Add auth token if set
+	// Add auth token if set.
 	if c.AuthToken != "" {
 		reqParams["auth_token"] = c.AuthToken
 	}
 
-	// Sign the request
+	// Sign the request.
 	reqParams["api_sig"] = c.Sign(reqParams)
 
-	// Build query string
+	// Build query string.
 	values := url.Values{}
 	for k, v := range reqParams {
 		values.Add(k, v)
