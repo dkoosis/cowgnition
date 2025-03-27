@@ -35,14 +35,22 @@ clean:
 	@printf "${GREEN}✓ Cleaned${NC}\n"
 
 # Download dependencies
+deps:
 # Download dependencies
 deps:
 	@printf "${BLUE}▶ Downloading dependencies...${NC}\n"
-	@go mod download > /dev/null 2>&1; \
+	@go mod tidy > /dev/null 2>&1; \
 	if [ $$? -eq 0 ]; then \
-		printf "  ${BLUE}No new dependencies needed${NC}\n"; \
+		printf "  ${BLUE}Running go mod download...${NC}\n"; \
+		go mod download > /dev/null 2>&1; \
+		if [ $$? -eq 0 ]; then \
+			printf "  ${BLUE}Dependencies synchronized successfully${NC}\n"; \
+		else \
+			printf "${RED}✗ Failed to download dependencies${NC}\n"; \
+			exit 1; \
+		fi \
 	else \
-		printf "${RED}✗ Failed to download dependencies${NC}\n"; \
+		printf "${RED}✗ Failed to tidy dependencies${NC}\n"; \
 		exit 1; \
 	fi
 	@printf "${GREEN}✓ Dependencies downloaded${NC}\n"

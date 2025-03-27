@@ -3,12 +3,15 @@
 package mcp
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/dkoosis/cowgnition/internal/config"
+	"github.com/dkoosis/cowgnition/internal/jsonrpc"
 )
 
 // Server represents an MCP server.
@@ -126,4 +129,56 @@ func (s *Server) RegisterToolProvider(provider ToolProvider) {
 	s.toolManager.RegisterProvider(provider) // Register the provider.
 }
 
-// ErrorMsgEnhanced: 2025-03-26
+// Add this to internal/mcp/server.go
+
+// RegisterJSONRPCHandlers registers the MCP handlers with the JSON-RPC adapter.
+func (s *Server) RegisterJSONRPCHandlers(adapter *jsonrpc.Adapter) {
+	// Register initialize handler
+	adapter.RegisterHandler("initialize", s.handleJSONRPCInitialize)
+
+	// Register resource handlers
+	adapter.RegisterHandler("list_resources", s.handleJSONRPCListResources)
+	adapter.RegisterHandler("read_resource", s.handleJSONRPCReadResource)
+
+	// Register tool handlers
+	adapter.RegisterHandler("list_tools", s.handleJSONRPCListTools)
+	adapter.RegisterHandler("call_tool", s.handleJSONRPCCallTool)
+}
+
+// handleJSONRPCInitialize handles the MCP initialize request via JSON-RPC.
+func (s *Server) handleJSONRPCInitialize(ctx context.Context, params json.RawMessage) (interface{}, error) {
+	var req InitializeRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("failed to decode initialize request: %v", err))
+	}
+
+	// Log initialization request
+	log.Printf("MCP initialization requested by: %s (version: %s)",
+		req.ServerName, req.ServerVersion)
+
+	// Construct server information
+	serverInfo := ServerInfo{
+		Name:    s.config.GetServerName(),
+		Version: s.version,
+	}
+
+	// Define capabilities
+	capabilities := map[string]interface{}{
+		"resources": map[string]interface{}{
+			"list": true,
+			"read": true,
+		},
+		"tools": map[string]interface{}{
+			"list": true,
+			"call": true,
+		},
+	}
+
+	// Construct response
+	response := InitializeResponse{
+		ServerInfo:   serverInfo,
+		Capabilities: capabilities,
+	}
+
+	return response, nil
+}
