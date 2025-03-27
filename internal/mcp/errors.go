@@ -2,9 +2,7 @@
 // file: internal/mcp/errors.go
 package mcp
 
-import (
-	"github.com/dkoosis/cowgnition/internal/mcp/errors"
-)
+import "github.com/dkoosis/cowgnition/internal/mcp/errors"
 
 // Re-export the sentinel errors for backward compatibility.
 var (

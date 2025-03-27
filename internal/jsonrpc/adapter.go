@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
