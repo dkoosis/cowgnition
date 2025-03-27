@@ -1,6 +1,6 @@
-// Package mcperror defines error types, codes, and utilities for MCP and JSON-RPC.
-// file: internal/mcperror/codes.go
-package mcperror
+// Package mcp/errors defines error types, codes, and utilities for MCP and JSON-RPC.
+// file: internal/mcp/errors/codes.go
+package errors
 
 // Categories for grouping similar errors.
 const (

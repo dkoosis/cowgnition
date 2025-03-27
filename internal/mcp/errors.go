@@ -3,22 +3,22 @@
 package mcp
 
 import (
-	"github.com/dkoosis/cowgnition/internal/mcperror"
+	"github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
 // Re-export the sentinel errors for backward compatibility.
 var (
-	ErrResourceNotFound = mcperror.ErrResourceNotFound
-	ErrToolNotFound     = mcperror.ErrToolNotFound
-	ErrInvalidArguments = mcperror.ErrInvalidArguments
-	ErrTimeout          = mcperror.ErrTimeout
+	ErrResourceNotFound = mcp / errors.ErrResourceNotFound
+	ErrToolNotFound     = mcp / errors.ErrToolNotFound
+	ErrInvalidArguments = mcp / errors.ErrInvalidArguments
+	ErrTimeout          = mcp / errors.ErrTimeout
 )
 
 // Re-export error checking functions for backward compatibility.
 var (
-	IsResourceNotFoundError = mcperror.IsResourceNotFoundError
-	IsToolNotFoundError     = mcperror.IsToolNotFoundError
-	IsInvalidArgumentsError = mcperror.IsInvalidArgumentsError
+	IsResourceNotFoundError = mcp / errors.IsResourceNotFoundError
+	IsToolNotFoundError     = mcp / errors.IsToolNotFoundError
+	IsInvalidArgumentsError = mcp / errors.IsInvalidArgumentsError
 )
 
 // DocEnhanced: 2025-03-26

@@ -1,6 +1,6 @@
-// Package mcperror defines error types, codes, and utilities for MCP and JSON-RPC.
-// file: internal/mcperror/utils.go
-package mcperror
+// Package mcp/errors defines error types, codes, and utilities for MCP and JSON-RPC.
+// file: internal/mcp/errors/utils.go
+package errors
 
 import (
 	"regexp"
@@ -13,7 +13,7 @@ import (
 // IsResourceNotFoundError checks if the error is a resource not found error
 // Example usage:
 //
-//	if mcperror.IsResourceNotFoundError(err) {
+//	if mcp/errors.IsResourceNotFoundError(err) {
 //	    // Handle resource not found case
 //	}
 func IsResourceNotFoundError(err error) bool {
@@ -23,7 +23,7 @@ func IsResourceNotFoundError(err error) bool {
 // IsToolNotFoundError checks if the error is a tool not found error
 // Example usage:
 //
-//	if mcperror.IsToolNotFoundError(err) {
+//	if mcp/errors.IsToolNotFoundError(err) {
 //	    // Handle tool not found case
 //	}
 func IsToolNotFoundError(err error) bool {
@@ -33,7 +33,7 @@ func IsToolNotFoundError(err error) bool {
 // IsInvalidArgumentsError checks if the error is an invalid arguments error
 // Example usage:
 //
-//	if mcperror.IsInvalidArgumentsError(err) {
+//	if mcp/errors.IsInvalidArgumentsError(err) {
 //	    // Handle invalid arguments case
 //	}
 func IsInvalidArgumentsError(err error) bool {
@@ -43,8 +43,8 @@ func IsInvalidArgumentsError(err error) bool {
 // GetErrorCategory gets the error category from an error
 // Example usage:
 //
-//	category := mcperror.GetErrorCategory(err)
-//	if category == mcperror.CategoryRPC {
+//	category := mcp/errors.GetErrorCategory(err)
+//	if category == mcp/errors.CategoryRPC {
 //	    // Handle RPC errors differently
 //	}
 func GetErrorCategory(err error) string {
@@ -60,8 +60,8 @@ func GetErrorCategory(err error) string {
 // GetErrorCode gets the JSON-RPC error code from an error
 // Example usage:
 //
-//	code := mcperror.GetErrorCode(err)
-//	if code == mcperror.CodeResourceNotFound {
+//	code := mcp/errors.GetErrorCode(err)
+//	if code == mcp/errors.CodeResourceNotFound {
 //	    // Handle resource not found case
 //	}
 func GetErrorCode(err error) int {
@@ -81,7 +81,7 @@ func GetErrorCode(err error) int {
 // GetErrorProperties extracts all properties from an error
 // Example usage:
 //
-//	props := mcperror.GetErrorProperties(err)
+//	props := mcp/errors.GetErrorProperties(err)
 //	resourceID, ok := props["resource_id"].(string)
 func GetErrorProperties(err error) map[string]interface{} {
 	properties := make(map[string]interface{})
@@ -116,7 +116,7 @@ func GetErrorProperties(err error) map[string]interface{} {
 // ErrorToMap converts an error to a map suitable for JSON-RPC error responses.
 // Example usage:
 //
-//	errorMap := mcperror.ErrorToMap(err)
+//	errorMap := mcp/errors.ErrorToMap(err)
 //	jsonBytes, _ := json.Marshal(errorMap)
 func ErrorToMap(err error) map[string]interface{} {
 	if err == nil {

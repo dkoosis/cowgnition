@@ -1,6 +1,6 @@
-// Package mcperror defines error types, codes, and utilities for MCP and JSON-RPC.
-// file: internal/mcperror/types.go
-package mcperror
+// Package mcp/errors defines error types, codes, and utilities for MCP and JSON-RPC.
+// file: internal/mcp/errors/types.go
+package errors
 
 import (
 	"fmt"
@@ -42,7 +42,7 @@ func ErrorWithDetails(err error, category string, code int, details map[string]i
 // Example usage:
 //
 //	properties := map[string]interface{}{"resource_uri": "auth://rtm"}
-//	return mcperror.NewResourceError("Failed to load auth resource", err, properties)
+//	return mcp/errors.NewResourceError("Failed to load auth resource", err, properties)
 func NewResourceError(message string, cause error, properties map[string]interface{}) error {
 	if cause == nil {
 		err := errors.Newf("%s", message)
@@ -59,7 +59,7 @@ func NewResourceError(message string, cause error, properties map[string]interfa
 // Example usage:
 //
 //	properties := map[string]interface{}{"tool_name": "get_tasks"}
-//	return mcperror.NewToolError("Failed to execute tool", err, properties)
+//	return mcp/errors.NewToolError("Failed to execute tool", err, properties)
 func NewToolError(message string, cause error, properties map[string]interface{}) error {
 	if cause == nil {
 		err := errors.Newf("%s", message)
@@ -76,7 +76,7 @@ func NewToolError(message string, cause error, properties map[string]interface{}
 // Example usage:
 //
 //	properties := map[string]interface{}{"argument": "frob", "expected": "string"}
-//	return mcperror.NewInvalidArgumentsError("Invalid frob format", properties)
+//	return mcp/errors.NewInvalidArgumentsError("Invalid frob format", properties)
 func NewInvalidArgumentsError(message string, properties map[string]interface{}) error {
 	err := errors.Newf("%s", message)
 	err = errors.Mark(err, ErrInvalidArguments)
@@ -87,7 +87,7 @@ func NewInvalidArgumentsError(message string, properties map[string]interface{})
 // Example usage:
 //
 //	properties := map[string]interface{}{"available_methods": []string{"list_resources", "read_resource"}}
-//	return mcperror.NewMethodNotFoundError("get_resources", properties)
+//	return mcp/errors.NewMethodNotFoundError("get_resources", properties)
 func NewMethodNotFoundError(method string, properties map[string]interface{}) error {
 	err := errors.Newf("method '%s' not found", method)
 	details := map[string]interface{}{
@@ -104,7 +104,7 @@ func NewMethodNotFoundError(method string, properties map[string]interface{}) er
 // Example usage:
 //
 //	properties := map[string]interface{}{"operation": "read_resource", "timeout_sec": 30}
-//	return mcperror.NewTimeoutError("Resource read operation timed out", properties)
+//	return mcp/errors.NewTimeoutError("Resource read operation timed out", properties)
 func NewTimeoutError(message string, properties map[string]interface{}) error {
 	err := errors.Newf("%s", message)
 	err = errors.Mark(err, ErrTimeout)
@@ -115,7 +115,7 @@ func NewTimeoutError(message string, properties map[string]interface{}) error {
 // Example usage:
 //
 //	properties := map[string]interface{}{"auth_method": "token"}
-//	return mcperror.NewAuthError("Invalid authentication token", err, properties)
+//	return mcp/errors.NewAuthError("Invalid authentication token", err, properties)
 func NewAuthError(message string, cause error, properties map[string]interface{}) error {
 	if cause == nil {
 		err := errors.Newf("%s", message)
@@ -130,7 +130,7 @@ func NewAuthError(message string, cause error, properties map[string]interface{}
 // Example usage:
 //
 //	properties := map[string]interface{}{"method": "rtm.auth.getFrob"}
-//	return mcperror.NewRTMError(101, "API key invalid", err, properties)
+//	return mcp/errors.NewRTMError(101, "API key invalid", err, properties)
 func NewRTMError(code int, message string, cause error, properties map[string]interface{}) error {
 	details := map[string]interface{}{
 		"rtm_code": code,

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/mcperror"
+	"github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -80,7 +80,7 @@ func (a *Adapter) getHandler(ctx context.Context, conn *jsonrpc2.Conn, req *json
 		properties := map[string]interface{}{
 			"request_id": req.ID,
 		}
-		methodError := mcperror.NewMethodNotFoundError(req.Method, properties)
+		methodError := mcp / errors.NewMethodNotFoundError(req.Method, properties)
 
 		if err := a.sendErrorResponse(ctx, conn, req, methodError); err != nil {
 			// Log the full error with stack trace for server-side debugging
@@ -166,7 +166,7 @@ func (a *Adapter) handleTimeout(ctx context.Context, conn *jsonrpc2.Conn, req *j
 			"request_id":  req.ID,
 		}
 
-		timeoutErr := mcperror.NewTimeoutError(
+		timeoutErr := mcp / errors.NewTimeoutError(
 			"Request timed out while executing handler",
 			properties,
 		)
@@ -191,7 +191,7 @@ func (a *Adapter) processResult(ctx context.Context, conn *jsonrpc2.Conn, req *j
 		if err := conn.Reply(ctx, req.ID, result); err != nil {
 			// Wrap the error with additional context
 			wrappedErr := errors.Wrapf(err, "failed to send response for method %s", req.Method)
-			wrappedErr = mcperror.ErrorWithDetails(wrappedErr, mcperror.CategoryRPC, mcperror.CodeInternalError,
+			wrappedErr = mcp / errors.ErrorWithDetails(wrappedErr, mcp/errors.CategoryRPC, mcp/errors.CodeInternalError,
 				map[string]interface{}{
 					"method":     req.Method,
 					"request_id": req.ID,
@@ -209,11 +209,11 @@ func (a *Adapter) sendErrorResponse(ctx context.Context, conn *jsonrpc2.Conn, re
 	}
 
 	// Get error code and prepare the client-safe message.
-	code := mcperror.GetErrorCode(err)
-	message := mcperror.UserFacingMessage(code)
+	code := mcp / errors.GetErrorCode(err)
+	message := mcp / errors.UserFacingMessage(code)
 
 	// Extract properties that are safe to expose to clients.
-	properties := mcperror.GetErrorProperties(err)
+	properties := mcp / errors.GetErrorProperties(err)
 	safeProps := make(map[string]interface{})
 
 	// Only include safe properties in the error data.
@@ -260,11 +260,11 @@ func containsSensitiveKeyword(key string) bool {
 
 // NewInvalidParamsError creates a new InvalidParams error with properties.
 func NewInvalidParamsError(details string, properties map[string]interface{}) error {
-	return mcperror.NewInvalidArgumentsError(details, properties)
+	return mcp / errors.NewInvalidArgumentsError(details, properties)
 }
 
 // NewInternalError creates a new InternalError with properties.
 func NewInternalError(err error, properties map[string]interface{}) error {
 	wrappedErr := errors.Wrapf(err, "internal server error")
-	return mcperror.ErrorWithDetails(wrappedErr, mcperror.CategoryRPC, mcperror.CodeInternalError, properties)
+	return mcp / errors.ErrorWithDetails(wrappedErr, mcp/errors.CategoryRPC, mcp/errors.CodeInternalError, properties)
 }
