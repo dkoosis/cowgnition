@@ -1,12 +1,17 @@
 # CowGnition 🐄 🧠
 
-<img src="/assets/cowgnition_logo.png" alt="CowGnition Logo" width="100" height="100">
+<img src="/docs/assets/cowgnition_logo.png" alt="CowGnition Logo" width="100" height="100">
 
 ## Have you Herd?
 
 CowGnition connects your [Remember The Milk](https://www.rememberthemilk.com/) (RTM) tasks with Claude Desktop. This MCP server lets you ask your AI assistant to manage your to-do lists, look up due dates, and get insights about your tasks through simple conversations. The [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) allows Claude Desktop, and other conversational agents that are MCP clients, to use "tools" like RTM to do things on your behalf.
 
 ## Quick Links
+
+- [TODO](docs/TODO.md) - For developers, our active TODO list (TODO: move this to GH issues)
+- [Decision Log](docs/decision_log.md) - Record of decisions about tools and architecture
+
+TODO: assess if any of the following makes sense
 
 - [Installation](#installation) - Get up and running
 - [Configuration](#configuration) - Set up your connection
