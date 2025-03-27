@@ -73,11 +73,28 @@ func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[s
 		return "", "", mcp.ErrResourceNotFound
 	}
 
+	// Check for existing token first
+	tokenResult, err := p.checkExistingToken()
+	if err == nil {
+		return tokenResult, "application/json", nil
+	}
+
+	// Handle authentication with frob if provided
+	if frob, ok := args["frob"]; ok && frob != "" {
+		return p.handleFrobAuthentication(frob)
+	}
+
+	// Start new authentication flow
+	return p.startNewAuthFlow(args)
+}
+
+// checkExistingToken verifies if we already have a valid token.
+func (p *AuthProvider) checkExistingToken() (string, error) {
 	// Check if a token is already stored
 	token, err := p.storage.LoadToken()
 	if err != nil {
-		log.Printf("AuthProvider.ReadResource: error loading token: %v", err)
-		// Continue with auth flow even if loading fails
+		log.Printf("AuthProvider.checkExistingToken: error loading token: %v", err)
+		return "", fmt.Errorf("failed to load token: %w", err)
 	}
 
 	// If we have a token, verify it's still valid
@@ -94,45 +111,52 @@ func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[s
 			}
 			responseJSON, err := json.MarshalIndent(response, "", "  ")
 			if err != nil {
-				return "", "", fmt.Errorf("AuthProvider.ReadResource: failed to marshal response: %w", err)
+				return "", fmt.Errorf("failed to marshal response: %w", err)
 			}
-			return string(responseJSON), "application/json", nil
+			return string(responseJSON), nil
 		}
 		// Token is invalid, continue with auth flow
-		log.Printf("AuthProvider.ReadResource: invalid token, starting new auth flow")
+		log.Printf("AuthProvider.checkExistingToken: invalid token, starting new auth flow")
 	}
 
-	// Handle frob parameter if provided
-	if frob, ok := args["frob"]; ok && frob != "" {
-		// Try to get token for frob
-		auth, err := p.client.GetToken(frob)
-		if err != nil {
-			return "", "", fmt.Errorf("AuthProvider.ReadResource: failed to get token: %w", err)
-		}
+	return "", fmt.Errorf("no valid token found")
+}
 
-		// Store the token
-		if err := p.storage.SaveToken(auth.Token); err != nil {
-			log.Printf("AuthProvider.ReadResource: error saving token: %v", err)
-			// Continue even if saving fails
-		}
-
-		// Set the token for future requests
-		p.client.SetAuthToken(auth.Token)
-
-		// Return successful authentication response
-		response := map[string]interface{}{
-			"status":      "authenticated",
-			"username":    auth.User.Username,
-			"fullname":    auth.User.Fullname,
-			"permissions": auth.Perms,
-		}
-		responseJSON, err := json.MarshalIndent(response, "", "  ")
-		if err != nil {
-			return "", "", fmt.Errorf("AuthProvider.ReadResource: failed to marshal response: %w", err)
-		}
-		return string(responseJSON), "application/json", nil
+// handleFrobAuthentication processes authentication with a provided frob.
+func (p *AuthProvider) handleFrobAuthentication(frob string) (string, string, error) {
+	// Try to get token for frob
+	auth, err := p.client.GetToken(frob)
+	if err != nil {
+		return "", "", fmt.Errorf("AuthProvider.handleFrobAuthentication: failed to get token: %w", err)
 	}
 
+	// Store the token
+	if err := p.storage.SaveToken(auth.Token); err != nil {
+		log.Printf("AuthProvider.handleFrobAuthentication: error saving token: %v", err)
+		// Continue even if saving fails
+	}
+
+	// Set the token for future requests
+	p.client.SetAuthToken(auth.Token)
+
+	// Return successful authentication response
+	response := map[string]interface{}{
+		"status":      "authenticated",
+		"username":    auth.User.Username,
+		"fullname":    auth.User.Fullname,
+		"permissions": auth.Perms,
+	}
+
+	responseJSON, err := json.MarshalIndent(response, "", "  ")
+	if err != nil {
+		return "", "", fmt.Errorf("AuthProvider.handleFrobAuthentication: failed to marshal response: %w", err)
+	}
+
+	return string(responseJSON), "application/json", nil
+}
+
+// startNewAuthFlow initiates a new authentication flow.
+func (p *AuthProvider) startNewAuthFlow(args map[string]string) (string, string, error) {
 	// Get permissions parameter, default to "delete" (highest)
 	perms := PermDelete
 	if p, ok := args["perms"]; ok && (p == PermRead || p == PermWrite || p == PermDelete) {
@@ -142,7 +166,7 @@ func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[s
 	// Start desktop authentication flow
 	frob, err := p.client.GetFrob()
 	if err != nil {
-		return "", "", fmt.Errorf("AuthProvider.ReadResource: failed to get frob: %w", err)
+		return "", "", fmt.Errorf("AuthProvider.startNewAuthFlow: failed to get frob: %w", err)
 	}
 
 	// Store frob with requested permissions
@@ -161,11 +185,11 @@ func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[s
 		"permissions":  perms,
 		"instructions": "Visit the auth_url to authorize this application, then access this resource again with the frob parameter.",
 	}
+
 	responseJSON, err := json.MarshalIndent(response, "", "  ")
 	if err != nil {
-		return "", "", fmt.Errorf("AuthProvider.ReadResource: failed to marshal response: %w", err)
+		return "", "", fmt.Errorf("AuthProvider.startNewAuthFlow: failed to marshal response: %w", err)
 	}
+
 	return string(responseJSON), "application/json", nil
 }
-
-// ErrorMsgEnhanced:2025-03-26
