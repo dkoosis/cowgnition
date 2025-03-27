@@ -239,6 +239,47 @@ A more sophisticated error handling system would go beyond simple error returns 
 This approach would provide better error diagnostics, make error handling more consistent throughout the codebase, and improve the developer experience when troubleshooting issues.
 ````
 
+## Preparing for Logging
+
+Here are some things we can do now while implementing cockroachdb/errors that will make future logging integration simpler:
+
+Use consistent property keys when attaching context to errors. This will make it easier to extract and structure logs later:
+
+```go
+// Instead of random property names:
+errors.WithProperty(err, "user_id", id)
+errors.WithProperty(err, "resource_name", name)
+errors.WithProperty(err, "operation", "read_resource")
+```
+
+Create error categories that will naturally map to log levels later:
+
+```go
+var (
+    // These might map to ERROR level
+    ErrCategoryValidation = "validation"
+    ErrCategoryInternal = "internal"
+    // These might map to WARNING level
+    ErrCategoryNotFound = "not_found"
+    // etc.
+)
+```
+
+Add a wrapper function that both wraps errors and prepares them for logging:
+
+```go
+// wrapError adds context to an error and prepares it for logging
+func wrapError(err error, message string, props map[string]interface{}) error {
+    wrappedErr := errors.Wrap(err, message)
+    for k, v := range props {
+        wrappedErr = errors.WithProperty(wrappedErr, k, v)
+    }
+    return wrappedErr
+}
+```
+
+These approaches will give us a more structured foundation that will simplify integrating a proper logging system later. Shall we incorporate these ideas while implementing cockroachdb/errors?
+
 ## Here is a Prompt to Implement Error Management with cockroachdb/errors
 
 **AI Prompt: Project-Wide Go Error Handling Enhancement with cockroachdb/errors & MCP Compliance**
