@@ -1,3 +1,8 @@
+Okay, I've updated the roadmap based on the progress you described regarding timeout management.
+
+Here's the updated `CowGnition Implementation Roadmap` in a markdown block:
+
+````markdown
 # CowGnition Implementation Roadmap
 
 ## 1. Core JSON-RPC Implementation
@@ -7,7 +12,6 @@
   - [x] Implement message parsing/validation (JSON-RPC 2.0 spec)
   - [x] Define request/response/notification structures
   - [x] Add proper error handling with standard codes
-  - [ ] Implement timeout management
   - [x] Reference: [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
 
 - [x] Create message dispatcher:
@@ -28,15 +32,15 @@
 
 - [x] Implement transport layer:
 
-  - [x] Add proper stdio transport support
-  - [ ] Add SSE/HTTP transport support
+  - [x] Add proper stdio transport support (including timeout handling)
+  - [ ] Add SSE/HTTP transport support (progress made: timeout handling implemented)
   - [x] Implement connection lifecycle management
   - [x] Reference: [MCP Transport Specification](https://spec.modelcontextprotocol.io/specification/2024-11-05/basic/transport/)
 
 - [ ] Update initialization flow:
   - [ ] Implement proper capability negotiation
   - [ ] Add protocol version validation
-  - [ ] Ensure proper shutdown procedure
+  - [x] Ensure proper shutdown procedure (including timeout handling)
   - [ ] Reference: [MCP Lifecycle](https://spec.modelcontextprotocol.io/specification/2024-11-05/basic/lifecycle/)
 
 ## 3. RTM API Integration
@@ -147,6 +151,8 @@
 - Added stdio transport implementation
 - Updated server to support both HTTP and stdio transports
 - Added command-line flags for transport selection
+- Implemented core JSON-RPC timeout management (requests, shutdown, context handling) across transports
+- Implemented graceful shutdown timeout handling in server initialization/lifecycle
 
 # Assess More Sophisticated Error Handling System
 
@@ -169,6 +175,7 @@ A more sophisticated error handling system would go beyond simple error returns 
        return e.Cause
    }
    ```
+````
 
 ````
 
