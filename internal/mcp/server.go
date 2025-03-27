@@ -5,6 +5,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors" // Added import for errors.Is
 	"fmt"
 	"log"
 	"net/http"
@@ -293,9 +294,10 @@ func (s *Server) handleJSONRPCReadResource(ctx context.Context, params json.RawM
 	// Read the resource
 	content, mimeType, err := s.resourceManager.ReadResource(ctx, req.Name, req.Args)
 	if err != nil {
-		if err == ErrResourceNotFound {
+		// Changed error comparisons to use errors.Is
+		if errors.Is(err, ErrResourceNotFound) {
 			return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("resource not found: %s", req.Name))
-		} else if err == ErrInvalidArguments {
+		} else if errors.Is(err, ErrInvalidArguments) {
 			return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("invalid arguments for resource: %s", req.Name))
 		}
 		return nil, jsonrpc.NewInternalError(fmt.Errorf("failed to read resource: %w", err))
@@ -340,9 +342,10 @@ func (s *Server) handleJSONRPCCallTool(ctx context.Context, params json.RawMessa
 	// Call the tool
 	result, err := s.toolManager.CallTool(ctx, req.Name, req.Arguments)
 	if err != nil {
-		if err == ErrToolNotFound {
+		// Changed error comparisons to use errors.Is
+		if errors.Is(err, ErrToolNotFound) {
 			return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("tool not found: %s", req.Name))
-		} else if err == ErrInvalidArguments {
+		} else if errors.Is(err, ErrInvalidArguments) {
 			return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("invalid arguments for tool: %s", req.Name))
 		}
 		return nil, jsonrpc.NewInternalError(fmt.Errorf("failed to call tool: %w", err))

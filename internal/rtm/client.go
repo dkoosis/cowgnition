@@ -105,7 +105,11 @@ func (c *Client) MakeRequest(method string, params map[string]string) ([]byte, e
 	if err != nil {
 		return nil, fmt.Errorf("Client.MakeRequest: failed to create HTTP request: %w", err)
 	}
+
 	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("Client.MakeRequest: failed to make HTTP request: %w", err)
+	}
 	defer resp.Body.Close()
 
 	// Read response body
@@ -116,5 +120,3 @@ func (c *Client) MakeRequest(method string, params map[string]string) ([]byte, e
 
 	return body, nil
 }
-
-// ErrorMsgEnhanced:2025-03-26
