@@ -231,3 +231,55 @@ A more sophisticated error handling system would go beyond simple error returns 
 
 This approach would provide better error diagnostics, make error handling more consistent throughout the codebase, and improve the developer experience when troubleshooting issues.
 ````
+
+## Here is a Prompt to Implement Error Management with cockroachdb/errors
+
+**AI Prompt: Project-Wide Go Error Handling Enhancement with cockroachdb/errors & MCP Compliance**
+
+**Role:** You are an expert Go developer specializing in robust error handling practices, large-scale code refactoring, and implementing JSON-RPC 2.0 based protocols like MCP.
+
+**Goal:** Systematically refactor the provided Go project files (`.go`) to replace standard error handling (`fmt.Errorf`, `errors.New`, simple error returns) with enhanced, consistent practices using the `github.com/cockroachdb/errors` library. The aim is to significantly improve debuggability via stack traces, add structured context using properties, ensure consistent error propagation, AND ensure the internal error structure facilitates creating **compliant JSON-RPC 2.0 / MCP error responses** at the appropriate boundaries.
+
+**Input:** You will be provided with the content of multiple Go source files (`.go`) constituting a project or a significant package, including (or alongside) files responsible for handling API requests/responses (e.g., HTTP handlers, JSON-RPC endpoints).
+
+**Core Task:** Analyze the provided Go files, identify areas where errors are created or propagated, and refactor them according to the patterns below using `cockroachdb/errors`.
+
+**Key Refactoring Patterns to Apply Consistently:**
+
+1.  **Error Origins (Where errors are first created):**
+
+    - Replace `fmt.Errorf("message %v", args...)` or `errors.New("message")` with `errors.Errorf("message %v", args...)` or `errors.Newf("message %v", args...)`.
+      - **Benefit:** Captures a stack trace automatically.
+    - Identify relevant local variables providing context (invalid inputs, IDs, states).
+    - Attach this context as structured data using `errors.WithProperty(err, "key_name", variable)`. Use clear, consistent key names (e.g., `invalid_parameter`, `resource_id`, `external_service_status`).
+      - **Benefit:** Makes context programmatically accessible for logging, internal handling, and importantly, _determining_ the correct JSON-RPC error details later.
+
+2.  **Error Propagation (Returning errors up the stack):**
+
+    - Replace simple `return err` _if context should be added_.
+    - Replace `fmt.Errorf("context: %w", err)` or `fmt.Errorf("context: %v", err)` with `errors.Wrapf(err, "context message %v", args...)` or `errors.Wrap(err, "context message")`.
+      - **Benefit:** Preserves original error type, adds higher-level context, and captures a stack trace at the wrapping site, creating a clear chain.
+
+3.  **Imports:** Ensure `"github.com/cockroachdb/errors"` is correctly added to the import block of every modified file.
+
+**Crucial Constraint - API/Service Boundaries & JSON-RPC/MCP Compliance:**
+
+- Internal error details (full stack traces from `%+v`, potentially sensitive property values, verbose internal messages) **MUST NOT** leak across public API boundaries or service interfaces.
+- **Specifically for JSON-RPC 2.0 / MCP Responses:** When translating internal Go errors into JSON-RPC error objects (likely happening in your HTTP handler or RPC endpoint code):
+  - The boundary code MUST generate responses adhering strictly to the **`{ "code": integer, "message": string, "data": optional_value }`** structure.
+  - Use standard codes (`-32700` to `-32603`) for JSON-RPC protocol issues (ParseError, InvalidRequest, etc.).
+  - Use custom codes in the range **`-32000` to `-32099`** for all your application-specific errors (e.g., RTM AuthError, ResourceError, ValidationError). Refer to your defined `ErrorCode` constants.
+  - The external `message` string must be concise, user-appropriate (if applicable), and contain NO internal implementation details or stack traces.
+  - The external `data` field can contain structured, non-sensitive details derived from the internal error, adhering to any specific MCP/JMAP requirements if applicable.
+  - **Guidance for Implementation:** The properties attached internally using `errors.WithProperty` are **key** here. Your boundary handling code should **inspect** the internal error (using `errors.Is`, `errors.As`, `errors.TryGetProperty`) to _determine_ the correct external `code`, `message`, and `data`. The raw internal error or its properties should **not** be directly placed into the external response fields. This refactoring should make it _easier_ to write that boundary logic correctly.
+- **Logging:** Use `fmt.Printf("%+v", err)` or integrate with structured logging libraries for detailed **server-side** diagnostics _only_. Log the full internal error before translating it for the external response.
+- **External Errors:** Use `err.Error()` _only if confirmed safe_ (rarely the case for detailed internal errors), or preferably use sanitized messages and data derived from inspecting the error.
+
+**Output:**
+
+1.  **Full Content of ALL Modified `.go` Files:** Provide the complete source code for each file that was changed.
+2.  **Summary of Changes:** Include a brief summary describing:
+    - The general refactoring patterns applied.
+    - How the changes support creating compliant JSON-RPC 2.0 / MCP error responses (e.g., "added properties like `resource_id` to errors originating in `resource_store.go` to facilitate generating `ResourceError` codes and data at the handler").
+    - Key benefits achieved (stack traces, structured context, consistent wrapping, easier boundary mapping).
+    - Any notable challenges or assumptions made.
