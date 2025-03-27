@@ -39,7 +39,7 @@ if [ "$WARN_LINES" -ge "$FAIL_LINES" ]; then
 fi
 
 # --- File Checking Logic ---
-printf "${BLUE}▶ Checking file lengths (warn > ${WARN_LINES}, fail > ${FAIL_LINES})...${NC}\n"
+#printf "${BLUE}▶ Checking file lengths (warn > ${WARN_LINES}, fail > ${FAIL_LINES})...${NC}\n"
 warnings_found=0
 errors_found=0
 

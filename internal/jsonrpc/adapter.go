@@ -208,17 +208,17 @@ func (a *Adapter) sendErrorResponse(ctx context.Context, conn *jsonrpc2.Conn, re
 		return nil
 	}
 
-	// Get error code and prepare the client-safe message
+	// Get error code and prepare the client-safe message.
 	code := mcperror.GetErrorCode(err)
 	message := mcperror.UserFacingMessage(code)
 
-	// Extract properties that are safe to expose to clients
+	// Extract properties that are safe to expose to clients.
 	properties := mcperror.GetErrorProperties(err)
 	safeProps := make(map[string]interface{})
 
-	// Only include safe properties in the error data
+	// Only include safe properties in the error data.
 	for k, v := range properties {
-		// Exclude internal properties and possibly sensitive data
+		// Exclude internal properties and possibly sensitive data.
 		if k != "category" && k != "code" && k != "stack" &&
 			!containsSensitiveKeyword(k) {
 			safeProps[k] = v
@@ -231,7 +231,7 @@ func (a *Adapter) sendErrorResponse(ctx context.Context, conn *jsonrpc2.Conn, re
 		Message: message,
 	}
 
-	// Add data field if we have safe properties to include
+	// Add data field if we have safe properties to include.
 	if len(safeProps) > 0 {
 		dataJSON, marshalErr := json.Marshal(safeProps)
 		if marshalErr == nil {
@@ -239,15 +239,15 @@ func (a *Adapter) sendErrorResponse(ctx context.Context, conn *jsonrpc2.Conn, re
 		}
 	}
 
-	// Log the full error with all details for server-side debugging
-	// The %+v format includes stack traces provided by cockroachdb/errors
+	// Log the full error with all details for server-side debugging.
+	// The %+v format includes stack traces provided by cockroachdb/errors.
 	log.Printf("JSON-RPC error: %+v", err)
 
-	// Send the sanitized error response to the client
+	// Send the sanitized error response to the client.
 	return conn.ReplyWithError(ctx, req.ID, rpcErr)
 }
 
-// Helper function to check if a string might contain sensitive information
+// Helper function to check if a string might contain sensitive information.
 func containsSensitiveKeyword(key string) bool {
 	sensitiveKeywords := []string{"token", "password", "secret", "key", "auth", "credential"}
 	for _, keyword := range sensitiveKeywords {

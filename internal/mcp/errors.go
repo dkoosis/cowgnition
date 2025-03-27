@@ -6,7 +6,7 @@ import (
 	"github.com/dkoosis/cowgnition/internal/mcperror"
 )
 
-// Re-export the sentinel errors for backward compatibility
+// Re-export the sentinel errors for backward compatibility.
 var (
 	ErrResourceNotFound = mcperror.ErrResourceNotFound
 	ErrToolNotFound     = mcperror.ErrToolNotFound
@@ -14,7 +14,7 @@ var (
 	ErrTimeout          = mcperror.ErrTimeout
 )
 
-// Re-export error checking functions for backward compatibility
+// Re-export error checking functions for backward compatibility.
 var (
 	IsResourceNotFoundError = mcperror.IsResourceNotFoundError
 	IsToolNotFoundError     = mcperror.IsToolNotFoundError

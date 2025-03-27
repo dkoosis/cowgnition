@@ -226,7 +226,11 @@ func (s *Server) RegisterJSONRPCHandlers(adapter *jsonrpc.Adapter) {
 func (s *Server) handleJSONRPCInitialize(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var req InitializeRequest
 	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("failed to decode initialize request: %v", err))
+		return nil, jsonrpc.NewInvalidParamsError(
+			fmt.Sprintf("failed to decode initialize request: %v", err),
+			map[string]interface{}{
+				"error": err.Error(),
+			})
 	}
 
 	// Log initialization request
@@ -283,12 +287,20 @@ func (s *Server) handleJSONRPCReadResource(ctx context.Context, params json.RawM
 	}
 
 	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("failed to decode read_resource request: %v", err))
+		return nil, jsonrpc.NewInvalidParamsError(
+			fmt.Sprintf("failed to decode read_resource request: %v", err),
+			map[string]interface{}{
+				"error": err.Error(),
+			})
 	}
 
 	// Validate required parameters
 	if req.Name == "" {
-		return nil, jsonrpc.NewInvalidParamsError("missing required resource name parameter")
+		return nil, jsonrpc.NewInvalidParamsError(
+			"missing required resource name parameter",
+			map[string]interface{}{
+				"parameter": "name",
+			})
 	}
 
 	// Read the resource
@@ -296,11 +308,24 @@ func (s *Server) handleJSONRPCReadResource(ctx context.Context, params json.RawM
 	if err != nil {
 		// Changed error comparisons to use errors.Is
 		if errors.Is(err, ErrResourceNotFound) {
-			return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("resource not found: %s", req.Name))
+			return nil, jsonrpc.NewInvalidParamsError(
+				fmt.Sprintf("resource not found: %s", req.Name),
+				map[string]interface{}{
+					"resource_name": req.Name,
+				})
 		} else if errors.Is(err, ErrInvalidArguments) {
-			return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("invalid arguments for resource: %s", req.Name))
+			return nil, jsonrpc.NewInvalidParamsError(
+				fmt.Sprintf("invalid arguments for resource: %s", req.Name),
+				map[string]interface{}{
+					"resource_name": req.Name,
+					"arguments":     req.Args,
+				})
 		}
-		return nil, jsonrpc.NewInternalError(fmt.Errorf("failed to read resource: %w", err))
+		return nil, jsonrpc.NewInternalError(
+			fmt.Errorf("failed to read resource: %w", err),
+			map[string]interface{}{
+				"resource_name": req.Name,
+			})
 	}
 
 	// Return the resource content
@@ -331,12 +356,20 @@ func (s *Server) handleJSONRPCCallTool(ctx context.Context, params json.RawMessa
 	// Parse request parameters
 	var req CallToolRequest
 	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("failed to decode call_tool request: %v", err))
+		return nil, jsonrpc.NewInvalidParamsError(
+			fmt.Sprintf("failed to decode call_tool request: %v", err),
+			map[string]interface{}{
+				"error": err.Error(),
+			})
 	}
 
 	// Validate required parameters
 	if req.Name == "" {
-		return nil, jsonrpc.NewInvalidParamsError("missing required tool name parameter")
+		return nil, jsonrpc.NewInvalidParamsError(
+			"missing required tool name parameter",
+			map[string]interface{}{
+				"parameter": "name",
+			})
 	}
 
 	// Call the tool
@@ -344,11 +377,24 @@ func (s *Server) handleJSONRPCCallTool(ctx context.Context, params json.RawMessa
 	if err != nil {
 		// Changed error comparisons to use errors.Is
 		if errors.Is(err, ErrToolNotFound) {
-			return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("tool not found: %s", req.Name))
+			return nil, jsonrpc.NewInvalidParamsError(
+				fmt.Sprintf("tool not found: %s", req.Name),
+				map[string]interface{}{
+					"tool_name": req.Name,
+				})
 		} else if errors.Is(err, ErrInvalidArguments) {
-			return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("invalid arguments for tool: %s", req.Name))
+			return nil, jsonrpc.NewInvalidParamsError(
+				fmt.Sprintf("invalid arguments for tool: %s", req.Name),
+				map[string]interface{}{
+					"tool_name": req.Name,
+					"arguments": req.Arguments,
+				})
 		}
-		return nil, jsonrpc.NewInternalError(fmt.Errorf("failed to call tool: %w", err))
+		return nil, jsonrpc.NewInternalError(
+			fmt.Errorf("failed to call tool: %w", err),
+			map[string]interface{}{
+				"tool_name": req.Name,
+			})
 	}
 
 	// Return the tool result

@@ -2,7 +2,7 @@
 // file: internal/mcperror/codes.go
 package mcperror
 
-// Categories for grouping similar errors
+// Categories for grouping similar errors.
 const (
 	CategoryResource = "resource" // Resource-related errors
 	CategoryTool     = "tool"     // Tool-related errors
@@ -12,16 +12,16 @@ const (
 	CategoryRTM      = "rtm"      // Remember The Milk API-related errors
 )
 
-// Error codes aligned with JSON-RPC 2.0 specification
+// Error codes aligned with JSON-RPC 2.0 specification.
 const (
-	// Standard JSON-RPC 2.0 error codes (-32768 to -32000 reserved)
+	// Standard JSON-RPC 2.0 error codes (-32768 to -32000 reserved).
 	CodeParseError     = -32700 // Invalid JSON received
 	CodeInvalidRequest = -32600 // Invalid request object
 	CodeMethodNotFound = -32601 // Method not found
 	CodeInvalidParams  = -32602 // Invalid method parameters
 	CodeInternalError  = -32603 // Internal JSON-RPC error
 
-	// Custom application error codes (-32000 to -32099 for server errors)
+	// Custom application error codes (-32000 to -32099 for server errors).
 	CodeResourceNotFound = -32000 // Requested resource not found
 	CodeToolNotFound     = -32001 // Requested tool not found
 	CodeInvalidArguments = -32002 // Invalid arguments provided
@@ -30,7 +30,7 @@ const (
 	CodeTimeoutError     = -32005 // Operation timed out
 )
 
-// UserFacingMessage returns a user-friendly message based on error code
+// UserFacingMessage returns a user-friendly message based on error code.
 func UserFacingMessage(code int) string {
 	switch code {
 	case CodeParseError:

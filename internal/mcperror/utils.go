@@ -113,7 +113,7 @@ func GetErrorProperties(err error) map[string]interface{} {
 	return properties
 }
 
-// ErrorToMap converts an error to a map suitable for JSON-RPC error responses
+// ErrorToMap converts an error to a map suitable for JSON-RPC error responses.
 // Example usage:
 //
 //	errorMap := mcperror.ErrorToMap(err)
@@ -132,8 +132,8 @@ func ErrorToMap(err error) map[string]interface{} {
 		"message": UserFacingMessage(code),
 	}
 
-	// Add data field if we have properties to include
-	// Filter out internal properties that shouldn't be exposed
+	// Add data field if we have properties to include.
+	// Filter out internal properties that shouldn't be exposed.
 	dataProps := make(map[string]interface{})
 	for k, v := range properties {
 		// Skip internal properties
@@ -150,7 +150,7 @@ func ErrorToMap(err error) map[string]interface{} {
 	return errorMap
 }
 
-// containsSensitiveKeyword checks if a key might contain sensitive information
+// containsSensitiveKeyword checks if a key might contain sensitive information.
 func containsSensitiveKeyword(key string) bool {
 	sensitiveKeywords := []string{"token", "password", "secret", "key", "auth", "credential"}
 	for _, keyword := range sensitiveKeywords {

@@ -8,23 +8,23 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Base sentinel errors used throughout the application
+// Base sentinel errors used throughout the application.
 var (
-	// Resource errors
+	// Resource errors.
 	ErrResourceNotFound = errors.New("resource not found")
 
-	// Tool errors
+	// Tool errors.
 	ErrToolNotFound = errors.New("tool not found")
 
-	// Argument errors
+	// Argument errors.
 	ErrInvalidArguments = errors.New("invalid arguments")
 
-	// Timeout errors
+	// Timeout errors.
 	ErrTimeout = errors.New("operation timed out")
 )
 
 // ErrorWithDetails adds structured details to an error while also
-// attaching category and code information
+// attaching category and code information.
 func ErrorWithDetails(err error, category string, code int, details map[string]interface{}) error {
 	// Mark the error with category and code using detail strings
 	err = errors.WithDetail(err, fmt.Sprintf("category:%s", category))
