@@ -5,6 +5,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors" // Added for errors.Is
 	"fmt"
 	"log"
 	"net/http"
@@ -205,9 +206,9 @@ func (s *Server) handleReadResource(w http.ResponseWriter, r *http.Request) {
 
 	if resourceErr != nil {
 		code := httputils.InternalError
-		if resourceErr == ErrResourceNotFound {
+		if errors.Is(resourceErr, ErrResourceNotFound) {
 			code = httputils.ResourceError
-		} else if resourceErr == ErrInvalidArguments {
+		} else if errors.Is(resourceErr, ErrInvalidArguments) {
 			code = httputils.InvalidParams
 		}
 
@@ -335,9 +336,9 @@ func (s *Server) handleCallTool(w http.ResponseWriter, r *http.Request) {
 
 	if toolErr != nil {
 		code := httputils.InternalError
-		if toolErr == ErrToolNotFound {
+		if errors.Is(toolErr, ErrToolNotFound) {
 			code = httputils.ToolError
-		} else if toolErr == ErrInvalidArguments {
+		} else if errors.Is(toolErr, ErrInvalidArguments) {
 			code = httputils.InvalidParams
 		}
 

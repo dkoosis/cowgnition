@@ -4,6 +4,7 @@ package jsonrpc
 import (
 	"context"
 	"encoding/json"
+	"errors" // Added for errors.As
 	"fmt"
 	"log"
 	"time"
@@ -115,8 +116,8 @@ func (a *Adapter) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2
 		if res.err != nil {
 			// Convert error to JSON-RPC error
 			var rpcErr *jsonrpc2.Error
-			if jsonErr, ok := res.err.(*jsonrpc2.Error); ok {
-				rpcErr = jsonErr
+			if errors.As(res.err, &rpcErr) {
+				// Already a JSON-RPC error, use it directly
 			} else {
 				rpcErr = &jsonrpc2.Error{
 					Code:    jsonrpc2.CodeInternalError,
