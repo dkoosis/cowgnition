@@ -36,7 +36,8 @@ func (a *Adapter) RegisterHandler(method string, handler Handler) {
 func (a *Adapter) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) {
 	handler, ok := a.handlers[req.Method]
 	if !ok {
-		if req.ID != nil { // Only respond to requests, not notifications
+		// Only respond to requests, not notifications
+		if !req.Notif {
 			err := &jsonrpc2.Error{
 				Code:    jsonrpc2.CodeMethodNotFound,
 				Message: fmt.Sprintf("method %q not found", req.Method),
@@ -49,7 +50,12 @@ func (a *Adapter) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2
 	}
 
 	// Handle the request
-	result, err := handler(ctx, req.Params)
+	var params json.RawMessage
+	if req.Params != nil {
+		params = *req.Params
+	}
+
+	result, err := handler(ctx, params)
 	if err != nil {
 		// Convert error to JSON-RPC error
 		var rpcErr *jsonrpc2.Error
@@ -62,7 +68,8 @@ func (a *Adapter) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2
 			}
 		}
 
-		if req.ID != nil { // Only respond to requests, not notifications
+		// Only respond to requests, not notifications
+		if !req.Notif {
 			if replyErr := conn.ReplyWithError(ctx, req.ID, rpcErr); replyErr != nil {
 				log.Printf("jsonrpc.Adapter: error sending error response: %v", replyErr)
 			}
@@ -70,8 +77,8 @@ func (a *Adapter) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2
 		return
 	}
 
-	// Send the result
-	if req.ID != nil { // Only respond to requests, not notifications
+	// Send the result for requests (not notifications)
+	if !req.Notif {
 		if err := conn.Reply(ctx, req.ID, result); err != nil {
 			log.Printf("jsonrpc.Adapter: error sending response: %v", err)
 		}
@@ -88,18 +95,24 @@ func NewMethodNotFoundError(method string) *jsonrpc2.Error {
 
 // NewInvalidParamsError creates a new InvalidParams error.
 func NewInvalidParamsError(details string) *jsonrpc2.Error {
+	var data json.RawMessage
+	data, _ = json.Marshal(details)
+
 	return &jsonrpc2.Error{
 		Code:    jsonrpc2.CodeInvalidParams,
 		Message: "invalid params",
-		Data:    json.RawMessage(fmt.Sprintf("%q", details)),
+		Data:    &data, // Use pointer to the data
 	}
 }
 
 // NewInternalError creates a new InternalError.
 func NewInternalError(err error) *jsonrpc2.Error {
+	var data json.RawMessage
+	data, _ = json.Marshal(err.Error())
+
 	return &jsonrpc2.Error{
 		Code:    jsonrpc2.CodeInternalError,
 		Message: "internal error",
-		Data:    json.RawMessage(fmt.Sprintf("%q", err.Error())),
+		Data:    &data, // Use pointer to the data
 	}
 }

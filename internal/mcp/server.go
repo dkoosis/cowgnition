@@ -182,3 +182,100 @@ func (s *Server) handleJSONRPCInitialize(ctx context.Context, params json.RawMes
 
 	return response, nil
 }
+
+// handleJSONRPCListResources handles the JSON-RPC list_resources request.
+func (s *Server) handleJSONRPCListResources(ctx context.Context, params json.RawMessage) (interface{}, error) {
+	// No parameters needed for listing resources
+
+	// Get resources from all registered providers
+	resources := s.resourceManager.GetAllResourceDefinitions()
+
+	response := ListResourcesResponse{
+		Resources: resources,
+	}
+
+	return response, nil
+}
+
+// handleJSONRPCReadResource handles the JSON-RPC read_resource request.
+func (s *Server) handleJSONRPCReadResource(ctx context.Context, params json.RawMessage) (interface{}, error) {
+	// Parse request parameters
+	var req struct {
+		Name string            `json:"name"`
+		Args map[string]string `json:"args,omitempty"`
+	}
+
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("failed to decode read_resource request: %v", err))
+	}
+
+	// Validate required parameters
+	if req.Name == "" {
+		return nil, jsonrpc.NewInvalidParamsError("missing required resource name parameter")
+	}
+
+	// Read the resource
+	content, mimeType, err := s.resourceManager.ReadResource(ctx, req.Name, req.Args)
+	if err != nil {
+		if err == ErrResourceNotFound {
+			return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("resource not found: %s", req.Name))
+		} else if err == ErrInvalidArguments {
+			return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("invalid arguments for resource: %s", req.Name))
+		}
+		return nil, jsonrpc.NewInternalError(fmt.Errorf("failed to read resource: %w", err))
+	}
+
+	// Return the resource content
+	response := ResourceResponse{
+		Content:  content,
+		MimeType: mimeType,
+	}
+
+	return response, nil
+}
+
+// handleJSONRPCListTools handles the JSON-RPC list_tools request.
+func (s *Server) handleJSONRPCListTools(ctx context.Context, params json.RawMessage) (interface{}, error) {
+	// No parameters needed for listing tools
+
+	// Get tools from all registered providers
+	tools := s.toolManager.GetAllToolDefinitions()
+
+	response := ListToolsResponse{
+		Tools: tools,
+	}
+
+	return response, nil
+}
+
+// handleJSONRPCCallTool handles the JSON-RPC call_tool request.
+func (s *Server) handleJSONRPCCallTool(ctx context.Context, params json.RawMessage) (interface{}, error) {
+	// Parse request parameters
+	var req CallToolRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("failed to decode call_tool request: %v", err))
+	}
+
+	// Validate required parameters
+	if req.Name == "" {
+		return nil, jsonrpc.NewInvalidParamsError("missing required tool name parameter")
+	}
+
+	// Call the tool
+	result, err := s.toolManager.CallTool(ctx, req.Name, req.Arguments)
+	if err != nil {
+		if err == ErrToolNotFound {
+			return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("tool not found: %s", req.Name))
+		} else if err == ErrInvalidArguments {
+			return nil, jsonrpc.NewInvalidParamsError(fmt.Sprintf("invalid arguments for tool: %s", req.Name))
+		}
+		return nil, jsonrpc.NewInternalError(fmt.Errorf("failed to call tool: %w", err))
+	}
+
+	// Return the tool result
+	response := ToolResponse{
+		Result: result,
+	}
+
+	return response, nil
+}
