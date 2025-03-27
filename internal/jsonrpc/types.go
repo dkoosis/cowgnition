@@ -1,4 +1,4 @@
-// Package jsonrpc implements the JSON-RPC 2.0 protocol.
+// Package jsonrpc implements the JSON-RPC 2.0, a simple protocol for remote procedure calls.
 // file: internal/jsonrpc/types.go
 package jsonrpc
 
@@ -11,6 +11,34 @@ const (
 	// Version is the JSON-RPC version string.
 	Version = "2.0"
 )
+
+// Error represents a JSON-RPC 2.0 error object.
+type Error struct {
+	Code    int             `json:"code"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data,omitempty"`
+}
+
+// Standard JSON-RPC 2.0 error codes
+const (
+	CodeParseError     = -32700
+	CodeInvalidRequest = -32600
+	CodeMethodNotFound = -32601
+	CodeInvalidParams  = -32602
+	CodeInternalError  = -32603
+)
+
+// Message represents a JSON-RPC message.
+// It can be either a Request, Response, or Notification.
+type Message struct {
+	// Common fields for all message types
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id,omitempty"`
+	Method  string          `json:"method,omitempty"`
+	Params  json.RawMessage `json:"params,omitempty"`
+	Result  json.RawMessage `json:"result,omitempty"`
+	Error   *Error          `json:"error,omitempty"`
+}
 
 // Message represents a JSON-RPC message.
 // It can be either a Request, Response, or Notification.
