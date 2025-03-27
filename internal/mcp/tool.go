@@ -4,6 +4,9 @@ package mcp
 import (
 	"context"
 	"fmt"
+
+	"github.com/cockroachdb/errors"
+	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
 // ToolProvider defines an interface for components that provide MCP tools.
@@ -51,16 +54,32 @@ func (tm *ToolManager) FindToolProvider(name string) (ToolProvider, error) {
 			}
 		}
 	}
-	return nil, fmt.Errorf("ToolManager.FindToolProvider: tool '%s' not found", name)
+
+	return nil, cgerr.NewToolError(
+		fmt.Sprintf("tool '%s' not found", name),
+		nil,
+		map[string]interface{}{"tool_name": name},
+	)
 }
 
 // CallTool calls a tool across all providers.
 func (tm *ToolManager) CallTool(ctx context.Context, name string, args map[string]interface{}) (string, error) {
 	provider, err := tm.FindToolProvider(name)
 	if err != nil {
-		return "", fmt.Errorf("ToolManager.CallTool: %w", err)
+		return "", errors.Wrap(err, "failed to find tool provider")
 	}
-	return provider.CallTool(ctx, name, args)
-}
 
-// ErrorMsgEnhanced:2025-03-26
+	result, err := provider.CallTool(ctx, name, args)
+	if err != nil {
+		return "", cgerr.NewToolError(
+			fmt.Sprintf("failed to execute tool '%s'", name),
+			err,
+			map[string]interface{}{
+				"tool_name": name,
+				"args":      args,
+			},
+		)
+	}
+
+	return result, nil
+}

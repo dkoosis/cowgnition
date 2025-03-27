@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	"github.com/cockroachdb/errors"
 )
 
 // ErrorCode defines standardized error codes according to JSON-RPC 2.0.
@@ -47,7 +49,7 @@ func WriteJSONResponse(w http.ResponseWriter, data interface{}) {
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		log.Printf("httputils.WriteJSONResponse: failed to encode JSON response: %v", err)
+		log.Printf("httputils.WriteJSONResponse: failed to encode JSON response: %+v", err)
 		WriteErrorResponse(w, InternalError, "failed to encode response", nil)
 	}
 }
@@ -68,7 +70,8 @@ func WriteErrorResponse(w http.ResponseWriter, code ErrorCode, message string, d
 	w.WriteHeader(httpStatus)
 
 	if err := json.NewEncoder(w).Encode(errResp); err != nil {
-		log.Printf("httputils.WriteErrorResponse: failed to encode error response: %v", err)
+		err = errors.Wrap(err, "failed to encode error response")
+		log.Printf("httputils.WriteErrorResponse: %+v", err)
 		http.Error(w, fmt.Sprintf("Internal error: %v", err), http.StatusInternalServerError)
 	}
 }
@@ -88,5 +91,3 @@ func httpStatusFromErrorCode(code ErrorCode) int {
 		return http.StatusInternalServerError
 	}
 }
-
-// ErrorMsgEnhanced:2025-03-26

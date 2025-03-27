@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/md5" // #nosec G501 - RTM API specifically requires MD5 for request signing
 	"encoding/hex"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -13,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
 const (
@@ -103,19 +104,44 @@ func (c *Client) MakeRequest(method string, params map[string]string) ([]byte, e
 	// Make HTTP request
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("Client.MakeRequest: failed to create HTTP request: %w", err)
+		return nil, cgerr.NewRTMError(
+			0,
+			"Failed to create HTTP request",
+			err,
+			map[string]interface{}{
+				"method": method,
+				"url":    requestURL,
+			},
+		)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Client.MakeRequest: failed to make HTTP request: %w", err)
+		return nil, cgerr.NewRTMError(
+			0,
+			"Failed to make HTTP request",
+			err,
+			map[string]interface{}{
+				"method": method,
+				"url":    requestURL,
+			},
+		)
 	}
 	defer resp.Body.Close()
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("Client.MakeRequest: failed to read response body: %w", err)
+		return nil, cgerr.NewRTMError(
+			0,
+			"Failed to read response body",
+			err,
+			map[string]interface{}{
+				"method":      method,
+				"url":         requestURL,
+				"status_code": resp.StatusCode,
+			},
+		)
 	}
 
 	return body, nil

@@ -5,6 +5,8 @@ package jsonrpc
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -93,7 +95,7 @@ func (m *Message) IsNotification() bool {
 // ToRequest converts the message to a Request if it is a request, otherwise returns an error.
 func (m *Message) ToRequest() (*Request, error) {
 	if !m.IsRequest() {
-		return nil, fmt.Errorf("message is not a request")
+		return nil, errors.New("message is not a request")
 	}
 	return &Request{
 		JSONRPC: m.JSONRPC,
@@ -106,7 +108,7 @@ func (m *Message) ToRequest() (*Request, error) {
 // ToResponse converts the message to a Response if it is a response, otherwise returns an error.
 func (m *Message) ToResponse() (*Response, error) {
 	if !m.IsResponse() {
-		return nil, fmt.Errorf("message is not a response")
+		return nil, errors.New("message is not a response")
 	}
 	return &Response{
 		JSONRPC: m.JSONRPC,
@@ -119,7 +121,7 @@ func (m *Message) ToResponse() (*Response, error) {
 // ToNotification converts the message to a Notification if it is a notification, otherwise returns an error.
 func (m *Message) ToNotification() (*Notification, error) {
 	if !m.IsNotification() {
-		return nil, fmt.Errorf("message is not a notification")
+		return nil, errors.New("message is not a notification")
 	}
 	return &Notification{
 		JSONRPC: m.JSONRPC,
@@ -136,14 +138,14 @@ func NewRequest(id interface{}, method string, params interface{}) (*Request, er
 	if id != nil {
 		idJSON, err = json.Marshal(id)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal ID: %w", err)
+			return nil, errors.Wrap(err, "failed to marshal ID")
 		}
 	}
 
 	if params != nil {
 		paramsJSON, err = json.Marshal(params)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal params: %w", err)
+			return nil, errors.Wrap(err, "failed to marshal params")
 		}
 	}
 
@@ -163,7 +165,7 @@ func NewResponse(id json.RawMessage, result interface{}, err *Error) (*Response,
 	if result != nil && err == nil {
 		resultJSON, marshalErr = json.Marshal(result)
 		if marshalErr != nil {
-			return nil, fmt.Errorf("failed to marshal result: %w", marshalErr)
+			return nil, errors.Wrap(marshalErr, "failed to marshal result")
 		}
 	}
 
@@ -183,7 +185,7 @@ func NewNotification(method string, params interface{}) (*Notification, error) {
 	if params != nil {
 		paramsJSON, err = json.Marshal(params)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal params: %w", err)
+			return nil, errors.Wrap(err, "failed to marshal params")
 		}
 	}
 
@@ -200,7 +202,7 @@ func (r *Request) ParseParams(dst interface{}) error {
 		return nil
 	}
 	if err := json.Unmarshal(r.Params, dst); err != nil {
-		return fmt.Errorf("failed to unmarshal params: %w", err)
+		return errors.Wrap(err, "failed to unmarshal params")
 	}
 	return nil
 }
@@ -211,7 +213,7 @@ func (n *Notification) ParseParams(dst interface{}) error {
 		return nil
 	}
 	if err := json.Unmarshal(n.Params, dst); err != nil {
-		return fmt.Errorf("failed to unmarshal params: %w", err)
+		return errors.Wrap(err, "failed to unmarshal params")
 	}
 	return nil
 }
@@ -221,7 +223,7 @@ func (r *Request) GetID() (interface{}, error) {
 	var id interface{}
 	err := json.Unmarshal(r.ID, &id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal ID: %w", err)
+		return nil, errors.Wrap(err, "failed to unmarshal ID")
 	}
 	return id, nil
 }

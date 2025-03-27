@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -82,7 +83,8 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusGatewayTimeout)
 			_, err := w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32603,"message":"request timed out"},"id":null}`))
 			if err != nil {
-				log.Printf("httpStream: failed to write timeout error response: %v", err)
+				err = errors.Wrap(err, "failed to write timeout error response")
+				log.Printf("httpStream: %+v", err)
 			}
 		}
 	}
@@ -98,31 +100,39 @@ type httpStream struct {
 // WriteObject writes a JSON-RPC message to the HTTP response.
 func (s *httpStream) WriteObject(obj interface{}) error {
 	if s.closed {
-		return io.ErrClosedPipe
+		return errors.New("connection closed: pipe is closed")
 	}
 
 	data, err := json.Marshal(obj)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to marshal object")
 	}
 
 	s.writer.Header().Set("Content-Type", "application/json")
 	_, err = s.writer.Write(data)
-	return err
+	if err != nil {
+		return errors.Wrap(err, "failed to write response")
+	}
+
+	return nil
 }
 
 // ReadObject reads a JSON-RPC message from the HTTP request.
 func (s *httpStream) ReadObject(v interface{}) error {
 	if s.closed {
-		return io.ErrClosedPipe
+		return errors.New("connection closed: pipe is closed")
 	}
 
 	data, err := io.ReadAll(s.reader)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to read request body")
 	}
 
-	return json.Unmarshal(data, v)
+	if err := json.Unmarshal(data, v); err != nil {
+		return errors.Wrap(err, "failed to unmarshal JSON")
+	}
+
+	return nil
 }
 
 // Close closes the stream.

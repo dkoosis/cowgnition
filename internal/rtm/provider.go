@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/dkoosis/cowgnition/internal/mcp"
+	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
 const (
@@ -33,7 +34,14 @@ type AuthProvider struct {
 func NewAuthProvider(apiKey, sharedSecret, tokenPath string) (*AuthProvider, error) {
 	storage, err := NewTokenStorage(tokenPath)
 	if err != nil {
-		return nil, fmt.Errorf("AuthProvider.NewAuthProvider: failed to create token storage: %w", err)
+		return nil, cgerr.NewRTMError(
+			0,
+			"Failed to create token storage",
+			err,
+			map[string]interface{}{
+				"token_path": tokenPath,
+			},
+		)
 	}
 
 	client := NewClient(apiKey, sharedSecret)
@@ -70,7 +78,14 @@ func (p *AuthProvider) GetResourceDefinitions() []mcp.ResourceDefinition {
 // ReadResource handles reading RTM authentication resources.
 func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error) {
 	if name != AuthResourceURI {
-		return "", "", mcp.ErrResourceNotFound
+		return "", "", cgerr.NewResourceError(
+			fmt.Sprintf("Resource not found: %s", name),
+			nil,
+			map[string]interface{}{
+				"resource_name":       name,
+				"available_resources": []string{AuthResourceURI},
+			},
+		)
 	}
 
 	// Check for existing token first
@@ -94,7 +109,13 @@ func (p *AuthProvider) checkExistingToken() (string, error) {
 	token, err := p.storage.LoadToken()
 	if err != nil {
 		log.Printf("AuthProvider.checkExistingToken: error loading token: %v", err)
-		return "", fmt.Errorf("failed to load token: %w", err)
+		return "", cgerr.NewAuthError(
+			"Failed to load token",
+			err,
+			map[string]interface{}{
+				"token_path": p.storage.TokenPath,
+			},
+		)
 	}
 
 	// If we have a token, verify it's still valid
@@ -111,7 +132,13 @@ func (p *AuthProvider) checkExistingToken() (string, error) {
 			}
 			responseJSON, err := json.MarshalIndent(response, "", "  ")
 			if err != nil {
-				return "", fmt.Errorf("failed to marshal response: %w", err)
+				return "", cgerr.NewResourceError(
+					"Failed to marshal response",
+					err,
+					map[string]interface{}{
+						"response": fmt.Sprintf("%v", response),
+					},
+				)
 			}
 			return string(responseJSON), nil
 		}
@@ -119,7 +146,13 @@ func (p *AuthProvider) checkExistingToken() (string, error) {
 		log.Printf("AuthProvider.checkExistingToken: invalid token, starting new auth flow")
 	}
 
-	return "", fmt.Errorf("no valid token found")
+	return "", cgerr.NewAuthError(
+		"No valid token found",
+		nil,
+		map[string]interface{}{
+			"token_path": p.storage.TokenPath,
+		},
+	)
 }
 
 // handleFrobAuthentication processes authentication with a provided frob.
@@ -127,7 +160,13 @@ func (p *AuthProvider) handleFrobAuthentication(frob string) (string, string, er
 	// Try to get token for frob
 	auth, err := p.client.GetToken(frob)
 	if err != nil {
-		return "", "", fmt.Errorf("AuthProvider.handleFrobAuthentication: failed to get token: %w", err)
+		return "", "", cgerr.NewAuthError(
+			"Failed to get token for frob",
+			err,
+			map[string]interface{}{
+				"frob": frob,
+			},
+		)
 	}
 
 	// Store the token
@@ -149,7 +188,13 @@ func (p *AuthProvider) handleFrobAuthentication(frob string) (string, string, er
 
 	responseJSON, err := json.MarshalIndent(response, "", "  ")
 	if err != nil {
-		return "", "", fmt.Errorf("AuthProvider.handleFrobAuthentication: failed to marshal response: %w", err)
+		return "", "", cgerr.NewResourceError(
+			"Failed to marshal authentication response",
+			err,
+			map[string]interface{}{
+				"frob": frob,
+			},
+		)
 	}
 
 	return string(responseJSON), "application/json", nil
@@ -166,7 +211,13 @@ func (p *AuthProvider) startNewAuthFlow(args map[string]string) (string, string,
 	// Start desktop authentication flow
 	frob, err := p.client.GetFrob()
 	if err != nil {
-		return "", "", fmt.Errorf("AuthProvider.startNewAuthFlow: failed to get frob: %w", err)
+		return "", "", cgerr.NewAuthError(
+			"Failed to get frob for authentication flow",
+			err,
+			map[string]interface{}{
+				"perms": perms,
+			},
+		)
 	}
 
 	// Store frob with requested permissions
@@ -188,7 +239,14 @@ func (p *AuthProvider) startNewAuthFlow(args map[string]string) (string, string,
 
 	responseJSON, err := json.MarshalIndent(response, "", "  ")
 	if err != nil {
-		return "", "", fmt.Errorf("AuthProvider.startNewAuthFlow: failed to marshal response: %w", err)
+		return "", "", cgerr.NewResourceError(
+			"Failed to marshal auth flow response",
+			err,
+			map[string]interface{}{
+				"frob":  frob,
+				"perms": perms,
+			},
+		)
 	}
 
 	return string(responseJSON), "application/json", nil

@@ -4,6 +4,9 @@ package mcp
 import (
 	"context"
 	"fmt"
+
+	"github.com/cockroachdb/errors"
+	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
 // ResourceProvider defines an interface for components that provide MCP resources.
@@ -51,16 +54,32 @@ func (rm *ResourceManager) FindResourceProvider(name string) (ResourceProvider, 
 			}
 		}
 	}
-	return nil, fmt.Errorf("ResourceManager.FindResourceProvider: resource '%s' not found", name)
+
+	return nil, cgerr.NewResourceError(
+		fmt.Sprintf("resource '%s' not found", name),
+		nil,
+		map[string]interface{}{"resource_name": name},
+	)
 }
 
 // ReadResource reads a resource across all providers.
 func (rm *ResourceManager) ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error) {
 	provider, err := rm.FindResourceProvider(name)
 	if err != nil {
-		return "", "", fmt.Errorf("ResourceManager.ReadResource: %w", err)
+		return "", "", errors.Wrap(err, "failed to find resource provider")
 	}
-	return provider.ReadResource(ctx, name, args)
-}
 
-// ErrorMsgEnhanced:2025-03-26
+	content, mimeType, err := provider.ReadResource(ctx, name, args)
+	if err != nil {
+		return "", "", cgerr.NewResourceError(
+			fmt.Sprintf("failed to read resource '%s'", name),
+			err,
+			map[string]interface{}{
+				"resource_name": name,
+				"args":          args,
+			},
+		)
+	}
+
+	return content, mimeType, nil
+}

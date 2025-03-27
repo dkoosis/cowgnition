@@ -2,10 +2,11 @@
 package rtm
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
+
+	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
 // TokenStorage handles storing and retrieving auth tokens.
@@ -19,7 +20,14 @@ func NewTokenStorage(tokenPath string) (*TokenStorage, error) {
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(tokenPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("TokenStorage.NewTokenStorage: failed to create token directory: %w", err)
+		return nil, cgerr.NewAuthError(
+			"Failed to create token directory",
+			err,
+			map[string]interface{}{
+				"token_path": tokenPath,
+				"directory":  dir,
+			},
+		)
 	}
 
 	return &TokenStorage{
@@ -33,7 +41,13 @@ func (s *TokenStorage) SaveToken(token string) error {
 	defer s.mu.Unlock()
 
 	if err := os.WriteFile(s.TokenPath, []byte(token), 0600); err != nil {
-		return fmt.Errorf("TokenStorage.SaveToken: failed to write token file: %w", err)
+		return cgerr.NewAuthError(
+			"Failed to write token file",
+			err,
+			map[string]interface{}{
+				"token_path": s.TokenPath,
+			},
+		)
 	}
 	return nil
 }
@@ -48,10 +62,14 @@ func (s *TokenStorage) LoadToken() (string, error) {
 		if os.IsNotExist(err) {
 			return "", nil
 		}
-		return "", fmt.Errorf("TokenStorage.LoadToken: failed to read token file: %w", err)
+		return "", cgerr.NewAuthError(
+			"Failed to read token file",
+			err,
+			map[string]interface{}{
+				"token_path": s.TokenPath,
+			},
+		)
 	}
 
 	return string(data), nil
 }
-
-// ErrorMsgEnhanced:2025-03-26
