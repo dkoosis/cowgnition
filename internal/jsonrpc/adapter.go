@@ -4,11 +4,12 @@ package jsonrpc
 import (
 	"context"
 	"encoding/json"
-	"errors" // Added for errors.As
 	"fmt"
 	"log"
 	"time"
 
+	"github.com/cockroachdb/errors"
+	"github.com/dkoosis/cowgnition/internal/mcp"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -77,12 +78,15 @@ func (a *Adapter) getHandler(ctx context.Context, conn *jsonrpc2.Conn, req *json
 	handler, ok := a.handlers[req.Method]
 	if !ok {
 		// Method not found error
-		err := &jsonrpc2.Error{
-			Code:    jsonrpc2.CodeMethodNotFound,
-			Message: fmt.Sprintf("method %q not found", req.Method),
-		}
-		if err := conn.ReplyWithError(ctx, req.ID, err); err != nil {
-			log.Printf("jsonrpc.Adapter: error sending MethodNotFound error: %v", err)
+		methodError := errors.WithProperty(
+			errors.Newf("method %q not found", req.Method),
+			"category", mcp.ErrCategoryRPC,
+			"code", mcp.CodeMethodNotFound,
+			"method", req.Method,
+		)
+
+		if err := a.sendErrorResponse(ctx, conn, req, methodError); err != nil {
+			log.Printf("jsonrpc.Adapter: error sending MethodNotFound error: %+v", err)
 		}
 		return nil, false
 	}
@@ -126,7 +130,7 @@ func (a *Adapter) handleNotification(ctx context.Context, handler Handler, req *
 		defer cancel()
 
 		if _, err := handler(timeoutCtx, params); err != nil {
-			log.Printf("jsonrpc.Adapter: error handling notification: %v", err)
+			log.Printf("jsonrpc.Adapter: error handling notification: %+v", err)
 		}
 	}()
 }
@@ -157,12 +161,16 @@ func (a *Adapter) handleTimeout(ctx context.Context, conn *jsonrpc2.Conn, req *j
 
 	// Check if the context was canceled due to timeout
 	if timeoutCtx.Err() == context.DeadlineExceeded {
-		timeoutErr := &jsonrpc2.Error{
-			Code:    jsonrpc2.CodeInternalError,
-			Message: "request timed out",
-		}
-		if err := conn.ReplyWithError(ctx, req.ID, timeoutErr); err != nil {
-			log.Printf("jsonrpc.Adapter: error sending timeout error: %v", err)
+		timeoutErr := errors.WithProperty(
+			errors.Newf("request timed out after %v", a.requestTimeout),
+			"category", mcp.ErrCategoryRPC,
+			"code", mcp.CodeTimeoutError,
+			"method", req.Method,
+			"timeout", a.requestTimeout.String(),
+		)
+
+		if err := a.sendErrorResponse(ctx, conn, req, timeoutErr); err != nil {
+			log.Printf("jsonrpc.Adapter: error sending timeout error: %+v", err)
 		}
 	}
 }
@@ -170,77 +178,142 @@ func (a *Adapter) handleTimeout(ctx context.Context, conn *jsonrpc2.Conn, req *j
 // processResult handles the result from a handler execution.
 func (a *Adapter) processResult(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request, result interface{}, err error) {
 	if err != nil {
-		a.sendErrorResponse(ctx, conn, req, err)
+		if err := a.sendErrorResponse(ctx, conn, req, err); err != nil {
+			log.Printf("jsonrpc.Adapter: error sending error response: %+v", err)
+		}
 		return
 	}
 
 	// Send the result for requests (not notifications)
 	if !req.Notif {
 		if err := conn.Reply(ctx, req.ID, result); err != nil {
-			log.Printf("jsonrpc.Adapter: error sending response: %v", err)
+			log.Printf("jsonrpc.Adapter: error sending response: %+v", err)
 		}
 	}
 }
 
-// sendErrorResponse converts an error to a JSON-RPC error and sends it.
-func (a *Adapter) sendErrorResponse(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request, err error) {
+// sendErrorResponse converts an internal error to a JSON-RPC error and sends it.
+func (a *Adapter) sendErrorResponse(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request, err error) error {
 	// Only respond to requests, not notifications
 	if req.Notif {
-		return
+		return nil
 	}
 
-	// Convert error to JSON-RPC error
-	var rpcErr *jsonrpc2.Error
-	if errors.As(err, &rpcErr) {
-		// Already a JSON-RPC error, use it directly
-	} else {
-		rpcErr = &jsonrpc2.Error{
-			Code:    jsonrpc2.CodeInternalError,
-			Message: err.Error(),
+	// Get error properties
+	code := mcp.GetErrorCode(err)
+
+	// Create a user-facing message that doesn't expose internal details
+	message := "Internal server error"
+
+	// Determine user-facing message based on error code
+	switch code {
+	case mcp.CodeParseError:
+		message = "Failed to parse JSON request"
+	case mcp.CodeInvalidRequest:
+		message = "Invalid request format"
+	case mcp.CodeMethodNotFound:
+		message = fmt.Sprintf("Method '%s' not found", req.Method)
+	case mcp.CodeInvalidParams:
+		message = "Invalid method parameters"
+	case mcp.CodeResourceNotFound:
+		message = "Requested resource not found"
+	case mcp.CodeToolNotFound:
+		message = "Requested tool not found"
+	case mcp.CodeInvalidArguments:
+		message = "Invalid arguments provided"
+	case mcp.CodeTimeoutError:
+		message = "Request timed out"
+	}
+
+	// Extract properties that are safe to expose to clients
+	properties := mcp.GetErrorProperties(err)
+	safeProps := make(map[string]interface{})
+
+	// Only include safe properties in the error data
+	for k, v := range properties {
+		// Exclude internal properties and possibly sensitive data
+		if k != "category" && k != "code" && k != "stack" &&
+			!contains([]string{"token", "password", "secret", "key"}, k) {
+			safeProps[k] = v
 		}
 	}
 
-	if replyErr := conn.ReplyWithError(ctx, req.ID, rpcErr); replyErr != nil {
-		log.Printf("jsonrpc.Adapter: error sending error response: %v", replyErr)
+	// Create JSON-RPC error object
+	rpcErr := &jsonrpc2.Error{
+		Code:    int64(code),
+		Message: message,
 	}
+
+	// Add data field if we have safe properties to include
+	if len(safeProps) > 0 {
+		dataJSON, marshalErr := json.Marshal(safeProps)
+		if marshalErr == nil {
+			rpcErr.Data = (*json.RawMessage)(&dataJSON)
+		}
+	}
+
+	// Log the full error with all details for server-side debugging
+	log.Printf("JSON-RPC error: %+v", err)
+
+	// Send the sanitized error response to the client
+	return conn.ReplyWithError(ctx, req.ID, rpcErr)
 }
 
-// NewMethodNotFoundError creates a new MethodNotFound error.
-func NewMethodNotFoundError(method string) *jsonrpc2.Error {
-	return &jsonrpc2.Error{
-		Code:    jsonrpc2.CodeMethodNotFound,
-		Message: fmt.Sprintf("method %q not found", method),
+// Helper function to check if a string is in a slice
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
 	}
+	return false
 }
 
-// NewInvalidParamsError creates a new InvalidParams error.
-func NewInvalidParamsError(details string) *jsonrpc2.Error {
-	var data json.RawMessage
-	data, _ = json.Marshal(details)
+// NewInvalidParamsError creates a new InvalidParams error with properties.
+func NewInvalidParamsError(details string, properties map[string]interface{}) error {
+	err := errors.WithProperty(
+		errors.Newf("invalid params: %s", details),
+		"category", mcp.ErrCategoryRPC,
+		"code", mcp.CodeInvalidParams,
+	)
 
-	return &jsonrpc2.Error{
-		Code:    jsonrpc2.CodeInvalidParams,
-		Message: "invalid params",
-		Data:    &data, // Use pointer to the data
+	// Add additional properties
+	for k, v := range properties {
+		err = errors.WithProperty(err, k, v)
 	}
+
+	return err
 }
 
-// NewInternalError creates a new InternalError.
-func NewInternalError(err error) *jsonrpc2.Error {
-	var data json.RawMessage
-	data, _ = json.Marshal(err.Error())
+// NewInternalError creates a new InternalError with properties.
+func NewInternalError(err error, properties map[string]interface{}) error {
+	wrappedErr := errors.WithProperty(
+		errors.Wrap(err, "internal error"),
+		"category", mcp.ErrCategoryRPC,
+		"code", mcp.CodeInternalError,
+	)
 
-	return &jsonrpc2.Error{
-		Code:    jsonrpc2.CodeInternalError,
-		Message: "internal error",
-		Data:    &data, // Use pointer to the data
+	// Add additional properties
+	for k, v := range properties {
+		wrappedErr = errors.WithProperty(wrappedErr, k, v)
 	}
+
+	return wrappedErr
 }
 
-// NewTimeoutError creates a new TimeoutError.
-func NewTimeoutError() *jsonrpc2.Error {
-	return &jsonrpc2.Error{
-		Code:    jsonrpc2.CodeInternalError,
-		Message: "request timed out",
+// NewTimeoutError creates a new TimeoutError with properties.
+func NewTimeoutError(duration time.Duration, properties map[string]interface{}) error {
+	err := errors.WithProperty(
+		errors.Newf("request timed out after %v", duration),
+		"category", mcp.ErrCategoryRPC,
+		"code", mcp.CodeTimeoutError,
+		"timeout", duration.String(),
+	)
+
+	// Add additional properties
+	for k, v := range properties {
+		err = errors.WithProperty(err, k, v)
 	}
+
+	return err
 }

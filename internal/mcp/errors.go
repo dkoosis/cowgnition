@@ -36,37 +36,6 @@ const (
 	CodeTimeoutError     = -32005 // Operation timed out
 )
 
-// Base error type for MCP errors
-type McpError struct {
-	category string
-	code     int
-	message  string
-	cause    error
-}
-
-// Error implements the error interface
-func (e *McpError) Error() string {
-	if e.cause != nil {
-		return e.message + ": " + e.cause.Error()
-	}
-	return e.message
-}
-
-// Unwrap implements the errors.Wrapper interface
-func (e *McpError) Unwrap() error {
-	return e.cause
-}
-
-// Category returns the error category
-func (e *McpError) Category() string {
-	return e.category
-}
-
-// Code returns the JSON-RPC error code
-func (e *McpError) Code() int {
-	return e.code
-}
-
 // Base sentinel errors
 var (
 	// Resource errors
