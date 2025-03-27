@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
 // ErrorCode defines standardized error codes according to JSON-RPC 2.0.
@@ -49,8 +50,14 @@ func WriteJSONResponse(w http.ResponseWriter, data interface{}) {
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		log.Printf("httputils.WriteJSONResponse: failed to encode JSON response: %+v", err)
-		WriteErrorResponse(w, InternalError, "failed to encode response", nil)
+		wrappedErr := errors.Wrap(err, "failed to encode JSON response")
+		log.Printf("httputils.WriteJSONResponse: %+v", wrappedErr)
+
+		// Log error without assigning to unused variable
+		log.Printf("Error details: data_type=%T", data)
+
+		// Use our WriteErrorResponse function
+		WriteErrorResponse(w, InternalError, "Failed to encode response", nil)
 	}
 }
 
@@ -70,8 +77,22 @@ func WriteErrorResponse(w http.ResponseWriter, code ErrorCode, message string, d
 	w.WriteHeader(httpStatus)
 
 	if err := json.NewEncoder(w).Encode(errResp); err != nil {
-		err = errors.Wrap(err, "failed to encode error response")
-		log.Printf("httputils.WriteErrorResponse: %+v", err)
+		// Create a rich error object with context but don't assign to unused variable
+		// Just log it directly
+		wrappedErr := cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to encode error response"),
+			cgerr.CategoryRPC,
+			cgerr.CodeInternalError,
+			map[string]interface{}{
+				"original_error_code":    int(code),
+				"original_error_message": message,
+			},
+		)
+
+		// Log the full error with stack trace
+		log.Printf("httputils.WriteErrorResponse: %+v", wrappedErr)
+
+		// Fall back to a simple error response
 		http.Error(w, fmt.Sprintf("Internal error: %v", err), http.StatusInternalServerError)
 	}
 }

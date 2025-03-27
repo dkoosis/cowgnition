@@ -10,9 +10,11 @@ import (
 	"syscall"   // System call interface for signals.
 	"time"      // Time-related functionality.
 
+	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config" // Configuration loading.
 	"github.com/dkoosis/cowgnition/internal/mcp"    // MCP server logic.
-	"github.com/dkoosis/cowgnition/internal/rtm"    // RTM authentication.
+	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
+	"github.com/dkoosis/cowgnition/internal/rtm" // RTM authentication.
 )
 
 func main() {
@@ -36,7 +38,8 @@ func main() {
 	// The server orchestrates MCP communication.
 	server, err := mcp.NewServer(cfg)
 	if err != nil {
-		log.Fatalf("main: failed to create server: %v", err) // Terminate on fatal error.
+		// Use better error logging with stack trace
+		log.Fatalf("main: failed to create server: %+v", err)
 	}
 
 	// Set version.
@@ -46,7 +49,17 @@ func main() {
 	// Set transport type.
 	// Determines how the server communicates (HTTP or stdio).
 	if err := server.SetTransport(*transportType); err != nil {
-		log.Fatalf("main: failed to set transport: %v", err) // Terminate on invalid transport.
+		err = cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to set transport"),
+			cgerr.CategoryConfig,
+			cgerr.CodeInvalidParams,
+			map[string]interface{}{
+				"transport_type": *transportType,
+				"valid_types":    []string{"http", "stdio"},
+			},
+		)
+		// Use better error logging with stack trace
+		log.Fatalf("main: %+v", err)
 	}
 
 	// Set timeout configurations
@@ -68,7 +81,19 @@ func main() {
 	// Ensure API key and shared secret are available.
 	// These are essential for RTM communication.
 	if apiKey == "" || sharedSecret == "" {
-		log.Fatalf("main: missing RTM API credentials: API key and shared secret must be provided in config or environment variables") // Terminate if missing.
+		err := cgerr.ErrorWithDetails(
+			errors.New("missing RTM API credentials"),
+			cgerr.CategoryConfig,
+			cgerr.CodeInvalidParams,
+			map[string]interface{}{
+				"has_api_key":       apiKey != "",
+				"has_shared_secret": sharedSecret != "",
+				"rtm_api_key_env":   os.Getenv("RTM_API_KEY") != "",
+				"rtm_secret_env":    os.Getenv("RTM_SHARED_SECRET") != "",
+			},
+		)
+		// Use better error logging with stack trace
+		log.Fatalf("main: %+v", err)
 	}
 
 	// Get token path from config or env.
@@ -82,7 +107,8 @@ func main() {
 	// This allows using home directory shorthand.
 	expandedPath, err := config.ExpandPath(tokenPath)
 	if err != nil {
-		log.Fatalf("main: failed to expand token path: %v", err) // Terminate on error.
+		// Use better error logging with stack trace
+		log.Fatalf("main: failed to expand token path: %+v", err)
 	}
 	tokenPath = expandedPath
 
@@ -90,7 +116,8 @@ func main() {
 	// This handles RTM authentication within the server.
 	authProvider, err := rtm.NewAuthProvider(apiKey, sharedSecret, tokenPath)
 	if err != nil {
-		log.Fatalf("main: failed to create RTM auth provider: %v", err) // Terminate on error.
+		// Use better error logging with stack trace
+		log.Fatalf("main: failed to create RTM auth provider: %+v", err)
 	}
 	server.RegisterResourceProvider(authProvider) // Register with the server.
 
@@ -103,7 +130,8 @@ func main() {
 			<-signals                                               // Block until a signal is received.
 			log.Println("Shutting down server...")
 			if err := server.Stop(); err != nil {
-				log.Printf("main: error stopping server: %v", err) // Log any shutdown errors.
+				// Use better error logging with stack trace
+				log.Printf("main: error stopping server: %+v", err)
 			}
 		}()
 	}
@@ -112,6 +140,7 @@ func main() {
 	// This begins the main execution loop.
 	log.Printf("Starting CowGnition MCP server with %s transport", *transportType)
 	if err := server.Start(); err != nil {
-		log.Fatalf("main: server failed to start: %v", err) // Terminate if server fails to start.
+		// Use better error logging with stack trace
+		log.Fatalf("main: server failed to start: %+v", err)
 	}
 }

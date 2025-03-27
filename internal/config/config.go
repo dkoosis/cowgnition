@@ -7,6 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/cockroachdb/errors"
+	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
 // Settings represents the application configuration.
@@ -92,7 +95,15 @@ func ExpandPath(path string) (string, error) {
 
 	home, err := os.UserHomeDir() // Get the user's home directory.
 	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %w", err) // Return an error if we can't get the home directory.
+		return "", cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to get user home directory"),
+			cgerr.CategoryConfig,
+			cgerr.CodeInternalError,
+			map[string]interface{}{
+				"input_path": path,
+				"os_user":    os.Getenv("USER"),
+			},
+		)
 	}
 
 	return filepath.Join(home, path[1:]), nil // Join the home directory with the rest of the path.

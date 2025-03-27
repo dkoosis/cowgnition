@@ -4,6 +4,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
@@ -55,10 +56,21 @@ func (tm *ToolManager) FindToolProvider(name string) (ToolProvider, error) {
 		}
 	}
 
+	// Get all available tool names for better error context
+	var availableTools []string
+	for _, provider := range tm.providers {
+		for _, tool := range provider.GetToolDefinitions() {
+			availableTools = append(availableTools, tool.Name)
+		}
+	}
+
 	return nil, cgerr.NewToolError(
 		fmt.Sprintf("tool '%s' not found", name),
 		nil,
-		map[string]interface{}{"tool_name": name},
+		map[string]interface{}{
+			"tool_name":       name,
+			"available_tools": availableTools,
+		},
 	)
 }
 
@@ -69,14 +81,29 @@ func (tm *ToolManager) CallTool(ctx context.Context, name string, args map[strin
 		return "", errors.Wrap(err, "failed to find tool provider")
 	}
 
+	// Capture the start time for timing information
+	startTime := time.Now()
+
+	// Check for context cancellation or deadline
+	if ctx.Err() != nil {
+		return "", cgerr.NewTimeoutError(
+			fmt.Sprintf("context ended before executing tool '%s'", name),
+			map[string]interface{}{
+				"tool_name":     name,
+				"context_error": ctx.Err().Error(),
+			},
+		)
+	}
+
 	result, err := provider.CallTool(ctx, name, args)
 	if err != nil {
 		return "", cgerr.NewToolError(
 			fmt.Sprintf("failed to execute tool '%s'", name),
 			err,
 			map[string]interface{}{
-				"tool_name": name,
-				"args":      args,
+				"tool_name":      name,
+				"args":           args,
+				"operation_time": time.Since(startTime).String(),
 			},
 		)
 	}

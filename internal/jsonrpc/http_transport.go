@@ -4,12 +4,14 @@ package jsonrpc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -56,6 +58,17 @@ func NewHTTPHandler(handler jsonrpc2.Handler, opts ...HTTPHandlerOption) *HTTPHa
 // ServeHTTP implements the http.Handler interface.
 func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		methodErr := cgerr.ErrorWithDetails(
+			errors.Newf("method %s not allowed", r.Method),
+			cgerr.CategoryRPC,
+			cgerr.CodeInvalidRequest,
+			map[string]interface{}{
+				"allowed_method": "POST",
+				"actual_method":  r.Method,
+				"path":           r.URL.Path,
+			},
+		)
+		log.Printf("httputils.ServeHTTP: %+v", methodErr)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -79,12 +92,31 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Normal completion
 	case <-ctx.Done():
 		if ctx.Err() == context.DeadlineExceeded {
-			// Request timed out
+			// Create a timeout error with details
+			timeoutErr := cgerr.NewTimeoutError(
+				"HTTP request timed out",
+				map[string]interface{}{
+					"timeout_seconds": h.requestTimeout.Seconds(),
+					"path":            r.URL.Path,
+					"remote_addr":     r.RemoteAddr,
+				},
+			)
+			log.Printf("httputils.ServeHTTP: %+v", timeoutErr)
+
+			// Send timeout response
 			w.WriteHeader(http.StatusGatewayTimeout)
-			_, err := w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32603,"message":"request timed out"},"id":null}`))
-			if err != nil {
-				err = errors.Wrap(err, "failed to write timeout error response")
-				log.Printf("httpStream: %+v", err)
+			_, writeErr := w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32603,"message":"request timed out"},"id":null}`))
+			if writeErr != nil {
+				writeErrWithDetails := cgerr.ErrorWithDetails(
+					errors.Wrap(writeErr, "failed to write timeout error response"),
+					cgerr.CategoryRPC,
+					cgerr.CodeInternalError,
+					map[string]interface{}{
+						"path":        r.URL.Path,
+						"remote_addr": r.RemoteAddr,
+					},
+				)
+				log.Printf("httputils.ServeHTTP: %+v", writeErrWithDetails)
 			}
 		}
 	}
@@ -100,18 +132,39 @@ type httpStream struct {
 // WriteObject writes a JSON-RPC message to the HTTP response.
 func (s *httpStream) WriteObject(obj interface{}) error {
 	if s.closed {
-		return errors.New("connection closed: pipe is closed")
+		return cgerr.ErrorWithDetails(
+			errors.New("connection closed: pipe is closed"),
+			cgerr.CategoryRPC,
+			cgerr.CodeInternalError,
+			map[string]interface{}{
+				"object_type": fmt.Sprintf("%T", obj),
+			},
+		)
 	}
 
 	data, err := json.Marshal(obj)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal object")
+		return cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to marshal object"),
+			cgerr.CategoryRPC,
+			cgerr.CodeInternalError,
+			map[string]interface{}{
+				"object_type": fmt.Sprintf("%T", obj),
+			},
+		)
 	}
 
 	s.writer.Header().Set("Content-Type", "application/json")
 	_, err = s.writer.Write(data)
 	if err != nil {
-		return errors.Wrap(err, "failed to write response")
+		return cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to write response"),
+			cgerr.CategoryRPC,
+			cgerr.CodeInternalError,
+			map[string]interface{}{
+				"data_size": len(data),
+			},
+		)
 	}
 
 	return nil
@@ -120,16 +173,38 @@ func (s *httpStream) WriteObject(obj interface{}) error {
 // ReadObject reads a JSON-RPC message from the HTTP request.
 func (s *httpStream) ReadObject(v interface{}) error {
 	if s.closed {
-		return errors.New("connection closed: pipe is closed")
+		return cgerr.ErrorWithDetails(
+			errors.New("connection closed: pipe is closed"),
+			cgerr.CategoryRPC,
+			cgerr.CodeInternalError,
+			map[string]interface{}{
+				"target_type": fmt.Sprintf("%T", v),
+			},
+		)
 	}
 
 	data, err := io.ReadAll(s.reader)
 	if err != nil {
-		return errors.Wrap(err, "failed to read request body")
+		return cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to read request body"),
+			cgerr.CategoryRPC,
+			cgerr.CodeParseError,
+			map[string]interface{}{
+				"target_type": fmt.Sprintf("%T", v),
+			},
+		)
 	}
 
 	if err := json.Unmarshal(data, v); err != nil {
-		return errors.Wrap(err, "failed to unmarshal JSON")
+		return cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to unmarshal JSON"),
+			cgerr.CategoryRPC,
+			cgerr.CodeParseError,
+			map[string]interface{}{
+				"data_size":   len(data),
+				"target_type": fmt.Sprintf("%T", v),
+			},
+		)
 	}
 
 	return nil

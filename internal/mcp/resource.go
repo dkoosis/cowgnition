@@ -4,6 +4,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
@@ -55,10 +56,21 @@ func (rm *ResourceManager) FindResourceProvider(name string) (ResourceProvider, 
 		}
 	}
 
+	// Get all available resource names for better error context
+	var availableResources []string
+	for _, provider := range rm.providers {
+		for _, res := range provider.GetResourceDefinitions() {
+			availableResources = append(availableResources, res.Name)
+		}
+	}
+
 	return nil, cgerr.NewResourceError(
 		fmt.Sprintf("resource '%s' not found", name),
 		nil,
-		map[string]interface{}{"resource_name": name},
+		map[string]interface{}{
+			"resource_name":       name,
+			"available_resources": availableResources,
+		},
 	)
 }
 
@@ -69,17 +81,34 @@ func (rm *ResourceManager) ReadResource(ctx context.Context, name string, args m
 		return "", "", errors.Wrap(err, "failed to find resource provider")
 	}
 
-	content, mimeType, err := provider.ReadResource(ctx, name, args)
-	if err != nil {
-		return "", "", cgerr.NewResourceError(
-			fmt.Sprintf("failed to read resource '%s'", name),
-			err,
+	// Capture the start time for timing information
+	startTime := time.Now()
+
+	// Check for context cancellation or deadline
+	if ctx.Err() != nil {
+		return "", "", cgerr.NewTimeoutError(
+			fmt.Sprintf("context ended before reading resource '%s'", name),
 			map[string]interface{}{
 				"resource_name": name,
-				"args":          args,
+				"context_error": ctx.Err().Error(),
 			},
 		)
 	}
 
+	content, mimeType, err := provider.ReadResource(ctx, name, args)
+	if err != nil {
+		// Add more context to the error
+		return "", "", cgerr.NewResourceError(
+			fmt.Sprintf("failed to read resource '%s'", name),
+			err,
+			map[string]interface{}{
+				"resource_name":  name,
+				"args":           args,
+				"operation_time": time.Since(startTime).String(),
+			},
+		)
+	}
+
+	// Return the resource content
 	return content, mimeType, nil
 }

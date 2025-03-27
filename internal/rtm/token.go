@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/cockroachdb/errors"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
@@ -22,10 +23,11 @@ func NewTokenStorage(tokenPath string) (*TokenStorage, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, cgerr.NewAuthError(
 			"Failed to create token directory",
-			err,
+			errors.Wrap(err, "could not create directory"),
 			map[string]interface{}{
 				"token_path": tokenPath,
 				"directory":  dir,
+				"permission": "0755",
 			},
 		)
 	}
@@ -43,9 +45,11 @@ func (s *TokenStorage) SaveToken(token string) error {
 	if err := os.WriteFile(s.TokenPath, []byte(token), 0600); err != nil {
 		return cgerr.NewAuthError(
 			"Failed to write token file",
-			err,
+			errors.Wrap(err, "could not write file"),
 			map[string]interface{}{
-				"token_path": s.TokenPath,
+				"token_path":  s.TokenPath,
+				"permission":  "0600",
+				"token_bytes": len(token),
 			},
 		)
 	}
@@ -60,13 +64,14 @@ func (s *TokenStorage) LoadToken() (string, error) {
 	data, err := os.ReadFile(s.TokenPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", nil
+			return "", nil // Not an error if file doesn't exist yet
 		}
 		return "", cgerr.NewAuthError(
 			"Failed to read token file",
-			err,
+			errors.Wrap(err, "could not read file"),
 			map[string]interface{}{
-				"token_path": s.TokenPath,
+				"token_path":  s.TokenPath,
+				"file_exists": !os.IsNotExist(err),
 			},
 		)
 	}
