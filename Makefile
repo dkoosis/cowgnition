@@ -1,4 +1,7 @@
-.PHONY: all build clean test lint golangci-lint fmt check deps install-tools help
+# Specify phony targets (targets not associated with files)
+.PHONY: all build clean test lint golangci-lint fmt check deps install-tools check-line-length help
+
+# --- Configuration ---
 
 # Colors for output formatting
 GREEN := \033[0;32m
@@ -10,14 +13,21 @@ NC := \033[0m # No Color
 # Variables
 BINARY_NAME := cowgnition
 MAIN_PACKAGE := ./cmd/server
+# Find Go files, excluding vendor and test directories (adjust if needed)
 GO_FILES := $(shell find . -name "*.go" -not -path "./vendor/*" -not -path "./test/*")
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT_HASH := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 LDFLAGS := -ldflags "-X main.version=${VERSION} -X main.commitHash=${COMMIT_HASH} -X main.buildDate=${BUILD_DATE}"
 
+# Line length check configuration
+WARN_LINES := 300  # Warn if lines exceed this
+FAIL_LINES := 600  # Fail if lines exceed this
+
+# --- Core Targets ---
+
 # Default target - run all checks and build
-all: check deps fmt lint test build
+all: check deps fmt golangci-lint check-line-length test build
 	@printf "${GREEN}✓ All checks passed and build completed successfully!${NC}\n"
 
 # Build the application
@@ -34,8 +44,8 @@ clean:
 	@go clean -cache -testcache
 	@printf "${GREEN}✓ Cleaned${NC}\n"
 
-# Download dependencies
-deps:
+# --- Dependency Management ---
+
 # Download dependencies
 deps:
 	@printf "${BLUE}▶ Downloading dependencies...${NC}\n"
@@ -55,6 +65,9 @@ deps:
 	fi
 	@printf "${GREEN}✓ Dependencies downloaded${NC}\n"
 
+
+# --- Quality & Testing ---
+
 # Run tests
 test:
 	@printf "${BLUE}▶ Running tests...${NC}\n"
@@ -62,61 +75,85 @@ test:
 		printf "${GREEN}✓ Tests passed${NC}\n" || \
 		(printf "${RED}✗ Tests failed${NC}\n" && exit 1)
 
-# Run linters
+# Run basic Go linter (go vet)
 lint:
-	@printf "${BLUE}▶ Running linters...${NC}\n"
+	@printf "${BLUE}▶ Running linters (go vet)...${NC}\n"
 	@go vet ./... && \
-		printf "${GREEN}✓ Code looks good${NC}\n" || \
-		(printf "${RED}✗ Linting issues found${NC}\n" && exit 1)
+		printf "${GREEN}✓ go vet passed${NC}\n" || \
+		(printf "${RED}✗ go vet found issues${NC}\n" && exit 1)
 
-# Run golangci-lint
-golangci-lint:
+# Run comprehensive golangci-lint
+golangci-lint: install-tools # Ensure tool is installed first
 	@printf "${BLUE}▶ Running golangci-lint...${NC}\n"
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run && \
+	@golangci-lint run && \
 		printf "${GREEN}✓ golangci-lint passed${NC}\n" || \
-		(printf "${RED}✗ golangci-lint failed${NC}\n" && exit 1); \
-	else \
-		printf "${YELLOW}⚠ golangci-lint not found, run 'make install-tools' to install${NC}\n"; \
+		(printf "${RED}✗ golangci-lint failed${NC}\n" && exit 1)
+
+# Check Go file line lengths using external script
+check-line-length:
+	# Ensure the script exists and is executable
+	@if [ ! -x "./scripts/check_file_length.sh" ]; then \
+		printf "${RED}✗ Error: Script './scripts/check_file_length.sh' not found or not executable.${NC}\n"; \
 		exit 1; \
 	fi
+	# Execute the script; it will print its own status messages.
+	@./scripts/check_file_length.sh ${WARN_LINES} ${FAIL_LINES} ${GO_FILES}
 
-# Run gofmt
+# Run gofmt to format code
 fmt:
 	@printf "${BLUE}▶ Formatting code...${NC}\n"
 	@go fmt ./...
 	@printf "${GREEN}✓ Code formatted${NC}\n"
 
-# Install required tools
+# --- Tooling & Setup ---
+
+# Install required tools (currently just golangci-lint)
 install-tools:
 	@printf "${BLUE}▶ Installing required tools...${NC}\n"
 	@printf "  golangci-lint: "
 	@if command -v golangci-lint >/dev/null 2>&1; then \
 		printf "${GREEN}✓ Already installed${NC}\n"; \
 	else \
+		printf "Installing..." ;\
 		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && \
 		printf "${GREEN}✓ Installed${NC}\n" || \
-		printf "${RED}✗ Installation failed${NC}\n"; \
+		(printf "${RED}✗ Installation failed${NC}\n" && exit 1); \
 	fi
-	@printf "${GREEN}✓ Tools installation complete${NC}\n"
+	@printf "${GREEN}✓ Tools installation check complete${NC}\n"
 
-# Check for required tools
+# Check for required tools locally
 check:
 	@printf "${BLUE}▶ Checking for required tools...${NC}\n"
 	@printf "  Go:            "
 	@if command -v go >/dev/null 2>&1; then \
-		printf "${GREEN}✓ $(shell go version)${NC}\n"; else printf "${RED}✗${NC}\n"; fi
+		printf "${GREEN}✓ $(shell go version)${NC}\n"; \
+	else \
+		printf "${RED}✗ Not Found${NC}\n"; \
+		exit 1; \
+	fi
+	@printf "  golangci-lint: "
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		printf "${GREEN}✓ Found${NC}\n"; \
+	else \
+		printf "${YELLOW}⚠ Not Found (run 'make install-tools')${NC}\n"; \
+	fi
 	@printf "${GREEN}✓ Tool check complete${NC}\n"
 
-# Help target
+
+# --- Help ---
+
+# Help target: Display available commands
 help:
 	@printf "${BLUE}CowGnition Make Targets:${NC}\n"
-	@printf "  %-16s %s\n" "all" "Run checks, formatting, tests, and build (default)"
-	@printf "  %-16s %s\n" "build" "Build the application"
-	@printf "  %-16s %s\n" "clean" "Clean build artifacts"
-	@printf "  %-16s %s\n" "test" "Run tests"
-	@printf "  %-16s %s\n" "lint" "Run linters"
-	@printf "  %-16s %s\n" "golangci-lint" "Run golangci-lint specifically"
-	@printf "  %-16s %s\n" "fmt" "Format code"
-	@printf "  %-16s %s\n" "deps" "Download dependencies"
-	@printf "  %-16s %s\n" "install-tools" "Install required development tools"
+	@printf "  %-20s %s\n" "all" "Run checks, formatting, tests, and build (default)"
+	@printf "  %-20s %s\n" "build" "Build the application"
+	@printf "  %-20s %s\n" "clean" "Clean build artifacts"
+	@printf "  %-20s %s\n" "test" "Run tests"
+	@printf "  %-20s %s\n" "lint" "Run basic 'go vet' linter"
+	@printf "  %-20s %s\n" "golangci-lint" "Run comprehensive golangci-lint"
+	@printf "  %-20s %s\n" "check-line-length" "Check Go file line count (W:${WARN_LINES}, F:${FAIL_LINES})"
+	@printf "  %-20s %s\n" "fmt" "Format code using 'go fmt'"
+	@printf "  %-20s %s\n" "deps" "Tidy and download dependencies"
+	@printf "  %-20s %s\n" "install-tools" "Install required development tools (golangci-lint)"
+	@printf "  %-20s %s\n" "check" "Check if required tools (Go) are installed"
+	@printf "  %-20s %s\n" "help" "Display this help message"
