@@ -8,6 +8,7 @@ import (
 	"os"        // OS-level interactions like environment variables.
 	"os/signal" // Signal handling for graceful shutdown.
 	"syscall"   // System call interface for signals.
+	"time"      // Time-related functionality.
 
 	"github.com/dkoosis/cowgnition/internal/config" // Configuration loading.
 	"github.com/dkoosis/cowgnition/internal/mcp"    // MCP server logic.
@@ -18,6 +19,8 @@ func main() {
 	// Parse command-line flags
 	transportType := flag.String("transport", "http", "Transport type (http or stdio)")
 	configPath := flag.String("config", "", "Path to configuration file")
+	requestTimeout := flag.Duration("request-timeout", 30*time.Second, "Timeout for JSON-RPC requests")
+	shutdownTimeout := flag.Duration("shutdown-timeout", 5*time.Second, "Timeout for graceful shutdown")
 	flag.Parse()
 
 	// Load configuration.
@@ -45,6 +48,10 @@ func main() {
 	if err := server.SetTransport(*transportType); err != nil {
 		log.Fatalf("main: failed to set transport: %v", err) // Terminate on invalid transport.
 	}
+
+	// Set timeout configurations
+	server.SetRequestTimeout(*requestTimeout)
+	server.SetShutdownTimeout(*shutdownTimeout)
 
 	// Get RTM API credentials from environment or config.
 	// Environment variables override config for flexibility.

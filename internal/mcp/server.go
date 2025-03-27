@@ -24,6 +24,8 @@ type Server struct {
 	resourceManager *ResourceManager // resourceManager: Manages resource providers and resources.
 	toolManager     *ToolManager     // toolManager: Manages tool providers and tools.
 	transport       string           // transport: The transport type (http or stdio).
+	requestTimeout  time.Duration    // requestTimeout: The timeout for JSON-RPC requests.
+	shutdownTimeout time.Duration    // shutdownTimeout: The timeout for graceful shutdown.
 }
 
 // NewServer creates a new MCP server.
@@ -44,6 +46,8 @@ func NewServer(cfg *config.Settings) (*Server, error) {
 		resourceManager: NewResourceManager(), // Initialize the resource manager.
 		toolManager:     NewToolManager(),     // Initialize the tool manager.
 		transport:       "http",               // Default transport type.
+		requestTimeout:  30 * time.Second,     // Default request timeout
+		shutdownTimeout: 5 * time.Second,      // Default shutdown timeout
 	}, nil
 }
 
@@ -55,6 +59,16 @@ func (s *Server) SetTransport(transport string) error {
 	}
 	s.transport = transport
 	return nil
+}
+
+// SetRequestTimeout sets the timeout for JSON-RPC requests.
+func (s *Server) SetRequestTimeout(timeout time.Duration) {
+	s.requestTimeout = timeout
+}
+
+// SetShutdownTimeout sets the timeout for graceful shutdown.
+func (s *Server) SetShutdownTimeout(timeout time.Duration) {
+	s.shutdownTimeout = timeout
 }
 
 // Start starts the MCP server using the configured transport.
@@ -96,8 +110,8 @@ func (s *Server) startHTTP() error {
 	s.httpServer = &http.Server{
 		Addr:         s.config.GetServerAddress(), // Use the configured server address.
 		Handler:      mux,                         // Use the multiplexer.
-		ReadTimeout:  15 * time.Second,            // Read timeout.
-		WriteTimeout: 15 * time.Second,            // Write timeout.
+		ReadTimeout:  s.requestTimeout,            // Use configured timeout for reads.
+		WriteTimeout: s.requestTimeout,            // Use configured timeout for writes.
 		IdleTimeout:  60 * time.Second,            // Idle timeout.
 	}
 
@@ -117,15 +131,20 @@ func (s *Server) startHTTP() error {
 //
 //	error: An error if the server fails to start.
 func (s *Server) startStdio() error {
-	// Create a JSON-RPC adapter
-	adapter := jsonrpc.NewAdapter()
+	// Create a JSON-RPC adapter with the configured timeout
+	adapter := jsonrpc.NewAdapter(jsonrpc.WithTimeout(s.requestTimeout))
 
 	// Register the MCP handlers
 	s.RegisterJSONRPCHandlers(adapter)
 
-	// Start the stdio server
+	// Start the stdio server with timeouts
 	log.Printf("Server.startStdio: starting MCP server with stdio transport")
-	if err := jsonrpc.RunStdioServer(adapter); err != nil {
+	stdioOpts := []jsonrpc.StdioTransportOption{
+		jsonrpc.WithStdioRequestTimeout(s.requestTimeout),
+		jsonrpc.WithStdioReadTimeout(s.requestTimeout),
+		jsonrpc.WithStdioWriteTimeout(s.requestTimeout),
+	}
+	if err := jsonrpc.RunStdioServer(adapter, stdioOpts...); err != nil {
 		return fmt.Errorf("Server.startStdio: failed to start stdio server: %w", err)
 	}
 
@@ -140,7 +159,7 @@ func (s *Server) startStdio() error {
 //	error: An error if the server fails to stop.
 func (s *Server) Stop() error {
 	if s.transport == "http" && s.httpServer != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
 		defer cancel()
 
 		if err := s.httpServer.Shutdown(ctx); err != nil {
@@ -187,8 +206,6 @@ func (s *Server) RegisterResourceProvider(provider ResourceProvider) {
 func (s *Server) RegisterToolProvider(provider ToolProvider) {
 	s.toolManager.RegisterProvider(provider) // Register the provider.
 }
-
-// Add this to internal/mcp/server.go
 
 // RegisterJSONRPCHandlers registers the MCP handlers with the JSON-RPC adapter.
 func (s *Server) RegisterJSONRPCHandlers(adapter *jsonrpc.Adapter) {
