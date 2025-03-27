@@ -3,6 +3,10 @@
 package mcperror
 
 import (
+	"regexp"
+	"strconv"
+	"strings"
+
 	"github.com/cockroachdb/errors"
 )
 
@@ -44,9 +48,10 @@ func IsInvalidArgumentsError(err error) bool {
 //	    // Handle RPC errors differently
 //	}
 func GetErrorCategory(err error) string {
-	if category, ok := errors.TryGetProperty(err, "category"); ok {
-		if cat, ok := category.(string); ok {
-			return cat
+	details := errors.GetAllDetails(err)
+	for _, detail := range details {
+		if strings.HasPrefix(detail, "category:") {
+			return strings.TrimPrefix(detail, "category:")
 		}
 	}
 	return ""
@@ -60,9 +65,14 @@ func GetErrorCategory(err error) string {
 //	    // Handle resource not found case
 //	}
 func GetErrorCode(err error) int {
-	if code, ok := errors.TryGetProperty(err, "code"); ok {
-		if c, ok := code.(int); ok {
-			return c
+	details := errors.GetAllDetails(err)
+	for _, detail := range details {
+		if strings.HasPrefix(detail, "code:") {
+			codeStr := strings.TrimPrefix(detail, "code:")
+			code, parseErr := strconv.Atoi(codeStr)
+			if parseErr == nil {
+				return code
+			}
 		}
 	}
 	return CodeInternalError // Default to internal error
@@ -75,19 +85,30 @@ func GetErrorCode(err error) int {
 //	resourceID, ok := props["resource_id"].(string)
 func GetErrorProperties(err error) map[string]interface{} {
 	properties := make(map[string]interface{})
+	details := errors.GetAllDetails(err)
 
-	// This walks the chain of wrapped errors and collects all properties
-	errors.WalkErrors(err, func(e error) bool {
-		if ps, ok := errors.TryGetProperties(e); ok {
-			for k, v := range ps {
-				// Don't overwrite existing properties (give precedence to outer errors)
-				if _, exists := properties[k]; !exists {
-					properties[k] = v
+	// Regular expression to match "key:value" details
+	re := regexp.MustCompile(`^([^:]+):(.+)$`)
+
+	for _, detail := range details {
+		matches := re.FindStringSubmatch(detail)
+		if len(matches) == 3 {
+			key := matches[1]
+			value := matches[2]
+
+			// Skip internal properties
+			if key != "category" && key != "code" {
+				// Try to convert to appropriate type
+				if intVal, err := strconv.Atoi(value); err == nil {
+					properties[key] = intVal
+				} else if boolVal, err := strconv.ParseBool(value); err == nil {
+					properties[key] = boolVal
+				} else {
+					properties[key] = value
 				}
 			}
 		}
-		return true // Continue walking the error chain
-	})
+	}
 
 	return properties
 }

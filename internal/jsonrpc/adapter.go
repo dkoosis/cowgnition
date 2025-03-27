@@ -4,12 +4,11 @@ package jsonrpc
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/mcp"
+	"github.com/dkoosis/cowgnition/internal/mcperror"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -77,15 +76,14 @@ func (a *Adapter) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2
 func (a *Adapter) getHandler(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) (Handler, bool) {
 	handler, ok := a.handlers[req.Method]
 	if !ok {
-		// Method not found error
-		methodError := errors.WithProperty(
-			errors.Newf("method %q not found", req.Method),
-			"category", mcp.ErrCategoryRPC,
-			"code", mcp.CodeMethodNotFound,
-			"method", req.Method,
-		)
+		// Create a method not found error with the method name as a property
+		properties := map[string]interface{}{
+			"request_id": req.ID,
+		}
+		methodError := mcperror.NewMethodNotFoundError(req.Method, properties)
 
 		if err := a.sendErrorResponse(ctx, conn, req, methodError); err != nil {
+			// Log the full error with stack trace for server-side debugging
 			log.Printf("jsonrpc.Adapter: error sending MethodNotFound error: %+v", err)
 		}
 		return nil, false
@@ -130,6 +128,7 @@ func (a *Adapter) handleNotification(ctx context.Context, handler Handler, req *
 		defer cancel()
 
 		if _, err := handler(timeoutCtx, params); err != nil {
+			// Log the full error with stack trace for server-side debugging
 			log.Printf("jsonrpc.Adapter: error handling notification: %+v", err)
 		}
 	}()
@@ -161,12 +160,15 @@ func (a *Adapter) handleTimeout(ctx context.Context, conn *jsonrpc2.Conn, req *j
 
 	// Check if the context was canceled due to timeout
 	if timeoutCtx.Err() == context.DeadlineExceeded {
-		timeoutErr := errors.WithProperty(
-			errors.Newf("request timed out after %v", a.requestTimeout),
-			"category", mcp.ErrCategoryRPC,
-			"code", mcp.CodeTimeoutError,
-			"method", req.Method,
-			"timeout", a.requestTimeout.String(),
+		properties := map[string]interface{}{
+			"method":      req.Method,
+			"timeout_sec": a.requestTimeout.Seconds(),
+			"request_id":  req.ID,
+		}
+
+		timeoutErr := mcperror.NewTimeoutError(
+			"Request timed out while executing handler",
+			properties,
 		)
 
 		if err := a.sendErrorResponse(ctx, conn, req, timeoutErr); err != nil {
@@ -187,7 +189,14 @@ func (a *Adapter) processResult(ctx context.Context, conn *jsonrpc2.Conn, req *j
 	// Send the result for requests (not notifications)
 	if !req.Notif {
 		if err := conn.Reply(ctx, req.ID, result); err != nil {
-			log.Printf("jsonrpc.Adapter: error sending response: %+v", err)
+			// Wrap the error with additional context
+			wrappedErr := errors.Wrapf(err, "failed to send response for method %s", req.Method)
+			wrappedErr = mcperror.ErrorWithDetails(wrappedErr, mcperror.CategoryRPC, mcperror.CodeInternalError,
+				map[string]interface{}{
+					"method":     req.Method,
+					"request_id": req.ID,
+				})
+			log.Printf("jsonrpc.Adapter: error sending response: %+v", wrappedErr)
 		}
 	}
 }
@@ -199,41 +208,19 @@ func (a *Adapter) sendErrorResponse(ctx context.Context, conn *jsonrpc2.Conn, re
 		return nil
 	}
 
-	// Get error properties
-	code := mcp.GetErrorCode(err)
-
-	// Create a user-facing message that doesn't expose internal details
-	message := "Internal server error"
-
-	// Determine user-facing message based on error code
-	switch code {
-	case mcp.CodeParseError:
-		message = "Failed to parse JSON request"
-	case mcp.CodeInvalidRequest:
-		message = "Invalid request format"
-	case mcp.CodeMethodNotFound:
-		message = fmt.Sprintf("Method '%s' not found", req.Method)
-	case mcp.CodeInvalidParams:
-		message = "Invalid method parameters"
-	case mcp.CodeResourceNotFound:
-		message = "Requested resource not found"
-	case mcp.CodeToolNotFound:
-		message = "Requested tool not found"
-	case mcp.CodeInvalidArguments:
-		message = "Invalid arguments provided"
-	case mcp.CodeTimeoutError:
-		message = "Request timed out"
-	}
+	// Get error code and prepare the client-safe message
+	code := mcperror.GetErrorCode(err)
+	message := mcperror.UserFacingMessage(code)
 
 	// Extract properties that are safe to expose to clients
-	properties := mcp.GetErrorProperties(err)
+	properties := mcperror.GetErrorProperties(err)
 	safeProps := make(map[string]interface{})
 
 	// Only include safe properties in the error data
 	for k, v := range properties {
 		// Exclude internal properties and possibly sensitive data
 		if k != "category" && k != "code" && k != "stack" &&
-			!contains([]string{"token", "password", "secret", "key"}, k) {
+			!containsSensitiveKeyword(k) {
 			safeProps[k] = v
 		}
 	}
@@ -253,16 +240,18 @@ func (a *Adapter) sendErrorResponse(ctx context.Context, conn *jsonrpc2.Conn, re
 	}
 
 	// Log the full error with all details for server-side debugging
+	// The %+v format includes stack traces provided by cockroachdb/errors
 	log.Printf("JSON-RPC error: %+v", err)
 
 	// Send the sanitized error response to the client
 	return conn.ReplyWithError(ctx, req.ID, rpcErr)
 }
 
-// Helper function to check if a string is in a slice
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
+// Helper function to check if a string might contain sensitive information
+func containsSensitiveKeyword(key string) bool {
+	sensitiveKeywords := []string{"token", "password", "secret", "key", "auth", "credential"}
+	for _, keyword := range sensitiveKeywords {
+		if key == keyword {
 			return true
 		}
 	}
@@ -271,49 +260,11 @@ func contains(slice []string, item string) bool {
 
 // NewInvalidParamsError creates a new InvalidParams error with properties.
 func NewInvalidParamsError(details string, properties map[string]interface{}) error {
-	err := errors.WithProperty(
-		errors.Newf("invalid params: %s", details),
-		"category", mcp.ErrCategoryRPC,
-		"code", mcp.CodeInvalidParams,
-	)
-
-	// Add additional properties
-	for k, v := range properties {
-		err = errors.WithProperty(err, k, v)
-	}
-
-	return err
+	return mcperror.NewInvalidArgumentsError(details, properties)
 }
 
 // NewInternalError creates a new InternalError with properties.
 func NewInternalError(err error, properties map[string]interface{}) error {
-	wrappedErr := errors.WithProperty(
-		errors.Wrap(err, "internal error"),
-		"category", mcp.ErrCategoryRPC,
-		"code", mcp.CodeInternalError,
-	)
-
-	// Add additional properties
-	for k, v := range properties {
-		wrappedErr = errors.WithProperty(wrappedErr, k, v)
-	}
-
-	return wrappedErr
-}
-
-// NewTimeoutError creates a new TimeoutError with properties.
-func NewTimeoutError(duration time.Duration, properties map[string]interface{}) error {
-	err := errors.WithProperty(
-		errors.Newf("request timed out after %v", duration),
-		"category", mcp.ErrCategoryRPC,
-		"code", mcp.CodeTimeoutError,
-		"timeout", duration.String(),
-	)
-
-	// Add additional properties
-	for k, v := range properties {
-		err = errors.WithProperty(err, k, v)
-	}
-
-	return err
+	wrappedErr := errors.Wrapf(err, "internal server error")
+	return mcperror.ErrorWithDetails(wrappedErr, mcperror.CategoryRPC, mcperror.CodeInternalError, properties)
 }
