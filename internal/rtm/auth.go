@@ -28,9 +28,9 @@ type Error struct {
 // It encapsulates the basic user information returned by the RTM API,
 // such as ID, username, and full name.
 type User struct {
-	ID       string `json:"id,attr"`       // ID: The user's unique ID.
-	Username string `json:"username,attr"` // Username: The user's username.
-	Fullname string `json:"fullname,attr"` // Fullname: The user's full name.
+	ID       string `json:"id"`       // ID: The user's unique ID.
+	Username string `json:"username"` // Username: The user's username.
+	Fullname string `json:"fullname"` // Fullname: The user's full name.
 }
 
 // Auth represents an RTM authentication response.

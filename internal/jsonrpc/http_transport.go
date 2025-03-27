@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -79,7 +80,10 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if ctx.Err() == context.DeadlineExceeded {
 			// Request timed out
 			w.WriteHeader(http.StatusGatewayTimeout)
-			w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32603,"message":"request timed out"},"id":null}`))
+			_, err := w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32603,"message":"request timed out"},"id":null}`))
+			if err != nil {
+				log.Printf("httpStream: failed to write timeout error response: %v", err)
+			}
 		}
 	}
 }

@@ -19,6 +19,11 @@ type Error struct {
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
+// Error returns the error message, implementing the error interface.
+func (e *Error) Error() string {
+	return fmt.Sprintf("JSON-RPC error %d: %s", e.Code, e.Message)
+}
+
 // Standard JSON-RPC 2.0 error codes.
 const (
 	CodeParseError     = -32700

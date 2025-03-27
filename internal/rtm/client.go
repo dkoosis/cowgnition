@@ -2,6 +2,7 @@
 package rtm
 
 import (
+	"context"
 	"crypto/md5" // #nosec G501 - RTM API specifically requires MD5 for request signing
 	"encoding/hex"
 	"fmt"
@@ -100,10 +101,11 @@ func (c *Client) MakeRequest(method string, params map[string]string) ([]byte, e
 	log.Printf("Making RTM API request: %s", requestURL)
 
 	// Make HTTP request
-	resp, err := c.HTTPClient.Get(requestURL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("Client.MakeRequest: failed to execute HTTP request: %w", err)
+		return nil, fmt.Errorf("Client.MakeRequest: failed to create HTTP request: %w", err)
 	}
+	resp, err := c.HTTPClient.Do(req)
 	defer resp.Body.Close()
 
 	// Read response body
