@@ -1,4 +1,4 @@
-// Package config handles application configuration.
+// package config handles application configuration.
 // file: internal/config/config.go
 package config
 
@@ -16,31 +16,31 @@ import (
 // It encapsulates all configuration settings for the application.
 // This design allows for easy management and access to configuration values throughout the codebase.
 type Settings struct {
-	Server ServerConfig // Server: Configuration related to the server.
-	RTM    RTMConfig    // RTM: Configuration for the Remember The Milk API.
-	Auth   AuthConfig   // Auth: Configuration for authentication mechanisms.
+	Server ServerConfig `yaml:"server"` // Server: Configuration related to the server.
+	RTM    RTMConfig    `yaml:"rtm"`    // RTM: Configuration for the Remember The Milk API.
+	Auth   AuthConfig   `yaml:"auth"`   // Auth: Configuration for authentication mechanisms.
 }
 
 // ServerConfig contains server configuration.
 // This is separated to group server-specific settings together,
 // promoting modularity and clarity in the configuration structure.
 type ServerConfig struct {
-	Name string // Name: The name of the server.
-	Port int    // Port: The port on which the server listens.
+	Name string `yaml:"name"` // Name: The name of the server.
+	Port int    `yaml:"port"` // Port: The port on which the server listens.
 }
 
 // RTMConfig contains RTM API configuration.
 // It holds the necessary credentials to interact with the Remember The Milk API.
 type RTMConfig struct {
-	APIKey       string // APIKey: The API key for RTM.
-	SharedSecret string // SharedSecret: The shared secret for RTM.
+	APIKey       string `yaml:"api_key"`       // APIKey: The API key for RTM.
+	SharedSecret string `yaml:"shared_secret"` // SharedSecret: The shared secret for RTM.
 }
 
 // AuthConfig contains authentication configuration.
 // This section manages settings related to user authentication,
 // such as where to store tokens.
 type AuthConfig struct {
-	TokenPath string // TokenPath: The file path to store authentication tokens.
+	TokenPath string `yaml:"token_path"` // TokenPath: The file path to store authentication tokens.
 }
 
 // New creates a new configuration with default values.
@@ -108,5 +108,3 @@ func ExpandPath(path string) (string, error) {
 
 	return filepath.Join(home, path[1:]), nil // Join the home directory with the rest of the path.
 }
-
-// DocEnhanced: 2024-08-27

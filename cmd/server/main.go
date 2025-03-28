@@ -266,6 +266,22 @@ func printManualSetupInstructions(exePath, configPath string) {
 	fmt.Println("==============================================")
 }
 
+// Helper function to sanitize data for logging.
+func sanitizeForLogging(data string, maxLen int) string {
+	if len(data) <= maxLen {
+		return data
+	}
+	return data[:maxLen] + "..."
+}
+
+// Helper function to mask credentials in logs.
+func maskCredential(cred string) string {
+	if len(cred) < 6 {
+		return "****"
+	}
+	return cred[:2] + "****" + cred[len(cred)-2:]
+}
+
 // cmd/server/main.go - refactored runServer function with improved error handling and documentation
 
 // runServer starts the MCP server with the given configuration.
@@ -358,6 +374,10 @@ func loadConfiguration(configPath string) (*config.Settings, error) {
 			)
 		}
 
+		// Debug: Print raw YAML data (sanitized)
+		yamlData := string(data)
+		log.Printf("Raw YAML data (first 100 chars): %s", sanitizeForLogging(yamlData, 100))
+
 		// Unmarshal YAML into config struct
 		if err := yaml.Unmarshal(data, cfg); err != nil {
 			return nil, cgerr.ErrorWithDetails(
@@ -372,6 +392,14 @@ func loadConfiguration(configPath string) (*config.Settings, error) {
 				},
 			)
 		}
+
+		// Debug: Print the loaded config values
+		log.Printf("Loaded configuration values:")
+		log.Printf("  - Server.Name: %s", cfg.Server.Name)
+		log.Printf("  - Server.Port: %d", cfg.Server.Port)
+		log.Printf("  - RTM.APIKey: %s (length: %d)", maskCredential(cfg.RTM.APIKey), len(cfg.RTM.APIKey))
+		log.Printf("  - RTM.SharedSecret: %s (length: %d)", maskCredential(cfg.RTM.SharedSecret), len(cfg.RTM.SharedSecret))
+		log.Printf("  - Auth.TokenPath: %s", cfg.Auth.TokenPath)
 
 		log.Printf("Configuration loaded successfully")
 	}

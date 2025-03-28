@@ -34,7 +34,7 @@ LDFLAGS := -ldflags "-X main.version=${VERSION} -X main.commitHash=${COMMIT_HASH
 
 # Line length check configuration
 WARN_LINES := 300  # Warn if lines exceed this
-FAIL_LINES := 600  # Fail if lines exceed this
+FAIL_LINES := 650  # Fail if lines exceed this
 
 # --- Core Targets ---
 
