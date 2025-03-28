@@ -88,9 +88,9 @@ func printUsage() {
 func getDefaultConfigPath() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return "configs/cowgnition-config.yaml" // Fallback to local directory.
+		return "configs/cowgnition.yaml" // Fallback to local directory.
 	}
-	return filepath.Join(homeDir, ".config", "cowgnition", "cowgnition-config.yaml")
+	return filepath.Join(homeDir, "cowgnition.yaml")
 }
 
 // runSetup performs the setup process for CowGnition and Claude Desktop integration.
