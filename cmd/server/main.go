@@ -90,7 +90,7 @@ func getDefaultConfigPath() string {
 	if err != nil {
 		return "configs/cowgnition.yaml" // Fallback to local directory.
 	}
-	return filepath.Join(homeDir, "cowgnition.yaml")
+	return filepath.Join(homeDir, ".config", "cowgnition", "cowgnition.yaml")
 }
 
 // runSetup performs the setup process for CowGnition and Claude Desktop integration.
@@ -150,8 +150,9 @@ func createDefaultConfig(configPath string) error {
 
 	// Default config sample.
 	defaultConfig := `server:
-  name: "CowGnition RTM"
+  name: "cowgnition"
   port: 8080
+
 
 rtm:
   api_key: ""
