@@ -1,5 +1,15 @@
 # CowGnition Implementation Roadmap
 
+## TOP PRIORITY: Debug RTM Credentials Loading Issue
+
+Problem: Server fails with "missing RTM API credentials" despite valid credentials in config file
+Error Details: Config shows config_has_key:false and config_has_secret:false despite values in YAML
+Focus Areas:
+Verify YAML struct tags match the config file format
+Add debug logging to print loaded config values
+Check for case sensitivity issues or YAML parsing problems
+Investigate potential struct initialization problems
+
 ## 1. Core JSON-RPC Implementation
 
 - [ ] Create message dispatcher:
