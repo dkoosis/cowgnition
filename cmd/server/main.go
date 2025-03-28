@@ -18,6 +18,7 @@ import (
 	"github.com/dkoosis/cowgnition/internal/mcp"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/dkoosis/cowgnition/internal/rtm"
+	"gopkg.in/yaml.v3"
 )
 
 // ClaudeDesktopConfig represents the structure of Claude Desktop's configuration file.
@@ -153,7 +154,6 @@ func createDefaultConfig(configPath string) error {
   name: "cowgnition"
   port: 8080
 
-
 rtm:
   api_key: ""
   shared_secret: ""
@@ -275,9 +275,22 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	// Load configuration.
 	cfg := config.New()
 
-	// TODO: Load configuration from file if specified.
+	// Load configuration from file if specified.
 	if configPath != "" {
-		log.Printf("Configuration file loading not yet implemented. Using default configuration.")
+		log.Printf("Loading configuration from %s", configPath)
+
+		// Read the file
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("failed to read configuration file: %s", configPath))
+		}
+
+		// Unmarshal YAML into config struct
+		if err := yaml.Unmarshal(data, cfg); err != nil {
+			return errors.Wrap(err, "failed to parse configuration file")
+		}
+
+		log.Printf("Configuration loaded successfully")
 	}
 
 	// Create and start MCP server.
