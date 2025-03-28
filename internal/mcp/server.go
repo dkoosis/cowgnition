@@ -236,6 +236,7 @@ func (s *Server) handleJSONRPCInitialize(ctx context.Context, params json.RawMes
 	// Log initialization request
 	log.Printf("MCP initialization requested by: %s (version: %s)",
 		req.ServerName, req.ServerVersion)
+	log.Printf("Client protocol version: %s", req.ProtocolVersion)
 
 	// Construct server information
 	serverInfo := ServerInfo{
@@ -259,8 +260,11 @@ func (s *Server) handleJSONRPCInitialize(ctx context.Context, params json.RawMes
 	response := InitializeResponse{
 		ServerInfo:   serverInfo,
 		Capabilities: capabilities,
+		// Make sure to include the protocol version to match the client's request
+		ProtocolVersion: req.ProtocolVersion,
 	}
 
+	log.Printf("Sending initialize response: %+v", response)
 	return response, nil
 }
 

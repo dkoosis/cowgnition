@@ -3,20 +3,27 @@ package mcp
 
 // InitializeRequest represents the MCP initialize request structure.
 type InitializeRequest struct {
-	ServerName    string `json:"server_name"`
-	ServerVersion string `json:"server_version"`
+	ServerName      string `json:"server_name"`     // Optional in newer MCP spec versions
+	ServerVersion   string `json:"server_version"`  // Optional in newer MCP spec versions
+	ProtocolVersion string `json:"protocolVersion"` // Protocol version
+	ClientInfo      struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	} `json:"clientInfo"` // Client information
+	Capabilities map[string]interface{} `json:"capabilities"` // Client capabilities
+}
+
+// InitializeResponse represents the MCP initialize response structure.
+type InitializeResponse struct {
+	ServerInfo      ServerInfo             `json:"server_info"`
+	Capabilities    map[string]interface{} `json:"capabilities"`
+	ProtocolVersion string                 `json:"protocolVersion"` // Protocol version
 }
 
 // ServerInfo represents the server information structure.
 type ServerInfo struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
-}
-
-// InitializeResponse represents the MCP initialize response structure.
-type InitializeResponse struct {
-	ServerInfo   ServerInfo             `json:"server_info"`
-	Capabilities map[string]interface{} `json:"capabilities"`
 }
 
 // ResourceDefinition represents an MCP resource structure.
