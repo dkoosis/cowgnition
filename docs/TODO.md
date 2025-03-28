@@ -1,14 +1,33 @@
 # CowGnition Implementation Roadmap
 
-## TOP PRIORITY: Debug RTM Credentials Loading Issue
+## TOP PRIORITY: Debug connection with Claude Desktop
 
-Problem: Server fails with "missing RTM API credentials" despite valid credentials in config file
-Error Details: Config shows config_has_key:false and config_has_secret:false despite values in YAML
-Focus Areas:
-Verify YAML struct tags match the config file format
-Add debug logging to print loaded config values
-Check for case sensitivity issues or YAML parsing problems
-Investigate potential struct initialization problems
+### Log Entries
+
+#### Server configurat...
+
+2025/03/28 00:32:47 Loaded configuration values:
+2025/03/28 00:32:47 - Server.Name: cowgnition
+2025/03/28 00:32:47 - Server.Port: 8080
+2025/03/28 00:32:47 - RTM.APIKey: ed\***\*44 (length: 32)
+2025/03/28 00:32:47 - RTM.SharedSecret: 20\*\***74 (length: 16)
+2025/03/28 00:32:47 - Auth.TokenPath: ~/.config/cowgnition/tokens
+2025/03/28 00:32:47 Configuration loaded successfully
+2025/03/28 00:32:47 Starting CowGnition MCP server with stdio transport
+2025/03/28 00:32:47 Server.startStdio: starting MCP server with stdio transport
+2025/03/28 00:32:47 Starting JSON-RPC server with stdio transport
+2025/03/28 00:33:16 jsonrpc2: protocol error: stdioObjectStream.ReadObject: read timeout after 30s
+2025-03-28T04:33:16.506Z [cowgnition] [info] Server transport closed
+2025-03-28T04:33:16.506Z [cowgnition] [info] Client transport closed
+2025-03-28T04:33:16.507Z [cowgnition] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log.
+2025-03-28T04:33:16.507Z [cowgnition] [error] Server disconnected. For troubleshooting guidance, please visit our [debugging documentation](https://modelcontextprotocol.io/docs/tools/debugging) {"context":"connection"}
+2025-03-28T04:33:16.508Z [cowgnition] [info] Client transport closed
+2025/03/28 00:33:17 jsonrpc2: protocol error: stdioObjectStream.ReadObject: read timeout after 30s
+2025-03-28T04:33:17.453Z [cowgnition] [info] Server transport closed
+2025-03-28T04:33:17.453Z [cowgnition] [info] Client transport closed
+2025-03-28T04:33:17.454Z [cowgnition] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log.
+2025-03-28T04:33:17.454Z [cowgnition] [error] Server disconnected. For troubleshooting guidance, please visit our [debugging documentation](https://modelcontextprotocol.io/docs/tools/debugging) {"context":"connection"}
+2025-03-28T04:33:17.455Z [cowgnition] [info] Client transport closed
 
 ## 1. Core JSON-RPC Implementation
 
