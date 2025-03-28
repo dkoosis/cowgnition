@@ -35,6 +35,8 @@ configs/config.yaml
 !configs/config.example.yaml
 .env
 *_token*
+cowgnition.yaml
+
 # Test artifacts
 test/coverage.out
 test/reports/
