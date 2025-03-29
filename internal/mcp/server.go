@@ -11,8 +11,10 @@ import (
 	"net/http"
 	"time"
 
+	cerrors "github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/jsonrpc"
+	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
 // Server represents an MCP server.
@@ -116,12 +118,12 @@ func (s *Server) startHTTP() error {
 		IdleTimeout:  60 * time.Second,            // Idle timeout.
 	}
 
-	// Start HTTP server
+	// Start HTTP server.
 	log.Printf("Server.startHTTP: starting MCP server with HTTP transport on %s", s.httpServer.Addr) // Log the server start.
 	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("Server.startHTTP: failed to start server: %w", err)
 	}
-	return nil // Start the server and listen for requests.
+	return nil // Start the server and listen for requests
 }
 
 // startStdio starts the MCP server using stdio transport.
@@ -132,7 +134,8 @@ func (s *Server) startHTTP() error {
 //
 //	error: An error if the server fails to start.
 //
-// In startStdio method of the Server struct
+
+// In startStdio method of the Server struct.
 func (s *Server) startStdio() error {
 	// Create a JSON-RPC adapter with the configured timeout
 	adapter := jsonrpc.NewAdapter(jsonrpc.WithTimeout(s.requestTimeout))
@@ -151,7 +154,7 @@ func (s *Server) startStdio() error {
 
 	if err := jsonrpc.RunStdioServer(adapter, stdioOpts...); err != nil {
 		return cgerr.ErrorWithDetails(
-			errors.Wrap(err, "failed to start stdio server"),
+			cerrors.Wrap(err, "failed to start stdio server"),
 			cgerr.CategoryRPC,
 			cgerr.CodeInternalError,
 			map[string]interface{}{
