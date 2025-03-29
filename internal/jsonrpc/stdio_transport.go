@@ -338,30 +338,6 @@ func (s *stdioObjectStream) ReadObject(v interface{}) error {
 	}
 }
 
-// readMessage reads a complete message and sends the result to the provided channel.
-// This helper function reduces the complexity of ReadObject.
-func (s *stdioObjectStream) readMessage(resultCh chan<- readResult) {
-	// Read headers to get Content-Length
-	contentLength, err := s.readHeaders()
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			resultCh <- readResult{nil, nil, true}
-			return
-		}
-		resultCh <- readResult{nil, err, false}
-		return
-	}
-
-	// Read message body based on Content-Length
-	data, err := s.readMessageBody(contentLength)
-	if err != nil {
-		resultCh <- readResult{nil, err, false}
-		return
-	}
-
-	resultCh <- readResult{data, nil, false}
-}
-
 // readHeaders reads and parses the message headers to extract Content-Length.
 // This helper function reduces the complexity of readMessage.
 func (s *stdioObjectStream) readHeaders() (int, error) {
