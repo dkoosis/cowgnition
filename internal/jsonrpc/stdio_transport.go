@@ -167,7 +167,7 @@ type stdioObjectStream struct {
 
 // WriteObject writes a JSON-RPC message to stdout with proper framing.
 // It follows the Content-Length framing protocol used by MCP.
-// WriteObject writes a JSON-RPC message with proper Content-Length header
+// WriteObject writes a JSON-RPC message with proper Content-Length header.
 func (s *stdioObjectStream) WriteObject(obj interface{}) error {
 	data, err := json.Marshal(obj)
 	if err != nil {
@@ -262,7 +262,7 @@ func (s *stdioObjectStream) WriteObject(obj interface{}) error {
 
 // ReadObject reads a JSON-RPC message from stdin with proper framing.
 // It handles the Content-Length framing protocol used by MCP.
-// Modified ReadObject to better handle different message formats
+// Modified ReadObject to better handle different message formats.
 func (s *stdioObjectStream) ReadObject(v interface{}) error {
 	if s.debug {
 		log.Printf("stdioObjectStream.ReadObject: Starting to read message with timeout %v", s.readTimeout)

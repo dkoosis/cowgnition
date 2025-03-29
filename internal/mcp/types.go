@@ -2,20 +2,16 @@
 package mcp
 
 // InitializeRequest represents the MCP initialize request structure.
-// internal/mcp/types.go
-package mcp
-
-// InitializeRequest represents the MCP initialize request structure.
 type InitializeRequest struct {
-    ProtocolVersion string `json:"protocolVersion"` // Protocol version
-    ClientInfo      struct {
-        Name    string `json:"name"`
-        Version string `json:"version"`
-    } `json:"clientInfo"` // Client information
-    Capabilities    map[string]interface{} `json:"capabilities"` // Client capabilities
-    // Legacy fields
-    ServerName      string `json:"server_name,omitempty"`    // Optional in newer MCP spec versions
-    ServerVersion   string `json:"server_version,omitempty"` // Optional in newer MCP spec versions
+	ProtocolVersion string `json:"protocolVersion"` // Protocol version
+	ClientInfo      struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	} `json:"clientInfo"` // Client information
+	Capabilities map[string]interface{} `json:"capabilities"` // Client capabilities
+	// Legacy fields
+	ServerName    string `json:"server_name,omitempty"`    // Optional in newer MCP spec versions
+	ServerVersion string `json:"server_version,omitempty"` // Optional in newer MCP spec versions
 }
 
 // InitializeResponse represents the MCP initialize response structure.
