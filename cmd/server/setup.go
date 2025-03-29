@@ -4,28 +4,38 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/config"
 )
 
-// ClaudeDesktopConfig represents the structure of Claude Desktop's configuration file
+// ClaudeDesktopConfig represents the structure of Claude Desktop's configuration file.
+// It holds the mapping of MCP server configurations available to Claude Desktop.
 type ClaudeDesktopConfig struct {
 	MCPServers map[string]MCPServerConfig `json:"mcpServers"`
 }
 
-// MCPServerConfig represents a server configuration in Claude Desktop
+// MCPServerConfig represents a server configuration in Claude Desktop.
+// It contains the command to execute, arguments, and optional environment variables.
 type MCPServerConfig struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
+	Command string            `json:"command"`
+	Args    []string          `json:"args"`
 	Env     map[string]string `json:"env,omitempty"`
 }
 
 // runSetup performs the setup process for CowGnition.
 // It configures both the local application and integrates with Claude Desktop.
+// The function creates a default configuration if one doesn't exist and
+// attempts to automatically configure Claude Desktop for seamless integration.
+//
+// configPath string: Path where the configuration file should be created or exists.
+//
+// Returns:
+//
+//	error: An error if setup fails, nil on success.
 func runSetup(configPath string) error {
 	// Get executable path
 	exePath, err := os.Executable()
@@ -35,6 +45,10 @@ func runSetup(configPath string) error {
 	exePath, err = filepath.Abs(exePath)
 	if err != nil {
 		return errors.Wrap(err, "failed to get absolute executable path")
+	}
+
+	if debugMode {
+		log.Printf("Using executable path: %s", exePath)
 	}
 
 	// Check and create local config
@@ -61,7 +75,14 @@ func runSetup(configPath string) error {
 	return nil
 }
 
-// createDefaultConfig creates a default configuration file if none exists
+// createDefaultConfig creates a default configuration file if none exists.
+// If the file already exists, it leaves it unchanged.
+//
+// configPath string: Path where the configuration file should be created.
+//
+// Returns:
+//
+//	error: An error if file creation fails, nil on success.
 func createDefaultConfig(configPath string) error {
 	// Check if config already exists
 	if _, err := os.Stat(configPath); err == nil {
@@ -78,7 +99,7 @@ func createDefaultConfig(configPath string) error {
 	// Create default config
 	fmt.Printf("Creating default configuration at %s\n", configPath)
 
-	// Default config sample - we'll need to implement this based on your config structure
+	// Default config sample with Remember The Milk settings
 	defaultConfig := `server:
   name: "CowGnition RTM"
   port: 8080
@@ -91,7 +112,8 @@ auth:
   token_path: "~/.config/cowgnition/tokens"
 `
 
-	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
+	// Use more secure file permissions (0600 instead of 0644)
+	if err := os.WriteFile(configPath, []byte(defaultConfig), 0600); err != nil {
 		return errors.Wrap(err, "failed to write default configuration file")
 	}
 
@@ -99,10 +121,23 @@ auth:
 	return nil
 }
 
-// configureClaudeDesktop updates Claude Desktop's configuration to include CowGnition
+// configureClaudeDesktop updates Claude Desktop's configuration to include CowGnition.
+// It reads the existing configuration (if any), adds the CowGnition server entry,
+// and writes the updated configuration back to disk.
+//
+// exePath string: Path to the CowGnition executable.
+// configPath string: Path to the CowGnition configuration file.
+//
+// Returns:
+//
+//	error: An error if configuration fails, nil on success.
 func configureClaudeDesktop(exePath, configPath string) error {
 	// Determine Claude Desktop config path based on OS
 	claudeConfigPath := getClaudeConfigPath()
+
+	if debugMode {
+		log.Printf("Claude Desktop config path: %s", claudeConfigPath)
+	}
 
 	// Create args for the server
 	args := []string{"serve", "--transport", "stdio", "--config", configPath}
@@ -123,6 +158,9 @@ func configureClaudeDesktop(exePath, configPath string) error {
 
 		if err := json.Unmarshal(data, &claudeConfig); err != nil {
 			// If the file exists but is invalid, create a new one
+			if debugMode {
+				log.Printf("Failed to parse existing Claude Desktop config, creating new one: %v", err)
+			}
 			claudeConfig = ClaudeDesktopConfig{
 				MCPServers: make(map[string]MCPServerConfig),
 			}
@@ -149,7 +187,8 @@ func configureClaudeDesktop(exePath, configPath string) error {
 		return errors.Wrap(err, "failed to create Claude Desktop configuration directory")
 	}
 
-	if err := os.WriteFile(claudeConfigPath, data, 0644); err != nil {
+	// Use more secure file permissions (0600 instead of 0644)
+	if err := os.WriteFile(claudeConfigPath, data, 0600); err != nil {
 		return errors.Wrap(err, "failed to write Claude Desktop configuration")
 	}
 
@@ -157,7 +196,12 @@ func configureClaudeDesktop(exePath, configPath string) error {
 	return nil
 }
 
-// getClaudeConfigPath returns the path to Claude Desktop's configuration file based on the OS
+// getClaudeConfigPath returns the path to Claude Desktop's configuration file based on the OS.
+// It handles the different filesystem locations for each supported operating system.
+//
+// Returns:
+//
+//	string: The path to the Claude Desktop configuration file.
 func getClaudeConfigPath() string {
 	var configDir string
 
@@ -175,7 +219,11 @@ func getClaudeConfigPath() string {
 	return filepath.Join(configDir, "claude_desktop_config.json")
 }
 
-// printManualSetupInstructions prints instructions for manually configuring Claude Desktop
+// printManualSetupInstructions prints instructions for manually configuring Claude Desktop.
+// This is used as a fallback when automatic configuration fails.
+//
+// exePath string: Path to the CowGnition executable.
+// configPath string: Path to the CowGnition configuration file.
 func printManualSetupInstructions(exePath, configPath string) {
 	claudeConfigPath := getClaudeConfigPath()
 

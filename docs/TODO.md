@@ -6,7 +6,8 @@
 
 - we seek to load the config file from known locations. Let's do some defensive coding around that, to warn the user if there are several config files, with one taking precedence. such an warning would surely have save me heartache in the course of my progamming career.
 
-- review the log messages for clarify and usefullness
+- review the log messages for clarity and usefullness
+- review the handling of credentials for RTM and put in place strong defensive coding
 
 ## 1. Core JSON-RPC Implementation
 
@@ -79,6 +80,12 @@
   - [ ] Include examples for common operations
   - [ ] Document error codes and solutions
   - [ ] Create usage guides for client applications
+
+## 8. Configuration File Management
+
+- [ ] I'm looking for example of excellent implementations of config file handling in golang; or excellent design guidance.
+
+Configuration file management is a common requirement, and one that seems likely to be prone to user errors, confusion, and security risks. It's hard for humans to be certain of the name and location of these inputs; they may have sensitive information; they may override eachother depending on path order.
 
 ## Implementation Strategy
 
