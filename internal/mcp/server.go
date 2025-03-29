@@ -131,6 +131,8 @@ func (s *Server) startHTTP() error {
 // Returns:
 //
 //	error: An error if the server fails to start.
+//
+// In startStdio method of the Server struct
 func (s *Server) startStdio() error {
 	// Create a JSON-RPC adapter with the configured timeout
 	adapter := jsonrpc.NewAdapter(jsonrpc.WithTimeout(s.requestTimeout))
@@ -138,15 +140,26 @@ func (s *Server) startStdio() error {
 	// Register the MCP handlers
 	s.RegisterJSONRPCHandlers(adapter)
 
-	// Start the stdio server with timeouts
-	log.Printf("Server.startStdio: starting MCP server with stdio transport")
+	// Start the stdio server with timeouts and debug mode
+	log.Printf("Server.startStdio: starting MCP server with stdio transport (debug enabled)")
 	stdioOpts := []jsonrpc.StdioTransportOption{
 		jsonrpc.WithStdioRequestTimeout(s.requestTimeout),
-		jsonrpc.WithStdioReadTimeout(s.requestTimeout),
-		jsonrpc.WithStdioWriteTimeout(s.requestTimeout),
+		jsonrpc.WithStdioReadTimeout(120 * time.Second), // Increase to 2 minutes
+		jsonrpc.WithStdioWriteTimeout(30 * time.Second),
+		jsonrpc.WithStdioDebug(true), // Enable debug logging
 	}
+
 	if err := jsonrpc.RunStdioServer(adapter, stdioOpts...); err != nil {
-		return fmt.Errorf("Server.startStdio: failed to start stdio server: %w", err)
+		return cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to start stdio server"),
+			cgerr.CategoryRPC,
+			cgerr.CodeInternalError,
+			map[string]interface{}{
+				"request_timeout": s.requestTimeout.String(),
+				"read_timeout":    "120s",
+				"write_timeout":   "30s",
+			},
+		)
 	}
 
 	return nil

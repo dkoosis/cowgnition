@@ -168,3 +168,18 @@
 - Documentation improvements:
   - Add comprehensive documentation to `internal/mcp/types.go`
   - Add usage examples where appropriate
+
+* Structured Logging Initiative:
+* - Research and select a structured logging library (e.g., zap, logrus)
+* - Define a base JSON schema for log entries
+* - Implement a log formatting utility
+* - Refactor existing logging to use the utility and structured format
+* - Design a mechanism for configuring log levels
+* - Implement middleware for HTTP request logging (if applicable)
+* - AI Coding Assistant Prompt:
+* - "Implement structured logging using the [chosen library name] library.
+* - Define a JSON schema with fields like timestamp (RFC3339), severity, message, component, and data.
+* - Create a log formatting utility to ensure consistent output.
+* - Refactor existing log calls to use this utility.
+* - Add a mechanism to configure log levels.
+* - If the server uses HTTP, implement middleware to log requests."

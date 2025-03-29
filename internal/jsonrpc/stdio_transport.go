@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/errors"
+	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -32,6 +34,7 @@ type StdioTransport struct {
 	requestTimeout time.Duration
 	readTimeout    time.Duration
 	writeTimeout   time.Duration
+	debug          bool // Enable debug logging
 }
 
 // StdioTransportOption defines a function that configures a StdioTransport.
@@ -58,6 +61,13 @@ func WithStdioWriteTimeout(timeout time.Duration) StdioTransportOption {
 	}
 }
 
+// WithStdioDebug enables or disables debug logging for the StdioTransport.
+func WithStdioDebug(debug bool) StdioTransportOption {
+	return func(t *StdioTransport) {
+		t.debug = debug
+	}
+}
+
 // NewStdioTransport creates a new stdio transport for JSON-RPC.
 // It sets up the transport to read from stdin and write to stdout.
 func NewStdioTransport(handler jsonrpc2.Handler, opts ...StdioTransportOption) *StdioTransport {
@@ -70,8 +80,9 @@ func NewStdioTransport(handler jsonrpc2.Handler, opts ...StdioTransportOption) *
 		writer:         bufio.NewWriter(os.Stdout),
 		contentLn:      "Content-Length: ",
 		requestTimeout: DefaultTimeout,
-		readTimeout:    30 * time.Second,
+		readTimeout:    60 * time.Second, // Increased from 30s to 60s
 		writeTimeout:   30 * time.Second,
+		debug:          false, // Default to false
 	}
 
 	// Apply options
@@ -86,6 +97,10 @@ func NewStdioTransport(handler jsonrpc2.Handler, opts ...StdioTransportOption) *
 // It reads messages from stdin, processes them through the JSON-RPC handler,
 // and writes responses to stdout.
 func (t *StdioTransport) Start() error {
+	if t.debug {
+		log.Printf("StdioTransport: Starting transport with read timeout %v", t.readTimeout)
+	}
+
 	stream := &stdioObjectStream{
 		reader:       t.reader,
 		writer:       t.writer,
@@ -93,25 +108,50 @@ func (t *StdioTransport) Start() error {
 		contentLn:    t.contentLn,
 		readTimeout:  t.readTimeout,
 		writeTimeout: t.writeTimeout,
+		debug:        t.debug,
 	}
 
 	t.conn = jsonrpc2.NewConn(t.ctx, stream, t.handler)
+	if t.debug {
+		log.Printf("StdioTransport: Connection established, waiting for messages")
+	}
 
 	// Wait for the connection to close
 	<-t.conn.DisconnectNotify()
+	if t.debug {
+		log.Printf("StdioTransport: Connection closed")
+	}
 	return nil
 }
 
 // Stop stops the transport and cleans up resources.
 func (t *StdioTransport) Stop() error {
+	if t.debug {
+		log.Printf("StdioTransport: Stopping transport")
+	}
+
 	if t.conn != nil {
 		if err := t.conn.Close(); err != nil {
-			return fmt.Errorf("StdioTransport.Stop: failed to close connection: %w", err)
+			return cgerr.ErrorWithDetails(
+				errors.Wrap(err, "failed to close connection"),
+				cgerr.CategoryRPC,
+				cgerr.CodeInternalError,
+				map[string]interface{}{
+					"transport_type": "stdio",
+				},
+			)
 		}
 	}
 
 	t.cancel()
 	return nil
+}
+
+// readResult represents the result of a read operation.
+type readResult struct {
+	data  []byte
+	err   error
+	isEOF bool
 }
 
 // stdioObjectStream implements the jsonrpc2.ObjectStream interface for stdio.
@@ -122,6 +162,7 @@ type stdioObjectStream struct {
 	contentLn    string
 	readTimeout  time.Duration
 	writeTimeout time.Duration
+	debug        bool
 }
 
 // WriteObject writes a JSON-RPC message to stdout with proper framing.
@@ -129,7 +170,18 @@ type stdioObjectStream struct {
 func (s *stdioObjectStream) WriteObject(obj interface{}) error {
 	data, err := json.Marshal(obj)
 	if err != nil {
-		return fmt.Errorf("stdioObjectStream.WriteObject: failed to marshal object: %w", err)
+		return cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to marshal object"),
+			cgerr.CategoryRPC,
+			cgerr.CodeInternalError,
+			map[string]interface{}{
+				"object_type": fmt.Sprintf("%T", obj),
+			},
+		)
+	}
+
+	if s.debug {
+		log.Printf("stdioObjectStream.WriteObject: Writing message: %s", string(data))
 	}
 
 	s.writeMu.Lock()
@@ -142,21 +194,50 @@ func (s *stdioObjectStream) WriteObject(obj interface{}) error {
 	go func() {
 		// Write header with content length
 		header := fmt.Sprintf("%s%d\r\n\r\n", s.contentLn, len(data))
+		if s.debug {
+			log.Printf("stdioObjectStream.WriteObject: Writing header: %s", header)
+		}
+
 		if _, err := s.writer.WriteString(header); err != nil {
-			errCh <- fmt.Errorf("stdioObjectStream.WriteObject: failed to write header: %w", err)
+			errCh <- cgerr.ErrorWithDetails(
+				errors.Wrap(err, "failed to write header"),
+				cgerr.CategoryRPC,
+				cgerr.CodeInternalError,
+				map[string]interface{}{
+					"header": header,
+				},
+			)
 			return
 		}
 
 		// Write JSON data
 		if _, err := s.writer.Write(data); err != nil {
-			errCh <- fmt.Errorf("stdioObjectStream.WriteObject: failed to write data: %w", err)
+			errCh <- cgerr.ErrorWithDetails(
+				errors.Wrap(err, "failed to write data"),
+				cgerr.CategoryRPC,
+				cgerr.CodeInternalError,
+				map[string]interface{}{
+					"data_size": len(data),
+				},
+			)
 			return
 		}
 
 		// Flush to ensure the message is sent immediately
 		if err := s.writer.Flush(); err != nil {
-			errCh <- fmt.Errorf("stdioObjectStream.WriteObject: failed to flush writer: %w", err)
+			errCh <- cgerr.ErrorWithDetails(
+				errors.Wrap(err, "failed to flush writer"),
+				cgerr.CategoryRPC,
+				cgerr.CodeInternalError,
+				map[string]interface{}{
+					"data_size": len(data),
+				},
+			)
 			return
+		}
+
+		if s.debug {
+			log.Printf("stdioObjectStream.WriteObject: Message written and flushed successfully")
 		}
 
 		close(done)
@@ -168,110 +249,206 @@ func (s *stdioObjectStream) WriteObject(obj interface{}) error {
 	case err := <-errCh:
 		return err
 	case <-time.After(s.writeTimeout):
-		return fmt.Errorf("stdioObjectStream.WriteObject: write timeout after %v", s.writeTimeout)
+		return cgerr.NewTimeoutError(
+			"write operation timed out",
+			map[string]interface{}{
+				"timeout":   s.writeTimeout.String(),
+				"data_size": len(data),
+			},
+		)
 	}
 }
 
 // ReadObject reads a JSON-RPC message from stdin with proper framing.
 // It handles the Content-Length framing protocol used by MCP.
 func (s *stdioObjectStream) ReadObject(v interface{}) error {
-	resultCh := make(chan struct {
-		err   error
-		data  []byte
-		isEOF bool
-	}, 1)
+	if s.debug {
+		log.Printf("stdioObjectStream.ReadObject: Starting to read message with timeout %v", s.readTimeout)
+	}
 
-	go func() {
-		// Read headers until we find Content-Length
-		var contentLength int
-		for {
-			line, err := s.reader.ReadString('\n')
-			if err != nil {
-				if err == io.EOF {
-					// Handle EOF gracefully
-					resultCh <- struct {
-						err   error
-						data  []byte
-						isEOF bool
-					}{nil, nil, true}
-					return
-				}
-				resultCh <- struct {
-					err   error
-					data  []byte
-					isEOF bool
-				}{fmt.Errorf("stdioObjectStream.ReadObject: failed to read header: %w", err), nil, false}
-				return
-			}
+	// Create a channel for the read result with a timeout
+	resultCh := make(chan readResult, 1)
 
-			line = strings.TrimSpace(line)
-			if line == "" {
-				// Empty line indicates end of headers
-				break
-			}
+	// Start read operation in a goroutine
+	go s.readMessage(resultCh)
 
-			if strings.HasPrefix(line, s.contentLn) {
-				// Parse content length
-				lenStr := strings.TrimPrefix(line, s.contentLn)
-				if _, err := fmt.Sscanf(lenStr, "%d", &contentLength); err != nil {
-					resultCh <- struct {
-						err   error
-						data  []byte
-						isEOF bool
-					}{fmt.Errorf("stdioObjectStream.ReadObject: invalid Content-Length: %w", err), nil, false}
-					return
-				}
-			}
-		}
-
-		if contentLength <= 0 {
-			resultCh <- struct {
-				err   error
-				data  []byte
-				isEOF bool
-			}{fmt.Errorf("stdioObjectStream.ReadObject: Content-Length header missing or invalid"), nil, false}
-			return
-		}
-
-		// Read the exact number of bytes specified by Content-Length
-		data := make([]byte, contentLength)
-		if _, err := io.ReadFull(s.reader, data); err != nil {
-			resultCh <- struct {
-				err   error
-				data  []byte
-				isEOF bool
-			}{fmt.Errorf("stdioObjectStream.ReadObject: failed to read message body: %w", err), nil, false}
-			return
-		}
-
-		resultCh <- struct {
-			err   error
-			data  []byte
-			isEOF bool
-		}{nil, data, false}
-	}()
-
+	// Wait for result or timeout
 	select {
 	case res := <-resultCh:
-		if res.isEOF {
-			return io.EOF
+		return s.processReadResult(res, v)
+	case <-time.After(s.readTimeout):
+		if s.debug {
+			log.Printf("stdioObjectStream.ReadObject: Read timeout after %v", s.readTimeout)
 		}
-		if res.err != nil {
-			return res.err
+		return cgerr.NewTimeoutError(
+			"read operation timed out",
+			map[string]interface{}{
+				"timeout":      s.readTimeout.String(),
+				"target_type":  fmt.Sprintf("%T", v),
+				"read_timeout": s.readTimeout,
+			},
+		)
+	}
+}
+
+// readMessage reads a complete message and sends the result to the provided channel.
+// This helper function reduces the complexity of ReadObject.
+func (s *stdioObjectStream) readMessage(resultCh chan<- readResult) {
+	// Read headers to get Content-Length
+	contentLength, err := s.readHeaders()
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			resultCh <- readResult{nil, nil, true}
+			return
+		}
+		resultCh <- readResult{nil, err, false}
+		return
+	}
+
+	// Read message body based on Content-Length
+	data, err := s.readMessageBody(contentLength)
+	if err != nil {
+		resultCh <- readResult{nil, err, false}
+		return
+	}
+
+	resultCh <- readResult{data, nil, false}
+}
+
+// readHeaders reads and parses the message headers to extract Content-Length.
+// This helper function reduces the complexity of readMessage.
+func (s *stdioObjectStream) readHeaders() (int, error) {
+	var contentLength int
+
+	// Read headers until we find Content-Length or an empty line
+	for {
+		if s.debug {
+			log.Printf("stdioObjectStream.readHeaders: Reading header line")
 		}
 
-		// Unmarshal the JSON data
-		if err := json.Unmarshal(res.data, v); err != nil {
-			return fmt.Errorf("stdioObjectStream.ReadObject: failed to unmarshal JSON: %w", err)
+		line, err := s.reader.ReadString('\n')
+		if err != nil {
+			return 0, err // This could be io.EOF or another error
 		}
-		return nil
-	case <-time.After(s.readTimeout):
-		return fmt.Errorf("stdioObjectStream.ReadObject: read timeout after %v", s.readTimeout)
+
+		line = strings.TrimSpace(line)
+		if s.debug {
+			log.Printf("stdioObjectStream.readHeaders: Read header line: %q", line)
+		}
+
+		// Empty line indicates end of headers
+		if line == "" {
+			if s.debug {
+				log.Printf("stdioObjectStream.readHeaders: End of headers reached")
+			}
+			break
+		}
+
+		// Parse Content-Length if present
+		if strings.HasPrefix(line, s.contentLn) {
+			lenStr := strings.TrimPrefix(line, s.contentLn)
+			if _, err := fmt.Sscanf(lenStr, "%d", &contentLength); err != nil {
+				return 0, cgerr.ErrorWithDetails(
+					errors.Wrap(err, "invalid Content-Length"),
+					cgerr.CategoryRPC,
+					cgerr.CodeParseError,
+					map[string]interface{}{
+						"content_length_str": lenStr,
+					},
+				)
+			}
+			if s.debug {
+				log.Printf("stdioObjectStream.readHeaders: Parsed Content-Length: %d", contentLength)
+			}
+		}
 	}
+
+	// Validate Content-Length
+	if contentLength <= 0 {
+		return 0, cgerr.ErrorWithDetails(
+			errors.New("Content-Length header missing or invalid"),
+			cgerr.CategoryRPC,
+			cgerr.CodeParseError,
+			map[string]interface{}{
+				"content_length": contentLength,
+			},
+		)
+	}
+
+	return contentLength, nil
+}
+
+// readMessageBody reads the message body based on the provided Content-Length.
+// This helper function reduces the complexity of readMessage.
+func (s *stdioObjectStream) readMessageBody(contentLength int) ([]byte, error) {
+	if s.debug {
+		log.Printf("stdioObjectStream.readMessageBody: Reading %d bytes of message body", contentLength)
+	}
+
+	data := make([]byte, contentLength)
+	if _, err := io.ReadFull(s.reader, data); err != nil {
+		return nil, cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to read message body"),
+			cgerr.CategoryRPC,
+			cgerr.CodeParseError,
+			map[string]interface{}{
+				"expected_bytes": contentLength,
+				"error":          err.Error(),
+			},
+		)
+	}
+
+	if s.debug {
+		log.Printf("stdioObjectStream.readMessageBody: Successfully read message: %s", string(data))
+	}
+
+	return data, nil
+}
+
+// processReadResult processes the result of a read operation.
+// This helper function reduces the complexity of ReadObject.
+func (s *stdioObjectStream) processReadResult(res readResult, v interface{}) error {
+	if res.isEOF {
+		if s.debug {
+			log.Printf("stdioObjectStream.processReadResult: Returning EOF")
+		}
+		return io.EOF
+	}
+
+	if res.err != nil {
+		if s.debug {
+			log.Printf("stdioObjectStream.processReadResult: Returning error: %v", res.err)
+		}
+		return res.err
+	}
+
+	// Unmarshal the JSON data
+	if err := json.Unmarshal(res.data, v); err != nil {
+		if s.debug {
+			log.Printf("stdioObjectStream.processReadResult: Failed to unmarshal JSON: %v", err)
+		}
+		return cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to unmarshal JSON"),
+			cgerr.CategoryRPC,
+			cgerr.CodeParseError,
+			map[string]interface{}{
+				"data_size":   len(res.data),
+				"target_type": fmt.Sprintf("%T", v),
+			},
+		)
+	}
+
+	if s.debug {
+		log.Printf("stdioObjectStream.processReadResult: Successfully unmarshalled object")
+	}
+	return nil
 }
 
 // Close closes the stream.
 func (s *stdioObjectStream) Close() error {
+	if s.debug {
+		log.Printf("stdioObjectStream.Close: Closing stream")
+	}
 	return nil // No resources to close for stdio
 }
 
@@ -280,12 +457,19 @@ func (s *stdioObjectStream) Close() error {
 func RunStdioServer(adapter *Adapter, opts ...StdioTransportOption) error {
 	log.Println("Starting JSON-RPC server with stdio transport")
 
-	// Create the transport
+	// Create the transport with provided options
 	transport := NewStdioTransport(adapter, opts...)
 
 	// Start processing messages
 	if err := transport.Start(); err != nil {
-		return fmt.Errorf("RunStdioServer: failed to start transport: %w", err)
+		return cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to start transport"),
+			cgerr.CategoryRPC,
+			cgerr.CodeInternalError,
+			map[string]interface{}{
+				"transport_type": "stdio",
+			},
+		)
 	}
 
 	return nil

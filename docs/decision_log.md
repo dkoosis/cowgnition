@@ -13,4 +13,9 @@ We considered errorx for its error grouping (traits), but cockroachdb/errors' pr
 
 ## JSON-RPC2.0
 
+
 ### sourcegraph/jsonrpc2
+
+## Logging
+
++We will adopt structured logging using a JSON format. This will provide consistent formatting, make logs more readable, and ease integration with cloud logging systems. This approach will improve debugging and observability.
