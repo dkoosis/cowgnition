@@ -183,3 +183,9 @@
 * - Refactor existing log calls to use this utility.
 * - Add a mechanism to configure log levels.
 * - If the server uses HTTP, implement middleware to log requests."
+    // TODO: internal/mcp/server.go Error handling simplification needed - The current approach uses three error packages:
+    // 1. Standard "errors" (for errors.Is/As)
+    // 2. "github.com/cockroachdb/errors" (for stack traces and wrapping)
+    // 3. Custom "cgerr" package (for domain-specific errors)
+    // This creates import confusion and makes error handling inconsistent.
+    // Consider consolidating when implementing improved logging.

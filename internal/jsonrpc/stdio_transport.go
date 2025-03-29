@@ -167,6 +167,7 @@ type stdioObjectStream struct {
 
 // WriteObject writes a JSON-RPC message to stdout with proper framing.
 // It follows the Content-Length framing protocol used by MCP.
+// WriteObject writes a JSON-RPC message with proper Content-Length header
 func (s *stdioObjectStream) WriteObject(obj interface{}) error {
 	data, err := json.Marshal(obj)
 	if err != nil {
@@ -181,7 +182,7 @@ func (s *stdioObjectStream) WriteObject(obj interface{}) error {
 	}
 
 	if s.debug {
-		log.Printf("stdioObjectStream.WriteObject: Writing message: %s", string(data))
+		log.Printf("stdioObjectStream.WriteObject: Sending message: %s", string(data))
 	}
 
 	s.writeMu.Lock()
@@ -192,8 +193,8 @@ func (s *stdioObjectStream) WriteObject(obj interface{}) error {
 	errCh := make(chan error, 1)
 
 	go func() {
-		// Write header with content length
-		header := fmt.Sprintf("%s%d\r\n\r\n", s.contentLn, len(data))
+		// Write header with content length - THIS IS CRITICAL
+		header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(data))
 		if s.debug {
 			log.Printf("stdioObjectStream.WriteObject: Writing header: %s", header)
 		}
@@ -261,6 +262,7 @@ func (s *stdioObjectStream) WriteObject(obj interface{}) error {
 
 // ReadObject reads a JSON-RPC message from stdin with proper framing.
 // It handles the Content-Length framing protocol used by MCP.
+// Modified ReadObject to better handle different message formats
 func (s *stdioObjectStream) ReadObject(v interface{}) error {
 	if s.debug {
 		log.Printf("stdioObjectStream.ReadObject: Starting to read message with timeout %v", s.readTimeout)
@@ -270,7 +272,52 @@ func (s *stdioObjectStream) ReadObject(v interface{}) error {
 	resultCh := make(chan readResult, 1)
 
 	// Start read operation in a goroutine
-	go s.readMessage(resultCh)
+	go func() {
+		// Try to peek at the first byte to see if it's direct JSON
+		firstByte, err := s.reader.Peek(1)
+		if err == nil && len(firstByte) > 0 && firstByte[0] == '{' {
+			// This appears to be direct JSON
+			if s.debug {
+				log.Printf("stdioObjectStream.ReadObject: Detected direct JSON message")
+			}
+
+			// Read the entire line
+			line, err := s.reader.ReadString('\n')
+			if err != nil && err != io.EOF {
+				resultCh <- readResult{nil, err, false}
+				return
+			}
+
+			// Trim any whitespace
+			line = strings.TrimSpace(line)
+			if s.debug {
+				log.Printf("stdioObjectStream.ReadObject: Read direct JSON: %s", line)
+			}
+
+			resultCh <- readResult{[]byte(line), nil, false}
+			return
+		}
+
+		// Standard Content-Length header approach
+		contentLength, err := s.readHeaders()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				resultCh <- readResult{nil, nil, true}
+				return
+			}
+			resultCh <- readResult{nil, err, false}
+			return
+		}
+
+		// Read message body based on Content-Length
+		data, err := s.readMessageBody(contentLength)
+		if err != nil {
+			resultCh <- readResult{nil, err, false}
+			return
+		}
+
+		resultCh <- readResult{data, nil, false}
+	}()
 
 	// Wait for result or timeout
 	select {

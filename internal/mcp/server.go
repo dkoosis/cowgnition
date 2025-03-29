@@ -1,5 +1,11 @@
 // Package mcp implements the Model Context Protocol (MCP) server.
 // file: internal/mcp/server.go
+// TODO: Error handling simplification needed - The current approach uses three error packages:
+// 1. Standard "errors" (for errors.Is/As)
+// 2. "github.com/cockroachdb/errors" (for stack traces and wrapping)
+// 3. Custom "cgerr" package (for domain-specific errors)
+// This creates import confusion and makes error handling inconsistent.
+// Consider consolidating when implementing improved logging.
 package mcp
 
 import (
@@ -240,18 +246,22 @@ func (s *Server) RegisterJSONRPCHandlers(adapter *jsonrpc.Adapter) {
 
 // handleJSONRPCInitialize handles the MCP initialize request via JSON-RPC.
 func (s *Server) handleJSONRPCInitialize(ctx context.Context, params json.RawMessage) (interface{}, error) {
+	log.Printf("Received initialize request with params: %s", string(params))
+
 	var req InitializeRequest
 	if err := json.Unmarshal(params, &req); err != nil {
+		log.Printf("Failed to unmarshal initialize request: %v", err)
 		return nil, jsonrpc.NewInvalidParamsError(
 			fmt.Sprintf("failed to decode initialize request: %v", err),
 			map[string]interface{}{
-				"error": err.Error(),
+				"error":  err.Error(),
+				"params": string(params),
 			})
 	}
 
 	// Log initialization request
-	log.Printf("MCP initialization requested by: %s (version: %s)",
-		req.ServerName, req.ServerVersion)
+	log.Printf("MCP initialization requested by client: %s (version: %s)",
+		req.ClientInfo.Name, req.ClientInfo.Version)
 	log.Printf("Client protocol version: %s", req.ProtocolVersion)
 
 	// Construct server information
@@ -274,10 +284,9 @@ func (s *Server) handleJSONRPCInitialize(ctx context.Context, params json.RawMes
 
 	// Construct response
 	response := InitializeResponse{
-		ServerInfo:   serverInfo,
-		Capabilities: capabilities,
-		// Make sure to include the protocol version to match the client's request
-		ProtocolVersion: req.ProtocolVersion,
+		ServerInfo:      serverInfo,
+		Capabilities:    capabilities,
+		ProtocolVersion: req.ProtocolVersion, // Echo back the client's protocol version
 	}
 
 	log.Printf("Sending initialize response: %+v", response)
