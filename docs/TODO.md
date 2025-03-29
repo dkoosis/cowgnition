@@ -4,30 +4,9 @@
 
 ### Log Entries
 
-#### Server configurat...
+- we seek to load the config file from known locations. Let's do some defensive coding around that, to warn the user if there are several config files, with one taking precedence. such an warning would surely have save me heartache in the course of my progamming career.
 
-2025/03/28 00:32:47 Loaded configuration values:
-2025/03/28 00:32:47 - Server.Name: cowgnition
-2025/03/28 00:32:47 - Server.Port: 8080
-2025/03/28 00:32:47 - RTM.APIKey: ed\***\*44 (length: 32)
-2025/03/28 00:32:47 - RTM.SharedSecret: 20\*\***74 (length: 16)
-2025/03/28 00:32:47 - Auth.TokenPath: ~/.config/cowgnition/tokens
-2025/03/28 00:32:47 Configuration loaded successfully
-2025/03/28 00:32:47 Starting CowGnition MCP server with stdio transport
-2025/03/28 00:32:47 Server.startStdio: starting MCP server with stdio transport
-2025/03/28 00:32:47 Starting JSON-RPC server with stdio transport
-2025/03/28 00:33:16 jsonrpc2: protocol error: stdioObjectStream.ReadObject: read timeout after 30s
-2025-03-28T04:33:16.506Z [cowgnition] [info] Server transport closed
-2025-03-28T04:33:16.506Z [cowgnition] [info] Client transport closed
-2025-03-28T04:33:16.507Z [cowgnition] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log.
-2025-03-28T04:33:16.507Z [cowgnition] [error] Server disconnected. For troubleshooting guidance, please visit our [debugging documentation](https://modelcontextprotocol.io/docs/tools/debugging) {"context":"connection"}
-2025-03-28T04:33:16.508Z [cowgnition] [info] Client transport closed
-2025/03/28 00:33:17 jsonrpc2: protocol error: stdioObjectStream.ReadObject: read timeout after 30s
-2025-03-28T04:33:17.453Z [cowgnition] [info] Server transport closed
-2025-03-28T04:33:17.453Z [cowgnition] [info] Client transport closed
-2025-03-28T04:33:17.454Z [cowgnition] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log.
-2025-03-28T04:33:17.454Z [cowgnition] [error] Server disconnected. For troubleshooting guidance, please visit our [debugging documentation](https://modelcontextprotocol.io/docs/tools/debugging) {"context":"connection"}
-2025-03-28T04:33:17.455Z [cowgnition] [info] Client transport closed
+- review the log messages for clarify and usefullness
 
 ## 1. Core JSON-RPC Implementation
 
@@ -117,57 +96,6 @@
 - Implement integration tests for end-to-end validation
 - Test with real Claude Desktop integration
 - Follow test-driven development where possible
-
-## Completed Items
-
-- Basic MCP server framework established
-- RTM authentication resource implemented
-- Clean architecture foundation with separation of concerns
-- Added stdio transport implementation
-- Updated server to support both HTTP and stdio transports
-- Added command-line flags for transport selection
-- Implemented core JSON-RPC timeout management (requests, shutdown, context handling) across transports
-- Implemented graceful shutdown timeout handling in server initialization/lifecycle
-- Create dedicated `internal/jsonrpc` package:
-  - Implement message parsing/validation (JSON-RPC 2.0 spec)
-  - Define request/response/notification structures
-  - Add proper error handling with standard codes
-  - Reference: [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
-- Create message dispatcher:
-  - Method registration mechanism
-  - Request routing to appropriate handlers
-  - Response generation with proper ID matching
-- Update MCP server to use JSON-RPC core:
-  - Reimplement handlers using the JSON-RPC package
-  - Ensure all messages follow JSON-RPC 2.0 format
-  - Implement proper error responses
-  - Reference: [MCP Specification](https://spec.modelcontextprotocol.io/)
-- Implement transport layer:
-  - Add proper stdio transport support (including timeout handling)
-  - Implement connection lifecycle management
-  - Reference: [MCP Transport Specification](https://spec.modelcontextprotocol.io/specification/2024-11-05/basic/transport/)
-- Implement structured logging and diagnostics:
-  - Add consistent structured logging throughout
-  - Log all errors with appropriate context
-  - Add request/response logging for debugging
-  - Implement log levels for production/development
-- Error messages improvements:
-  - Ensure all error messages are user-friendly
-  - Add detailed developer error context
-  - Implement consistent error formatting
-- Error handling system implementation:
-  - Create domain-specific error types for better error identification
-  - Implement error wrapping with additional context
-  - Add error codes and categorization
-  - Implement sentinel errors for key failure conditions
-  - Create comprehensive error handling system using cockroachdb/errors
-  - Add structured error types with proper categorization and contextual information
-  - Implement JSON-RPC compliant error responses with proper sanitization
-  - Add stack traces to errors for better debugging
-  - Update all components to use the new error system consistently
-- Documentation improvements:
-  - Add comprehensive documentation to `internal/mcp/types.go`
-  - Add usage examples where appropriate
 
 * Structured Logging Initiative:
 * - Research and select a structured logging library (e.g., zap, logrus)

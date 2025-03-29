@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/textproto" // ADDED: Import textproto for standard header parsing
 	"os"
-	"strings"
+	"strconv" // ADDED: For more robust string to int conversion
 	"sync"
 	"time"
 
@@ -78,9 +79,9 @@ func NewStdioTransport(handler jsonrpc2.Handler, opts ...StdioTransportOption) *
 		handler:        handler,
 		reader:         bufio.NewReader(os.Stdin),
 		writer:         bufio.NewWriter(os.Stdout),
-		contentLn:      "Content-Length: ",
+		contentLn:      "Content-Length", // CHANGED: Removed trailing colon and space for proper header matching
 		requestTimeout: DefaultTimeout,
-		readTimeout:    60 * time.Second, // Increased from 30s to 60s
+		readTimeout:    120 * time.Second, // INCREASED: Doubled from 60s to 120s for better tolerance of slow connections
 		writeTimeout:   30 * time.Second,
 		debug:          false, // Default to false
 	}
@@ -151,7 +152,7 @@ func (t *StdioTransport) Stop() error {
 type readResult struct {
 	data  []byte
 	err   error
-	isEOF bool // Explicitly track clean EOF conditions
+	isEOF bool
 }
 
 // stdioObjectStream implements the jsonrpc2.ObjectStream interface for stdio.
@@ -192,8 +193,9 @@ func (s *stdioObjectStream) WriteObject(obj interface{}) error {
 	errCh := make(chan error, 1)
 
 	go func() {
+		// IMPROVED: Use more canonical header format with colon directly after header name
 		// Write header with content length - THIS IS CRITICAL
-		header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(data))
+		header := fmt.Sprintf("%s: %d\r\n\r\n", s.contentLn, len(data))
 		if s.debug {
 			log.Printf("stdioObjectStream.WriteObject: Writing header: %s", header)
 		}
@@ -259,251 +261,328 @@ func (s *stdioObjectStream) WriteObject(obj interface{}) error {
 	}
 }
 
-// ReadObject reads a JSON-RPC message from stdin, strictly adhering to the
-// Content-Length header framing protocol. It includes detailed logging and
-// robust error handling.
+// ReadObject reads a JSON-RPC message from stdin with proper framing.
+// It handles the Content-Length framing protocol used by MCP, but also
+// attempts to handle direct JSON messages for better compatibility.
 func (s *stdioObjectStream) ReadObject(v interface{}) error {
 	if s.debug {
-		// Use a consistent prefix for easier log filtering
-		log.Printf("[DEBUG][stdioStream] ReadObject: Waiting to read message (timeout: %v)...", s.readTimeout)
+		log.Printf("stdioObjectStream.ReadObject: Starting to read message with timeout %v", s.readTimeout)
 	}
 
+	// Create a channel for the read result with a timeout
 	resultCh := make(chan readResult, 1)
 
-	// Read operation runs in a goroutine to allow for timeout.
+	// Start read operation in a goroutine
 	go func() {
-		// Step 1: Read headers to find Content-Length
-		contentLength, err := s.readHeaders()
+		// IMPROVED: First try to peek at the first byte to determine the message format
+		firstByte, err := s.reader.Peek(1)
 		if err != nil {
-			// Check for clean EOF specifically
 			if errors.Is(err, io.EOF) {
-				if s.debug {
-					log.Printf("[DEBUG][stdioStream] ReadObject: Clean EOF detected while reading headers.")
-				}
-				resultCh <- readResult{nil, nil, true} // Signal clean EOF
+				resultCh <- readResult{nil, nil, true}
+			} else {
+				resultCh <- readResult{nil, err, false}
+			}
+			return
+		}
+
+		// Check if this appears to be direct JSON (starting with '{')
+		// ADDED: Direct JSON handling for better compatibility with clients
+		// that don't use the Content-Length framing
+		if len(firstByte) > 0 && firstByte[0] == '{' {
+			if s.debug {
+				log.Printf("stdioObjectStream.ReadObject: Detected direct JSON message")
+			}
+
+			// Read the entire line or until we get a complete JSON object
+			data, err := s.readDirectJSON()
+			if err != nil {
+				resultCh <- readResult{nil, err, false}
 				return
 			}
-			// Log and return other header reading errors
-			log.Printf("[ERROR][stdioStream] ReadObject: Error reading headers: %+v", err) // Log full wrapped error
+
+			resultCh <- readResult{data, nil, false}
+			return
+		}
+
+		// Standard Content-Length header approach
+		contentLength, err := s.readHeaders()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				resultCh <- readResult{nil, nil, true}
+				return
+			}
 			resultCh <- readResult{nil, err, false}
 			return
 		}
-		if s.debug {
-			log.Printf("[DEBUG][stdioStream] ReadObject: Successfully parsed Content-Length: %d", contentLength)
-		}
 
-		// Step 2: Read the exact message body size
+		// Read message body based on Content-Length
 		data, err := s.readMessageBody(contentLength)
 		if err != nil {
-			log.Printf("[ERROR][stdioStream] ReadObject: Error reading message body (expected %d bytes): %+v", contentLength, err)
 			resultCh <- readResult{nil, err, false}
 			return
 		}
-		if s.debug {
-			log.Printf("[DEBUG][stdioStream] ReadObject: Successfully read %d bytes for message body.", len(data))
-		}
 
-		// Step 3: Send the successfully read data for unmarshalling
 		resultCh <- readResult{data, nil, false}
 	}()
 
-	// Wait for the read operation to complete or timeout
+	// Wait for result or timeout
 	select {
 	case res := <-resultCh:
-		// processReadResult handles unmarshalling, EOF propagation, and error returns
 		return s.processReadResult(res, v)
-
 	case <-time.After(s.readTimeout):
 		if s.debug {
-			log.Printf("[WARN][stdioStream] ReadObject: Read operation timed out after %v", s.readTimeout)
+			log.Printf("stdioObjectStream.ReadObject: Read timeout after %v", s.readTimeout)
 		}
-		return cgerr.NewTimeoutError( // Return a specific timeout error
-			fmt.Sprintf("read operation timed out after %v", s.readTimeout),
+		return cgerr.NewTimeoutError(
+			"read operation timed out",
 			map[string]interface{}{
-				"timeout_duration": s.readTimeout.String(),
-				"target_type":      fmt.Sprintf("%T", v),
+				"timeout":      s.readTimeout.String(),
+				"target_type":  fmt.Sprintf("%T", v),
+				"read_timeout": s.readTimeout,
 			},
 		)
 	}
 }
 
-// readHeaders reads and parses message headers until the empty line separator,
-// extracting the Content-Length value.
-func (s *stdioObjectStream) readHeaders() (int, error) {
-	contentLength := -1 // Use -1 to signify "not found yet"
-	if s.debug {
-		log.Printf("[DEBUG][stdioStream] readHeaders: Starting header read loop.")
-	}
+// readDirectJSON reads a complete JSON object directly from the stream.
+// REFACTORED: Reduced cyclomatic complexity by simplifying and factoring out logic.
+func (s *stdioObjectStream) readDirectJSON() ([]byte, error) {
+	var (
+		data       []byte
+		braceCount int
+		foundBrace bool
+	)
 
+	// State tracking for JSON parsing
+	state := &jsonParserState{}
+
+	// Keep reading until we have a complete JSON object
 	for {
-		// bufio.Reader.ReadString handles \n and \r\n endings correctly.
-		line, err := s.reader.ReadString('\n')
+		buffer := make([]byte, 1) // Read one byte at a time
+		n, err := s.reader.Read(buffer)
 		if err != nil {
-			// If EOF occurs *before* the empty separator line, it's either a
-			// clean closure (if no data read yet) or an unexpected closure.
-			// Return io.EOF to signal potential clean closure upstream.
-			if errors.Is(err, io.EOF) {
-				log.Printf("[INFO][stdioStream] readHeaders: EOF encountered while reading header line.")
-				return 0, io.EOF // Signal EOF
+			// Handle EOF specially - it's ok if we've found a complete object
+			if err == io.EOF && braceCount == 0 && foundBrace {
+				break
 			}
-			// Other read errors are transport problems.
-			return 0, cgerr.ErrorWithDetails(
-				errors.Wrap(err, "transport error reading header line"),
-				cgerr.CategoryRPC,
-				cgerr.CodeInternalError, // Treat as internal transport error
-				map[string]interface{}{"partial_line_read": line},
-			)
+			return nil, err
 		}
 
-		// Remove surrounding whitespace including potential \r
-		trimmedLine := strings.TrimSpace(line)
-		if s.debug {
-			log.Printf("[DEBUG][stdioStream] readHeaders: Read header line: %q", trimmedLine)
+		if n == 0 {
+			continue
 		}
 
-		// Empty line marks the end of the header section
-		if trimmedLine == "" {
-			if s.debug {
-				log.Printf("[DEBUG][stdioStream] readHeaders: Empty line detected, ending header read.")
-			}
-			break // Exit header loop
-		}
+		char := buffer[0]
+		data = append(data, char)
 
-		// Check for the Content-Length header (case-sensitive based on s.contentLn)
-		if strings.HasPrefix(trimmedLine, s.contentLn) {
-			lenStr := strings.TrimPrefix(trimmedLine, s.contentLn)
-			var cl int
-			// Use Sscanf for robust integer parsing from the remaining string part.
-			if _, err := fmt.Sscanf(lenStr, "%d", &cl); err != nil || cl < 0 {
-				// Invalid format or negative length
-				return 0, cgerr.ErrorWithDetails(
-					errors.Wrap(err, "invalid Content-Length header value"),
-					cgerr.CategoryRPC,
-					cgerr.CodeParseError,
-					map[string]interface{}{"header_line": trimmedLine},
-				)
+		// Update parsing state based on the current character
+		state.update(char)
+
+		// Only count braces outside of strings
+		if !state.inQuote {
+			if char == '{' {
+				braceCount++
+				foundBrace = true
+			} else if char == '}' {
+				braceCount--
 			}
-			contentLength = cl
-			if s.debug {
-				log.Printf("[DEBUG][stdioStream] readHeaders: Found Content-Length: %d", contentLength)
+
+			// If we've found a matching closing brace, we're done
+			if foundBrace && braceCount == 0 {
+				break
 			}
 		}
-		// Other headers are simply ignored without the unnecessary empty "else if s.debug" branch
 	}
 
-	// After loop, check if Content-Length was actually found
-	if contentLength == -1 {
+	if s.debug {
+		log.Printf("stdioObjectStream.readDirectJSON: Read JSON: %s", string(data))
+	}
+
+	return data, nil
+}
+
+// jsonParserState tracks the state of JSON parsing to handle quoting and escaping.
+type jsonParserState struct {
+	inQuote    bool
+	escapeNext bool
+}
+
+// update updates the parser state based on the current character.
+func (s *jsonParserState) update(char byte) {
+	if char == '"' && !s.escapeNext {
+		s.inQuote = !s.inQuote
+	}
+
+	if char == '\\' && s.inQuote && !s.escapeNext {
+		s.escapeNext = true
+	} else {
+		s.escapeNext = false
+	}
+}
+
+// readHeaders reads and parses the message headers to extract Content-Length.
+// Now uses textproto for standard header parsing.
+func (s *stdioObjectStream) readHeaders() (int, error) {
+	if s.debug {
+		log.Printf("stdioObjectStream.readHeaders: Reading headers using textproto")
+	}
+
+	// Create a textproto reader from our bufio reader
+	tr := textproto.NewReader(s.reader)
+
+	// ReadMIMEHeader parses headers until a blank line
+	headers, err := tr.ReadMIMEHeader()
+	if err != nil {
 		return 0, cgerr.ErrorWithDetails(
-			errors.New("mandatory Content-Length header missing"),
+			errors.Wrap(err, "failed to read headers"),
 			cgerr.CategoryRPC,
-			cgerr.CodeParseError, // It's a parsing/protocol violation
-			nil,
+			cgerr.CodeParseError,
+			map[string]interface{}{
+				"error": err.Error(),
+			},
 		)
+	}
+
+	if s.debug {
+		log.Printf("stdioObjectStream.readHeaders: Headers read: %v", headers)
+	}
+
+	// Get Content-Length header, normalizing on case
+	contentLengthStr := headers.Get(s.contentLn)
+	if contentLengthStr == "" {
+		return 0, cgerr.ErrorWithDetails(
+			errors.New("Content-Length header missing"),
+			cgerr.CategoryRPC,
+			cgerr.CodeParseError,
+			map[string]interface{}{
+				"headers": headers,
+			},
+		)
+	}
+
+	// Parse Content-Length value
+	contentLength, err := strconv.Atoi(contentLengthStr)
+	if err != nil {
+		return 0, cgerr.ErrorWithDetails(
+			errors.Wrap(err, "invalid Content-Length"),
+			cgerr.CategoryRPC,
+			cgerr.CodeParseError,
+			map[string]interface{}{
+				"content_length_str": contentLengthStr,
+			},
+		)
+	}
+
+	// Validate Content-Length
+	if contentLength <= 0 {
+		return 0, cgerr.ErrorWithDetails(
+			errors.New("Content-Length must be positive"),
+			cgerr.CategoryRPC,
+			cgerr.CodeParseError,
+			map[string]interface{}{
+				"content_length": contentLength,
+			},
+		)
+	}
+
+	if s.debug {
+		log.Printf("stdioObjectStream.readHeaders: Parsed Content-Length: %d", contentLength)
 	}
 
 	return contentLength, nil
 }
 
-// readMessageBody reads exactly 'contentLength' bytes from the reader.
-// Uses io.ReadFull for robustness.
+// readMessageBody reads the message body based on the provided Content-Length.
 func (s *stdioObjectStream) readMessageBody(contentLength int) ([]byte, error) {
-	if contentLength == 0 {
-		if s.debug {
-			log.Printf("[DEBUG][stdioStream] readMessageBody: Content-Length is 0, returning empty body.")
-		}
-		return []byte{}, nil // Return empty slice, not nil
-	}
-
 	if s.debug {
-		log.Printf("[DEBUG][stdioStream] readMessageBody: Attempting to read exactly %d bytes.", contentLength)
+		log.Printf("stdioObjectStream.readMessageBody: Reading %d bytes of message body", contentLength)
 	}
 
-	data := make([]byte, contentLength)
-	// io.ReadFull is crucial: it returns an error (ErrUnexpectedEOF) if
-	// the stream ends before reading the full 'contentLength' bytes.
-	n, err := io.ReadFull(s.reader, data)
-	if err != nil {
-		readBytes := n // Capture bytes read even on error
-		// If EOF/UnexpectedEOF happens here, it means the stream died after
-		// headers promised 'contentLength' bytes, which is a framing error.
-		if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
-			return nil, cgerr.ErrorWithDetails(
-				errors.Wrap(err, "stream closed unexpectedly while reading message body"),
-				cgerr.CategoryRPC,
-				cgerr.CodeParseError, // Framing/parsing issue
-				map[string]interface{}{
-					"expected_bytes": contentLength,
-					"read_bytes":     readBytes,
-				},
-			)
-		}
-		// Other read errors are likely transport issues.
+	// Safety check for very large content lengths
+	if contentLength > 100*1024*1024 { // 100MB limit
 		return nil, cgerr.ErrorWithDetails(
-			errors.Wrap(err, "transport error reading message body"),
+			errors.New("Content-Length too large"),
 			cgerr.CategoryRPC,
-			cgerr.CodeInternalError,
+			cgerr.CodeParseError,
 			map[string]interface{}{
-				"expected_bytes": contentLength,
-				"read_bytes":     readBytes,
+				"content_length": contentLength,
+				"max_allowed":    100 * 1024 * 1024,
 			},
 		)
 	}
 
-	// Optional logging of received data is handled elsewhere
+	data := make([]byte, contentLength)
+	if _, err := io.ReadFull(s.reader, data); err != nil {
+		return nil, cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to read message body"),
+			cgerr.CategoryRPC,
+			cgerr.CodeParseError,
+			map[string]interface{}{
+				"expected_bytes": contentLength,
+				"error":          err.Error(),
+			},
+		)
+	}
+
+	if s.debug {
+		log.Printf("stdioObjectStream.readMessageBody: Successfully read message: %s", string(data))
+	}
+
 	return data, nil
 }
 
-// processReadResult handles the outcome from the read goroutine, performing
-// unmarshalling or propagating errors/EOF.
+// processReadResult processes the result of a read operation.
+// This helper function reduces the complexity of ReadObject.
 func (s *stdioObjectStream) processReadResult(res readResult, v interface{}) error {
-	// Case 1: Clean EOF detected during header reading
 	if res.isEOF {
 		if s.debug {
-			log.Printf("[INFO][stdioStream] processReadResult: Propagating clean EOF.")
+			log.Printf("stdioObjectStream.processReadResult: Returning EOF")
 		}
-		return io.EOF // Signal clean stream closure to jsonrpc2 library
+		return io.EOF
 	}
 
-	// Case 2: Error occurred during readHeaders or readMessageBody
 	if res.err != nil {
-		// Error already logged where it occurred, just return it.
 		if s.debug {
-			log.Printf("[DEBUG][stdioStream] processReadResult: Propagating read error: %+v", res.err)
+			log.Printf("stdioObjectStream.processReadResult: Returning error: %v", res.err)
 		}
 		return res.err
 	}
 
-	// Case 3: Data successfully read, attempt to unmarshal
+	// Added more information about the received data
 	if s.debug {
-		log.Printf("[DEBUG][stdioStream] processReadResult: Attempting to unmarshal %d bytes into %T", len(res.data), v)
+		log.Printf("stdioObjectStream.processReadResult: Processing %d bytes of data", len(res.data))
 	}
-	if err := json.Unmarshal(res.data, v); err != nil {
-		// Log the raw data that failed (truncated) - THIS IS KEY FOR DEBUGGING
-		logData := string(res.data)
-		const maxLogData = 512 // Limit log size
-		if len(logData) > maxLogData {
-			logData = logData[:maxLogData] + "...(truncated)"
-		}
-		log.Printf("[ERROR][stdioStream] processReadResult: Failed to unmarshal JSON: %v. Raw Data: %q", err, logData)
 
-		// Wrap and return a specific deserialization error
+	// Unmarshal the JSON data
+	if err := json.Unmarshal(res.data, v); err != nil {
+		if s.debug {
+			log.Printf("stdioObjectStream.processReadResult: Failed to unmarshal JSON: %v", err)
+			log.Printf("stdioObjectStream.processReadResult: Problematic JSON: %s", string(res.data))
+		}
 		return cgerr.ErrorWithDetails(
-			errors.Wrap(err, "JSON unmarshal failed"),
+			errors.Wrap(err, "failed to unmarshal JSON"),
 			cgerr.CategoryRPC,
-			cgerr.CodeParseError, // It's a parse error according to JSON-RPC spec
+			cgerr.CodeParseError,
 			map[string]interface{}{
 				"data_size":   len(res.data),
 				"target_type": fmt.Sprintf("%T", v),
-				"data_prefix": logData, // Include sample data in error details
+				"data_sample": string(res.data[:min(100, len(res.data))]), // Include a sample of the data
 			},
 		)
 	}
 
-	// Success
 	if s.debug {
-		log.Printf("[DEBUG][stdioStream] processReadResult: Successfully unmarshalled message.")
+		log.Printf("stdioObjectStream.processReadResult: Successfully unmarshalled object")
 	}
 	return nil
+}
+
+// min returns the minimum of two integers.
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // Close closes the stream.

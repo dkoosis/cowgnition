@@ -172,6 +172,22 @@ check:
 	@printf "   $(ICON_OK) $(GREEN)Tool check complete$(NC)\n"
 	@printf "\n" # Add spacing
 
+# --- Convenience Targets ---
+
+# Run CowGnition server with default settings
+run:
+	@printf "$(ICON_START) $(BOLD)$(BLUE)Running CowGnition server...$(NC)\n"
+	@./$(BINARY_NAME) serve
+
+# Run with HTTP transport instead of stdio
+run-http:
+	@printf "$(ICON_START) $(BOLD)$(BLUE)Running CowGnition server with HTTP transport...$(NC)\n"
+	@./$(BINARY_NAME) serve --transport http
+
+# Run with debug logging
+run-debug:
+	@printf "$(ICON_START) $(BOLD)$(BLUE)Running CowGnition server with debug logging...$(NC)\n"
+	@./$(BINARY_NAME) serve --debug
 
 # --- Help ---
 
