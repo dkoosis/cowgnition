@@ -13,8 +13,15 @@ We considered errorx for its error grouping (traits), but cockroachdb/errors' pr
 
 ## JSON-RPC2.0
 
-
 ### sourcegraph/jsonrpc2
+
+## Configuration Management
+
+### koanf
+
+We will use koanf for configuration management instead of Viper. Koanf offers a simpler, lighter approach with no core dependencies. It supports all our needs: file discovery in multiple paths, environment variable handling, multiple format support, and clear override precedence.
+
+Despite being newer than Viper, koanf follows Go idioms more closely and provides a more modular design. We believe this fits our project's current complexity level better than the heavier Viper alternative. Koanf's explicit layering of configuration sources will help solve our concerns about config file precedence and user confusion.
 
 ## Logging
 

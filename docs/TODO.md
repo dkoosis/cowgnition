@@ -4,8 +4,6 @@
 
 ### Log Entries
 
-- we seek to load the config file from known locations. Let's do some defensive coding around that, to warn the user if there are several config files, with one taking precedence. such an warning would surely have save me heartache in the course of my progamming career.
-
 - review the log messages for clarity and usefullness
 - review the handling of credentials for RTM and put in place strong defensive coding
 
@@ -46,10 +44,32 @@
 
 ## 4. Configuration Enhancements
 
-- [ ] Implement file-based configuration (YAML/TOML)
-- [ ] Add validation for configuration values
-- [ ] Support for environment variable overrides (expand current implementation)
-- [ ] Create configuration documentation
+- [ ] Implement koanf-based configuration system with the following features:
+
+  - [ ] Clear configuration hierarchy (defaults → files → env vars → flags)
+  - [ ] Multiple search paths with precedence rules
+  - [ ] Secure handling of sensitive information
+  - [ ] Strong validation with helpful error messages
+  - [ ] Documentation for users and developers
+  - [ ] we seek to load the config file from known locations. Let's do some defensive coding around that, to warn the user if there are several config files, with one taking precedence. such an warning would surely have save me heartache in the course of my progamming career.
+
+  Implementation plan:
+
+  1. Add koanf dependency to go.mod
+  2. Create new package `internal/kconfig` to replace existing config
+  3. Define configuration structure with appropriate types
+  4. Implement file discovery with explicit search path order
+  5. Add environment variable overrides with clear naming conventions
+  6. Add validation logic for all configuration values
+  7. Implement secure credential handling with masking in logs
+  8. Create config file generator for new users
+  9. Add helper functions for common config operations
+  10. Update all existing code to use the new package
+  11. Write comprehensive tests for the new configuration system
+
+  Reference:
+
+  - Koanf GitHub: https://github.com/knadh/koanf
 
 ## 5. Testing & Quality Assurance
 
@@ -81,12 +101,6 @@
   - [ ] Document error codes and solutions
   - [ ] Create usage guides for client applications
 
-## 8. Configuration File Management
-
-- [ ] I'm looking for example of excellent implementations of config file handling in golang; or excellent design guidance.
-
-Configuration file management is a common requirement, and one that seems likely to be prone to user errors, confusion, and security risks. It's hard for humans to be certain of the name and location of these inputs; they may have sensitive information; they may override eachother depending on path order.
-
 ## Implementation Strategy
 
 1. Focus on one component at a time, getting it fully working before moving on
@@ -104,23 +118,27 @@ Configuration file management is a common requirement, and one that seems likely
 - Test with real Claude Desktop integration
 - Follow test-driven development where possible
 
-* Structured Logging Initiative:
-* - Research and select a structured logging library (e.g., zap, logrus)
-* - Define a base JSON schema for log entries
-* - Implement a log formatting utility
-* - Refactor existing logging to use the utility and structured format
-* - Design a mechanism for configuring log levels
-* - Implement middleware for HTTP request logging (if applicable)
-* - AI Coding Assistant Prompt:
-* - "Implement structured logging using the [chosen library name] library.
-* - Define a JSON schema with fields like timestamp (RFC3339), severity, message, component, and data.
-* - Create a log formatting utility to ensure consistent output.
-* - Refactor existing log calls to use this utility.
-* - Add a mechanism to configure log levels.
-* - If the server uses HTTP, implement middleware to log requests."
-    // TODO: internal/mcp/server.go Error handling simplification needed - The current approach uses three error packages:
-    // 1. Standard "errors" (for errors.Is/As)
-    // 2. "github.com/cockroachdb/errors" (for stack traces and wrapping)
-    // 3. Custom "cgerr" package (for domain-specific errors)
-    // This creates import confusion and makes error handling inconsistent.
-    // Consider consolidating when implementing improved logging.
+## Structured Logging Initiative
+
+- Research and select a structured logging library (e.g., zap, logrus)
+- Define a base JSON schema for log entries
+- Implement a log formatting utility
+- Refactor existing logging to use the utility and structured format
+- Design a mechanism for configuring log levels
+- Implement middleware for HTTP request logging (if applicable)
+
+## Error Handling Simplification
+
+- [ ] Review and consolidate error handling approach:
+
+  - [ ] Standardize on cockroachdb/errors for all error operations
+  - [ ] Create consistent error wrapping patterns
+  - [ ] Update error checking to use errors.Is consistently
+  - [ ] Remove redundant error types where possible
+  - [ ] Ensure all errors include appropriate context
+
+  // TODO: internal/mcp/server.go Error handling simplification needed - The current approach uses three error packages:
+  // 1. Standard "errors" (for errors.Is/As)
+  // 2. "github.com/cockroachdb/errors" (for stack traces and wrapping)
+  // 3. Custom "cgerr" package (for domain-specific errors)
+  // This creates import confusion and makes error handling inconsistent.
