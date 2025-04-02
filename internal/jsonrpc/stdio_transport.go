@@ -203,7 +203,6 @@ func RunStdioServer(handler jsonrpc2.Handler, options ...StdioTransportOption) e
 	}()
 
 	// Create a root context that will live for the duration of the server
-	// We're not using a timeout here as that could cause premature termination
 	rootCtx := context.Background()
 
 	// Connect the transport
@@ -221,20 +220,38 @@ func RunStdioServer(handler jsonrpc2.Handler, options ...StdioTransportOption) e
 		)
 	}
 
+	// State tracking - aligns with state machine architecture
+	connState := "connected"
+	lastActivity := time.Now()
+
 	// Get the disconnect notification channel
 	disconnectChan := conn.DisconnectNotify()
 
-	// Block until disconnection
 	if opts.debug {
-		log.Printf("Blocking on connection disconnect notification")
+		log.Printf("MCP Connection established: state=%s", connState)
 	}
 
-	// Using direct channel receive instead of select with single case
-	<-disconnectChan
+	// Create a heartbeat ticker to monitor connection health
+	// This is important for detecting and logging connection issues
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 
-	if opts.debug {
-		log.Printf("Stdio JSON-RPC server disconnected")
+	// Block until explicit disconnection - crucial for MCP protocol
+	for {
+		select {
+		case <-disconnectChan:
+			connState = "disconnected"
+			if opts.debug {
+				log.Printf("MCP Connection state change: %s (after %s of activity)",
+					connState, time.Since(lastActivity))
+			}
+			return nil
+
+		case <-ticker.C:
+			if opts.debug {
+				log.Printf("MCP Connection heartbeat: state=%s, active_duration=%s",
+					connState, time.Since(lastActivity))
+			}
+		}
 	}
-
-	return nil
 }

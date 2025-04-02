@@ -26,3 +26,15 @@ Despite being newer than Viper, koanf follows Go idioms more closely and provide
 ## Logging
 
 +We will adopt structured logging using a JSON format. This will provide consistent formatting, make logs more readable, and ease integration with cloud logging systems. This approach will improve debugging and observability.
+
+## MCP Connection Flow Architecture
+
+We've chosen to implement a State Machine-based Event Handler architecture for the MCP connection flow. This architecture models the connection lifecycle as explicit states (Unconnected, Initializing, Connected, Terminating, Error) with clearly defined transitions between them. Message handling is implemented as an event-driven system that dispatches requests to appropriate handlers based on the current state and message type.
+
+This approach was selected because it directly addresses our key requirements:
+
+1. **Protocol Compliance**: The explicit state machine enforces the correct connection lifecycle and message sequencing as defined in the MCP specification.
+2. **Developer Experience**: Structured logging with connection context, clear error handling distinguishing protocol vs. system errors, and transparent state transitions provide excellent debuggability.
+3. **Future Extensibility**: The architecture naturally accommodates stateful features like resource subscriptions, progress tracking, and request cancellation.
+
+We considered alternatives including a simpler request-response loop and an actor model, but the state machine approach better aligns with Go idioms and the stateful nature of the MCP protocol. It provides the right balance of structure, flexibility, and maintainability while remaining idiomatic Go.

@@ -1,146 +1,18 @@
 # CowGnition Implementation Roadmap
 
-## TOP PRIORITY: Debug connection with Claude Desktop
+## TOP PRIORITY: Implement State Machine Architecture for MCP Connection Handling
 
-These are errors.
+**Implementation Prompt for AI Assistant:**
+"Help me implement the State Machine-based Event Handler architecture for MCP connection handling. Focus on the following key components:
 
-### MCP.LOG
+1. Defining a ConnectionManager struct with explicit connection states (Unconnected, Initializing, Connected, Terminating, Error)
+2. Implementing state transitions with appropriate validation
+3. Creating a message dispatcher that routes messages based on current state and message method
+4. Integrating structured logging throughout with connection and request IDs
+5. Implementing proper error handling that distinguishes between protocol and system errors
+6. Ensuring the transport layer maintains persistent connections throughout the state lifecycle"
 
-```
-2025-04-02T02:11:32.477Z [info] [cowgnition] Initializing server...
-2025-04-02T02:11:32.489Z [info] [cowgnition] Server started and connected successfully
-2025-04-02T02:11:32.491Z [info] [cowgnition] Message from client: {"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0}
-2025-04-02T02:11:32.525Z [info] [cowgnition] Message from server: {"jsonrpc":"2.0","id":0,"result":{"server_info":{"name":"cowgnition","version":"1.0.0"},"capabilities":{"resources":{"list":true,"read":true},"tools":{"call":true,"list":true}},"protocolVersion":"2024-11-05"}}
-2025-04-02T02:11:32.526Z [info] [cowgnition] Client transport closed
-2025-04-02T02:11:32.527Z [info] [cowgnition] Server transport closed
-2025-04-02T02:11:32.527Z [info] [cowgnition] Client transport closed
-2025-04-02T02:11:32.527Z [info] [cowgnition] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log.
-2025-04-02T02:11:32.527Z [error] [cowgnition] Server disconnected. For troubleshooting guidance, please visit our [debugging documentation](https://modelcontextprotocol.io/docs/tools/debugging)
-2025-04-02T02:11:32.528Z [info] [cowgnition] Server transport closed
-2025-04-02T02:11:32.528Z [info] [cowgnition] Client transport closed
-2025-04-02T02:11:33.132Z [info] [cowgnition] Initializing server...
-2025-04-02T02:11:33.136Z [info] [cowgnition] Server started and connected successfully
-2025-04-02T02:11:33.137Z [info] [cowgnition] Message from client: {"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0}
-2025-04-02T02:11:33.143Z [info] [cowgnition] Message from server: {"jsonrpc":"2.0","id":0,"result":{"server_info":{"name":"cowgnition","version":"1.0.0"},"capabilities":{"resources":{"list":true,"read":true},"tools":{"call":true,"list":true}},"protocolVersion":"2024-11-05"}}
-2025-04-02T02:11:33.143Z [info] [cowgnition] Client transport closed
-2025-04-02T02:11:33.143Z [info] [cowgnition] Server transport closed
-2025-04-02T02:11:33.143Z [info] [cowgnition] Client transport closed
-2025-04-02T02:11:33.143Z [info] [cowgnition] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log.
-2025-04-02T02:11:33.143Z [error] [cowgnition] Server disconnected. For troubleshooting guidance, please visit our [debugging documentation](https://modelcontextprotocol.io/docs/tools/debugging)
-2025-04-02T02:11:33.146Z [info] [cowgnition] Server transport closed
-2025-04-02T02:11:33.146Z [info] [cowgnition] Client transport closed
-2025-04-02T02:56:28.467Z [info] [cowgnition] Initializing server...
-2025-04-02T02:56:28.477Z [info] [cowgnition] Server started and connected successfully
-2025-04-02T02:56:28.478Z [info] [cowgnition] Message from client: {"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0}
-2025-04-02T02:56:28.956Z [info] [cowgnition] Initializing server...
-2025-04-02T02:56:28.975Z [info] [cowgnition] Server started and connected successfully
-2025-04-02T02:56:28.977Z [info] [cowgnition] Message from client: {"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0}
-2025-04-02T02:56:29.079Z [info] [cowgnition] Message from server: {"jsonrpc":"2.0","id":0,"result":{"server_info":{"name":"cowgnition","version":"1.0.0"},"capabilities":{"resources":{"list":true,"read":true},"tools":{"call":true,"list":true}},"protocolVersion":"2024-11-05"}}
-2025-04-02T02:56:29.079Z [info] [cowgnition] Message from server: {"jsonrpc":"2.0","id":0,"result":{"server_info":{"name":"cowgnition","version":"1.0.0"},"capabilities":{"resources":{"list":true,"read":true},"tools":{"call":true,"list":true}},"protocolVersion":"2024-11-05"}}
-2025-04-02T02:56:29.081Z [info] [cowgnition] Client transport closed
-2025-04-02T02:56:29.082Z [info] [cowgnition] Server transport closed
-2025-04-02T02:56:29.082Z [info] [cowgnition] Client transport closed
-2025-04-02T02:56:29.082Z [info] [cowgnition] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log.
-2025-04-02T02:56:29.082Z [error] [cowgnition] Server disconnected. For troubleshooting guidance, please visit our [debugging documentation](https://modelcontextprotocol.io/docs/tools/debugging)
-2025-04-02T02:56:29.084Z [info] [cowgnition] Client transport closed
-2025-04-02T02:56:29.084Z [info] [cowgnition] Server transport closed
-2025-04-02T02:56:29.084Z [info] [cowgnition] Client transport closed
-2025-04-02T02:56:29.084Z [info] [cowgnition] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log.
-2025-04-02T02:56:29.084Z [error] [cowgnition] Server disconnected. For troubleshooting guidance, please visit our [debugging documentation](https://modelcontextprotocol.io/docs/tools/debugging)
-2025-04-02T02:56:29.167Z [info] [cowgnition] Server transport closed
-2025-04-02T02:56:29.167Z [info] [cowgnition] Client transport closed
-2025-04-02T02:56:29.167Z [info] [cowgnition] Server transport closed
-2025-04-02T02:56:29.167Z [info] [cowgnition] Client transport closed
-```
-
-### MCP-SERVER-COWGNITIOPN.LOG
-
-```
-2025-04-02T02:11:32.477Z [cowgnition] [info] Initializing server...
-2025-04-02T02:11:32.488Z [cowgnition] [info] Server started and connected successfully
-2025-04-02T02:11:32.491Z [cowgnition] [info] Message from client: {"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0}
-2025/04/01 22:11:32 Configuration loaded successfully
-2025/04/01 22:11:32 Starting CowGnition MCP server with stdio transport
-2025/04/01 22:11:32 Server.startStdio: starting MCP server with stdio transport (debug enabled)
-2025/04/01 22:11:32 Starting stdio JSON-RPC server with timeouts (request: 30s, read: 2m0s, write: 30s)
-2025/04/01 22:11:32 Connected stdio transport (using NewPlainObjectStream for MCP newline-delimited JSON)
-2025/04/01 22:11:32 Blocking on connection disconnect notification
-2025/04/01 22:11:32 Received initialize request with params: {"capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"},"protocolVersion":"2024-11-05"}
-2025/04/01 22:11:32 MCP initialization requested by client: claude-ai (version: 0.1.0)
-2025/04/01 22:11:32 Client protocol version: 2024-11-05
-2025/04/01 22:11:32 Sending initialize response: {ServerInfo:{Name:cowgnition Version:1.0.0} Capabilities:map[resources:map[list:true read:true] tools:map[call:true list:true]] ProtocolVersion:2024-11-05}
-2025-04-02T02:11:32.525Z [cowgnition] [info] Message from server: {"jsonrpc":"2.0","id":0,"result":{"server_info":{"name":"cowgnition","version":"1.0.0"},"capabilities":{"resources":{"list":true,"read":true},"tools":{"call":true,"list":true}},"protocolVersion":"2024-11-05"}}
-2025-04-02T02:11:32.526Z [cowgnition] [info] Client transport closed
-2025-04-02T02:11:32.527Z [cowgnition] [info] Server transport closed
-2025-04-02T02:11:32.527Z [cowgnition] [info] Client transport closed
-2025-04-02T02:11:32.527Z [cowgnition] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log.
-2025-04-02T02:11:32.527Z [cowgnition] [error] Server disconnected. For troubleshooting guidance, please visit our [debugging documentation](https://modelcontextprotocol.io/docs/tools/debugging) {"context":"connection"}
-2025-04-02T02:11:32.528Z [cowgnition] [info] Server transport closed
-2025-04-02T02:11:32.528Z [cowgnition] [info] Client transport closed
-2025-04-02T02:11:33.132Z [cowgnition] [info] Initializing server...
-2025-04-02T02:11:33.136Z [cowgnition] [info] Server started and connected successfully
-2025-04-02T02:11:33.137Z [cowgnition] [info] Message from client: {"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0}
-2025/04/01 22:11:33 Configuration loaded successfully
-2025/04/01 22:11:33 Starting CowGnition MCP server with stdio transport
-2025/04/01 22:11:33 Server.startStdio: starting MCP server with stdio transport (debug enabled)
-2025/04/01 22:11:33 Starting stdio JSON-RPC server with timeouts (request: 30s, read: 2m0s, write: 30s)
-2025/04/01 22:11:33 Connected stdio transport (using NewPlainObjectStream for MCP newline-delimited JSON)
-2025/04/01 22:11:33 Blocking on connection disconnect notification
-2025/04/01 22:11:33 Received initialize request with params: {"capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"},"protocolVersion":"2024-11-05"}
-2025/04/01 22:11:33 MCP initialization requested by client: claude-ai (version: 0.1.0)
-2025/04/01 22:11:33 Client protocol version: 2024-11-05
-2025/04/01 22:11:33 Sending initialize response: {ServerInfo:{Name:cowgnition Version:1.0.0} Capabilities:map[resources:map[list:true read:true] tools:map[call:true list:true]] ProtocolVersion:2024-11-05}
-2025-04-02T02:11:33.143Z [cowgnition] [info] Message from server: {"jsonrpc":"2.0","id":0,"result":{"server_info":{"name":"cowgnition","version":"1.0.0"},"capabilities":{"resources":{"list":true,"read":true},"tools":{"call":true,"list":true}},"protocolVersion":"2024-11-05"}}
-2025-04-02T02:11:33.143Z [cowgnition] [info] Client transport closed
-2025-04-02T02:11:33.143Z [cowgnition] [info] Server transport closed
-2025-04-02T02:11:33.143Z [cowgnition] [info] Client transport closed
-2025-04-02T02:11:33.143Z [cowgnition] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log.
-2025-04-02T02:11:33.143Z [cowgnition] [error] Server disconnected. For troubleshooting guidance, please visit our [debugging documentation](https://modelcontextprotocol.io/docs/tools/debugging) {"context":"connection"}
-2025-04-02T02:11:33.146Z [cowgnition] [info] Server transport closed
-2025-04-02T02:11:33.146Z [cowgnition] [info] Client transport closed
-2025-04-02T02:56:28.466Z [cowgnition] [info] Initializing server...
-2025-04-02T02:56:28.477Z [cowgnition] [info] Server started and connected successfully
-2025-04-02T02:56:28.478Z [cowgnition] [info] Message from client: {"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0}
-2025-04-02T02:56:28.956Z [cowgnition] [info] Initializing server...
-2025-04-02T02:56:28.974Z [cowgnition] [info] Server started and connected successfully
-2025-04-02T02:56:28.977Z [cowgnition] [info] Message from client: {"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0}
-2025/04/01 22:56:29 Configuration loaded successfully
-2025/04/01 22:56:29 Starting CowGnition MCP server with stdio transport
-2025/04/01 22:56:29 Server.startStdio: starting MCP server with stdio transport (debug enabled)
-2025/04/01 22:56:29 Starting stdio JSON-RPC server with timeouts (request: 30s, read: 2m0s, write: 30s)
-2025/04/01 22:56:29 Connected stdio transport (using NewPlainObjectStream for MCP newline-delimited JSON)
-2025/04/01 22:56:29 Blocking on connection disconnect notification
-2025/04/01 22:56:29 Received initialize request with params: {"capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"},"protocolVersion":"2024-11-05"}
-2025/04/01 22:56:29 MCP initialization requested by client: claude-ai (version: 0.1.0)
-2025/04/01 22:56:29 Client protocol version: 2024-11-05
-2025/04/01 22:56:29 Sending initialize response: {ServerInfo:{Name:cowgnition Version:1.0.0} Capabilities:map[resources:map[list:true read:true] tools:map[call:true list:true]] ProtocolVersion:2024-11-05}
-2025/04/01 22:56:29 Configuration loaded successfully
-2025/04/01 22:56:29 Starting CowGnition MCP server with stdio transport
-2025/04/01 22:56:29 Server.startStdio: starting MCP server with stdio transport (debug enabled)
-2025/04/01 22:56:29 Starting stdio JSON-RPC server with timeouts (request: 30s, read: 2m0s, write: 30s)
-2025/04/01 22:56:29 Connected stdio transport (using NewPlainObjectStream for MCP newline-delimited JSON)
-2025/04/01 22:56:29 Blocking on connection disconnect notification
-2025/04/01 22:56:29 Received initialize request with params: {"capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"},"protocolVersion":"2024-11-05"}
-2025/04/01 22:56:29 MCP initialization requested by client: claude-ai (version: 0.1.0)
-2025/04/01 22:56:29 Client protocol version: 2024-11-05
-2025/04/01 22:56:29 Sending initialize response: {ServerInfo:{Name:cowgnition Version:1.0.0} Capabilities:map[resources:map[list:true read:true] tools:map[call:true list:true]] ProtocolVersion:2024-11-05}
-2025-04-02T02:56:29.079Z [cowgnition] [info] Message from server: {"jsonrpc":"2.0","id":0,"result":{"server_info":{"name":"cowgnition","version":"1.0.0"},"capabilities":{"resources":{"list":true,"read":true},"tools":{"call":true,"list":true}},"protocolVersion":"2024-11-05"}}
-2025-04-02T02:56:29.079Z [cowgnition] [info] Message from server: {"jsonrpc":"2.0","id":0,"result":{"server_info":{"name":"cowgnition","version":"1.0.0"},"capabilities":{"resources":{"list":true,"read":true},"tools":{"call":true,"list":true}},"protocolVersion":"2024-11-05"}}
-2025-04-02T02:56:29.081Z [cowgnition] [info] Client transport closed
-2025-04-02T02:56:29.082Z [cowgnition] [info] Server transport closed
-2025-04-02T02:56:29.082Z [cowgnition] [info] Client transport closed
-2025-04-02T02:56:29.082Z [cowgnition] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log.
-2025-04-02T02:56:29.082Z [cowgnition] [error] Server disconnected. For troubleshooting guidance, please visit our [debugging documentation](https://modelcontextprotocol.io/docs/tools/debugging) {"context":"connection"}
-2025-04-02T02:56:29.084Z [cowgnition] [info] Client transport closed
-2025-04-02T02:56:29.084Z [cowgnition] [info] Server transport closed
-2025-04-02T02:56:29.084Z [cowgnition] [info] Client transport closed
-2025-04-02T02:56:29.084Z [cowgnition] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log.
-2025-04-02T02:56:29.084Z [cowgnition] [error] Server disconnected. For troubleshooting guidance, please visit our [debugging documentation](https://modelcontextprotocol.io/docs/tools/debugging) {"context":"connection"}
-2025-04-02T02:56:29.167Z [cowgnition] [info] Server transport closed
-2025-04-02T02:56:29.167Z [cowgnition] [info] Server transport closed
-2025-04-02T02:56:29.167Z [cowgnition] [info] Client transport closed
-2025-04-02T02:56:29.167Z [cowgnition] [info] Client transport closed
-```
+Start by designing the core state machine interfaces and structs, then implement the state transition logic, followed by the message dispatch system. Each implementation should include comprehensive logging, error handling, and follow Go best practices.
 
 ### Log Entries
 
