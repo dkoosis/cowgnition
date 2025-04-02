@@ -63,14 +63,14 @@ type ConnectionManager struct {
 	clientCapabilities map[string]interface{}
 
 	// Resource manager
-	resourceManager *ResourceManager
+	resourceManager ResourceManager
 
 	// Tool manager
-	toolManager *ToolManager
+	toolManager ToolManager
 }
 
 // NewConnectionManager creates a new ConnectionManager with the given configuration.
-func NewConnectionManager(config ServerConfig, resourceManager *ResourceManager, toolManager *ToolManager) *ConnectionManager {
+func NewConnectionManager(config ServerConfig, resourceManager ResourceManager, toolManager ToolManager) *ConnectionManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	manager := &ConnectionManager{
