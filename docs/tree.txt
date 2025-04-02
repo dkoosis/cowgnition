@@ -1,17 +1,23 @@
 .
+├── Makefile
+├── README.md
 ├── cmd
 │   └── server
 │       ├── config.go
 │       ├── main.go
 │       ├── server.go
 │       └── setup.go
+├── coverage.out
+├── cowgnition
 ├── docs
+│   ├── TODO.md
 │   ├── assets
 │   │   └── cowgnition_logo.png
-│   ├── TODO.md
 │   ├── decision_log.md
 │   ├── llm.md
 │   └── tree.txt
+├── go.mod
+├── go.sum
 ├── internal
 │   ├── config
 │   │   └── config.go
@@ -23,6 +29,12 @@
 │   │   ├── stdio_transport.go
 │   │   └── types.go
 │   ├── mcp
+│   │   ├── connection
+│   │   │   ├── handlers.go
+│   │   │   ├── manager.go
+│   │   │   ├── state.go
+│   │   │   ├── types.go
+│   │   │   └── utils.go
 │   │   ├── errors
 │   │   │   ├── codes.go
 │   │   │   ├── types.go
@@ -31,6 +43,7 @@
 │   │   ├── handlers.go
 │   │   ├── resource.go
 │   │   ├── server.go
+│   │   ├── server_connection.go
 │   │   ├── tool.go
 │   │   └── types.go
 │   └── rtm
@@ -38,15 +51,9 @@
 │       ├── client.go
 │       ├── provider.go
 │       └── token.go
-├── scripts
-│   ├── check_file_length.sh
-│   ├── graph.d2
-│   └── pkgdep.sh
-├── Makefile
-├── README.md
-├── coverage.out
-├── cowgnition
-├── go.mod
-└── go.sum
+└── scripts
+    ├── check_file_length.sh
+    ├── graph.d2
+    └── pkgdep.sh
 
-13 directories, 37 files
+14 directories, 43 files

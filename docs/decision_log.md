@@ -38,3 +38,9 @@ This approach was selected because it directly addresses our key requirements:
 3. **Future Extensibility**: The architecture naturally accommodates stateful features like resource subscriptions, progress tracking, and request cancellation.
 
 We considered alternatives including a simpler request-response loop and an actor model, but the state machine approach better aligns with Go idioms and the stateful nature of the MCP protocol. It provides the right balance of structure, flexibility, and maintainability while remaining idiomatic Go.
+
+### state machine library, or hand-made?
+
+The ConnectionManager, responsible for handling the complex Model Context Protocol (MCP) connection lifecycle, currently uses a hand-rolled state machine. Given MCP's richness—including asynchronous notifications, subscriptions, and cancellations—this manual approach raises concerns about long-term maintainability, robustness, and boilerplate code (like explicit state checks in handlers). To mitigate these issues, the recommendation is to adopt a dedicated Go state machine library. This shift aims to leverage library benefits such as declarative state definitions, built-in transition validation, reduced boilerplate, and potentially better concurrency management.
+
+Comparing popular options, qmuntal/stateless is recommended for closer initial assessment over the simpler looplab/fsm. While looplab/fsm is capable, the advanced features of qmuntal/stateless (like hierarchical states, guards, and a fluent configuration API) appear potentially better suited for modeling the intricacies suggested by the MCP schema and maintaining clarity as complexity grows. However, looplab/fsm remains a solid alternative if a simpler feature set proves sufficient after evaluation.
