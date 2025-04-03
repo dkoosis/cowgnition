@@ -1,7 +1,7 @@
 // file: internal/mcp/definitions/types.go
 package definitions
 
-// LogLevel represents the severity of a log message
+// LogLevel represents the severity of a log message.
 type LogLevel string
 
 const (
@@ -32,7 +32,7 @@ type ToolDefinition struct {
 	InputSchema map[string]interface{} `json:"inputSchema,omitempty"`
 }
 
-// ServerInfo represents server information
+// ServerInfo represents server information.
 type ServerInfo struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`

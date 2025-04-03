@@ -1,25 +1,29 @@
-// file: internal/mcp/types.go
+// Package mcp defines core types, constants, and interfaces for the
+// Machine Control Protocol (MCP).
 package mcp
 
 import (
 	"context"
+	"time"
+	// Import definitions for use in contracts
+	// IMPORTANT: Replace with the correct import path for your module
+	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 )
 
-// ConnectionState represents the different states a connection can be in.
-type ConnectionState string
+// State represents the different states a connection managed by the MCP can be in.
+type State string // Renamed from ConnectionState
 
 const (
-	StateUnconnected  ConnectionState = "unconnected"
-	StateInitializing ConnectionState = "initializing"
-	StateConnected    ConnectionState = "connected"
-	StateTerminating  ConnectionState = "terminating"
-	StateError        ConnectionState = "error"
+	StateUnconnected  State = "unconnected"
+	StateInitializing State = "initializing"
+	StateConnected    State = "connected"
+	StateTerminating  State = "terminating"
+	StateError        State = "error"
 )
 
-// String provides string representation for logging/debugging.
-func (s ConnectionState) String() string { return string(s) }
+func (s State) String() string { return string(s) }
 
-// Trigger represents events that can cause state transitions.
+// Trigger represents events that can cause state transitions within the MCP state machine.
 type Trigger string
 
 const (
@@ -34,74 +38,73 @@ const (
 	TriggerShutdownComplete Trigger = "ShutdownComplete"
 	TriggerErrorOccurred    Trigger = "ErrorOccurred"
 	TriggerDisconnect       Trigger = "Disconnect"
+	TriggerPing             Trigger = "Ping"
+	TriggerSubscribe        Trigger = "Subscribe"
 )
 
-// String provides string representation for logging/debugging.
 func (t Trigger) String() string { return string(t) }
 
 // ResourceManagerContract defines the interface expected by the connection manager
-// for resource management operations.
+// for resource management operations. Implementations adapt specific resource sources.
 type ResourceManagerContract interface {
-	// GetAllResourceDefinitions returns all available resource definitions.
-	GetAllResourceDefinitions() []interface{}
+	// GetAllResourceDefinitions returns metadata for all available resources.
+	GetAllResourceDefinitions() []definitions.ResourceDefinition // Use specific type
 
 	// ReadResource reads a resource with the given name and arguments.
-	// Returns the resource content, MIME type, and any error encountered.
-	ReadResource(ctx context.Context, name string, args map[string]string) (interface{}, string, error)
+	// Returns the resource content as a string, its MIME type, and any error.
+	ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error) // Use specific type
 }
 
 // ToolManagerContract defines the interface expected by the connection manager
-// for tool management operations.
+// for tool management operations. Implementations adapt specific tool execution backends.
 type ToolManagerContract interface {
-	// GetAllToolDefinitions returns all available tool definitions.
-	GetAllToolDefinitions() []interface{}
+	// GetAllToolDefinitions returns metadata for all available tools.
+	GetAllToolDefinitions() []definitions.ToolDefinition // Use specific type
 
 	// CallTool attempts to execute a tool with the given name and arguments.
-	// Returns the result of the tool execution and any error encountered.
-	CallTool(ctx context.Context, name string, args map[string]interface{}) (interface{}, error)
+	// Returns the result of the tool execution as a string and any error.
+	CallTool(ctx context.Context, name string, args map[string]interface{}) (string, error) // Use specific type
 }
 
-// Helper map to translate JSON-RPC method strings to state machine Triggers.
-var methodToTriggerMap = map[string]Trigger{
-	// Initialization / Lifecycle
-	"initialize": TriggerInitialize,
-	"shutdown":   TriggerShutdown,
-	// Resources
-	"resources/list":      TriggerListResources,
-	"resources/read":      TriggerReadResource,
-	"list_resources":      TriggerListResources,
-	"read_resource":       TriggerReadResource,
-	"resources/subscribe": Trigger("Subscribe"),
-	// Tools
-	"tools/list": TriggerListTools,
-	"tools/call": TriggerCallTool,
-	"list_tools": TriggerListTools,
-	"call_tool":  TriggerCallTool,
-	"ping":       Trigger("Ping"),
+// IsCompatibleProtocolVersion checks if the client's protocol version is compatible.
+func IsCompatibleProtocolVersion(clientVersion string) bool {
+	supportedVersions := map[string]bool{"2.0": true, "2024-11-05": true}
+	return supportedVersions[clientVersion]
 }
 
-// MapMethodToTrigger translates a method string to a defined Trigger.
-func MapMethodToTrigger(method string) (Trigger, bool) {
-	t, ok := methodToTriggerMap[method]
-	return t, ok
+// --- Base Server Interfaces/Types ---
+// Assuming these base interfaces/types are defined elsewhere in package mcp,
+// potentially in internal/mcp/server.go or similar.
+// These are needed by the connection.ConnectionServer.
+
+type Server struct {
+	// ... fields for the base server (config, transport, base managers) ...
+	config          Config // Example config type
+	version         string
+	requestTimeout  time.Duration
+	shutdownTimeout time.Duration
+	resourceManager ResourceManager // Base resource manager interface/type
+	toolManager     ToolManager     // Base tool manager interface/type
+	transport       string
 }
 
-// MapErrorToStateTrigger translates specific errors into state machine triggers.
-func MapErrorToStateTrigger(err error) Trigger {
-	// Add logic to check error types if needed
-	return ""
+// Example base config interface needed by ConnectionServer setup
+type Config interface {
+	GetServerName() string
+	// ... other config methods ...
 }
 
-// isCompatibleProtocolVersion checks if the client's protocol version is compatible.
-func isCompatibleProtocolVersion(version string) bool {
-	// Currently supported versions
-	supportedVersions := []string{"2.0", "2024-11-05"}
-
-	for _, supported := range supportedVersions {
-		if version == supported {
-			return true
-		}
-	}
-	// Future: implement semantic version checking for better compatibility
-	return false
+// Example base ResourceManager interface needed by adapter
+type ResourceManager interface {
+	GetAllResourceDefinitions() []definitions.ResourceDefinition
+	ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error)
 }
+
+// Example base ToolManager interface needed by adapter
+type ToolManager interface {
+	GetAllToolDefinitions() []definitions.ToolDefinition
+	CallTool(ctx context.Context, name string, args map[string]interface{}) (string, error)
+}
+
+// Add methods for Server if needed, e.g., startHTTP
+func (s *Server) startHTTP() error { /* ... implementation ... */ return nil }

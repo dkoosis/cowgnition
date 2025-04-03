@@ -8,7 +8,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/dkoosis/cowgnition/internal/mcp"
+	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
@@ -54,12 +54,12 @@ func NewAuthProvider(apiKey, sharedSecret, tokenPath string) (*AuthProvider, err
 }
 
 // GetResourceDefinitions returns the resource definitions provided by this provider.
-func (p *AuthProvider) GetResourceDefinitions() []mcp.ResourceDefinition {
-	return []mcp.ResourceDefinition{
+func (p *AuthProvider) GetResourceDefinitions() []definitions.ResourceDefinition {
+	return []definitions.ResourceDefinition{
 		{
 			Name:        AuthResourceURI,
 			Description: "Remember The Milk authentication",
-			Arguments: []mcp.ResourceArgument{
+			Arguments: []definitions.ResourceArgument{
 				{
 					Name:        "frob",
 					Description: "RTM frob for authentication flow",
