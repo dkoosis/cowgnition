@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log" // Needed for SetTriggerParameters example
+	"log"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	// Assuming your custom error package exists:
+	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	stateless "github.com/qmuntal/stateless"
 	"github.com/sourcegraph/jsonrpc2"
@@ -96,7 +96,7 @@ func NewConnectionManager(config ServerConfig, resourceManager ResourceManager, 
 	// Map triggers to the actual handler implementations
 	manager.registerTriggerHandlers()
 
-	manager.logf(LogLevelInfo, "ConnectionManager created (id: %s, initial state: %s)", manager.connectionID, manager.currentState)
+	manager.logf(definitions.LogLevelInfo, "ConnectionManager created (id: %s, initial state: %s)", manager.connectionID, manager.currentState)
 	return manager
 }
 
@@ -116,7 +116,7 @@ func (m *ConnectionManager) setState(ctx context.Context, state stateless.State)
 	newState, ok := state.(ConnectionState) // Assert to your specific type
 	if !ok {
 		err := errors.Newf("internal error: invalid state type provided by FSM: %T", state)
-		m.logf(LogLevelError, "CRITICAL: Failed to set state: %v", err)
+		m.logf(definitions.LogLevelError, "CRITICAL: Failed to set state: %v", err)
 		m.currentState = StateError // Force error state on programming error
 		return err
 	}
@@ -125,7 +125,7 @@ func (m *ConnectionManager) setState(ctx context.Context, state stateless.State)
 	if oldState != newState {
 		m.currentState = newState
 		m.lastActivity = time.Now()
-		m.logf(LogLevelInfo, "Connection state changed: %s -> %s (id: %s)", oldState, newState, m.connectionID)
+		m.logf(definitions.LogLevelInfo, "Connection state changed: %s -> %s (id: %s)", oldState, newState, m.connectionID)
 	}
 	return nil
 }
@@ -160,7 +160,7 @@ func (m *ConnectionManager) configureStateMachine() {
 
 	m.fsm.Configure(StateError).
 		OnEntry(func(ctx context.Context, args ...interface{}) error {
-			m.logf(LogLevelError, "Connection entered ERROR state (id: %s)", m.connectionID)
+			m.logf(definitions.LogLevelError, "Connection entered ERROR state (id: %s)", m.connectionID)
 			// Force immediate shutdown from error state? Or wait for explicit shutdown?
 			// Let's trigger termination automatically from error state for cleanup.
 			// Use FireAsync for safety within action handler if not using FiringQueued
@@ -171,7 +171,7 @@ func (m *ConnectionManager) configureStateMachine() {
 
 	// Handle triggers that aren't configured for the current state
 	m.fsm.OnUnhandledTrigger(func(ctx context.Context, state stateless.State, trigger stateless.Trigger, unhandledTriggerArgs ...interface{}) error {
-		m.logf(LogLevelWarning, "Unhandled trigger '%s' in state '%s' (id: %s)", trigger, state, m.connectionID)
+		m.logf(definitions.LogLevelWarn, "Unhandled trigger '%s' in state '%s' (id: %s)", trigger, state, m.connectionID)
 		// Return nil to ignore, or return an error to propagate
 		return errors.Newf("trigger %s not permitted in state %s", trigger, state)
 	})
@@ -195,7 +195,7 @@ func (m *ConnectionManager) Connect(conn *jsonrpc2.Conn) error {
 	m.dataMu.Lock()
 	if m.conn != nil {
 		m.dataMu.Unlock()
-		m.logf(LogLevelWarning, "Connect called on already connected manager (id: %s)", m.connectionID)
+		m.logf(definitions.LogLevelWarn, "Connect called on already connected manager (id: %s)", m.connectionID)
 		// Optionally close old connection or return error
 		// For now, just log and update conn
 	}
@@ -204,28 +204,28 @@ func (m *ConnectionManager) Connect(conn *jsonrpc2.Conn) error {
 	m.lastActivity = time.Now()
 	m.dataMu.Unlock()
 
-	m.logf(LogLevelInfo, "Connection transport established (id: %s)", m.connectionID)
+	m.logf(definitions.LogLevelInfo, "Connection transport established (id: %s)", m.connectionID)
 	// Connection remains in StateUnconnected until successful Initialize call
 	return nil
 }
 
 // Shutdown initiates the shutdown sequence by firing the trigger.
 func (m *ConnectionManager) Shutdown() error {
-	m.logf(LogLevelInfo, "Shutdown requested externally (id: %s)", m.connectionID)
+	m.logf(definitions.LogLevelInfo, "Shutdown requested externally (id: %s)", m.connectionID)
 	// Use FireCtx to potentially pass context if actions need it
 	err := m.fsm.FireCtx(m.baseCtx, TriggerShutdown)
 	// Ignore ErrNoTransition, as it means we are already shutting down or terminated
 	if err != nil && !errors.Is(err, stateless.ErrNoTransition) {
-		m.logf(LogLevelError, "Error firing shutdown trigger: %v (id: %s)", err, m.connectionID)
+		m.logf(definitions.LogLevelError, "Error firing shutdown trigger: %v (id: %s)", err, m.connectionID)
 		return errors.Wrap(err, "failed to initiate shutdown")
 	}
-	m.logf(LogLevelDebug, "Shutdown trigger fired successfully or was ignored (id: %s)", m.connectionID)
+	m.logf(definitions.LogLevelDebug, "Shutdown trigger fired successfully or was ignored (id: %s)", m.connectionID)
 	return nil
 }
 
 // performGracefulShutdown is the OnEntry action for StateTerminating.
 func (m *ConnectionManager) performGracefulShutdown(ctx context.Context, args ...interface{}) error {
-	m.logf(LogLevelInfo, "Performing graceful shutdown action (id: %s)", m.connectionID)
+	m.logf(definitions.LogLevelInfo, "Performing graceful shutdown action (id: %s)", m.connectionID)
 
 	// 1. Cancel context for any dependent operations
 	m.cancelCtx() // Cancel the manager's base context
@@ -237,18 +237,18 @@ func (m *ConnectionManager) performGracefulShutdown(ctx context.Context, args ..
 	m.dataMu.Unlock()
 
 	if connToClose != nil {
-		m.logf(LogLevelDebug, "Closing underlying jsonrpc2 connection (id: %s)", m.connectionID)
+		m.logf(definitions.LogLevelDebug, "Closing underlying jsonrpc2 connection (id: %s)", m.connectionID)
 		// Consider using CloseContext with a timeout from config
 		// closeCtx, closeCancel := context.WithTimeout(context.Background(), m.config.ShutdownTimeout)
 		// defer closeCancel()
 		// err := connToClose.CloseContext(closeCtx)
 		err := connToClose.Close() // Simple close
 		if err != nil {
-			m.logf(LogLevelError, "Error closing underlying connection: %v (id: %s)", err, m.connectionID)
+			m.logf(definitions.LogLevelError, "Error closing underlying connection: %v (id: %s)", err, m.connectionID)
 			// Log error but continue the shutdown process
 		}
 	} else {
-		m.logf(LogLevelDebug, "No active connection to close during shutdown (id: %s)", m.connectionID)
+		m.logf(definitions.LogLevelDebug, "No active connection to close during shutdown (id: %s)", m.connectionID)
 	}
 
 	// 3. Fire completion trigger to move to the final state (StateUnconnected)
@@ -257,9 +257,9 @@ func (m *ConnectionManager) performGracefulShutdown(ctx context.Context, args ..
 	err := m.fsm.Fire(TriggerShutdownComplete)
 	if err != nil {
 		// This indicates a configuration error or unexpected issue
-		m.logf(LogLevelError, "CRITICAL: Error firing ShutdownComplete trigger: %v (id: %s)", err, m.connectionID)
+		m.logf(definitions.LogLevelError, "CRITICAL: Error firing ShutdownComplete trigger: %v (id: %s)", err, m.connectionID)
 	} else {
-		m.logf(LogLevelInfo, "Graceful shutdown action complete (id: %s)", m.connectionID)
+		m.logf(definitions.LogLevelInfo, "Graceful shutdown action complete (id: %s)", m.connectionID)
 	}
 	// Return nil from OnEntry action unless you want to block further state processing
 	return nil
@@ -273,13 +273,13 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 	m.dataMu.Lock()
 	if m.conn == nil {
 		m.conn = conn
-		m.logf(LogLevelInfo, "jsonrpc2.Conn associated on first Handle call (id: %s)", m.connectionID)
+		m.logf(definitions.LogLevelInfo, "jsonrpc2.Conn associated on first Handle call (id: %s)", m.connectionID)
 	}
 	currentConn := m.conn // Use the stored connection for replies
 	m.lastActivity = time.Now()
 	m.dataMu.Unlock()
 
-	m.logf(LogLevelDebug, "Handle request: %s (id: %s, req.ID: %s)", req.Method, m.connectionID, req.ID)
+	m.logf(definitions.LogLevelDebug, "Handle request: %s (id: %s, req.ID: %s)", req.Method, m.connectionID, req.ID)
 
 	// 1. Map method string to Trigger
 	trigger, methodKnown := MapMethodToTrigger(req.Method)
@@ -288,7 +288,7 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 			err := cgerr.NewMethodNotFoundError(req.Method, map[string]interface{}{"connection_id": m.connectionID})
 			m.handleError(ctx, currentConn, req, err) // Use stored conn for reply
 		} else {
-			m.logf(LogLevelDebug, "Ignoring notification for unknown method %s (id: %s)", req.Method, m.connectionID)
+			m.logf(definitions.LogLevelDebug, "Ignoring notification for unknown method %s (id: %s)", req.Method, m.connectionID)
 		}
 		return
 	}
@@ -313,7 +313,7 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 			)
 			m.handleError(ctx, currentConn, req, err)
 		} else {
-			m.logf(LogLevelDebug, "Ignoring notification '%s' (trigger '%s') in state '%s' (id: %s)", req.Method, trigger, currentState, m.connectionID)
+			m.logf(definitions.LogLevelDebug, "Ignoring notification '%s' (trigger '%s') in state '%s' (id: %s)", req.Method, trigger, currentState, m.connectionID)
 		}
 		return
 	}
@@ -321,7 +321,7 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 	// 3. Find the associated handler logic
 	handlerFunc, handlerExists := m.triggerHandlers[trigger]
 	if !handlerExists {
-		m.logf(LogLevelError, "Internal Error: No handler registered for known trigger %s (method %s) (id: %s)", trigger, req.Method, m.connectionID)
+		m.logf(definitions.LogLevelError, "Internal Error: No handler registered for known trigger %s (method %s) (id: %s)", trigger, req.Method, m.connectionID)
 		if !req.Notif {
 			err := cgerr.NewInternalError(errors.New("handler not registered for trigger"), map[string]interface{}{"trigger": trigger})
 			m.handleError(ctx, currentConn, req, err)
@@ -338,7 +338,7 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 	result, handlerErr := handlerFunc(reqCtx, req) // Execute the business logic
 
 	duration := time.Since(startTime)
-	m.logf(LogLevelDebug, "Handler execution time for %s: %s (id: %s)", req.Method, duration, m.connectionID)
+	m.logf(definitions.LogLevelDebug, "Handler execution time for %s: %s (id: %s)", req.Method, duration, m.connectionID)
 
 	// 5. Handle result/error and fire subsequent triggers if needed
 	if handlerErr != nil {
@@ -360,7 +360,7 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 	if trigger == TriggerInitialize {
 		fsmErr = m.fsm.FireCtx(fireCtx, TriggerInitSuccess)
 		if fsmErr == nil {
-			m.logf(LogLevelInfo, "Initialization successful, connection now active (id: %s)", m.connectionID)
+			m.logf(definitions.LogLevelInfo, "Initialization successful, connection now active (id: %s)", m.connectionID)
 		}
 	} else if trigger == TriggerShutdown {
 		// Shutdown trigger was checked with CanFire, but actual firing happens
@@ -376,7 +376,7 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 
 	// Handle FSM errors that might occur during success triggers
 	if fsmErr != nil {
-		m.logf(LogLevelError, "CRITICAL: State transition failed after successful handler %s: %v (id: %s)", trigger, fsmErr, m.connectionID)
+		m.logf(definitions.LogLevelError, "CRITICAL: State transition failed after successful handler %s: %v (id: %s)", trigger, fsmErr, m.connectionID)
 		_ = m.fsm.FireCtx(fireCtx, TriggerErrorOccurred) // Attempt to force error state
 		m.handleError(ctx, currentConn, req, errors.Wrapf(fsmErr, "state transition failed post-%s", trigger))
 		return
@@ -385,7 +385,7 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 	// 6. Send reply (if not notification)
 	if !req.Notif {
 		if replyErr := currentConn.Reply(ctx, req.ID, result); replyErr != nil {
-			m.logf(LogLevelError, "Failed to send response: %v (id: %s)", replyErr, m.connectionID)
+			m.logf(definitions.LogLevelError, "Failed to send response: %v (id: %s)", replyErr, m.connectionID)
 			// Consider if failure to reply should trigger an error state
 			// _ = m.fsm.FireCtx(fireCtx, TriggerErrorOccurred)
 		}
@@ -399,13 +399,13 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 func (m *ConnectionManager) handleError(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request, err error) {
 	// Skip error responses for notifications
 	if req.Notif {
-		m.logf(LogLevelError, "Error handling notification %s: %v (id: %s)", req.Method, err, m.connectionID)
+		m.logf(definitions.LogLevelError, "Error handling notification %s: %v (id: %s)", req.Method, err, m.connectionID)
 		return
 	}
 
 	// Ensure we have a connection to reply on
 	if conn == nil {
-		m.logf(LogLevelError, "Cannot send error reply, connection is nil (req: %s, err: %v, id: %s)", req.Method, err, m.connectionID)
+		m.logf(definitions.LogLevelError, "Cannot send error reply, connection is nil (req: %s, err: %v, id: %s)", req.Method, err, m.connectionID)
 		return
 	}
 
@@ -430,7 +430,7 @@ func (m *ConnectionManager) handleError(ctx context.Context, conn *jsonrpc2.Conn
 	if m.fsm != nil {
 		fsmStateStr = m.fsm.MustStateCtx(m.baseCtx).String()
 	}
-	m.logf(LogLevelError, "Error handling request %s in state %s: %+v (id: %s, req.ID: %s)", req.Method, fsmStateStr, err, m.connectionID, req.ID)
+	m.logf(definitions.LogLevelError, "Error handling request %s in state %s: %+v (id: %s, req.ID: %s)", req.Method, fsmStateStr, err, m.connectionID, req.ID)
 
 	// Construct the JSON-RPC error
 	rpcErr := &jsonrpc2.Error{
@@ -450,7 +450,7 @@ func (m *ConnectionManager) handleError(ctx context.Context, conn *jsonrpc2.Conn
 		if marshalErr == nil {
 			rpcErr.Data = (*json.RawMessage)(&jsonData)
 		} else {
-			m.logf(LogLevelError, "Failed to marshal error data: %v", marshalErr)
+			m.logf(definitions.LogLevelError, "Failed to marshal error data: %v", marshalErr)
 			// Send error without data
 		}
 	} else {
@@ -464,14 +464,14 @@ func (m *ConnectionManager) handleError(ctx context.Context, conn *jsonrpc2.Conn
 
 	// Send the error reply
 	if replyErr := conn.ReplyWithError(ctx, req.ID, *rpcErr); replyErr != nil {
-		m.logf(LogLevelError, "Failed to send error response: %v (id: %s)", replyErr, m.connectionID)
+		m.logf(definitions.LogLevelError, "Failed to send error response: %v (id: %s)", replyErr, m.connectionID)
 	}
 }
 
 // --- Utility ---
 
 // logf is a helper for logging.
-func (m *ConnectionManager) logf(level LogLevel, format string, v ...interface{}) {
+func (m *ConnectionManager) logf(level definitions.LogLevel, format string, v ...interface{}) {
 	// Add log level filtering if necessary
 	// Example: if level < configuredLevel { return }
 	m.logger.Printf(format, v...)

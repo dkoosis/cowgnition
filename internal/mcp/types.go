@@ -5,16 +5,6 @@ import (
 	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 )
 
-// Define log levels
-type LogLevel string
-
-const (
-	LogLevelDebug LogLevel = "DEBUG"
-	LogLevelInfo  LogLevel = "INFO"
-	LogLevelWarn  LogLevel = "WARN"
-	LogLevelError LogLevel = "ERROR"
-)
-
 // InitializeRequest represents the MCP initialize request structure.
 type InitializeRequest struct {
 	ProtocolVersion string `json:"protocolVersion"` // Protocol version
