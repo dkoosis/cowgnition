@@ -13,12 +13,6 @@ import (
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
-// --- Assumed Types/Interfaces (Ensure these are defined elsewhere in package mcp) ---
-
-// Assume constructors exist
-
-// --- Server Definition ---
-
 // Server represents the base MCP server structure.
 // It handles configuration and basic transport setup.
 // Request handling logic might be delegated (e.g., via ConnectionServer).
@@ -26,9 +20,9 @@ type Server struct {
 	config          *config.Settings
 	version         string
 	transport       string
-	httpServer      *http.Server     // Used only for HTTP transport
-	resourceManager *ResourceManager // Manages resources
-	toolManager     *ToolManager     // Manages tools
+	httpServer      *http.Server    // Used only for HTTP transport
+	resourceManager ResourceManager // Manages resources (interface)
+	toolManager     ToolManager     // Manages tools (interface)
 	requestTimeout  time.Duration
 	shutdownTimeout time.Duration
 }
@@ -44,7 +38,7 @@ func NewServer(cfg *config.Settings) (*Server, error) {
 		)
 	}
 
-	// TODO: Consider proper initialization or error handling for managers
+	// Create new resource and tool managers
 	rm := NewResourceManager()
 	tm := NewToolManager()
 	if rm == nil || tm == nil {
@@ -54,18 +48,16 @@ func NewServer(cfg *config.Settings) (*Server, error) {
 
 	server := &Server{
 		config:          cfg,
-		version:         "0.1.0", // Default version, consider setting from build info
-		transport:       "http",  // Default transport
-		resourceManager: rm,
-		toolManager:     tm,
+		version:         "0.1.0",          // Default version, consider setting from build info
+		transport:       "http",           // Default transport
+		resourceManager: rm,               // Store interface, not pointer to interface
+		toolManager:     tm,               // Store interface, not pointer to interface
 		requestTimeout:  30 * time.Second, // Default request timeout
 		shutdownTimeout: 5 * time.Second,  // Default shutdown timeout
 	}
 
 	return server, nil
 }
-
-// --- Configuration Methods ---
 
 // SetVersion sets the server version.
 func (s *Server) SetVersion(version string) {
@@ -99,8 +91,6 @@ func (s *Server) SetShutdownTimeout(timeout time.Duration) {
 	s.shutdownTimeout = timeout
 }
 
-// --- Provider Registration ---
-
 // RegisterResourceProvider registers a resource provider with the ResourceManager.
 func (s *Server) RegisterResourceProvider(provider ResourceProvider) {
 	if s.resourceManager == nil {
@@ -120,8 +110,6 @@ func (s *Server) RegisterToolProvider(provider ToolProvider) {
 	}
 	s.toolManager.RegisterProvider(provider)
 }
-
-// --- Server Lifecycle ---
 
 // Start starts the MCP server using the configured transport.
 // Note: This starts the *base* server logic. If using ConnectionServer,
@@ -143,11 +131,6 @@ func (s *Server) Start() error {
 func (s *Server) startHTTP() error {
 	// Create a JSON-RPC adapter
 	adapter := jsonrpc.NewAdapter(jsonrpc.WithTimeout(s.requestTimeout))
-
-	// --- Handler Registration (Original non-state-machine way) ---
-	// If using ConnectionServer, request handling is delegated there,
-	// and these handlers might not be needed or used via this path.
-	// s.registerHandlers(adapter) // <-- Commented out/Removed
 
 	// Create an HTTP handler
 	httpHandler := jsonrpc.NewHTTPHandler(adapter, jsonrpc.WithHTTPRequestTimeout(s.requestTimeout))
@@ -181,10 +164,6 @@ func (s *Server) startHTTP() error {
 func (s *Server) startStdio() error {
 	// Create a JSON-RPC adapter
 	adapter := jsonrpc.NewAdapter(jsonrpc.WithTimeout(s.requestTimeout))
-
-	// --- Handler Registration (Original non-state-machine way) ---
-	// If using ConnectionServer, request handling is delegated there via ConnectionServer.startStdio
-	// s.registerHandlers(adapter) // <-- Commented out/Removed
 
 	// Set up stdio transport options
 	stdioOpts := []jsonrpc.StdioTransportOption{
@@ -235,30 +214,3 @@ func (s *Server) Stop() error {
 	// TODO: Add logic to stop stdio transport if needed/possible
 	return nil
 }
-
-// --- Optional: Keep registerHandlers if base Server handlers are still used ---
-// --- OR Remove if ConnectionServer is the only path ---
-
-// registerHandlers registers base handlers with the adapter.
-// These handlers are associated with the base *Server type.
-// This method is NOT used by ConnectionServer's stdio path.
-func (s *Server) registerHandlers(adapter *jsonrpc.Adapter) {
-	fmt.Println("Registering base server handlers (may be unused if ConnectionServer is active)") // Added log
-	// Assumes methods like s.handleInitialize exist on *Server
-	// adapter.RegisterHandler("initialize", s.handleInitialize)
-	// adapter.RegisterHandler("list_resources", s.handleListResources)
-	// adapter.RegisterHandler("read_resource", s.handleReadResource)
-	// adapter.RegisterHandler("list_tools", s.handleListTools)
-	// adapter.RegisterHandler("call_tool", s.handleCallTool)
-	// Add other base handlers here if needed for the non-state-machine path
-}
-
-// --- Handler Method Placeholders (Assumed defined elsewhere on *Server) ---
-// func (s *Server) handleInitialize(ctx context.Context, params *json.RawMessage) (interface{}, error) { /* ... */ }
-// func (s *Server) handleListResources(ctx context.Context, params *json.RawMessage) (interface{}, error) { /* ... */ }
-// func (s *Server) handleReadResource(ctx context.Context, params *json.RawMessage) (interface{}, error) { /* ... */ }
-// func (s *Server) handleListTools(ctx context.Context, params *json.RawMessage) (interface{}, error) { /* ... */ }
-// func (s *Server) handleCallTool(ctx context.Context, params *json.RawMessage) (interface{}, error) { /* ... */ }
-
-// --- MISPLACED FUNCTION REMOVED ---
-// createAndConfigureServerWithStateMachine belongs in the cmd/server package.

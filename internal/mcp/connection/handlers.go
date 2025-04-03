@@ -4,6 +4,7 @@ package connection
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -73,7 +74,21 @@ func (m *ConnectionManager) handleInitialize(ctx context.Context, req *jsonrpc2.
 
 // handleListResources processes a list_resources request.
 func (m *ConnectionManager) handleListResources(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
-	resources := m.resourceManager.GetAllResourceDefinitions()
+	// Get resource definitions and convert types as needed
+	resourceInterfaces := m.resourceManager.GetAllResourceDefinitions()
+	resources := make([]definitions.ResourceDefinition, len(resourceInterfaces))
+
+	// Convert each interface{} to ResourceDefinition
+	for i, r := range resourceInterfaces {
+		if rd, ok := r.(definitions.ResourceDefinition); ok {
+			resources[i] = rd
+		} else {
+			// Log warning and create empty definition if type conversion fails
+			m.logf(definitions.LogLevelWarn, "Failed to convert resource definition at index %d (id: %s)", i, m.connectionID)
+			resources[i] = definitions.ResourceDefinition{}
+		}
+	}
+
 	m.logf(definitions.LogLevelDebug, "Listed %d resources (id: %s)", len(resources), m.connectionID)
 	return definitions.ListResourcesResponse{
 		Resources: resources,
@@ -124,18 +139,41 @@ func (m *ConnectionManager) handleReadResource(ctx context.Context, req *jsonrpc
 		)
 	}
 
+	// Convert []byte to string if necessary
+	contentStr := ""
+	if contentBytes, ok := content.([]byte); ok {
+		contentStr = string(contentBytes)
+	} else if contentStr, ok = content.(string); !ok {
+		// Try to convert to string otherwise
+		contentStr = fmt.Sprintf("%v", content)
+	}
+
 	m.logf(definitions.LogLevelDebug, "Read resource %s, mime type: %s, content length: %d (id: %s)",
-		readReq.Name, mimeType, len(content), m.connectionID)
+		readReq.Name, mimeType, len(contentStr), m.connectionID)
 
 	return definitions.ResourceResponse{
-		Content:  content,
+		Content:  contentStr,
 		MimeType: mimeType,
 	}, nil
 }
 
 // handleListTools processes a list_tools request.
 func (m *ConnectionManager) handleListTools(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
-	tools := m.toolManager.GetAllToolDefinitions()
+	// Get tool definitions and convert types as needed
+	toolInterfaces := m.toolManager.GetAllToolDefinitions()
+	tools := make([]definitions.ToolDefinition, len(toolInterfaces))
+
+	// Convert each interface{} to ToolDefinition
+	for i, t := range toolInterfaces {
+		if td, ok := t.(definitions.ToolDefinition); ok {
+			tools[i] = td
+		} else {
+			// Log warning and create empty definition if type conversion fails
+			m.logf(definitions.LogLevelWarn, "Failed to convert tool definition at index %d (id: %s)", i, m.connectionID)
+			tools[i] = definitions.ToolDefinition{}
+		}
+	}
+
 	m.logf(definitions.LogLevelDebug, "Listed %d tools (id: %s)", len(tools), m.connectionID)
 	return definitions.ListToolsResponse{Tools: tools}, nil
 }
@@ -187,10 +225,19 @@ func (m *ConnectionManager) handleCallTool(ctx context.Context, req *jsonrpc2.Re
 		)
 	}
 
-	m.logf(definitions.LogLevelDebug, "Called tool %s, execution time: %s, result length: %d (id: %s)",
-		callReq.Name, duration, len(result), m.connectionID)
+	// Convert result to string if necessary
+	resultStr := ""
+	if resultBytes, ok := result.([]byte); ok {
+		resultStr = string(resultBytes)
+	} else if resultStr, ok = result.(string); !ok {
+		// Try to convert to string otherwise
+		resultStr = fmt.Sprintf("%v", result)
+	}
 
-	return definitions.ToolResponse{Result: result}, nil
+	m.logf(definitions.LogLevelDebug, "Called tool %s, execution time: %s, result length: %d (id: %s)",
+		callReq.Name, duration, len(resultStr), m.connectionID)
+
+	return definitions.ToolResponse{Result: resultStr}, nil
 }
 
 // handleShutdownRequest handles the RPC message for shutdown.

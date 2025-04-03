@@ -8,7 +8,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/jsonrpc"
 	"github.com/dkoosis/cowgnition/internal/mcp/connection"
-	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
@@ -106,32 +105,50 @@ func (s *ConnectionServer) Start() error {
 	}
 }
 
-// resourceManagerAdapter adapts the Server's ResourceManager to the connection.ResourceManager interface
+// resourceManagerAdapter adapts the Server's ResourceManager to the connection.ResourceManagerContract interface
 type resourceManagerAdapter struct {
 	rm ResourceManager
 }
 
-// GetAllResourceDefinitions implements the connection.ResourceManager interface
-func (a *resourceManagerAdapter) GetAllResourceDefinitions() []definitions.ResourceDefinition {
-	return a.rm.GetAllResourceDefinitions()
+// GetAllResourceDefinitions implements the connection.ResourceManagerContract interface
+func (a *resourceManagerAdapter) GetAllResourceDefinitions() []interface{} {
+	// The adapter needs to convert from typed to interface slice
+	definitions := a.rm.GetAllResourceDefinitions()
+	result := make([]interface{}, len(definitions))
+	for i, def := range definitions {
+		result[i] = def
+	}
+	return result
 }
 
-// ReadResource implements the connection.ResourceManager interface
-func (a *resourceManagerAdapter) ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error) {
-	return a.rm.ReadResource(ctx, name, args)
+// ReadResource implements the connection.ResourceManagerContract interface
+func (a *resourceManagerAdapter) ReadResource(ctx context.Context, name string, args map[string]string) (interface{}, string, error) {
+	// Call through to the underlying ResourceManager
+	content, mimeType, err := a.rm.ReadResource(ctx, name, args)
+	// Return content as an interface{} that can be handled by the connection package
+	return content, mimeType, err
 }
 
-// toolManagerAdapter adapts the Server's ToolManager to the connection.ToolManager interface
+// toolManagerAdapter adapts the Server's ToolManager to the connection.ToolManagerContract interface
 type toolManagerAdapter struct {
 	tm ToolManager
 }
 
-// GetAllToolDefinitions implements the connection.ToolManager interface
-func (a *toolManagerAdapter) GetAllToolDefinitions() []definitions.ToolDefinition {
-	return a.tm.GetAllToolDefinitions()
+// GetAllToolDefinitions implements the connection.ToolManagerContract interface
+func (a *toolManagerAdapter) GetAllToolDefinitions() []interface{} {
+	// The adapter needs to convert from typed to interface slice
+	definitions := a.tm.GetAllToolDefinitions()
+	result := make([]interface{}, len(definitions))
+	for i, def := range definitions {
+		result[i] = def
+	}
+	return result
 }
 
-// CallTool implements the connection.ToolManager interface
-func (a *toolManagerAdapter) CallTool(ctx context.Context, name string, args map[string]interface{}) (string, error) {
-	return a.tm.CallTool(ctx, name, args)
+// CallTool implements the connection.ToolManagerContract interface
+func (a *toolManagerAdapter) CallTool(ctx context.Context, name string, args map[string]interface{}) (interface{}, error) {
+	// Call through to the underlying ToolManager
+	result, err := a.tm.CallTool(ctx, name, args)
+	// Return result as an interface{} that can be handled by the connection package
+	return result, err
 }

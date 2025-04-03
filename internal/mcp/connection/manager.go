@@ -16,17 +16,7 @@ import (
 	"github.com/sourcegraph/jsonrpc2"
 )
 
-// --- Assumed Interfaces (Ensure these are defined elsewhere) ---
-type ResourceManager interface {
-	GetAllResourceDefinitions() []interface{} // Replace 'interface{}' with actual type
-	ReadResource(ctx context.Context, name string, args map[string]string) (content []byte, mimeType string, err error)
-}
-type ToolManager interface {
-	GetAllToolDefinitions() []interface{} // Replace 'interface{}' with actual type
-	CallTool(ctx context.Context, name string, args map[string]interface{}) (result []byte, err error)
-}
-
-// --- MessageHandler & ServerConfig (as before) ---
+// MessageHandler & ServerConfig
 type MessageHandler func(ctx context.Context, req *jsonrpc2.Request) (interface{}, error)
 
 type ServerConfig struct {
@@ -37,15 +27,15 @@ type ServerConfig struct {
 	ShutdownTimeout time.Duration
 }
 
-// --- ConnectionManager Struct (Refactored) ---
+// ConnectionManager struct
 type ConnectionManager struct {
 	// State Machine
 	fsm *stateless.StateMachine
 
 	// Dependencies & Config
 	config          ServerConfig
-	resourceManager ResourceManager
-	toolManager     ToolManager
+	resourceManager ResourceManagerContract
+	toolManager     ToolManagerContract
 	logger          *log.Logger
 
 	// Connection Specific Data (Protected by dataMu)
@@ -65,10 +55,8 @@ type ConnectionManager struct {
 	cancelCtx context.CancelFunc // To cancel operations on shutdown
 }
 
-// --- Constructor and FSM Setup ---
-
 // NewConnectionManager creates a new ConnectionManager.
-func NewConnectionManager(config ServerConfig, resourceManager ResourceManager, toolManager ToolManager) *ConnectionManager {
+func NewConnectionManager(config ServerConfig, resourceManager ResourceManagerContract, toolManager ToolManagerContract) *ConnectionManager {
 	baseCtx, cancel := context.WithCancel(context.Background())
 
 	manager := &ConnectionManager{
@@ -88,7 +76,15 @@ func NewConnectionManager(config ServerConfig, resourceManager ResourceManager, 
 	}
 
 	// Initialize the FSM using external storage functions
-	manager.fsm = stateless.NewStateMachineWithExternalStorage(manager.getState, manager.setState, stateless.FiringQueued)
+	manager.fsm = stateless.NewStateMachineWithExternalStorage(
+		func(ctx context.Context) (stateless.State, error) {
+			return manager.getState(ctx)
+		},
+		func(ctx context.Context, state stateless.State) error {
+			return manager.setState(ctx, state)
+		},
+		stateless.FiringQueued,
+	)
 
 	// Define the state machine structure
 	manager.configureStateMachine()
@@ -164,13 +160,15 @@ func (m *ConnectionManager) configureStateMachine() {
 			// Force immediate shutdown from error state? Or wait for explicit shutdown?
 			// Let's trigger termination automatically from error state for cleanup.
 			// Use FireAsync for safety within action handler if not using FiringQueued
-			go m.fsm.Fire(TriggerShutdown) // Trigger shutdown asynchronously
+			go func() {
+				_ = m.fsm.Fire(TriggerShutdown) // Trigger shutdown asynchronously
+			}()
 			return nil
 		}).
 		Permit(TriggerShutdown, StateTerminating) // Allow explicit shutdown from error state
 
 	// Handle triggers that aren't configured for the current state
-	m.fsm.OnUnhandledTrigger(func(ctx context.Context, state stateless.State, trigger stateless.Trigger, unhandledTriggerArgs ...interface{}) error {
+	m.fsm.OnUnhandledTrigger(func(ctx context.Context, state stateless.State, trigger stateless.Trigger, args ...interface{}) error {
 		m.logf(definitions.LogLevelWarn, "Unhandled trigger '%s' in state '%s' (id: %s)", trigger, state, m.connectionID)
 		// Return nil to ignore, or return an error to propagate
 		return errors.Newf("trigger %s not permitted in state %s", trigger, state)
@@ -187,8 +185,6 @@ func (m *ConnectionManager) registerTriggerHandlers() {
 	m.triggerHandlers[TriggerShutdown] = m.handleShutdownRequest
 	// Add other handlers...
 }
-
-// --- Public Methods ---
 
 // Connect stores the connection; state is managed by FSM based on subsequent 'initialize'.
 func (m *ConnectionManager) Connect(conn *jsonrpc2.Conn) error {
@@ -213,14 +209,22 @@ func (m *ConnectionManager) Connect(conn *jsonrpc2.Conn) error {
 func (m *ConnectionManager) Shutdown() error {
 	m.logf(definitions.LogLevelInfo, "Shutdown requested externally (id: %s)", m.connectionID)
 	// Use FireCtx to potentially pass context if actions need it
-	err := m.fsm.FireCtx(m.baseCtx, TriggerShutdown)
-	// Ignore ErrNoTransition, as it means we are already shutting down or terminated
-	if err != nil && !errors.Is(err, stateless.ErrNoTransition) {
+	err := m.fsm.Fire(TriggerShutdown)
+
+	// Define our own NoTransitionError to handle this case since stateless.ErrNoTransition is undefined
+	if err != nil && !isNoTransitionError(err) {
 		m.logf(definitions.LogLevelError, "Error firing shutdown trigger: %v (id: %s)", err, m.connectionID)
 		return errors.Wrap(err, "failed to initiate shutdown")
 	}
 	m.logf(definitions.LogLevelDebug, "Shutdown trigger fired successfully or was ignored (id: %s)", m.connectionID)
 	return nil
+}
+
+// isNoTransitionError checks if the error is a "no transition" error from stateless
+func isNoTransitionError(err error) bool {
+	// The actual check would depend on how stateless library reports no transition errors
+	// For now, we'll check if the error message contains "no transition"
+	return err != nil && errors.Is(err, stateless.ErrTransitionNotFound)
 }
 
 // performGracefulShutdown is the OnEntry action for StateTerminating.
@@ -265,8 +269,6 @@ func (m *ConnectionManager) performGracefulShutdown(ctx context.Context, args ..
 	return nil
 }
 
-// --- jsonrpc2.Handler Implementation ---
-
 // Handle implements the jsonrpc2.Handler interface using the state machine.
 func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) {
 	// Ensure conn is set and update last activity atomically
@@ -297,23 +299,27 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 	fireCtx := m.baseCtx // Use manager's base context by default for FSM operations
 
 	// 2. Check if the trigger is permitted *before* executing handler
-	if !m.fsm.CanFireCtx(fireCtx, trigger) {
-		currentState := m.fsm.MustStateCtx(fireCtx)
+	canFire, fireErr := m.fsm.CanFire(trigger)
+	if !canFire || fireErr != nil {
+		currentState, _ := m.fsm.State()
+		currentStateStr := fmt.Sprintf("%v", currentState)
+
 		if !req.Notif {
 			err := cgerr.ErrorWithDetails(
-				errors.Newf("method '%s' (trigger '%s') not permitted in state '%s'", req.Method, trigger, currentState),
+				errors.Newf("method '%s' (trigger '%s') not permitted in state '%s'", req.Method, trigger, currentStateStr),
 				cgerr.CategoryRPC,
 				cgerr.CodeInvalidRequest,
 				map[string]interface{}{
 					"connection_id": m.connectionID,
-					"current_state": currentState,
+					"current_state": currentStateStr,
 					"method":        req.Method,
 					"trigger":       trigger,
 				},
 			)
 			m.handleError(ctx, currentConn, req, err)
 		} else {
-			m.logf(definitions.LogLevelDebug, "Ignoring notification '%s' (trigger '%s') in state '%s' (id: %s)", req.Method, trigger, currentState, m.connectionID)
+			m.logf(definitions.LogLevelDebug, "Ignoring notification '%s' (trigger '%s') in state '%s' (id: %s)",
+				req.Method, trigger, currentStateStr, m.connectionID)
 		}
 		return
 	}
@@ -321,9 +327,19 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 	// 3. Find the associated handler logic
 	handlerFunc, handlerExists := m.triggerHandlers[trigger]
 	if !handlerExists {
-		m.logf(definitions.LogLevelError, "Internal Error: No handler registered for known trigger %s (method %s) (id: %s)", trigger, req.Method, m.connectionID)
+		m.logf(definitions.LogLevelError, "Internal Error: No handler registered for known trigger %s (method %s) (id: %s)",
+			trigger, req.Method, m.connectionID)
 		if !req.Notif {
-			err := cgerr.NewInternalError(errors.New("handler not registered for trigger"), map[string]interface{}{"trigger": trigger})
+			err := errors.New("internal server error: handler not registered for trigger")
+			err = cgerr.ErrorWithDetails(
+				err,
+				cgerr.CategoryRPC,
+				cgerr.CodeInternalError,
+				map[string]interface{}{
+					"trigger": trigger,
+					"method":  req.Method,
+				},
+			)
 			m.handleError(ctx, currentConn, req, err)
 		}
 		return
@@ -345,11 +361,11 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 		// Check if error should cause a major state change
 		if stateChangeTrigger := MapErrorToStateTrigger(handlerErr); stateChangeTrigger != "" {
 			// Use FireAsync or rely on FiringQueued to avoid deadlocks if action also uses manager
-			_ = m.fsm.FireCtx(fireCtx, stateChangeTrigger)
+			_ = m.fsm.Fire(stateChangeTrigger)
 		}
 		// Specifically handle initialization failure trigger
 		if trigger == TriggerInitialize {
-			_ = m.fsm.FireCtx(fireCtx, TriggerInitFailure)
+			_ = m.fsm.Fire(TriggerInitFailure)
 		}
 		m.handleError(ctx, currentConn, req, handlerErr) // Send JSON-RPC error response
 		return
@@ -358,26 +374,17 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 	// Fire success triggers where applicable
 	var fsmErr error
 	if trigger == TriggerInitialize {
-		fsmErr = m.fsm.FireCtx(fireCtx, TriggerInitSuccess)
+		fsmErr = m.fsm.Fire(TriggerInitSuccess)
 		if fsmErr == nil {
 			m.logf(definitions.LogLevelInfo, "Initialization successful, connection now active (id: %s)", m.connectionID)
 		}
-	} else if trigger == TriggerShutdown {
-		// Shutdown trigger was checked with CanFire, but actual firing happens
-		// either here after success, or via the separate Shutdown() method.
-		// Let's assume the handler `handleShutdownRequest` just returns success,
-		// and the actual trigger firing should happen via the `Shutdown()` method call.
-		// So, no fsm.Fire here for shutdown triggered by RPC message.
-	} else {
-		// For simple reentry triggers, explicitly fire them if needed for logging/actions
-		// Or rely on the fact that CanFire passed. Let's assume reentry is implicit.
-		// fsmErr = m.fsm.FireCtx(fireCtx, trigger) // Optional: Fire reentry triggers if actions depend on it
 	}
 
 	// Handle FSM errors that might occur during success triggers
 	if fsmErr != nil {
-		m.logf(definitions.LogLevelError, "CRITICAL: State transition failed after successful handler %s: %v (id: %s)", trigger, fsmErr, m.connectionID)
-		_ = m.fsm.FireCtx(fireCtx, TriggerErrorOccurred) // Attempt to force error state
+		m.logf(definitions.LogLevelError, "CRITICAL: State transition failed after successful handler %s: %v (id: %s)",
+			trigger, fsmErr, m.connectionID)
+		_ = m.fsm.Fire(TriggerErrorOccurred) // Attempt to force error state
 		m.handleError(ctx, currentConn, req, errors.Wrapf(fsmErr, "state transition failed post-%s", trigger))
 		return
 	}
@@ -387,15 +394,12 @@ func (m *ConnectionManager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 		if replyErr := currentConn.Reply(ctx, req.ID, result); replyErr != nil {
 			m.logf(definitions.LogLevelError, "Failed to send response: %v (id: %s)", replyErr, m.connectionID)
 			// Consider if failure to reply should trigger an error state
-			// _ = m.fsm.FireCtx(fireCtx, TriggerErrorOccurred)
+			// _ = m.fsm.Fire(TriggerErrorOccurred)
 		}
 	}
 }
 
-// --- Error Handling ---
-
 // handleError processes an error from a handler and sends an appropriate error response.
-// (This can remain mostly the same as your original, potentially adding FSM state)
 func (m *ConnectionManager) handleError(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request, err error) {
 	// Skip error responses for notifications
 	if req.Notif {
@@ -405,12 +409,13 @@ func (m *ConnectionManager) handleError(ctx context.Context, conn *jsonrpc2.Conn
 
 	// Ensure we have a connection to reply on
 	if conn == nil {
-		m.logf(definitions.LogLevelError, "Cannot send error reply, connection is nil (req: %s, err: %v, id: %s)", req.Method, err, m.connectionID)
+		m.logf(definitions.LogLevelError, "Cannot send error reply, connection is nil (req: %s, err: %v, id: %s)",
+			req.Method, err, m.connectionID)
 		return
 	}
 
 	// Determine RPC error code, message, data from the incoming error
-	code := jsonrpc2.CodeInternalError
+	code := int64(jsonrpc2.CodeInternalError)
 	message := "Internal error"
 	var data map[string]interface{} // Initialize data as nil initially
 
@@ -426,11 +431,11 @@ func (m *ConnectionManager) handleError(ctx context.Context, conn *jsonrpc2.Conn
 	}
 
 	// Log the detailed error including FSM state
-	fsmStateStr := "unknown"
-	if m.fsm != nil {
-		fsmStateStr = m.fsm.MustStateCtx(m.baseCtx).String()
-	}
-	m.logf(definitions.LogLevelError, "Error handling request %s in state %s: %+v (id: %s, req.ID: %s)", req.Method, fsmStateStr, err, m.connectionID, req.ID)
+	currentState, _ := m.fsm.State()
+	currentStateStr := fmt.Sprintf("%v", currentState)
+
+	m.logf(definitions.LogLevelError, "Error handling request %s in state %s: %+v (id: %s, req.ID: %s)",
+		req.Method, currentStateStr, err, m.connectionID, req.ID)
 
 	// Construct the JSON-RPC error
 	rpcErr := &jsonrpc2.Error{
@@ -444,7 +449,7 @@ func (m *ConnectionManager) handleError(ctx context.Context, conn *jsonrpc2.Conn
 			data["connection_id"] = m.connectionID
 		}
 		if _, ok := data["state"]; !ok {
-			data["state"] = fsmStateStr
+			data["state"] = currentStateStr
 		}
 		jsonData, marshalErr := json.Marshal(data)
 		if marshalErr == nil {
@@ -457,18 +462,16 @@ func (m *ConnectionManager) handleError(ctx context.Context, conn *jsonrpc2.Conn
 		// Even if no specific data, add connection_id and state for context
 		jsonData, _ := json.Marshal(map[string]interface{}{
 			"connection_id": m.connectionID,
-			"state":         fsmStateStr,
+			"state":         currentStateStr,
 		})
 		rpcErr.Data = (*json.RawMessage)(&jsonData)
 	}
 
 	// Send the error reply
-	if replyErr := conn.ReplyWithError(ctx, req.ID, *rpcErr); replyErr != nil {
+	if replyErr := conn.ReplyWithError(ctx, req.ID, rpcErr); replyErr != nil {
 		m.logf(definitions.LogLevelError, "Failed to send error response: %v (id: %s)", replyErr, m.connectionID)
 	}
 }
-
-// --- Utility ---
 
 // logf is a helper for logging.
 func (m *ConnectionManager) logf(level definitions.LogLevel, format string, v ...interface{}) {
@@ -482,9 +485,3 @@ func generateConnectionID() string {
 	// Consider using a more robust UUID library
 	return fmt.Sprintf("conn-%d", time.Now().UnixNano())
 }
-
-// --- DELETED METHODS ---
-// func (m *ConnectionManager) SetState(...) // No longer needed
-// func (m *ConnectionManager) GetState() ConnectionState // No longer needed (use m.fsm.MustState())
-// func (m *ConnectionManager) registerDefaultHandlers() // No longer needed (replaced by registerTriggerHandlers)
-// func (m *ConnectionManager) validateStateTransition(...) // No longer needed

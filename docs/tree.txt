@@ -33,7 +33,6 @@
 │   │   │   ├── handlers.go
 │   │   │   ├── manager.go
 │   │   │   ├── state.go
-│   │   │   ├── types.go
 │   │   │   └── utils.go
 │   │   ├── definitions
 │   │   │   └── types.go
@@ -42,7 +41,6 @@
 │   │   │   ├── types.go
 │   │   │   └── utils.go
 │   │   ├── errors.go
-│   │   ├── handlers.go
 │   │   ├── interfaces.go
 │   │   ├── resource.go
 │   │   ├── server.go
@@ -59,4 +57,4 @@
     ├── graph.d2
     └── pkgdep.sh
 
-15 directories, 45 files
+15 directories, 43 files
