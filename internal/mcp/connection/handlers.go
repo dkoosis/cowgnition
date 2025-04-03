@@ -1,4 +1,4 @@
-// internal/mcp/connection/handlers.go
+// file: internal/mcp/connection/handlers.go
 package connection
 
 import (

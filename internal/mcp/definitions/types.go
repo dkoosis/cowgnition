@@ -1,3 +1,4 @@
+// file: internal/mcp/definitions/types.go
 package definitions
 
 // ResourceDefinition represents an MCP resource structure.
