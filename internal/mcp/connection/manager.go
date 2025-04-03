@@ -1,3 +1,4 @@
+// file: internal/mcp/connection/manager.go
 package connection
 
 import (

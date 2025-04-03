@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	// Assuming these imports are needed and correct
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/jsonrpc"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
@@ -16,31 +15,7 @@ import (
 
 // --- Assumed Types/Interfaces (Ensure these are defined elsewhere in package mcp) ---
 
-// ResourceManager manages resource providers and access. (Assumed defined)
-type ResourceManager interface {
-	RegisterProvider(provider ResourceProvider)
-	// Add other methods used by base server handlers if any
-}
-
-// ToolManager manages tool providers and execution. (Assumed defined)
-type ToolManager interface {
-	RegisterProvider(provider ToolProvider)
-	// Add other methods used by base server handlers if any
-}
-
-// ResourceProvider defines the interface for resource sources. (Assumed defined)
-type ResourceProvider interface {
-	// Define methods for resource providers
-}
-
-// ToolProvider defines the interface for tool sources. (Assumed defined)
-type ToolProvider interface {
-	// Define methods for tool providers
-}
-
 // Assume constructors exist
-func NewResourceManager() *ResourceManager { /* ... implementation ... */ return nil }
-func NewToolManager() *ToolManager         { /* ... implementation ... */ return nil }
 
 // --- Server Definition ---
 
