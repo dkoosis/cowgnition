@@ -4,7 +4,6 @@ package connection
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -48,7 +47,7 @@ func (m *ConnectionManager) handleInitialize(ctx context.Context, req *jsonrpc2.
 			map[string]interface{}{
 				"connection_id":      m.connectionID,
 				"client_version":     clientProtoVersion,
-				"supported_versions": []string{"2.0", "2024-11-05"},
+				"supported_versions": []string{"2.0", "2024-11-05"}, // Example versions
 			},
 		)
 	}
@@ -65,7 +64,7 @@ func (m *ConnectionManager) handleInitialize(ctx context.Context, req *jsonrpc2.
 	response := definitions.InitializeResponse{
 		ServerInfo:      serverInfo,
 		Capabilities:    m.config.Capabilities,
-		ProtocolVersion: clientProtoVersion,
+		ProtocolVersion: clientProtoVersion, // Echo back compatible version client sent
 	}
 
 	m.logf(definitions.LogLevelDebug, "handleInitialize successful (id: %s)", m.connectionID)
@@ -74,20 +73,8 @@ func (m *ConnectionManager) handleInitialize(ctx context.Context, req *jsonrpc2.
 
 // handleListResources processes a list_resources request.
 func (m *ConnectionManager) handleListResources(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
-	// Get resource definitions and convert types as needed
-	resourceInterfaces := m.resourceManager.GetAllResourceDefinitions()
-	resources := make([]definitions.ResourceDefinition, len(resourceInterfaces))
-
-	// Convert each interface{} to ResourceDefinition
-	for i, r := range resourceInterfaces {
-		if rd, ok := r.(definitions.ResourceDefinition); ok {
-			resources[i] = rd
-		} else {
-			// Log warning and create empty definition if type conversion fails
-			m.logf(definitions.LogLevelWarn, "Failed to convert resource definition at index %d (id: %s)", i, m.connectionID)
-			resources[i] = definitions.ResourceDefinition{}
-		}
-	}
+	// Get resource definitions - the adapter should now return the correct type
+	resources := m.resourceManager.GetAllResourceDefinitions()
 
 	m.logf(definitions.LogLevelDebug, "Listed %d resources (id: %s)", len(resources), m.connectionID)
 	return definitions.ListResourcesResponse{
@@ -126,11 +113,15 @@ func (m *ConnectionManager) handleReadResource(ctx context.Context, req *jsonrpc
 		)
 	}
 
-	content, mimeType, err := m.resourceManager.ReadResource(ctx, readReq.Name, readReq.Args)
+	// Call the resource manager - the adapter should now return string content
+	contentStr, mimeType, err := m.resourceManager.ReadResource(ctx, readReq.Name, readReq.Args)
 	if err != nil {
+		// Attempt to get a specific code, default otherwise
+		errCode := cgerr.GetErrorCode(err)
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "failed to read resource"),
-			cgerr.CategoryResource, cgerr.GetErrorCode(err),
+			cgerr.CategoryResource, // Assuming a category for resource errors
+			errCode,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
 				"resource_name": readReq.Name,
@@ -139,14 +130,7 @@ func (m *ConnectionManager) handleReadResource(ctx context.Context, req *jsonrpc
 		)
 	}
 
-	// Convert []byte to string if necessary
-	contentStr := ""
-	if contentBytes, ok := content.([]byte); ok {
-		contentStr = string(contentBytes)
-	} else if contentStr, ok = content.(string); !ok {
-		// Try to convert to string otherwise
-		contentStr = fmt.Sprintf("%v", content)
-	}
+	// No conversion needed, contentStr is already a string
 
 	m.logf(definitions.LogLevelDebug, "Read resource %s, mime type: %s, content length: %d (id: %s)",
 		readReq.Name, mimeType, len(contentStr), m.connectionID)
@@ -159,20 +143,8 @@ func (m *ConnectionManager) handleReadResource(ctx context.Context, req *jsonrpc
 
 // handleListTools processes a list_tools request.
 func (m *ConnectionManager) handleListTools(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
-	// Get tool definitions and convert types as needed
-	toolInterfaces := m.toolManager.GetAllToolDefinitions()
-	tools := make([]definitions.ToolDefinition, len(toolInterfaces))
-
-	// Convert each interface{} to ToolDefinition
-	for i, t := range toolInterfaces {
-		if td, ok := t.(definitions.ToolDefinition); ok {
-			tools[i] = td
-		} else {
-			// Log warning and create empty definition if type conversion fails
-			m.logf(definitions.LogLevelWarn, "Failed to convert tool definition at index %d (id: %s)", i, m.connectionID)
-			tools[i] = definitions.ToolDefinition{}
-		}
-	}
+	// Get tool definitions - the adapter should now return the correct type
+	tools := m.toolManager.GetAllToolDefinitions()
 
 	m.logf(definitions.LogLevelDebug, "Listed %d tools (id: %s)", len(tools), m.connectionID)
 	return definitions.ListToolsResponse{Tools: tools}, nil
@@ -205,17 +177,21 @@ func (m *ConnectionManager) handleCallTool(ctx context.Context, req *jsonrpc2.Re
 		)
 	}
 
+	// Add context values that might be useful for the tool implementation
 	childCtx := context.WithValue(ctx, "connection_id", m.connectionID)
 	childCtx = context.WithValue(childCtx, "request_id", req.ID)
 
 	startTime := time.Now()
-	result, err := m.toolManager.CallTool(childCtx, callReq.Name, callReq.Arguments)
+	// Call the tool manager - the adapter should now return string result
+	resultStr, err := m.toolManager.CallTool(childCtx, callReq.Name, callReq.Arguments)
 	duration := time.Since(startTime)
 
 	if err != nil {
+		errCode := cgerr.GetErrorCode(err) // Get specific code if available
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "failed to call tool"),
-			cgerr.CategoryTool, cgerr.GetErrorCode(err),
+			cgerr.CategoryTool, // Assuming a category for tool errors
+			errCode,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
 				"tool_name":     callReq.Name,
@@ -225,14 +201,7 @@ func (m *ConnectionManager) handleCallTool(ctx context.Context, req *jsonrpc2.Re
 		)
 	}
 
-	// Convert result to string if necessary
-	resultStr := ""
-	if resultBytes, ok := result.([]byte); ok {
-		resultStr = string(resultBytes)
-	} else if resultStr, ok = result.(string); !ok {
-		// Try to convert to string otherwise
-		resultStr = fmt.Sprintf("%v", result)
-	}
+	// No conversion needed, resultStr is already a string
 
 	m.logf(definitions.LogLevelDebug, "Called tool %s, execution time: %s, result length: %d (id: %s)",
 		callReq.Name, duration, len(resultStr), m.connectionID)
@@ -243,8 +212,8 @@ func (m *ConnectionManager) handleCallTool(ctx context.Context, req *jsonrpc2.Re
 // handleShutdownRequest handles the RPC message for shutdown.
 func (m *ConnectionManager) handleShutdownRequest(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	m.logf(definitions.LogLevelInfo, "Received shutdown request via RPC (id: %s)", m.connectionID)
-	// Acknowledges the request. Actual shutdown action is triggered via FSM OnEntry.
-	return map[string]interface{}{
-		"status": "shutdown_initiated",
-	}, nil
+	// Acknowledges the request immediately. Actual shutdown action is triggered
+	// via state machine (e.g., firing TriggerShutdown).
+	// The response here confirms receipt, not completion.
+	return map[string]interface{}{"status": "shutdown_acknowledged"}, nil
 }

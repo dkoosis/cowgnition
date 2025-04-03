@@ -5,6 +5,8 @@ go 1.22
 
 require (
 	github.com/cockroachdb/errors v1.11.1
+	github.com/google/uuid v1.3.0
+	github.com/qmuntal/stateless v1.7.1
 	github.com/sourcegraph/jsonrpc2 v0.2.0
 	gopkg.in/yaml.v3 v3.0.1
 )
