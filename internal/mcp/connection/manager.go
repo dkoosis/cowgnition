@@ -267,7 +267,8 @@ func (m *ConnectionManager) sendNotification(ctx context.Context, method string,
 
 	if err := conn.Notify(notifyCtx, method, params); err != nil {
 		// Check for common closed connection errors
-		if errors.Is(err, jsonrpc2.ErrClosed) || errors.Is(err, jsonrpc2.ErrNotConnected) {
+		// FIX: Remove reference to non-existent jsonrpc2.ErrNotConnected
+		if errors.Is(err, jsonrpc2.ErrClosed) {
 			m.logf(definitions.LogLevelWarn, "Could not send notification, connection closed (method: %s)", method)
 		} else {
 			m.logf(definitions.LogLevelError, "Error sending notification (method: %s): %v", method, err)

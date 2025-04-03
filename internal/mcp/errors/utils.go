@@ -3,6 +3,7 @@
 package errors
 
 import (
+	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
@@ -185,7 +186,13 @@ func ToJSONRPCError(err error) *jsonrpc2.Error {
 		}
 
 		if len(safeProps) > 0 {
-			rpcErr.Data = safeProps
+			// Marshal the map to JSON
+			dataJSON, marshalErr := json.Marshal(safeProps)
+			if marshalErr == nil {
+				// Convert to json.RawMessage and use its address
+				rawMsg := json.RawMessage(dataJSON)
+				rpcErr.Data = &rawMsg
+			}
 		}
 	}
 
