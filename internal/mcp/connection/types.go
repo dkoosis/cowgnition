@@ -1,80 +1,42 @@
-// internal/mcp/connection/types.go
+// file: internal/mcp/connection/types.go
 package connection
 
 import (
 	"context"
-
-	"github.com/dkoosis/cowgnition/internal/mcp"
+	// Import the new definitions package for shared types
+	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
+	// --- REMOVE the import for the parent mcp package ---
+	// "github.com/dkoosis/cowgnition/internal/mcp"
 )
 
-// InitializeRequest represents the MCP initialize request structure.
-// Importing from parent package or redefining here for internal use
-type InitializeRequest struct {
-	ProtocolVersion string `json:"protocolVersion"` // Protocol version
-	ClientInfo      struct {
-		Name    string `json:"name"`
-		Version string `json:"version"`
-	} `json:"clientInfo"` // Client information
-	Capabilities map[string]interface{} `json:"capabilities"` // Client capabilities
-	// Legacy fields
-	ServerName    string `json:"server_name,omitempty"`    // Optional in newer MCP spec versions
-	ServerVersion string `json:"server_version,omitempty"` // Optional in newer MCP spec versions
-}
+// --- NOTE ---
+// Request/Response struct definitions (like InitializeRequest, InitializeResponse,
+// ListResourcesResponse, ResourceResponse, ListToolsResponse, CallToolRequest,
+// ToolResponse, ServerInfo) should be defined in the parent package's
+// `internal/mcp/types.go` file, not duplicated here.
 
-// InitializeResponse represents the MCP initialize response structure.
-type InitializeResponse struct {
-	ServerInfo      ServerInfo             `json:"server_info"`
-	Capabilities    map[string]interface{} `json:"capabilities"`
-	ProtocolVersion string                 `json:"protocolVersion"` // Protocol version
-}
-
-// ServerInfo represents the server information structure.
-type ServerInfo struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-}
-
-// ListResourcesResponse represents the MCP list_resources response structure.
-type ListResourcesResponse struct {
-	Resources []mcp.ResourceDefinition `json:"resources"`
-}
-
-// ResourceResponse represents the MCP read_resource response structure.
-type ResourceResponse struct {
-	Content  string `json:"content"`
-	MimeType string `json:"mime_type"`
-}
-
-// ListToolsResponse represents the MCP list_tools response structure.
-type ListToolsResponse struct {
-	Tools []mcp.ToolDefinition `json:"tools"`
-}
-
-// CallToolRequest represents the MCP call_tool request structure.
-type CallToolRequest struct {
-	Name      string                 `json:"name"`
-	Arguments map[string]interface{} `json:"arguments"`
-}
-
-// ToolResponse represents the MCP call_tool response structure.
-type ToolResponse struct {
-	Result string `json:"result"`
-}
-
-// ResourceManager interface represents the contract for resource management.
+// ResourceManager interface represents the contract for resource management
+// required by the ConnectionManager. It uses types from the definitions package.
 type ResourceManager interface {
-	// GetAllResourceDefinitions returns all resource definitions.
-	GetAllResourceDefinitions() []mcp.ResourceDefinition
+	// GetAllResourceDefinitions returns all available resource definitions.
+	GetAllResourceDefinitions() []definitions.ResourceDefinition // <-- Use definitions.
 
-	// ReadResource reads a resource with the given name and arguments.
+	// ReadResource reads the content and determines the mime type of a resource.
+	// Return types match the implementation expected (string content, string mimeType).
 	ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error)
 }
 
-// ToolManager interface represents the contract for tool management.
+// ToolManager interface represents the contract for tool management
+// required by the ConnectionManager. It uses types from the definitions package.
 type ToolManager interface {
-	// GetAllToolDefinitions returns all tool definitions.
-	GetAllToolDefinitions() []mcp.ToolDefinition
+	// GetAllToolDefinitions returns all available tool definitions.
+	GetAllToolDefinitions() []definitions.ToolDefinition // <-- Use definitions.
 
-	// CallTool calls a tool with the given name and arguments.
+	// CallTool executes a tool and returns its result as a string.
+	// Return type matches the implementation expected (string result).
 	CallTool(ctx context.Context, name string, args map[string]interface{}) (string, error)
 }
+
+// Add any other types or interfaces here that are TRULY SPECIFIC
+// only to the internal workings of the 'connection' package.
+// Based on the files shown previously, only the interfaces seem necessary here.

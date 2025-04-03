@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
+	// ADD THIS
 )
 
 // ResourceProvider defines an interface for components that provide MCP resources.

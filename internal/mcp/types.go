@@ -1,3 +1,4 @@
+// file: internal/mcp/types.go
 package mcp
 
 import (
