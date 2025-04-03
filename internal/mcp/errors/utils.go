@@ -1,4 +1,3 @@
-// Package mcp/errors defines error types, codes, and utilities for MCP and JSON-RPC.
 // file: internal/mcp/errors/utils.go
 package errors
 
@@ -8,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/sourcegraph/jsonrpc2"
 )
 
 // IsResourceNotFoundError checks if the error is a resource not found error
@@ -148,6 +148,47 @@ func ErrorToMap(err error) map[string]interface{} {
 	}
 
 	return errorMap
+}
+
+// ToJSONRPCError converts an internal error to a *jsonrpc2.Error that can be used
+// with the jsonrpc2 library for error responses.
+// Example usage:
+//
+//	respErr := mcp/errors.ToJSONRPCError(err)
+//	conn.ReplyWithError(ctx, req.ID, respErr)
+func ToJSONRPCError(err error) *jsonrpc2.Error {
+	if err == nil {
+		return nil
+	}
+
+	// Extract error code and user-facing message
+	code := GetErrorCode(err)
+	message := UserFacingMessage(code)
+
+	// Extract properties for the data field
+	properties := GetErrorProperties(err)
+
+	// Filter out internal properties and sensitive information
+	dataProps := make(map[string]interface{})
+	for k, v := range properties {
+		if k != "category" && k != "code" && k != "stack" &&
+			!containsSensitiveKeyword(k) {
+			dataProps[k] = v
+		}
+	}
+
+	// Create the JSON-RPC error object
+	rpcErr := &jsonrpc2.Error{
+		Code:    int64(code),
+		Message: message,
+	}
+
+	// Add data if we have properties to include
+	if len(dataProps) > 0 {
+		rpcErr.Data = dataProps
+	}
+
+	return rpcErr
 }
 
 // containsSensitiveKeyword checks if a key might contain sensitive information.
