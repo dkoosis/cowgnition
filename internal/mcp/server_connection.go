@@ -1,4 +1,4 @@
-// internal/mcp/server_connection.go
+// file: internal/mcp/server_connection.go
 package mcp
 
 import (
@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/jsonrpc"
 	"github.com/dkoosis/cowgnition/internal/mcp/connection"
+	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
@@ -107,11 +108,11 @@ func (s *ConnectionServer) Start() error {
 
 // resourceManagerAdapter adapts the Server's ResourceManager to the connection.ResourceManager interface
 type resourceManagerAdapter struct {
-	rm *ResourceManager
+	rm ResourceManager
 }
 
 // GetAllResourceDefinitions implements the connection.ResourceManager interface
-func (a *resourceManagerAdapter) GetAllResourceDefinitions() []ResourceDefinition {
+func (a *resourceManagerAdapter) GetAllResourceDefinitions() []definitions.ResourceDefinition {
 	return a.rm.GetAllResourceDefinitions()
 }
 
@@ -122,11 +123,11 @@ func (a *resourceManagerAdapter) ReadResource(ctx context.Context, name string, 
 
 // toolManagerAdapter adapts the Server's ToolManager to the connection.ToolManager interface
 type toolManagerAdapter struct {
-	tm *ToolManager
+	tm ToolManager
 }
 
 // GetAllToolDefinitions implements the connection.ToolManager interface
-func (a *toolManagerAdapter) GetAllToolDefinitions() []ToolDefinition {
+func (a *toolManagerAdapter) GetAllToolDefinitions() []definitions.ToolDefinition {
 	return a.tm.GetAllToolDefinitions()
 }
 

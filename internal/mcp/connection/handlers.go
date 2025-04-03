@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
 // handleInitialize processes the initialize request.
 func (m *ConnectionManager) handleInitialize(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
-	var initReq InitializeRequest
+	var initReq definitions.InitializeRequest
 	if err := json.Unmarshal(*req.Params, &initReq); err != nil {
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "failed to parse initialize request"),
@@ -34,7 +35,7 @@ func (m *ConnectionManager) handleInitialize(ctx context.Context, req *jsonrpc2.
 	if clientVersion == "" {
 		clientVersion = initReq.ServerVersion // Using legacy snake_case field
 	}
-	m.logf(LogLevelInfo, "Processing initialize request from client: %s (version: %s) (id: %s)",
+	m.logf(definitions.LogLevelInfo, "Processing initialize request from client: %s (version: %s) (id: %s)",
 		clientName, clientVersion, m.connectionID)
 
 	clientProtoVersion := initReq.ProtocolVersion
@@ -55,26 +56,26 @@ func (m *ConnectionManager) handleInitialize(ctx context.Context, req *jsonrpc2.
 	m.clientCapabilities = initReq.Capabilities
 	m.dataMu.Unlock()
 
-	serverInfo := ServerInfo{
+	serverInfo := definitions.ServerInfo{
 		Name:    m.config.Name,
 		Version: m.config.Version,
 	}
 
-	response := InitializeResponse{
+	response := definitions.InitializeResponse{
 		ServerInfo:      serverInfo,
 		Capabilities:    m.config.Capabilities,
 		ProtocolVersion: clientProtoVersion,
 	}
 
-	m.logf(LogLevelDebug, "handleInitialize successful (id: %s)", m.connectionID)
+	m.logf(definitions.LogLevelDebug, "handleInitialize successful (id: %s)", m.connectionID)
 	return response, nil
 }
 
 // handleListResources processes a list_resources request.
 func (m *ConnectionManager) handleListResources(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	resources := m.resourceManager.GetAllResourceDefinitions()
-	m.logf(LogLevelDebug, "Listed %d resources (id: %s)", len(resources), m.connectionID)
-	return ListResourcesResponse{
+	m.logf(definitions.LogLevelDebug, "Listed %d resources (id: %s)", len(resources), m.connectionID)
+	return definitions.ListResourcesResponse{
 		Resources: resources,
 	}, nil
 }
@@ -123,10 +124,10 @@ func (m *ConnectionManager) handleReadResource(ctx context.Context, req *jsonrpc
 		)
 	}
 
-	m.logf(LogLevelDebug, "Read resource %s, mime type: %s, content length: %d (id: %s)",
+	m.logf(definitions.LogLevelDebug, "Read resource %s, mime type: %s, content length: %d (id: %s)",
 		readReq.Name, mimeType, len(content), m.connectionID)
 
-	return ResourceResponse{
+	return definitions.ResourceResponse{
 		Content:  content,
 		MimeType: mimeType,
 	}, nil
@@ -135,13 +136,13 @@ func (m *ConnectionManager) handleReadResource(ctx context.Context, req *jsonrpc
 // handleListTools processes a list_tools request.
 func (m *ConnectionManager) handleListTools(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	tools := m.toolManager.GetAllToolDefinitions()
-	m.logf(LogLevelDebug, "Listed %d tools (id: %s)", len(tools), m.connectionID)
-	return ListToolsResponse{Tools: tools}, nil
+	m.logf(definitions.LogLevelDebug, "Listed %d tools (id: %s)", len(tools), m.connectionID)
+	return definitions.ListToolsResponse{Tools: tools}, nil
 }
 
 // handleCallTool processes a call_tool request.
 func (m *ConnectionManager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
-	var callReq CallToolRequest
+	var callReq definitions.CallToolRequest
 	if err := json.Unmarshal(*req.Params, &callReq); err != nil {
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "failed to parse call_tool request"),
@@ -186,15 +187,15 @@ func (m *ConnectionManager) handleCallTool(ctx context.Context, req *jsonrpc2.Re
 		)
 	}
 
-	m.logf(LogLevelDebug, "Called tool %s, execution time: %s, result length: %d (id: %s)",
+	m.logf(definitions.LogLevelDebug, "Called tool %s, execution time: %s, result length: %d (id: %s)",
 		callReq.Name, duration, len(result), m.connectionID)
 
-	return ToolResponse{Result: result}, nil
+	return definitions.ToolResponse{Result: result}, nil
 }
 
 // handleShutdownRequest handles the RPC message for shutdown.
 func (m *ConnectionManager) handleShutdownRequest(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
-	m.logf(LogLevelInfo, "Received shutdown request via RPC (id: %s)", m.connectionID)
+	m.logf(definitions.LogLevelInfo, "Received shutdown request via RPC (id: %s)", m.connectionID)
 	// Acknowledges the request. Actual shutdown action is triggered via FSM OnEntry.
 	return map[string]interface{}{
 		"status": "shutdown_initiated",

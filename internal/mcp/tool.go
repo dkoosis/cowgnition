@@ -1,4 +1,5 @@
-// internal/mcp/tool.go
+// Package mcp handles the Model Context Protocol (MCP) server functionality.
+// file: internal/mcp/tool.go
 package mcp
 
 import (
@@ -7,39 +8,30 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
-// ToolProvider defines an interface for components that provide MCP tools.
-type ToolProvider interface {
-	// GetToolDefinitions returns the list of tools this provider handles.
-	GetToolDefinitions() []ToolDefinition
-
-	// CallTool attempts to execute a tool with the given name and arguments.
-	// Returns the result of the tool execution and any error encountered.
-	CallTool(ctx context.Context, name string, args map[string]interface{}) (string, error)
-}
-
-// ToolManager manages all registered tool providers.
-type ToolManager struct {
+// ToolManagerImpl manages all registered tool providers.
+type ToolManagerImpl struct {
 	providers []ToolProvider
 }
 
 // NewToolManager creates a new tool manager.
-func NewToolManager() *ToolManager {
-	return &ToolManager{
+func NewToolManager() ToolManager {
+	return &ToolManagerImpl{
 		providers: []ToolProvider{},
 	}
 }
 
 // RegisterProvider registers a ToolProvider.
-func (tm *ToolManager) RegisterProvider(provider ToolProvider) {
+func (tm *ToolManagerImpl) RegisterProvider(provider ToolProvider) {
 	tm.providers = append(tm.providers, provider)
 }
 
 // GetAllToolDefinitions returns all tool definitions from all providers.
-func (tm *ToolManager) GetAllToolDefinitions() []ToolDefinition {
-	var allTools []ToolDefinition
+func (tm *ToolManagerImpl) GetAllToolDefinitions() []definitions.ToolDefinition {
+	var allTools []definitions.ToolDefinition
 	for _, provider := range tm.providers {
 		allTools = append(allTools, provider.GetToolDefinitions()...)
 	}
@@ -47,7 +39,7 @@ func (tm *ToolManager) GetAllToolDefinitions() []ToolDefinition {
 }
 
 // FindToolProvider finds the provider for a specific tool name.
-func (tm *ToolManager) FindToolProvider(name string) (ToolProvider, error) {
+func (tm *ToolManagerImpl) FindToolProvider(name string) (ToolProvider, error) {
 	for _, provider := range tm.providers {
 		for _, tool := range provider.GetToolDefinitions() {
 			if tool.Name == name {
@@ -75,7 +67,7 @@ func (tm *ToolManager) FindToolProvider(name string) (ToolProvider, error) {
 }
 
 // CallTool calls a tool across all providers.
-func (tm *ToolManager) CallTool(ctx context.Context, name string, args map[string]interface{}) (string, error) {
+func (tm *ToolManagerImpl) CallTool(ctx context.Context, name string, args map[string]interface{}) (string, error) {
 	provider, err := tm.FindToolProvider(name)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to find tool provider")

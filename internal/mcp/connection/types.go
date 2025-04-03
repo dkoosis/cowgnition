@@ -3,13 +3,13 @@ package connection
 
 import (
 	"context"
-	// Import the definitions package for shared types
+
 	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 )
 
 // ResourceManager interface represents the contract for resource management
 // required by the ConnectionManager.
-type ResourceManager interface {
+type ResourceManagerContract interface {
 	// GetAllResourceDefinitions returns all available resource definitions.
 	GetAllResourceDefinitions() []definitions.ResourceDefinition
 
@@ -19,7 +19,7 @@ type ResourceManager interface {
 
 // ToolManager interface represents the contract for tool management
 // required by the ConnectionManager.
-type ToolManager interface {
+type ToolManagerContract interface {
 	// GetAllToolDefinitions returns all available tool definitions.
 	GetAllToolDefinitions() []definitions.ToolDefinition
 

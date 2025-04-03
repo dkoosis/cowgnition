@@ -8,33 +8,19 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
-	// ADD THIS
 )
 
-// ResourceProvider defines an interface for components that provide MCP resources.
-// This interface abstracts the underlying resource access mechanism.
-type ResourceProvider interface {
-	// GetResourceDefinitions returns the list of resources this provider handles.
-	// This allows the ResourceManager to discover available resources.
-	GetResourceDefinitions() []ResourceDefinition
-
-	// ReadResource attempts to read the content of a resource with the given name and arguments.
-	// Returns the resource content, MIME type, and any error encountered.
-	// The context is used to manage timeouts and cancellations.
-	ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error)
-}
-
-// ResourceManager manages all registered resource providers.
-// It acts as a central registry and access point for resources.
-type ResourceManager struct {
+// ResourceManagerImpl implements the ResourceManager interface.
+type ResourceManagerImpl struct {
 	providers []ResourceProvider // providers holds the registered ResourceProviders.
 }
 
 // NewResourceManager creates a new resource manager.
-// It initializes the ResourceManager with an empty list of providers.
-func NewResourceManager() *ResourceManager {
-	return &ResourceManager{
+// It initializes the ResourceManagerImpl with an empty list of providers.
+func NewResourceManager() ResourceManager {
+	return &ResourceManagerImpl{
 		providers: []ResourceProvider{}, // Initialize with no providers.
 	}
 }
@@ -42,15 +28,15 @@ func NewResourceManager() *ResourceManager {
 // RegisterProvider registers a ResourceProvider.
 // This adds a provider to the list of available providers,
 // allowing the ResourceManager to access its resources.
-func (rm *ResourceManager) RegisterProvider(provider ResourceProvider) {
+func (rm *ResourceManagerImpl) RegisterProvider(provider ResourceProvider) {
 	rm.providers = append(rm.providers, provider) // Add the provider to the list.
 }
 
 // GetAllResourceDefinitions returns all resource definitions from all providers.
 // This aggregates the definitions from each provider into a single list,
 // providing a comprehensive view of available resources.
-func (rm *ResourceManager) GetAllResourceDefinitions() []ResourceDefinition {
-	var allResources []ResourceDefinition
+func (rm *ResourceManagerImpl) GetAllResourceDefinitions() []definitions.ResourceDefinition {
+	var allResources []definitions.ResourceDefinition
 	for _, provider := range rm.providers {
 		allResources = append(allResources, provider.GetResourceDefinitions()...) // Collect definitions from each provider.
 	}
@@ -62,7 +48,7 @@ func (rm *ResourceManager) GetAllResourceDefinitions() []ResourceDefinition {
 // that handles the resource with the given name.
 // If no provider is found, it returns an error with a list of available resources
 // to aid in debugging.
-func (rm *ResourceManager) FindResourceProvider(name string) (ResourceProvider, error) {
+func (rm *ResourceManagerImpl) FindResourceProvider(name string) (ResourceProvider, error) {
 	for _, provider := range rm.providers {
 		for _, res := range provider.GetResourceDefinitions() {
 			if res.Name == name {
@@ -93,7 +79,7 @@ func (rm *ResourceManager) FindResourceProvider(name string) (ResourceProvider, 
 // It first finds the appropriate provider for the given resource name
 // and then calls the provider's ReadResource method to retrieve the content.
 // It also handles context timeouts and wraps errors with additional context.
-func (rm *ResourceManager) ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error) {
+func (rm *ResourceManagerImpl) ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error) {
 	provider, err := rm.FindResourceProvider(name) // Find the provider for the resource.
 	if err != nil {
 		return "", "", errors.Wrap(err, "failed to find resource provider") // Wrap error with context.
