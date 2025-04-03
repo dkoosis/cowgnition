@@ -2,58 +2,106 @@
 package mcp
 
 import (
-	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
+	"context"
 )
 
-// InitializeRequest represents the MCP initialize request structure.
-type InitializeRequest struct {
-	ProtocolVersion string `json:"protocolVersion"` // Protocol version
-	ClientInfo      struct {
-		Name    string `json:"name"`
-		Version string `json:"version"`
-	} `json:"clientInfo"` // Client information
-	Capabilities map[string]interface{} `json:"capabilities"` // Client capabilities
-	// Legacy fields
-	ServerName    string `json:"server_name,omitempty"`    // Optional in newer MCP spec versions
-	ServerVersion string `json:"server_version,omitempty"` // Optional in newer MCP spec versions
+// ConnectionState represents the different states a connection can be in.
+type ConnectionState string
+
+const (
+	StateUnconnected  ConnectionState = "unconnected"
+	StateInitializing ConnectionState = "initializing"
+	StateConnected    ConnectionState = "connected"
+	StateTerminating  ConnectionState = "terminating"
+	StateError        ConnectionState = "error"
+)
+
+// String provides string representation for logging/debugging.
+func (s ConnectionState) String() string { return string(s) }
+
+// Trigger represents events that can cause state transitions.
+type Trigger string
+
+const (
+	TriggerInitialize       Trigger = "Initialize"
+	TriggerInitSuccess      Trigger = "InitSuccess"
+	TriggerInitFailure      Trigger = "InitFailure"
+	TriggerListResources    Trigger = "ListResources"
+	TriggerReadResource     Trigger = "ReadResource"
+	TriggerListTools        Trigger = "ListTools"
+	TriggerCallTool         Trigger = "CallTool"
+	TriggerShutdown         Trigger = "Shutdown"
+	TriggerShutdownComplete Trigger = "ShutdownComplete"
+	TriggerErrorOccurred    Trigger = "ErrorOccurred"
+	TriggerDisconnect       Trigger = "Disconnect"
+)
+
+// String provides string representation for logging/debugging.
+func (t Trigger) String() string { return string(t) }
+
+// ResourceManagerContract defines the interface expected by the connection manager
+// for resource management operations.
+type ResourceManagerContract interface {
+	// GetAllResourceDefinitions returns all available resource definitions.
+	GetAllResourceDefinitions() []interface{}
+
+	// ReadResource reads a resource with the given name and arguments.
+	// Returns the resource content, MIME type, and any error encountered.
+	ReadResource(ctx context.Context, name string, args map[string]string) (interface{}, string, error)
 }
 
-// ServerInfo represents the server information structure.
-type ServerInfo struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+// ToolManagerContract defines the interface expected by the connection manager
+// for tool management operations.
+type ToolManagerContract interface {
+	// GetAllToolDefinitions returns all available tool definitions.
+	GetAllToolDefinitions() []interface{}
+
+	// CallTool attempts to execute a tool with the given name and arguments.
+	// Returns the result of the tool execution and any error encountered.
+	CallTool(ctx context.Context, name string, args map[string]interface{}) (interface{}, error)
 }
 
-// InitializeResponse represents the MCP initialize response structure.
-type InitializeResponse struct {
-	ServerInfo      ServerInfo             `json:"server_info"`
-	Capabilities    map[string]interface{} `json:"capabilities"`
-	ProtocolVersion string                 `json:"protocolVersion"` // Protocol version
+// Helper map to translate JSON-RPC method strings to state machine Triggers.
+var methodToTriggerMap = map[string]Trigger{
+	// Initialization / Lifecycle
+	"initialize": TriggerInitialize,
+	"shutdown":   TriggerShutdown,
+	// Resources
+	"resources/list":      TriggerListResources,
+	"resources/read":      TriggerReadResource,
+	"list_resources":      TriggerListResources,
+	"read_resource":       TriggerReadResource,
+	"resources/subscribe": Trigger("Subscribe"),
+	// Tools
+	"tools/list": TriggerListTools,
+	"tools/call": TriggerCallTool,
+	"list_tools": TriggerListTools,
+	"call_tool":  TriggerCallTool,
+	"ping":       Trigger("Ping"),
 }
 
-// ListResourcesResponse represents the MCP list_resources response structure.
-type ListResourcesResponse struct {
-	Resources []definitions.ResourceDefinition `json:"resources"`
+// MapMethodToTrigger translates a method string to a defined Trigger.
+func MapMethodToTrigger(method string) (Trigger, bool) {
+	t, ok := methodToTriggerMap[method]
+	return t, ok
 }
 
-// ResourceResponse represents the MCP read_resource response structure.
-type ResourceResponse struct {
-	Content  string `json:"content"`
-	MimeType string `json:"mime_type"`
+// MapErrorToStateTrigger translates specific errors into state machine triggers.
+func MapErrorToStateTrigger(err error) Trigger {
+	// Add logic to check error types if needed
+	return ""
 }
 
-// ListToolsResponse represents the MCP list_tools response structure.
-type ListToolsResponse struct {
-	Tools []definitions.ToolDefinition `json:"tools"`
-}
+// isCompatibleProtocolVersion checks if the client's protocol version is compatible.
+func isCompatibleProtocolVersion(version string) bool {
+	// Currently supported versions
+	supportedVersions := []string{"2.0", "2024-11-05"}
 
-// CallToolRequest represents the MCP call_tool request structure.
-type CallToolRequest struct {
-	Name      string                 `json:"name"`
-	Arguments map[string]interface{} `json:"arguments"`
-}
-
-// ToolResponse represents the MCP call_tool response structure.
-type ToolResponse struct {
-	Result string `json:"result"`
+	for _, supported := range supportedVersions {
+		if version == supported {
+			return true
+		}
+	}
+	// Future: implement semantic version checking for better compatibility
+	return false
 }
