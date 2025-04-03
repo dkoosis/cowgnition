@@ -2,59 +2,83 @@
 
 ## Top Priority
 
-Quality review:
-Key Observations:
+# CowGnition MCP Implementation Roadmap: Urgent Fixes
 
-Custom JSON-RPC Types: You have defined your own set of structs for handling JSON-RPC messages (jsonrpc.Message, jsonrpc.Request, jsonrpc.Response, jsonrpc.Notification) and errors (jsonrpc.Error) within the internal/jsonrpc package.
-Different Error Struct: The jsonrpc.Error struct defined in this file (Code int, Message string, Data json.RawMessage) is different from the jsonrpc2.Error struct used by the sourcegraph/jsonrpc2 library (Code int64, Message string, Data interface{}).
-manager.go Uses sourcegraph/jsonrpc2: Critically, your internal/mcp/connection/manager.go file (as shown in previous snippets and implied by the error messages) imports and uses types from github.com/sourcegraph/jsonrpc2, specifically jsonrpc2.Conn, jsonrpc2.Request, and it expects a \*jsonrpc2.Error for the conn.ReplyWithError method.
-The Mix-up:
+## Priority Tasks for Codebase Cleanup and Standardization
 
-The error undefined: cgerr.ToJSONRPCError arises because manager.go needs a function in your errors package (cgerr) that converts your application's internal errors into the specific \*jsonrpc2.Error type required by the sourcegraph/jsonrpc2 library's conn.ReplyWithError method.
+### 1. Fix Immediate Build Errors
 
-The existence of your internal/jsonrpc/types.go doesn't change what manager.go needs. The function ToJSONRPCError that I provided for your errors/utils.go was specifically designed to:
+- [ ] Implement `ToJSONRPCError` in `internal/mcp/errors/utils.go` to convert our internal errors to `*jsonrpc2.Error`
+- [ ] Remove references to non-existent `jsonrpc2.ErrNotConnected` in `internal/mcp/connection/manager.go`
+- [ ] Fix import issues in `internal/mcp/server_connection.go` related to the connection package
+- [ ] Update any code that relies on these functions and verify successful build
 
-Take your application errors (which use embedded details via cockroachdb/errors).
-Use your helper functions (GetErrorCode, UserFacingMessage, etc.) to extract the relevant information.
-Construct and return a \*jsonrpc2.Error (from the sourcegraph/jsonrpc2 library) suitable for manager.go.
-Conclusion & Fix:
+### 2. Complete State Machine Implementation
 
-ToJSONRPCError is Still Needed: The ToJSONRPCError function defined in the previous answer (the one designed for your errors/utils.go using your specific error helpers) is still the correct function needed to resolve the undefined: cgerr.ToJSONRPCError error in manager.go. Please ensure that function is correctly added to your internal/mcp/errors/utils.go file and that the file is saved.
-jsonrpc.Error vs jsonrpc2.Error: Your internal/jsonrpc package defines its own error type. This is fine, but it's not the type needed by the conn.ReplyWithError method used in manager.go. The ToJSONRPCError function correctly produces the required *jsonrpc2.Error. You may want to review where else internal/jsonrpc/types.go is used in your project to ensure consistency, but it doesn't invalidate the fix needed for manager.go.
-jsonrpc2.ErrNotConnected: The fix for the undefined: jsonrpc2.ErrNotConnected error in manager.go (removing that part of the if condition in sendNotification) also still applies, as that error variable is not exported by the sourcegraph/jsonrpc2 library.
-In summary: Please ensure the ToJSONRPCError function (which returns *jsonrpc2.Error) is present and saved in internal/mcp/errors/utils.go, and apply the correction for jsonrpc2.ErrNotConnected in internal/mcp/connection/manager.go. This should resolve the current compilation errors.
+- [ ] Finalize the integration of `qmuntal/stateless` for connection management
+- [ ] Eliminate redundant state tracking mechanisms outside of the state machine
+- [ ] Ensure all state transitions are properly handled by the state machine
+- [ ] Verify event handlers are correctly registered and functioning
+- [ ] Remove any vestigial code from the previous implementation approach
+- [ ] Write state transition tests to validate the new architecture
+
+### 3. Standardize Error Handling
+
+- [ ] Audit and document our chosen error handling patterns
+- [ ] Consolidate on `cockroachdb/errors` package for rich error context
+- [ ] Create consistent helpers for converting between domain errors and protocol errors
+- [ ] Establish clear error category boundaries (domain vs. protocol vs. transport)
+- [ ] Ensure proper error propagation across boundaries
+- [ ] Implement consistent error logging with appropriate detail levels
+- [ ] Add unit tests for error handling scenarios
+
+### 4. Standardize on jsonrpc2 Library
+
+- [ ] Remove vestigial custom JSON-RPC implementation code from `internal/jsonrpc/types.go`
+- [ ] Ensure all JSON-RPC related code uses `sourcegraph/jsonrpc2` types directly
+- [ ] Create clean adapter layers where needed (e.g., for error conversion)
+- [ ] Update any remaining code that refers to the custom types
+- [ ] Document the standard pattern for JSON-RPC interactions for future development
+
+### 5. Documentation and Testing
+
+- [ ] Document architectural decisions in `docs/decision_log.md`
+- [ ] Update code comments to reflect the new patterns
+- [ ] Create integration tests for the entire protocol flow
+- [ ] Set up CI checks to prevent regressions
+
+## Implementation Strategy
+
+Start small and validate each change incrementally:
+
+1. First fix the build errors to get a working baseline
+2. Focus on the state machine implementation next
+3. Standardize error handling and validate with tests
+4. Finally, clean up any remaining custom JSON-RPC code
+
+For each component, follow this approach:
+
+1. Analyze the current implementation
+2. Define the target architecture
+3. Implement incremental changes with tests
+4. Validate with real-world use cases
+5. Document the patterns for future development
+
+## Expected Benefits
+
+- **Simplified codebase** with fewer parallel implementations
+- **Improved maintainability** through standardized patterns
+- **Better error handling** with rich context for debugging
+- **More robust state management** using a proven library
+- **Faster development** by leveraging established libraries
+
+## Technical Details
+
+For the `ToJSONRPCError` function implementation and other specifics, refer to the error logs and code snippets in our GitHub issues and PR discussions.
 
 ## Next PRIORITY: Implement State Machine Architecture for MCP Connection Handling
 
-**Implementation Prompt for AI Assistant:**
-"Help me implement the State Machine-based Event Handler architecture for MCP connection handling. Focus on the following key components:
-
-### complete - needs quality review
-
-✅ Created a new connection package in the internal/mcp directory with files:
-
-types.go: Defines types and interfaces
-manager.go: Core connection manager implementation
-handlers.go: Request handler implementations
-state.go: Connection state definitions and validation
-utils.go: Utility functions
-
-✅ Split the implementation across multiple files in that package:
-
-Each file has a focused responsibility
-Code is organized for better maintainability
-
-✅ Made the connection manager use the MCP types from the parent package:
-
-Created proper interfaces to adapt to the existing types
-Ensured type safety between packages
-
-✅ Updated the server integration to reference the new package:
-
-Created server_connection.go with ConnectionServer implementation
-Updated cmd/server/server.go to use the new ConnectionServer
-
-### requierd (may have been completed, see list above)
+### (may have been completed, see list above)
 
 1. Defining a ConnectionManager struct with explicit connection states (Unconnected, Initializing, Connected, Terminating, Error)
 2. Implementing state transitions with appropriate validation
