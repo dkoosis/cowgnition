@@ -99,6 +99,8 @@ func NewManager(
 }
 
 // Handle is the main entry point for incoming JSON-RPC requests.
+// file: internal/mcp/connection/manager.go
+
 // Handle is the main entry point for incoming JSON-RPC requests.
 func (m *Manager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) {
 	m.dataMu.Lock()
@@ -107,145 +109,192 @@ func (m *Manager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2
 
 	trigger, ok := MapMethodToTrigger(req.Method)
 	if !ok {
-		m.logf(definitions.LogLevelWarn, "Received unknown method: %s", req.Method)
-		respErr := &jsonrpc2.Error{
-			Code:    int64(jsonrpc2.CodeMethodNotFound),
-			Message: fmt.Sprintf("Method not found: %s", req.Method),
-		}
-		if err := conn.ReplyWithError(ctx, req.ID, respErr); err != nil {
-			m.logf(definitions.LogLevelError, "Error sending MethodNotFound reply: %v", err)
-		}
+		m.handleUnknownMethod(ctx, conn, req)
 		return
 	}
 
-	currentState := m.stateMachine.MustState().(ConnectionState)
+	currentState := m.stateMachine.MustState().(State)
 	m.logf(definitions.LogLevelDebug, "Processing method '%s' (trigger '%s') in state '%s'", req.Method, trigger, currentState)
 
-	// For initialize, we use the state machine transition directly
-	if trigger == TriggerInitialize {
-		err := m.stateMachine.FireCtx(ctx, string(trigger), req)
-		if err != nil {
-			m.logf(definitions.LogLevelError, "Error firing initialize trigger: %v", err)
-			respErr := &jsonrpc2.Error{
-				Code:    int64(jsonrpc2.CodeInvalidRequest),
-				Message: fmt.Sprintf("Failed to initialize: %v", err),
-			}
-			if replyErr := conn.ReplyWithError(ctx, req.ID, respErr); replyErr != nil {
-				m.logf(definitions.LogLevelError, "Error sending initialize error reply: %v", replyErr)
-			}
-		}
-		return
-	}
-
-	// For shutdown, execute handler and then trigger state transition
-	if trigger == TriggerShutdown {
-		if currentState == StateConnected {
-			result, err := m.handleShutdownRequest(ctx, req)
-			if err != nil {
-				m.logf(definitions.LogLevelError, "Error handling shutdown: %v", err)
-				respErr := cgerr.ToJSONRPCError(err)
-				if replyErr := conn.ReplyWithError(ctx, req.ID, respErr); replyErr != nil {
-					m.logf(definitions.LogLevelError, "Error sending shutdown error reply: %v", replyErr)
-				}
-				return
-			}
-
-			// Send success response first
-			if !req.Notif {
-				if replyErr := conn.Reply(ctx, req.ID, result); replyErr != nil {
-					m.logf(definitions.LogLevelError, "Error sending shutdown reply: %v", replyErr)
-				}
-			}
-
-			// Then fire trigger (using a separate goroutine to avoid blocking)
-			go func() {
-				// Short delay to ensure the response is sent
-				select {
-				case <-time.After(100 * time.Millisecond):
-					if err := m.stateMachine.Fire(string(TriggerShutdown)); err != nil {
-						m.logf(definitions.LogLevelError, "Error firing shutdown trigger: %v", err)
-					}
-				case <-ctx.Done():
-					m.logf(definitions.LogLevelWarn, "Context canceled before shutdown trigger fired")
-				}
-			}()
-			return
-		}
-
-		// If we're not in Connected state, return error
-		respErr := &jsonrpc2.Error{
-			Code:    int64(jsonrpc2.CodeInvalidRequest),
-			Message: fmt.Sprintf("Cannot shutdown in state '%s'", currentState),
-		}
-		if err := conn.ReplyWithError(ctx, req.ID, respErr); err != nil {
-			m.logf(definitions.LogLevelError, "Error sending shutdown error reply: %v", err)
-		}
+	// Handle special triggers with their own routing logic
+	if m.isSpecialTrigger(ctx, conn, req, trigger, currentState) {
 		return
 	}
 
 	// For normal operations in Connected state
 	if currentState == StateConnected && !req.Notif {
-		var result interface{}
-		var handlerErr error
-
-		switch trigger {
-		case TriggerListResources:
-			result, handlerErr = m.handleListResources(ctx, req)
-		case TriggerReadResource:
-			result, handlerErr = m.handleReadResource(ctx, req)
-		case TriggerListTools:
-			result, handlerErr = m.handleListTools(ctx, req)
-		case TriggerCallTool:
-			result, handlerErr = m.handleCallTool(ctx, req)
-		case TriggerPing:
-			result, handlerErr = m.handlePing(ctx, req)
-		case TriggerSubscribe:
-			result, handlerErr = m.handleSubscribe(ctx, req)
-		default:
-			handlerErr = cgerr.ErrorWithDetails(
-				errors.Newf("no handler implemented for method: %s", req.Method),
-				cgerr.CategoryRPC,
-				cgerr.CodeMethodNotFound,
-				map[string]interface{}{
-					"connection_id": m.connectionID,
-					"request_id":    req.ID,
-					"method":        req.Method,
-				},
-			)
-		}
-
-		// Handle errors from the handler
-		if handlerErr != nil {
-			m.logf(definitions.LogLevelError, "Error handling method '%s': %v", req.Method, handlerErr)
-			respErr := cgerr.ToJSONRPCError(handlerErr)
-			if replyErr := conn.ReplyWithError(ctx, req.ID, respErr); replyErr != nil {
-				m.logf(definitions.LogLevelError, "Error sending error reply: %v", replyErr)
-			}
-
-			// Don't transition to error state for normal operation errors
-			return
-		}
-
-		// Send the result
-		if !req.Notif && result != nil {
-			if replyErr := conn.Reply(ctx, req.ID, result); replyErr != nil {
-				m.logf(definitions.LogLevelError, "Error sending reply: %v", replyErr)
-			}
-		}
-
-		// Don't fire state transitions for normal operations (they should stay in Connected state)
+		m.handleConnectedStateRequest(ctx, conn, req, trigger)
 		return
 	}
 
 	// Handle operations in other states
 	if !req.Notif {
+		m.handleInvalidStateOperation(ctx, conn, req, currentState)
+	}
+}
+
+// handleUnknownMethod handles requests with unknown methods.
+func (m *Manager) handleUnknownMethod(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) {
+	m.logf(definitions.LogLevelWarn, "Received unknown method: %s", req.Method)
+	respErr := &jsonrpc2.Error{
+		Code:    int64(jsonrpc2.CodeMethodNotFound),
+		Message: fmt.Sprintf("Method not found: %s", req.Method),
+	}
+	if err := conn.ReplyWithError(ctx, req.ID, respErr); err != nil {
+		m.logf(definitions.LogLevelError, "Error sending MethodNotFound reply: %v", err)
+	}
+}
+
+// isSpecialTrigger handles special triggers that have custom routing logic
+// Returns true if the trigger was handled.
+func (m *Manager) isSpecialTrigger(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request, trigger Trigger, currentState State) bool {
+	// Handle initialization
+	if trigger == TriggerInitialize {
+		m.handleInitializeRequest(ctx, conn, req)
+		return true
+	}
+
+	// Handle shutdown
+	if trigger == TriggerShutdown {
+		if currentState == StateConnected {
+			m.handleShutdownInConnectedState(ctx, conn, req)
+			return true
+		}
+		m.handleInvalidShutdown(ctx, conn, req, currentState)
+		return true
+	}
+
+	return false
+}
+
+// handleInitializeRequest handles the initialize request.
+func (m *Manager) handleInitializeRequest(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) {
+	err := m.stateMachine.FireCtx(ctx, string(TriggerInitialize), req)
+	if err != nil {
+		m.logf(definitions.LogLevelError, "Error firing initialize trigger: %v", err)
 		respErr := &jsonrpc2.Error{
 			Code:    int64(jsonrpc2.CodeInvalidRequest),
-			Message: fmt.Sprintf("Operation '%s' not allowed in state '%s'", req.Method, currentState),
+			Message: fmt.Sprintf("Failed to initialize: %v", err),
 		}
 		if replyErr := conn.ReplyWithError(ctx, req.ID, respErr); replyErr != nil {
-			m.logf(definitions.LogLevelError, "Error sending invalid state error reply: %v", replyErr)
+			m.logf(definitions.LogLevelError, "Error sending initialize error reply: %v", replyErr)
 		}
+	}
+}
+
+// handleShutdownInConnectedState handles a shutdown request in the Connected state.
+func (m *Manager) handleShutdownInConnectedState(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) {
+	result, err := m.handleShutdownRequest(ctx, req)
+	if err != nil {
+		m.logf(definitions.LogLevelError, "Error handling shutdown: %v", err)
+		respErr := cgerr.ToJSONRPCError(err)
+		if replyErr := conn.ReplyWithError(ctx, req.ID, respErr); replyErr != nil {
+			m.logf(definitions.LogLevelError, "Error sending shutdown error reply: %v", replyErr)
+		}
+		return
+	}
+
+	// Send success response first
+	if !req.Notif {
+		if replyErr := conn.Reply(ctx, req.ID, result); replyErr != nil {
+			m.logf(definitions.LogLevelError, "Error sending shutdown reply: %v", replyErr)
+		}
+	}
+
+	// Then fire trigger (using a separate goroutine to avoid blocking)
+	go func() {
+		// Short delay to ensure the response is sent
+		select {
+		case <-time.After(100 * time.Millisecond):
+			if err := m.stateMachine.Fire(string(TriggerShutdown)); err != nil {
+				m.logf(definitions.LogLevelError, "Error firing shutdown trigger: %v", err)
+			}
+		case <-ctx.Done():
+			m.logf(definitions.LogLevelWarn, "Context canceled before shutdown trigger fired")
+		}
+	}()
+}
+
+// handleInvalidShutdown handles shutdown requests in invalid states.
+func (m *Manager) handleInvalidShutdown(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request, currentState State) {
+	respErr := &jsonrpc2.Error{
+		Code:    int64(jsonrpc2.CodeInvalidRequest),
+		Message: fmt.Sprintf("Cannot shutdown in state '%s'", currentState),
+	}
+	if err := conn.ReplyWithError(ctx, req.ID, respErr); err != nil {
+		m.logf(definitions.LogLevelError, "Error sending shutdown error reply: %v", err)
+	}
+}
+
+// handleConnectedStateRequest handles normal requests in the Connected state.
+func (m *Manager) handleConnectedStateRequest(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request, trigger Trigger) {
+	var result interface{}
+	var handlerErr error
+
+	switch trigger {
+	case TriggerListResources:
+		result, handlerErr = m.handleListResources(ctx, req)
+	case TriggerReadResource:
+		result, handlerErr = m.handleReadResource(ctx, req)
+	case TriggerListTools:
+		result, handlerErr = m.handleListTools(ctx, req)
+	case TriggerCallTool:
+		result, handlerErr = m.handleCallTool(ctx, req)
+	case TriggerPing:
+		result, handlerErr = m.handlePing(ctx, req)
+	case TriggerSubscribe:
+		result, handlerErr = m.handleSubscribe(ctx, req)
+	default:
+		handlerErr = cgerr.ErrorWithDetails(
+			errors.Newf("no handler implemented for method: %s", req.Method),
+			cgerr.CategoryRPC,
+			cgerr.CodeMethodNotFound,
+			map[string]interface{}{
+				"connection_id": m.connectionID,
+				"request_id":    req.ID,
+				"method":        req.Method,
+			},
+		)
+	}
+
+	// Handle errors from the handler
+	if handlerErr != nil {
+		m.handleErrorResponse(ctx, conn, req, handlerErr)
+		return
+	}
+
+	// Send the successful result
+	if result != nil {
+		m.sendSuccessResponse(ctx, conn, req, result)
+	}
+}
+
+// handleErrorResponse sends an error response for failed requests.
+func (m *Manager) handleErrorResponse(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request, err error) {
+	m.logf(definitions.LogLevelError, "Error handling method '%s': %v", req.Method, err)
+	respErr := cgerr.ToJSONRPCError(err)
+	if replyErr := conn.ReplyWithError(ctx, req.ID, respErr); replyErr != nil {
+		m.logf(definitions.LogLevelError, "Error sending error reply: %v", replyErr)
+	}
+}
+
+// sendSuccessResponse sends a successful response.
+func (m *Manager) sendSuccessResponse(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request, result interface{}) {
+	if !req.Notif {
+		if replyErr := conn.Reply(ctx, req.ID, result); replyErr != nil {
+			m.logf(definitions.LogLevelError, "Error sending reply: %v", replyErr)
+		}
+	}
+}
+
+// handleInvalidStateOperation handles requests in invalid states.
+func (m *Manager) handleInvalidStateOperation(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request, currentState State) {
+	respErr := &jsonrpc2.Error{
+		Code:    int64(jsonrpc2.CodeInvalidRequest),
+		Message: fmt.Sprintf("Operation '%s' not allowed in state '%s'", req.Method, currentState),
+	}
+	if replyErr := conn.ReplyWithError(ctx, req.ID, respErr); replyErr != nil {
+		m.logf(definitions.LogLevelError, "Error sending invalid state error reply: %v", replyErr)
 	}
 }
 

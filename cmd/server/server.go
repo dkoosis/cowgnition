@@ -17,7 +17,11 @@ import (
 
 // runServer starts the MCP server with the given configuration.
 func runServer(transportType, configPath string, requestTimeout, shutdownTimeout time.Duration) error {
-	// The existing config loading code stays the same...
+	// Load configuration from file or create default
+	cfg, err := loadConfiguration(configPath)
+	if err != nil {
+		return errors.Wrap(err, "runServer: failed to load configuration")
+	}
 
 	// Create server
 	server, err := mcp.NewServer(cfg)
@@ -92,6 +96,8 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 }
 
 // createAndConfigureServer creates and configures the MCP server.
+//
+//nolint:unused
 func createAndConfigureServer(cfg *config.Settings, transportType string, requestTimeout, shutdownTimeout time.Duration) (*mcp.Server, error) {
 	// Create server
 	server, err := mcp.NewServer(cfg)
@@ -196,6 +202,8 @@ func registerRTMProvider(server *mcp.Server, apiKey, sharedSecret, tokenPath str
 }
 
 // setupGracefulShutdown sets up signal handling for graceful shutdown.
+//
+//nolint:unused
 func setupGracefulShutdown(server *mcp.Server, transportType string) {
 	if transportType == "http" {
 		go func() {

@@ -14,6 +14,8 @@ import (
 
 // findOrCreateConfig tries to find an existing config or create a default one.
 // Returns the path to the config file and a boolean indicating success.
+//
+//nolint:unused
 func findOrCreateConfig() (string, bool) {
 	// Try standard locations in this order
 	possiblePaths := []string{
