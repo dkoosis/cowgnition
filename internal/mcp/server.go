@@ -1,159 +1,125 @@
-// Package connection handles the state management and communication logic,
-// including the server setup specific to the ConnectionManager.
-package connection
+// internal/mcp/server.go
+package mcp
 
 import (
-	"context"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/jsonrpc"
-
-	// Import mcp for base Server type and base interfaces
-	// IMPORTANT: Replace with the correct import path for your module
-	"github.com/dkoosis/cowgnition/internal/mcp"
-	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
-	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
-	"github.com/sourcegraph/jsonrpc2"
+	"github.com/dkoosis/cowgnition/internal/mcp/connection"
 )
 
-// ConnectionServer wraps the base mcp.Server to use the ConnectionManager
-// for handling connections, particularly stdio.
-type ConnectionServer struct {
-	// Embed the base server from the mcp package
-	*mcp.Server
-	// Use the ConnectionManager from this package
-	connectionManager *Manager // Renamed from ConnectionManager
+// Server is the main MCP server implementation.
+type Server struct {
+	config          Config
+	version         string
+	transport       string
+	requestTimeout  time.Duration
+	shutdownTimeout time.Duration
+	resourceManager ResourceManager
+	toolManager     ToolManager
 }
 
-// NewConnectionServer creates a new server specialized for ConnectionManager usage.
-// It takes the base mcp.Server which contains configurations and base managers.
-func NewConnectionServer(baseServer *mcp.Server) (*ConnectionServer, error) {
-	// Create server configuration specific to the connection manager
-	// Uses types defined within this 'connection' package (ServerConfig)
-	config := ServerConfig{ // Now uses ServerConfig from this package
-		Name:            baseServer.Config().GetServerName(), // Assuming Config() method on mcp.Server
-		Version:         baseServer.Version(),                // Assuming Version() method on mcp.Server
-		RequestTimeout:  baseServer.RequestTimeout(),         // Assuming RequestTimeout() method
-		ShutdownTimeout: baseServer.ShutdownTimeout(),        // Assuming ShutdownTimeout() method
-		Capabilities: map[string]interface{}{
-			"resources": map[string]interface{}{"list": true, "read": true},
-			"tools":     map[string]interface{}{"list": true, "call": true},
-		},
-	}
-
-	// Create adapters that satisfy the contracts defined in mcp package
-	// using the base managers from the mcp.Server.
-	// Note: Contracts are now defined in mcp.ResourceManagerContract, mcp.ToolManagerContract
-	resourceManagerAdapter := &resourceManagerAdapter{rm: baseServer.ResourceManager()} // Assuming ResourceManager() method
-	toolManagerAdapter := &toolManagerAdapter{tm: baseServer.ToolManager()}             // Assuming ToolManager() method
-
-	// Create a new connection manager (defined in this package)
-	// Pass the adapters which fulfill the required contracts.
-	connectionManager := NewManager( // Uses NewManager from this package
-		config,
-		resourceManagerAdapter, // Implements mcp.ResourceManagerContract
-		toolManagerAdapter,     // Implements mcp.ToolManagerContract
-	)
-
-	return &ConnectionServer{
-		Server:            baseServer,
-		connectionManager: connectionManager,
+// NewServer creates a new MCP server instance.
+func NewServer(config Config) (*Server, error) {
+	return &Server{
+		config:          config,
+		version:         "1.0.0", // Default version
+		transport:       "stdio", // Default transport
+		requestTimeout:  30 * time.Second,
+		shutdownTimeout: 5 * time.Second,
+		resourceManager: NewResourceManager(),
+		toolManager:     NewToolManager(),
 	}, nil
 }
 
-// startStdio starts the server using stdio transport, handled by ConnectionManager.
-func (s *ConnectionServer) startStdio() error {
-	handler := jsonrpc2.HandlerWithError(func(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) (interface{}, error) {
-		// Delegate directly to the ConnectionManager's handler (in this package)
-		s.connectionManager.Handle(ctx, conn, req)
-		// ConnectionManager handles replies internally via state machine actions.
-		// Returning nil, nil indicates the request was accepted for processing.
-		return nil, nil
-	})
+// SetVersion sets the server version.
+func (s *Server) SetVersion(version string) {
+	s.version = version
+}
 
-	// Use base server properties via embedded field access
-	requestTimeout := s.RequestTimeout() // Assuming getter on mcp.Server
+// Version returns the server version.
+func (s *Server) Version() string {
+	return s.version
+}
 
-	stdioOpts := []jsonrpc.StdioTransportOption{
-		jsonrpc.WithStdioRequestTimeout(requestTimeout),
-		jsonrpc.WithStdioReadTimeout(120 * time.Second),
-		jsonrpc.WithStdioWriteTimeout(30 * time.Second),
-		jsonrpc.WithStdioDebug(true),
+// SetTransport sets the transport type (http or stdio).
+func (s *Server) SetTransport(transportType string) error {
+	if transportType != "http" && transportType != "stdio" {
+		return errors.Newf("unsupported transport type: %s", transportType)
 	}
-
-	if err := jsonrpc.RunStdioServer(handler, stdioOpts...); err != nil {
-		return cgerr.ErrorWithDetails(
-			errors.Wrap(err, "failed to start stdio server"),
-			cgerr.CategoryRPC,
-			cgerr.CodeInternalError,
-			map[string]interface{}{
-				"request_timeout": requestTimeout.String(),
-				"read_timeout":    "120s",
-				"write_timeout":   "30s",
-			},
-		)
-	}
+	s.transport = transportType
 	return nil
 }
 
-// Start decides which transport to use based on configuration.
-func (s *ConnectionServer) Start() error {
-	transport := s.Transport() // Assuming Transport() getter on mcp.Server
-	switch transport {
-	case "http":
-		// Fallback to the base server's HTTP implementation
-		return s.Server.StartHTTP() // Assuming StartHTTP method on mcp.Server
-	case "stdio":
-		// Use the ConnectionManager-based stdio implementation
-		return s.startStdio()
-	default:
-		return errors.Newf("unsupported transport type: %s", transport)
+// Transport returns the current transport type.
+func (s *Server) Transport() string {
+	return s.transport
+}
+
+// SetRequestTimeout sets the request timeout.
+func (s *Server) SetRequestTimeout(timeout time.Duration) {
+	s.requestTimeout = timeout
+}
+
+// RequestTimeout returns the request timeout.
+func (s *Server) RequestTimeout() time.Duration {
+	return s.requestTimeout
+}
+
+// SetShutdownTimeout sets the shutdown timeout.
+func (s *Server) SetShutdownTimeout(timeout time.Duration) {
+	s.shutdownTimeout = timeout
+}
+
+// ShutdownTimeout returns the shutdown timeout.
+func (s *Server) ShutdownTimeout() time.Duration {
+	return s.shutdownTimeout
+}
+
+// ResourceManager returns the resource manager.
+func (s *Server) ResourceManager() ResourceManager {
+	return s.resourceManager
+}
+
+// ToolManager returns the tool manager.
+func (s *Server) ToolManager() ToolManager {
+	return s.toolManager
+}
+
+// RegisterResourceProvider registers a resource provider.
+func (s *Server) RegisterResourceProvider(provider ResourceProvider) {
+	s.resourceManager.RegisterProvider(provider)
+}
+
+// RegisterToolProvider registers a tool provider.
+func (s *Server) RegisterToolProvider(provider ToolProvider) {
+	s.toolManager.RegisterProvider(provider)
+}
+
+// Config returns the server configuration.
+func (s *Server) Config() Config {
+	return s.config
+}
+
+// Start starts the server with the configured transport.
+func (s *Server) Start() error {
+	// Create a connection server that uses the state machine architecture
+	connServer, err := connection.NewConnectionServer(s)
+	if err != nil {
+		return err
 	}
+
+	return connServer.Start()
 }
 
-// resourceManagerAdapter adapts the base mcp.ResourceManager to satisfy
-// the mcp.ResourceManagerContract interface.
-type resourceManagerAdapter struct {
-	// Holds the base resource manager (type defined in mcp package)
-	rm mcp.ResourceManager
+// startHTTP starts the HTTP transport server (implementation for connection package to use).
+func (s *Server) startHTTP() error {
+	// Implementation for HTTP transport
+	return errors.New("HTTP transport not yet implemented")
 }
 
-// GetAllResourceDefinitions implements the mcp.ResourceManagerContract interface.
-func (a *resourceManagerAdapter) GetAllResourceDefinitions() []definitions.ResourceDefinition {
-	return a.rm.GetAllResourceDefinitions()
+// Stop stops the server.
+func (s *Server) Stop() error {
+	// Implementation for stopping the server
+	return nil
 }
-
-// ReadResource implements the mcp.ResourceManagerContract interface.
-func (a *resourceManagerAdapter) ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error) {
-	return a.rm.ReadResource(ctx, name, args)
-}
-
-// toolManagerAdapter adapts the base mcp.ToolManager to satisfy
-// the mcp.ToolManagerContract interface.
-type toolManagerAdapter struct {
-	// Holds the base tool manager (type defined in mcp package)
-	tm mcp.ToolManager
-}
-
-// GetAllToolDefinitions implements the mcp.ToolManagerContract interface.
-func (a *toolManagerAdapter) GetAllToolDefinitions() []definitions.ToolDefinition {
-	return a.tm.GetAllToolDefinitions()
-}
-
-// CallTool implements the mcp.ToolManagerContract interface.
-func (a *toolManagerAdapter) CallTool(ctx context.Context, name string, args map[string]interface{}) (string, error) {
-	return a.tm.CallTool(ctx, name, args)
-}
-
-// --- Helper methods assumed to exist on mcp.Server ---
-// These are examples; adjust based on your actual mcp.Server structure
-
-func (s *mcp.Server) Config() mcp.Config                   { return s.config }
-func (s *mcp.Server) Version() string                      { return s.version }
-func (s *mcp.Server) RequestTimeout() time.Duration        { return s.requestTimeout }
-func (s *mcp.Server) ShutdownTimeout() time.Duration       { return s.shutdownTimeout }
-func (s *mcp.Server) ResourceManager() mcp.ResourceManager { return s.resourceManager }
-func (s *mcp.Server) ToolManager() mcp.ToolManager         { return s.toolManager }
-func (s *mcp.Server) Transport() string                    { return s.transport }
-func (s *mcp.Server) StartHTTP() error                     { return s.startHTTP() } // Assuming private startHTTP exists

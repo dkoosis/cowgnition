@@ -1,68 +1,78 @@
-// Package connection handles the state management and communication logic
-// for a single client connection using the MCP protocol.
+// file: internal/mcp/connection/state.go
 package connection
 
-// Import the core MCP types from the mcp package
-// IMPORTANT: Replace with the correct import path for your module
-import (
-	"github.com/dkoosis/cowgnition/internal/mcp"
-	// "errors" // Uncomment if errors.Is or similar is needed in MapErrorToStateTrigger
+// ConnectionState represents the different states a connection can be in.
+type ConnectionState string
+
+const (
+	StateUnconnected  ConnectionState = "unconnected"
+	StateInitializing ConnectionState = "initializing"
+	StateConnected    ConnectionState = "connected"
+	StateTerminating  ConnectionState = "terminating"
+	StateError        ConnectionState = "error"
 )
 
-// --- Removed duplicate type and constant definitions ---
-// ConnectionState, State*, Trigger, Trigger* constants are now defined in the mcp package.
-// isCompatibleProtocolVersion is now mcp.IsCompatibleProtocolVersion
+func (s ConnectionState) String() string { return string(s) }
+
+// Trigger represents events that can cause state transitions within the state machine.
+type Trigger string
+
+const (
+	TriggerInitialize       Trigger = "Initialize"
+	TriggerInitSuccess      Trigger = "InitSuccess"
+	TriggerInitFailure      Trigger = "InitFailure"
+	TriggerListResources    Trigger = "ListResources"
+	TriggerReadResource     Trigger = "ReadResource"
+	TriggerListTools        Trigger = "ListTools"
+	TriggerCallTool         Trigger = "CallTool"
+	TriggerShutdown         Trigger = "Shutdown"
+	TriggerShutdownComplete Trigger = "ShutdownComplete"
+	TriggerErrorOccurred    Trigger = "ErrorOccurred"
+	TriggerDisconnect       Trigger = "Disconnect"
+	TriggerPing             Trigger = "Ping"
+	TriggerSubscribe        Trigger = "Subscribe"
+)
+
+func (t Trigger) String() string { return string(t) }
 
 // methodToTriggerMap translates known JSON-RPC method strings to their
-// corresponding MCP state machine Triggers (defined in the mcp package).
-// Ensure this aligns with your actual expected JSON-RPC method names.
-var methodToTriggerMap = map[string]mcp.Trigger{
+// corresponding state machine Triggers.
+var methodToTriggerMap = map[string]Trigger{
 	// Initialization / Lifecycle
-	"initialize": mcp.TriggerInitialize,
-	"shutdown":   mcp.TriggerShutdown,
+	"initialize": TriggerInitialize,
+	"shutdown":   TriggerShutdown,
 
-	// Resources (Using preferred MCP style, add legacy if needed)
-	"resources/list":      mcp.TriggerListResources,
-	"resources/read":      mcp.TriggerReadResource,
-	"resources/subscribe": mcp.TriggerSubscribe, // Example
+	// Resources
+	"resources/list":      TriggerListResources,
+	"resources/read":      TriggerReadResource,
+	"resources/subscribe": TriggerSubscribe,
 
-	// Tools (Using preferred MCP style, add legacy if needed)
-	"tools/list": mcp.TriggerListTools,
-	"tools/call": mcp.TriggerCallTool,
+	// Tools
+	"tools/list": TriggerListTools,
+	"tools/call": TriggerCallTool,
 
 	// Other
-	"ping": mcp.TriggerPing,
-
-	// Add legacy method names if required for backward compatibility:
-	// "list_resources": mcp.TriggerListResources,
-	// "read_resource":  mcp.TriggerReadResource,
-	// "list_tools":     mcp.TriggerListTools,
-	// "call_tool":      mcp.TriggerCallTool,
+	"ping": TriggerPing,
 }
 
-// MapMethodToTrigger translates a method string to a defined mcp.Trigger.
+// MapMethodToTrigger translates a method string to a defined Trigger.
 // It returns the corresponding trigger and true if found, otherwise an empty trigger and false.
-func MapMethodToTrigger(method string) (mcp.Trigger, bool) {
+func MapMethodToTrigger(method string) (Trigger, bool) {
 	t, ok := methodToTriggerMap[method]
 	return t, ok
 }
 
 // MapErrorToStateTrigger translates specific errors into state machine triggers.
 // This version triggers a generic error state change if any error is passed.
-// Customize this function if specific errors should lead to different state transitions.
-func MapErrorToStateTrigger(err error) mcp.Trigger {
-	// Example: Check for specific error types if they should trigger different states
-	// if errors.Is(err, SomeSpecificErrorType) {
-	//     return mcp.TriggerSomeErrorCondition
-	// }
-
+func MapErrorToStateTrigger(err error) Trigger {
 	if err != nil {
-		// Signal that a generic error occurred, potentially moving the state machine
-		// to the mcp.StateError state via the mcp.TriggerErrorOccurred.
-		return mcp.TriggerErrorOccurred
+		return TriggerErrorOccurred
 	}
-
-	// Return an empty string Trigger if no error occurred, indicating no
-	// error-driven state change is needed based on this function's check.
 	return ""
+}
+
+// isCompatibleProtocolVersion checks if the client's protocol version is compatible.
+func isCompatibleProtocolVersion(clientVersion string) bool {
+	supportedVersions := map[string]bool{"2.0": true, "2024-11-05": true}
+	return supportedVersions[clientVersion]
 }

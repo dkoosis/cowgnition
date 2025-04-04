@@ -16,7 +16,7 @@ import (
 // ConnectionServer extends the Server to use the ConnectionManager.
 type ConnectionServer struct {
 	*Server
-	connectionManager *connection.ConnectionManager
+	connectionManager *connection.Manager
 }
 
 // NewConnectionServer creates a new server with state machine architecture.
@@ -44,7 +44,7 @@ func NewConnectionServer(server *Server) (*ConnectionServer, error) {
 	toolManager := &toolManagerAdapter{tm: server.toolManager}
 
 	// Create a new connection manager
-	connectionManager := connection.NewConnectionManager(
+	connectionManager := connection.NewManager(
 		config,
 		resourceManager,
 		toolManager,
