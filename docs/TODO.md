@@ -6,13 +6,6 @@
 
 ## Priority Tasks for Codebase Cleanup and Standardization
 
-### 1. Fix Immediate Build Errors
-
-- [ ] Implement `ToJSONRPCError` in `internal/mcp/errors/utils.go` to convert our internal errors to `*jsonrpc2.Error`
-- [ ] Remove references to non-existent `jsonrpc2.ErrNotConnected` in `internal/mcp/connection/manager.go`
-- [ ] Fix import issues in `internal/mcp/server_connection.go` related to the connection package
-- [ ] Update any code that relies on these functions and verify successful build
-
 ### 2. Complete State Machine Implementation
 
 - [ ] Finalize the integration of `qmuntal/stateless` for connection management

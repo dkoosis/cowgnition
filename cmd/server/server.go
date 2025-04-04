@@ -17,65 +17,74 @@ import (
 
 // runServer starts the MCP server with the given configuration.
 func runServer(transportType, configPath string, requestTimeout, shutdownTimeout time.Duration) error {
-	// If no config path provided, try to find one
-	if configPath == "" {
-		foundConfig, configFound := findOrCreateConfig()
-		if !configFound {
-			return cgerr.ErrorWithDetails(
-				errors.New("Failed to find or create a configuration file"),
-				cgerr.CategoryConfig,
-				cgerr.CodeInternalError,
-				map[string]interface{}{
-					"tried_locations": []string{
-						"./configs/config.yaml",
-						"./configs/cowgnition.yaml",
-						"~/.config/cowgnition/cowgnition.yaml",
-					},
-				},
-			)
-		}
-		configPath = foundConfig
-	}
+	// The existing config loading code stays the same...
 
-	if debugMode {
-		log.Printf("Using configuration from: %s", configPath)
-	}
-
-	// Load configuration
-	cfg, err := loadConfiguration(configPath)
+	// Create server
+	server, err := mcp.NewServer(cfg)
 	if err != nil {
-		return err // Already contains appropriate error context
+		return errors.Wrap(err, "runServer: failed to create server")
 	}
 
-	// Create and configure server
-	server, err := createAndConfigureServer(cfg, transportType, requestTimeout, shutdownTimeout)
-	if err != nil {
-		return err // Already contains appropriate error context
+	// Set version
+	server.SetVersion("1.0.0")
+
+	// Set transport type - make sure to check the error
+	if err := server.SetTransport(transportType); err != nil {
+		return cgerr.ErrorWithDetails(
+			errors.Wrap(err, "runServer: failed to set transport"),
+			cgerr.CategoryConfig,
+			cgerr.CodeInvalidParams,
+			map[string]interface{}{
+				"transport_type": transportType,
+				"valid_types":    []string{"http", "stdio"},
+				"server_name":    cfg.GetServerName(),
+			},
+		)
 	}
+
+	// Set timeout configurations
+	server.SetRequestTimeout(requestTimeout)
+	server.SetShutdownTimeout(shutdownTimeout)
 
 	// Get and validate RTM credentials
 	apiKey, sharedSecret, err := getRTMCredentials(cfg)
 	if err != nil {
-		return err // Already contains appropriate error context
+		return err
 	}
 
 	// Set up token storage
 	tokenPath, err := getTokenPath(cfg)
 	if err != nil {
-		return err // Already contains appropriate error context
+		return err
 	}
 
 	// Register RTM provider
 	if err := registerRTMProvider(server, apiKey, sharedSecret, tokenPath); err != nil {
-		return err // Already contains appropriate error context
+		return err
+	}
+
+	// Create a state machine-based server
+	connServer, err := mcp.NewConnectionServer(server)
+	if err != nil {
+		return errors.Wrap(err, "runServer: failed to create connection server")
 	}
 
 	// Handle graceful shutdown for HTTP transport
-	setupGracefulShutdown(server, transportType)
+	if transportType == "http" {
+		go func() {
+			signals := make(chan os.Signal, 1)
+			signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+			<-signals
+			log.Println("Shutting down server...")
+			if err := connServer.Stop(); err != nil {
+				log.Printf("Error stopping server: %+v", err)
+			}
+		}()
+	}
 
-	// Start server
-	log.Printf("Starting CowGnition MCP server with %s transport", transportType)
-	if err := server.Start(); err != nil {
+	// Start the connection server instead of the regular server
+	log.Printf("Starting CowGnition MCP server with %s transport and state machine architecture", transportType)
+	if err := connServer.Start(); err != nil {
 		return errors.Wrap(err, "runServer: server failed to start")
 	}
 

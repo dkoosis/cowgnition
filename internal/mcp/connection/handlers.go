@@ -1,6 +1,9 @@
 // file: internal/mcp/connection/handlers.go
 package connection
 
+// file: internal/mcp/connection/handlers.go
+// Additional handlers
+
 import (
 	"context"
 	"encoding/json"
@@ -11,6 +14,51 @@ import (
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
+
+// handlePing processes a ping request.
+func (m *Manager) handlePing(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+	m.logf(definitions.LogLevelDebug, "Received ping request (id: %s)", m.connectionID)
+	return map[string]interface{}{"pong": true}, nil
+}
+
+// handleSubscribe processes a resource subscription request.
+func (m *Manager) handleSubscribe(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+	var subscribeReq struct {
+		URI string `json:"uri"`
+	}
+
+	if err := json.Unmarshal(*req.Params, &subscribeReq); err != nil {
+		return nil, cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to parse subscribe request"),
+			cgerr.CategoryRPC,
+			cgerr.CodeInvalidParams,
+			map[string]interface{}{
+				"connection_id": m.connectionID,
+				"request_id":    req.ID,
+			},
+		)
+	}
+
+	if subscribeReq.URI == "" {
+		return nil, cgerr.ErrorWithDetails(
+			errors.New("missing required parameter: uri"),
+			cgerr.CategoryRPC,
+			cgerr.CodeInvalidParams,
+			map[string]interface{}{
+				"connection_id": m.connectionID,
+				"request_id":    req.ID,
+			},
+		)
+	}
+
+	// In a full implementation, you would store the subscription
+	// and set up notifications when the resource changes
+
+	m.logf(definitions.LogLevelDebug, "Subscribed to resource %s (id: %s)",
+		subscribeReq.URI, m.connectionID)
+
+	return map[string]interface{}{"status": "subscribed"}, nil
+}
 
 // Define an unexported type for context keys to avoid collisions.
 type contextKey string //nolint:unused // Tell linter to ignore this line

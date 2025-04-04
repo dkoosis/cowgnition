@@ -10,6 +10,7 @@
 │   │   └── cowgnition_logo.png
 │   ├── TODO.md
 │   ├── decision_log.md
+│   ├── errors.md
 │   ├── llm.md
 │   └── tree.txt
 ├── internal
@@ -58,4 +59,4 @@
 ├── go.mod
 └── go.sum
 
-15 directories, 44 files
+15 directories, 45 files

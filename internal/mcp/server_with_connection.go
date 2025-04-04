@@ -3,37 +3,72 @@ package mcp
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/jsonrpc"
+	"github.com/dkoosis/cowgnition/internal/mcp/connection"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
-// ConnectionServer handles MCP connections with state machine architecture.
+// ConnectionServer enhances the regular Server with state machine-based connection management.
 type ConnectionServer struct {
 	*Server
-	// Renamed connectionManager to _connectionManager to silence the unused linter warning,
-	// as it's intended to be set/used by a factory function or other logic later.
-	//nolint:unused
-	_connectionManager interface{} // Will be set by factory function
+	connectionManager *connection.Manager
 }
 
 // NewConnectionServer creates a server with state machine architecture.
 func NewConnectionServer(server *Server) (*ConnectionServer, error) {
-	// This is a simplified version to break the import cycle
+	// Create server configuration for the connection manager
+	config := connection.ServerConfig{
+		Name:            server.config.GetServerName(),
+		Version:         server.version,
+		RequestTimeout:  server.requestTimeout,
+		ShutdownTimeout: server.shutdownTimeout,
+		Capabilities: map[string]interface{}{
+			"resources": map[string]interface{}{
+				"list": true,
+				"read": true,
+			},
+			"tools": map[string]interface{}{
+				"list": true,
+				"call": true,
+			},
+		},
+	}
+
+	// Create resource manager adapter
+	resourceAdapter := &resourceManagerAdapter{
+		rm: server.resourceManager,
+	}
+
+	// Create tool manager adapter
+	toolAdapter := &toolManagerAdapter{
+		tm: server.toolManager,
+	}
+
+	// Create connection manager
+	connManager := connection.NewManager(config, resourceAdapter, toolAdapter)
+
 	return &ConnectionServer{
-		Server: server,
+		Server:            server,
+		connectionManager: connManager,
 	}, nil
 }
 
-// startStdio starts the MCP server using stdio transport.
+// startStdio starts the MCP server using stdio transport with state machine architecture.
 func (s *ConnectionServer) startStdio() error {
-	// Create a JSON-RPC handler
+	log.Printf("Starting MCP server with state machine architecture on stdio transport")
+
+	// Create a JSON-RPC handler that delegates to the connection manager
 	handler := jsonrpc2.HandlerWithError(func(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) (interface{}, error) {
-		// Simple handler
-		return nil, errors.New("Not implemented yet")
+		// Delegate to the connection manager's Handle method
+		s.connectionManager.Handle(ctx, conn, req)
+
+		// This handler doesn't return a response directly - responses are sent by the connection manager
+		return nil, nil
 	})
 
 	// Set up stdio transport options
@@ -41,6 +76,7 @@ func (s *ConnectionServer) startStdio() error {
 		jsonrpc.WithStdioRequestTimeout(s.requestTimeout),
 		jsonrpc.WithStdioReadTimeout(120 * time.Second),
 		jsonrpc.WithStdioWriteTimeout(30 * time.Second),
+		jsonrpc.WithStdioDebug(true), // Enable debug logging for transport
 	}
 
 	// Start the stdio server
@@ -64,12 +100,19 @@ func (s *ConnectionServer) startStdio() error {
 func (s *ConnectionServer) Start() error {
 	switch s.transport {
 	case "http":
-		// For now, we'll use the existing HTTP implementation
+		// For now, use the existing HTTP implementation
+		// In a future update, we can implement HTTP with state machine
 		return s.Server.startHTTP()
 	case "stdio":
-		// Use our new state machine-based stdio implementation
+		// Use our state machine-based stdio implementation
 		return s.startStdio()
 	default:
 		return errors.Newf("unsupported transport type: %s", s.transport)
 	}
+}
+
+// Stop stops the server.
+func (s *ConnectionServer) Stop() error {
+	// Additional cleanup might be needed here
+	return s.Server.Stop()
 }
