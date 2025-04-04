@@ -1,4 +1,4 @@
-// cmd/server/server.go
+// cmd/server/server_logic.go
 package main
 
 import (

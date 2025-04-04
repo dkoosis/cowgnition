@@ -1,4 +1,4 @@
-// file: internal/mcp/connection/types.go
+// file: internal/mcp/connection/connection_types.go
 package connection
 
 import (

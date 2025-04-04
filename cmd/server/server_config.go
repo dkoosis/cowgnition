@@ -1,4 +1,4 @@
-// cmd/server/config.go
+// cmd/server/server_config.go
 package main
 
 import (

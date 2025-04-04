@@ -14,13 +14,13 @@ import (
 )
 
 // handlePing processes a ping request.
-func (m *Manager) handlePing(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handlePing(_ context.Context, _ *jsonrpc2.Request) interface{} {
 	m.logf(definitions.LogLevelDebug, "Received ping request")
-	return map[string]interface{}{"pong": true}, nil
+	return map[string]interface{}{"pong": true}
 }
 
 // handleSubscribe processes a resource subscription request.
-func (m *Manager) handleSubscribe(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleSubscribe(_ context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var subscribeReq struct {
 		URI string `json:"uri"`
 	}
@@ -66,7 +66,7 @@ const (
 )
 
 // handleInitialize processes the initialize request.
-func (m *Manager) handleInitialize(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var initReq definitions.InitializeRequest
 	if err := json.Unmarshal(*req.Params, &initReq); err != nil {
 		return nil, cgerr.ErrorWithDetails(
@@ -125,14 +125,14 @@ func (m *Manager) handleInitialize(ctx context.Context, req *jsonrpc2.Request) (
 }
 
 // handleListResources processes a list_resources request.
-func (m *Manager) handleListResources(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleListResources(_ context.Context, _ *jsonrpc2.Request) interface{} {
 	// Get resource definitions
 	resources := m.resourceManager.GetAllResourceDefinitions()
 
 	m.logf(definitions.LogLevelDebug, "Listed %d resources", len(resources))
 	return definitions.ListResourcesResponse{
 		Resources: resources,
-	}, nil
+	}
 }
 
 // handleReadResource processes a read_resource request.
@@ -193,12 +193,12 @@ func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request)
 }
 
 // handleListTools processes a list_tools request.
-func (m *Manager) handleListTools(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleListTools(_ context.Context, _ *jsonrpc2.Request) interface{} {
 	// Get tool definitions
 	tools := m.toolManager.GetAllToolDefinitions()
 
 	m.logf(definitions.LogLevelDebug, "Listed %d tools", len(tools))
-	return definitions.ListToolsResponse{Tools: tools}, nil
+	return definitions.ListToolsResponse{Tools: tools}
 }
 
 // handleCallTool processes a call_tool request.
@@ -259,11 +259,11 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 }
 
 // handleShutdownRequest handles the RPC message for shutdown.
-func (m *Manager) handleShutdownRequest(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleShutdownRequest(_ context.Context, _ *jsonrpc2.Request) interface{} {
 	m.logf(definitions.LogLevelInfo, "Received shutdown request via RPC")
 
 	// Acknowledges the request immediately. Actual shutdown action is triggered
 	// via state machine (e.g., firing TriggerShutdown).
 	// The response here confirms receipt, not completion.
-	return map[string]interface{}{"status": "shutdown_acknowledged"}, nil
+	return map[string]interface{}{"status": "shutdown_acknowledged"}
 }

@@ -139,7 +139,6 @@ func (m *Manager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2
 // processStateAndTrigger handles the request based on the current state and trigger.
 func (m *Manager) processStateAndTrigger(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request,
 	trigger Trigger, currentState State) error {
-
 	// Special case: initialize can be processed in unconnected state
 	if trigger == TriggerInitialize && currentState == StateUnconnected {
 		return m.stateMachine.FireCtx(ctx, string(TriggerInitialize), req)
@@ -238,7 +237,6 @@ func (m *Manager) handleShutdownInConnectedState(ctx context.Context, conn *json
 // handleConnectedStateRequest handles normal requests in the Connected state.
 func (m *Manager) handleConnectedStateRequest(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request,
 	trigger Trigger) error {
-
 	var result interface{}
 	var handlerErr error
 
@@ -301,7 +299,6 @@ func (m *Manager) handleConnectedStateRequest(ctx context.Context, conn *jsonrpc
 // handleConnectedStateNotification handles notifications in the Connected state.
 func (m *Manager) handleConnectedStateNotification(ctx context.Context, req *jsonrpc2.Request,
 	trigger Trigger) error {
-
 	// Fire the trigger to let state machine know about the notification
 	if fireErr := m.stateMachine.Fire(string(trigger), req); fireErr != nil {
 		m.logf(definitions.LogLevelWarn, "Failed to fire notification trigger %s: %v", trigger, fireErr)
