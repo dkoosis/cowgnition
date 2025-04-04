@@ -58,29 +58,29 @@ type InitializeResponse struct {
 	ProtocolVersion string                 `json:"protocolVersion"`
 }
 
-// ListResourcesResponse represents the response for listing resources
+// ListResourcesResponse represents the response for listing resources.
 type ListResourcesResponse struct {
 	Resources []ResourceDefinition `json:"resources"`
 }
 
-// ResourceResponse represents the response for a resource read operation
+// ResourceResponse represents the response for a resource read operation.
 type ResourceResponse struct {
 	Content  string `json:"content"`
 	MimeType string `json:"mime_type"`
 }
 
-// ListToolsResponse represents the response for listing tools
+// ListToolsResponse represents the response for listing tools.
 type ListToolsResponse struct {
 	Tools []ToolDefinition `json:"tools"`
 }
 
-// CallToolRequest represents a tool call request
+// CallToolRequest represents a tool call request.
 type CallToolRequest struct {
 	Name      string                 `json:"name"`
 	Arguments map[string]interface{} `json:"arguments"`
 }
 
-// ToolResponse represents a tool call response
+// ToolResponse represents a tool call response.
 type ToolResponse struct {
 	Result string `json:"result"`
 }

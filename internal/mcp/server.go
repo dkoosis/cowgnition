@@ -2,11 +2,20 @@
 package mcp
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/mcp/connection"
+	"github.com/dkoosis/cowgnition/internal/jsonrpc"
+	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
+	"github.com/sourcegraph/jsonrpc2"
 )
+
+// Config defines the interface for server configuration.
+type Config interface {
+	GetServerName() string
+	GetServerAddress() string
+}
 
 // Server is the main MCP server implementation.
 type Server struct {
@@ -103,19 +112,51 @@ func (s *Server) Config() Config {
 
 // Start starts the server with the configured transport.
 func (s *Server) Start() error {
-	// Create a connection server that uses the state machine architecture
-	connServer, err := connection.NewConnectionServer(s)
-	if err != nil {
-		return err
+	switch s.transport {
+	case "http":
+		return s.startHTTP()
+	case "stdio":
+		return s.startStdio()
+	default:
+		return errors.Newf("unsupported transport type: %s", s.transport)
 	}
-
-	return connServer.Start()
 }
 
-// startHTTP starts the HTTP transport server (implementation for connection package to use).
+// startHTTP starts the HTTP transport server.
 func (s *Server) startHTTP() error {
 	// Implementation for HTTP transport
 	return errors.New("HTTP transport not yet implemented")
+}
+
+// startStdio starts the server using the stdio transport.
+func (s *Server) startStdio() error {
+	// Create a JSON-RPC handler
+	handler := jsonrpc2.HandlerWithError(func(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) (interface{}, error) {
+		// Basic handler implementation
+		return nil, errors.New("Not implemented")
+	})
+
+	// Set up stdio transport options
+	stdioOpts := []jsonrpc.StdioTransportOption{
+		jsonrpc.WithStdioRequestTimeout(s.requestTimeout),
+		jsonrpc.WithStdioReadTimeout(120 * time.Second),
+		jsonrpc.WithStdioWriteTimeout(30 * time.Second),
+	}
+
+	// Start the stdio server
+	if err := jsonrpc.RunStdioServer(handler, stdioOpts...); err != nil {
+		return cgerr.ErrorWithDetails(
+			errors.Wrap(err, "failed to start stdio server"),
+			cgerr.CategoryRPC,
+			cgerr.CodeInternalError,
+			map[string]interface{}{
+				"server_name":     s.config.GetServerName(),
+				"request_timeout": s.requestTimeout.String(),
+			},
+		)
+	}
+
+	return nil
 }
 
 // Stop stops the server.

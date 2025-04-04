@@ -27,7 +27,7 @@ type ToolProvider interface {
 	CallTool(ctx context.Context, name string, args map[string]interface{}) (string, error)
 }
 
-// ResourceManager defines the interface for managing resource providers
+// ResourceManager defines the interface for managing resource providers.
 type ResourceManager interface {
 	// RegisterProvider registers a ResourceProvider.
 	RegisterProvider(provider ResourceProvider)
@@ -39,7 +39,7 @@ type ResourceManager interface {
 	ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error)
 }
 
-// ToolManager defines the interface for managing tool providers
+// ToolManager defines the interface for managing tool providers.
 type ToolManager interface {
 	// RegisterProvider registers a ToolProvider.
 	RegisterProvider(provider ToolProvider)

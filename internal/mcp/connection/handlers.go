@@ -13,7 +13,7 @@ import (
 )
 
 // handleInitialize processes the initialize request.
-func (m *ConnectionManager) handleInitialize(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleInitialize(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var initReq definitions.InitializeRequest
 	if err := json.Unmarshal(*req.Params, &initReq); err != nil {
 		return nil, cgerr.ErrorWithDetails(
@@ -72,7 +72,7 @@ func (m *ConnectionManager) handleInitialize(ctx context.Context, req *jsonrpc2.
 }
 
 // handleListResources processes a list_resources request.
-func (m *ConnectionManager) handleListResources(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleListResources(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	// Get resource definitions - the adapter should now return the correct type
 	resources := m.resourceManager.GetAllResourceDefinitions()
 
@@ -83,7 +83,7 @@ func (m *ConnectionManager) handleListResources(ctx context.Context, req *jsonrp
 }
 
 // handleReadResource processes a read_resource request.
-func (m *ConnectionManager) handleReadResource(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var readReq struct {
 		Name string            `json:"name"`
 		Args map[string]string `json:"args,omitempty"`
@@ -142,7 +142,7 @@ func (m *ConnectionManager) handleReadResource(ctx context.Context, req *jsonrpc
 }
 
 // handleListTools processes a list_tools request.
-func (m *ConnectionManager) handleListTools(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleListTools(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	// Get tool definitions - the adapter should now return the correct type
 	tools := m.toolManager.GetAllToolDefinitions()
 
@@ -151,7 +151,7 @@ func (m *ConnectionManager) handleListTools(ctx context.Context, req *jsonrpc2.R
 }
 
 // handleCallTool processes a call_tool request.
-func (m *ConnectionManager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var callReq definitions.CallToolRequest
 	if err := json.Unmarshal(*req.Params, &callReq); err != nil {
 		return nil, cgerr.ErrorWithDetails(
@@ -210,7 +210,7 @@ func (m *ConnectionManager) handleCallTool(ctx context.Context, req *jsonrpc2.Re
 }
 
 // handleShutdownRequest handles the RPC message for shutdown.
-func (m *ConnectionManager) handleShutdownRequest(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleShutdownRequest(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	m.logf(definitions.LogLevelInfo, "Received shutdown request via RPC (id: %s)", m.connectionID)
 	// Acknowledges the request immediately. Actual shutdown action is triggered
 	// via state machine (e.g., firing TriggerShutdown).

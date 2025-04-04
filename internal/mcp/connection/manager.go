@@ -148,7 +148,7 @@ func (m *Manager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2
 	// Responses are sent by the action handlers (e.g., onEnterInitializing)
 }
 
-// onEnterInitializing is called when entering the Initializing state
+// onEnterInitializing is called when entering the Initializing state.
 func (m *Manager) onEnterInitializing(ctx context.Context, args ...interface{}) error {
 	if len(args) == 0 {
 		return errors.New("missing request argument for onEnterInitializing")
@@ -158,7 +158,7 @@ func (m *Manager) onEnterInitializing(ctx context.Context, args ...interface{}) 
 		return errors.New("invalid request argument type for onEnterInitializing")
 	}
 
-	// Call the specific handler logic
+	// Call the specific handler logic from handlers.go
 	result, err := m.handleInitialize(ctx, req)
 
 	// Get the active connection (might have been updated)
@@ -203,13 +203,13 @@ func (m *Manager) onEnterInitializing(ctx context.Context, args ...interface{}) 
 	return nil // Indicate success to state machine
 }
 
-// onEnterConnected is called when entering the Connected state
+// onEnterConnected is called when entering the Connected state.
 func (m *Manager) onEnterConnected(ctx context.Context, args ...interface{}) error {
 	m.logf(definitions.LogLevelInfo, "Connection established and initialized")
 	return nil
 }
 
-// onEnterTerminating is called when entering the Terminating state
+// onEnterTerminating is called when entering the Terminating state.
 func (m *Manager) onEnterTerminating(ctx context.Context, args ...interface{}) error {
 	m.logf(definitions.LogLevelInfo, "Connection terminating...")
 	// Perform cleanup actions here
@@ -221,7 +221,7 @@ func (m *Manager) onEnterTerminating(ctx context.Context, args ...interface{}) e
 	return nil
 }
 
-// onEnterError is called when entering the Error state
+// onEnterError is called when entering the Error state.
 func (m *Manager) onEnterError(ctx context.Context, args ...interface{}) error {
 	errMsg := "Unknown internal error"
 	if len(args) > 0 {
@@ -241,15 +241,7 @@ func (m *Manager) logf(level definitions.LogLevel, format string, v ...interface
 	m.logger.Printf("[%s] %s", level, message)
 }
 
-// Stub for handleInitialize - this would be implemented in handlers.go
-func (m *Manager) handleInitialize(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
-	// Stub implementation
-	return map[string]interface{}{
-		"serverInfo": map[string]interface{}{
-			"name":    m.config.Name,
-			"version": m.config.Version,
-		},
-		"capabilities":    m.config.Capabilities,
-		"protocolVersion": "2024-11-05",
-	}, nil
+// NewConnectionServer creates a new connection manager styled as a server.
+func NewConnectionServer(serverConfig ServerConfig, resourceMgr ResourceManagerContract, toolMgr ToolManagerContract) (*Manager, error) {
+	return NewManager(serverConfig, resourceMgr, toolMgr), nil
 }
