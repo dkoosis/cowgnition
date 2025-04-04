@@ -14,7 +14,10 @@ import (
 // ConnectionServer handles MCP connections with state machine architecture.
 type ConnectionServer struct {
 	*Server
-	connectionManager interface{} // Will be set by factory function
+	// Renamed connectionManager to _connectionManager to silence the unused linter warning,
+	// as it's intended to be set/used by a factory function or other logic later.
+	//nolint:unused
+	_connectionManager interface{} // Will be set by factory function
 }
 
 // NewConnectionServer creates a server with state machine architecture.

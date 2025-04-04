@@ -12,8 +12,17 @@ import (
 	"github.com/sourcegraph/jsonrpc2"
 )
 
+// Define an unexported type for context keys to avoid collisions.
+type contextKey string //nolint:unused // Tell linter to ignore this line
+
+const (
+	connectionIDKey contextKey = "connection_id" //nolint:unused // Tell linter to ignore this line
+	requestIDKey    contextKey = "request_id"    //nolint:unused // Tell linter to ignore this line
+)
+
 // handleInitialize processes the initialize request.
-func (m *Manager) handleInitialize(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+// Renamed ctx to _ because it was unused.
+func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var initReq definitions.InitializeRequest
 	if err := json.Unmarshal(*req.Params, &initReq); err != nil {
 		return nil, cgerr.ErrorWithDetails(
@@ -72,9 +81,11 @@ func (m *Manager) handleInitialize(ctx context.Context, req *jsonrpc2.Request) (
 }
 
 // handleListResources processes a list_resources request.
+// Renamed ctx and req to _ because they were unused.
+// Added nolint:unparam for the always-nil error result.
 //
 //nolint:unused
-func (m *Manager) handleListResources(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleListResources(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) { //nolint:unparam
 	// Get resource definitions - the adapter should now return the correct type
 	resources := m.resourceManager.GetAllResourceDefinitions()
 
@@ -85,6 +96,7 @@ func (m *Manager) handleListResources(ctx context.Context, req *jsonrpc2.Request
 }
 
 // handleReadResource processes a read_resource request.
+// ctx is used here, so it remains unchanged. req is used.
 //
 //nolint:unused
 func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
@@ -146,9 +158,11 @@ func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request)
 }
 
 // handleListTools processes a list_tools request.
+// Renamed ctx and req to _ because they were unused.
+// Added nolint:unparam for the always-nil error result.
 //
 //nolint:unused
-func (m *Manager) handleListTools(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleListTools(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) { //nolint:unparam
 	// Get tool definitions - the adapter should now return the correct type
 	tools := m.toolManager.GetAllToolDefinitions()
 
@@ -157,6 +171,7 @@ func (m *Manager) handleListTools(ctx context.Context, req *jsonrpc2.Request) (i
 }
 
 // handleCallTool processes a call_tool request.
+// ctx is used here, so it remains unchanged. req is used.
 //
 //nolint:unused
 func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
@@ -186,8 +201,9 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 	}
 
 	// Add context values that might be useful for the tool implementation
-	childCtx := context.WithValue(ctx, "connection_id", m.connectionID)
-	childCtx = context.WithValue(childCtx, "request_id", req.ID)
+	// Use custom context keys instead of strings
+	childCtx := context.WithValue(ctx, connectionIDKey, m.connectionID)
+	childCtx = context.WithValue(childCtx, requestIDKey, req.ID)
 
 	startTime := time.Now()
 	// Call the tool manager - the adapter should now return string result
@@ -218,9 +234,11 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 }
 
 // handleShutdownRequest handles the RPC message for shutdown.
+// Renamed ctx and req to _ because they were unused.
+// Added nolint:unparam for the always-nil error result.
 //
 //nolint:unused
-func (m *Manager) handleShutdownRequest(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleShutdownRequest(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) { //nolint:unparam
 	m.logf(definitions.LogLevelInfo, "Received shutdown request via RPC (id: %s)", m.connectionID)
 	// Acknowledges the request immediately. Actual shutdown action is triggered
 	// via state machine (e.g., firing TriggerShutdown).
