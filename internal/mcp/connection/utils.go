@@ -8,7 +8,9 @@ import (
 )
 
 // logFormatter formats a log message with connection ID and state.
-func logFormatter(level definitions.LogLevel, connectionID string, state ConnectionState, format string, args ...interface{}) string {
+//
+//nolint:unused
+func logFormatter(level definitions.LogLevel, connectionID string, state State, format string, args ...interface{}) string {
 	// Format: [LEVEL] [ConnectionID] [State] Message
 	return fmt.Sprintf("[%s] [%s] [%s] %s", level, connectionID, state, fmt.Sprintf(format, args...))
 }

@@ -118,7 +118,7 @@ func (m *Manager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2
 	}
 
 	m.logf(definitions.LogLevelDebug, "Mapping method '%s' to trigger '%s'", req.Method, trigger)
-	currentState := m.stateMachine.MustState().(ConnectionState)
+	currentState := m.stateMachine.MustState().(State)
 
 	// Fire the trigger
 	err := m.stateMachine.FireCtx(ctx, string(trigger), req) // Pass request as argument to actions
@@ -139,7 +139,7 @@ func (m *Manager) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2
 	}
 
 	// Log successful state transition if it occurred
-	newState := m.stateMachine.MustState().(ConnectionState)
+	newState := m.stateMachine.MustState().(State)
 	if currentState != newState {
 		m.logf(definitions.LogLevelDebug, "State transition: %s -> %s (Trigger: %s)", currentState, newState, trigger)
 	} else {

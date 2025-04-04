@@ -72,6 +72,8 @@ func (m *Manager) handleInitialize(ctx context.Context, req *jsonrpc2.Request) (
 }
 
 // handleListResources processes a list_resources request.
+//
+//nolint:unused
 func (m *Manager) handleListResources(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	// Get resource definitions - the adapter should now return the correct type
 	resources := m.resourceManager.GetAllResourceDefinitions()
@@ -83,6 +85,8 @@ func (m *Manager) handleListResources(ctx context.Context, req *jsonrpc2.Request
 }
 
 // handleReadResource processes a read_resource request.
+//
+//nolint:unused
 func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var readReq struct {
 		Name string            `json:"name"`
@@ -142,6 +146,8 @@ func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request)
 }
 
 // handleListTools processes a list_tools request.
+//
+//nolint:unused
 func (m *Manager) handleListTools(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	// Get tool definitions - the adapter should now return the correct type
 	tools := m.toolManager.GetAllToolDefinitions()
@@ -151,6 +157,8 @@ func (m *Manager) handleListTools(ctx context.Context, req *jsonrpc2.Request) (i
 }
 
 // handleCallTool processes a call_tool request.
+//
+//nolint:unused
 func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var callReq definitions.CallToolRequest
 	if err := json.Unmarshal(*req.Params, &callReq); err != nil {
@@ -210,6 +218,8 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 }
 
 // handleShutdownRequest handles the RPC message for shutdown.
+//
+//nolint:unused
 func (m *Manager) handleShutdownRequest(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	m.logf(definitions.LogLevelInfo, "Received shutdown request via RPC (id: %s)", m.connectionID)
 	// Acknowledges the request immediately. Actual shutdown action is triggered

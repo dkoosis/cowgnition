@@ -1,18 +1,19 @@
 // file: internal/mcp/connection/state.go
 package connection
 
-// ConnectionState represents the different states a connection can be in.
-type ConnectionState string
+// State represents the different states a connection can be in.
+type State string // Renamed type
 
 const (
-	StateUnconnected  ConnectionState = "unconnected"
-	StateInitializing ConnectionState = "initializing"
-	StateConnected    ConnectionState = "connected"
-	StateTerminating  ConnectionState = "terminating"
-	StateError        ConnectionState = "error"
+	StateUnconnected  State = "unconnected"  // Renamed type
+	StateInitializing State = "initializing" // Renamed type
+	StateConnected    State = "connected"    // Renamed type
+	StateTerminating  State = "terminating"  // Renamed type
+	StateError        State = "error"        // Renamed type
 )
 
-func (s ConnectionState) String() string { return string(s) }
+// String returns the string representation of the State. // Updated comment.
+func (s State) String() string { return string(s) } // Updated receiver type
 
 // Trigger represents events that can cause state transitions within the state machine.
 type Trigger string
