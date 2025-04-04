@@ -1,12 +1,10 @@
 // file: internal/mcp/connection/handlers.go
 package connection
 
-// file: internal/mcp/connection/handlers.go
-// Additional handlers
-
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -15,28 +13,14 @@ import (
 	"github.com/sourcegraph/jsonrpc2"
 )
 
-// file: internal/mcp/connection/handlers.go
-
 // handlePing processes a ping request.
-// Changed ctx to _ since it's unused.
-// file: internal/mcp/connection/handlers.go
-
-// handlePing processes a ping request.
-// Changed both ctx and req to _ since they're unused.
-// file: internal/mcp/connection/handlers.go
-
-// handlePing processes a ping request.
-// Error return maintained for handler signature consistency
-//
-//nolint:unparam
-func (m *Manager) handlePing(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) {
-	m.logf(definitions.LogLevelDebug, "Received ping request (id: %s)", m.connectionID)
+func (m *Manager) handlePing(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+	m.logf(definitions.LogLevelDebug, "Received ping request")
 	return map[string]interface{}{"pong": true}, nil
 }
 
 // handleSubscribe processes a resource subscription request.
-// Changed ctx to _ since it's unused.
-func (m *Manager) handleSubscribe(_ context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleSubscribe(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var subscribeReq struct {
 		URI string `json:"uri"`
 	}
@@ -48,7 +32,7 @@ func (m *Manager) handleSubscribe(_ context.Context, req *jsonrpc2.Request) (int
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    req.ID,
+				"request_id":    fmt.Sprintf("%v", req.ID),
 			},
 		)
 	}
@@ -60,7 +44,7 @@ func (m *Manager) handleSubscribe(_ context.Context, req *jsonrpc2.Request) (int
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    req.ID,
+				"request_id":    fmt.Sprintf("%v", req.ID),
 			},
 		)
 	}
@@ -68,23 +52,21 @@ func (m *Manager) handleSubscribe(_ context.Context, req *jsonrpc2.Request) (int
 	// In a full implementation, you would store the subscription
 	// and set up notifications when the resource changes
 
-	m.logf(definitions.LogLevelDebug, "Subscribed to resource %s (id: %s)",
-		subscribeReq.URI, m.connectionID)
+	m.logf(definitions.LogLevelDebug, "Subscribed to resource %s", subscribeReq.URI)
 
 	return map[string]interface{}{"status": "subscribed"}, nil
 }
 
 // Define an unexported type for context keys to avoid collisions.
-type contextKey string //nolint:unused // Tell linter to ignore this line
+type contextKey string
 
 const (
-	connectionIDKey contextKey = "connection_id" //nolint:unused // Tell linter to ignore this line
-	requestIDKey    contextKey = "request_id"    //nolint:unused // Tell linter to ignore this line
+	connectionIDKey contextKey = "connection_id"
+	requestIDKey    contextKey = "request_id"
 )
 
 // handleInitialize processes the initialize request.
-// Renamed ctx to _ because it was unused.
-func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (interface{}, error) {
+func (m *Manager) handleInitialize(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var initReq definitions.InitializeRequest
 	if err := json.Unmarshal(*req.Params, &initReq); err != nil {
 		return nil, cgerr.ErrorWithDetails(
@@ -93,7 +75,7 @@ func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (in
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    req.ID,
+				"request_id":    fmt.Sprintf("%v", req.ID),
 			},
 		)
 	}
@@ -106,8 +88,8 @@ func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (in
 	if clientVersion == "" {
 		clientVersion = initReq.ServerVersion // Using legacy snake_case field
 	}
-	m.logf(definitions.LogLevelInfo, "Processing initialize request from client: %s (version: %s) (id: %s)",
-		clientName, clientVersion, m.connectionID)
+	m.logf(definitions.LogLevelInfo, "Processing initialize request from client: %s (version: %s)",
+		clientName, clientVersion)
 
 	clientProtoVersion := initReq.ProtocolVersion
 	if !isCompatibleProtocolVersion(clientProtoVersion) {
@@ -118,7 +100,7 @@ func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (in
 			map[string]interface{}{
 				"connection_id":      m.connectionID,
 				"client_version":     clientProtoVersion,
-				"supported_versions": []string{"2.0", "2024-11-05"}, // Example versions
+				"supported_versions": []string{"2.0", "2024-11-05"},
 			},
 		)
 	}
@@ -138,29 +120,22 @@ func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (in
 		ProtocolVersion: clientProtoVersion, // Echo back compatible version client sent
 	}
 
-	m.logf(definitions.LogLevelDebug, "handleInitialize successful (id: %s)", m.connectionID)
+	m.logf(definitions.LogLevelDebug, "handleInitialize successful")
 	return response, nil
 }
 
 // handleListResources processes a list_resources request.
-// Renamed ctx and req to _ because they were unused.
-// Added nolint:unparam for the always-nil error result.
-//
-//nolint:unused
-func (m *Manager) handleListResources(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) { //nolint:unparam
-	// Get resource definitions - the adapter should now return the correct type
+func (m *Manager) handleListResources(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+	// Get resource definitions
 	resources := m.resourceManager.GetAllResourceDefinitions()
 
-	m.logf(definitions.LogLevelDebug, "Listed %d resources (id: %s)", len(resources), m.connectionID)
+	m.logf(definitions.LogLevelDebug, "Listed %d resources", len(resources))
 	return definitions.ListResourcesResponse{
 		Resources: resources,
 	}, nil
 }
 
 // handleReadResource processes a read_resource request.
-// ctx is used here, so it remains unchanged. req is used.
-//
-//nolint:unused
 func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var readReq struct {
 		Name string            `json:"name"`
@@ -174,7 +149,7 @@ func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request)
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    req.ID,
+				"request_id":    fmt.Sprintf("%v", req.ID),
 			},
 		)
 	}
@@ -186,19 +161,19 @@ func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request)
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    req.ID,
+				"request_id":    fmt.Sprintf("%v", req.ID),
 			},
 		)
 	}
 
-	// Call the resource manager - the adapter should now return string content
+	// Call the resource manager
 	contentStr, mimeType, err := m.resourceManager.ReadResource(ctx, readReq.Name, readReq.Args)
 	if err != nil {
 		// Attempt to get a specific code, default otherwise
 		errCode := cgerr.GetErrorCode(err)
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "failed to read resource"),
-			cgerr.CategoryResource, // Assuming a category for resource errors
+			cgerr.CategoryResource,
 			errCode,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
@@ -208,10 +183,8 @@ func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request)
 		)
 	}
 
-	// No conversion needed, contentStr is already a string
-
-	m.logf(definitions.LogLevelDebug, "Read resource %s, mime type: %s, content length: %d (id: %s)",
-		readReq.Name, mimeType, len(contentStr), m.connectionID)
+	m.logf(definitions.LogLevelDebug, "Read resource %s, mime type: %s, content length: %d",
+		readReq.Name, mimeType, len(contentStr))
 
 	return definitions.ResourceResponse{
 		Content:  contentStr,
@@ -220,22 +193,15 @@ func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request)
 }
 
 // handleListTools processes a list_tools request.
-// Renamed ctx and req to _ because they were unused.
-// Added nolint:unparam for the always-nil error result.
-//
-//nolint:unused
-func (m *Manager) handleListTools(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) { //nolint:unparam
-	// Get tool definitions - the adapter should now return the correct type
+func (m *Manager) handleListTools(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+	// Get tool definitions
 	tools := m.toolManager.GetAllToolDefinitions()
 
-	m.logf(definitions.LogLevelDebug, "Listed %d tools (id: %s)", len(tools), m.connectionID)
+	m.logf(definitions.LogLevelDebug, "Listed %d tools", len(tools))
 	return definitions.ListToolsResponse{Tools: tools}, nil
 }
 
 // handleCallTool processes a call_tool request.
-// ctx is used here, so it remains unchanged. req is used.
-//
-//nolint:unused
 func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var callReq definitions.CallToolRequest
 	if err := json.Unmarshal(*req.Params, &callReq); err != nil {
@@ -245,7 +211,7 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    req.ID,
+				"request_id":    fmt.Sprintf("%v", req.ID),
 			},
 		)
 	}
@@ -257,26 +223,25 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    req.ID,
+				"request_id":    fmt.Sprintf("%v", req.ID),
 			},
 		)
 	}
 
 	// Add context values that might be useful for the tool implementation
-	// Use custom context keys instead of strings
 	childCtx := context.WithValue(ctx, connectionIDKey, m.connectionID)
-	childCtx = context.WithValue(childCtx, requestIDKey, req.ID)
+	childCtx = context.WithValue(childCtx, requestIDKey, fmt.Sprintf("%v", req.ID))
 
 	startTime := time.Now()
-	// Call the tool manager - the adapter should now return string result
+	// Call the tool manager
 	resultStr, err := m.toolManager.CallTool(childCtx, callReq.Name, callReq.Arguments)
 	duration := time.Since(startTime)
 
 	if err != nil {
-		errCode := cgerr.GetErrorCode(err) // Get specific code if available
+		errCode := cgerr.GetErrorCode(err)
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "failed to call tool"),
-			cgerr.CategoryTool, // Assuming a category for tool errors
+			cgerr.CategoryTool,
 			errCode,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
@@ -287,21 +252,16 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 		)
 	}
 
-	// No conversion needed, resultStr is already a string
-
-	m.logf(definitions.LogLevelDebug, "Called tool %s, execution time: %s, result length: %d (id: %s)",
-		callReq.Name, duration, len(resultStr), m.connectionID)
+	m.logf(definitions.LogLevelDebug, "Called tool %s, execution time: %s, result length: %d",
+		callReq.Name, duration, len(resultStr))
 
 	return definitions.ToolResponse{Result: resultStr}, nil
 }
 
 // handleShutdownRequest handles the RPC message for shutdown.
-// Renamed ctx and req to _ because they were unused.
-// Added nolint:unparam for the always-nil error result.
-//
-//nolint:unused
-func (m *Manager) handleShutdownRequest(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) { //nolint:unparam
-	m.logf(definitions.LogLevelInfo, "Received shutdown request via RPC (id: %s)", m.connectionID)
+func (m *Manager) handleShutdownRequest(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
+	m.logf(definitions.LogLevelInfo, "Received shutdown request via RPC")
+
 	// Acknowledges the request immediately. Actual shutdown action is triggered
 	// via state machine (e.g., firing TriggerShutdown).
 	// The response here confirms receipt, not completion.
