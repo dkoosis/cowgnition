@@ -10,7 +10,7 @@ import (
 
 // ConnectWithStateManager connects the Server to a state-machine-based connection manager.
 func (s *Server) ConnectWithStateManager() error {
-	// Create server configuration
+	// Create server configuration.
 	config := connection.ServerConfig{
 		Name:            s.config.GetServerName(),
 		Version:         s.version,
@@ -28,21 +28,26 @@ func (s *Server) ConnectWithStateManager() error {
 		},
 	}
 
-	// Create resource manager adapter
+	// Create resource manager adapter.
 	resourceAdapter := &resourceManagerAdapter{
 		rm: s.resourceManager,
 	}
 
-	// Create tool manager adapter
+	// Create tool manager adapter.
 	toolAdapter := &toolManagerAdapter{
 		tm: s.toolManager,
 	}
 
-	// Create connection manager
+	// Create connection manager using the factory function.
 	_, err := connection.NewConnectionServer(config, resourceAdapter, toolAdapter)
 	if err != nil {
 		return err
 	}
+
+	// TODO: Store the returned 'manager' instance in the 's *Server' struct.
+	// The server needs to hold this reference to later call manager.Handle()
+	// when actual connections and requests are received.
+	// Example: s.connManager = manager
 
 	return nil
 }
