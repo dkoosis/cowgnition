@@ -17,7 +17,8 @@
 │   ├── config
 │   │   └── app_config.go
 │   ├── httputils
-│   │   └── response.go
+│   │   ├── response.go
+│   │   └── response_test.go
 │   ├── jsonrpc
 │   │   ├── http_transport.go
 │   │   ├── jsonrpc_handler.go
@@ -50,7 +51,8 @@
 │       ├── auth.go
 │       ├── client.go
 │       ├── provider.go
-│       └── token.go
+│       ├── token.go
+│       └── token_test.go
 ├── scripts
 │   ├── check_file_length.sh
 │   ├── graph.d2
@@ -62,4 +64,4 @@
 ├── go.mod
 └── go.sum
 
-16 directories, 47 files
+16 directories, 49 files
