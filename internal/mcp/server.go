@@ -1,9 +1,10 @@
-// internal/mcp/server.go
+// file: internal/mcp/server.go
 package mcp
 
 import (
 	"context"
 	"fmt" // Import fmt for error formatting
+
 	// Import slog
 	"time"
 
@@ -15,7 +16,7 @@ import (
 )
 
 // Initialize the logger at the package level
-var logger = logging.GetLogger("mcp_server")
+var serverLogger = logging.GetLogger("mcp_server") // Changed from logger to serverLogger
 
 // Config defines the interface for server configuration.
 type Config interface {
@@ -37,7 +38,7 @@ type Server struct {
 // NewServer creates a new MCP server instance.
 func NewServer(config Config) (*Server, error) {
 	// Log server creation? Optional, might be too noisy.
-	// logger.Debug("Creating new MCP server instance")
+	// serverLogger.Debug("Creating new MCP server instance")
 	return &Server{
 		config:          config,
 		version:         "1.0.0", // Default version
@@ -63,7 +64,7 @@ func (s *Server) Version() string {
 func (s *Server) SetTransport(transportType string) error {
 	if transportType != "http" && transportType != "stdio" {
 		err := errors.Newf("unsupported transport type: %s", transportType)
-		logger.Error("Invalid transport type specified", "transport", transportType, "error", fmt.Sprintf("%+v", err))
+		serverLogger.Error("Invalid transport type specified", "transport", transportType, "error", fmt.Sprintf("%+v", err))
 		return err
 	}
 	s.transport = transportType
@@ -108,13 +109,13 @@ func (s *Server) ToolManager() ToolManager {
 // RegisterResourceProvider registers a resource provider.
 func (s *Server) RegisterResourceProvider(provider ResourceProvider) {
 	s.resourceManager.RegisterProvider(provider)
-	logger.Info("Registered resource provider", "provider_type", fmt.Sprintf("%T", provider))
+	serverLogger.Info("Registered resource provider", "provider_type", fmt.Sprintf("%T", provider))
 }
 
 // RegisterToolProvider registers a tool provider.
 func (s *Server) RegisterToolProvider(provider ToolProvider) {
 	s.toolManager.RegisterProvider(provider)
-	logger.Info("Registered tool provider", "provider_type", fmt.Sprintf("%T", provider))
+	serverLogger.Info("Registered tool provider", "provider_type", fmt.Sprintf("%T", provider))
 }
 
 // Config returns the server configuration.
@@ -124,7 +125,7 @@ func (s *Server) Config() Config {
 
 // Start starts the server with the configured transport.
 func (s *Server) Start() error {
-	logger.Info("Starting MCP server", "version", s.version, "transport", s.transport)
+	serverLogger.Info("Starting MCP server", "version", s.version, "transport", s.transport)
 	switch s.transport {
 	case "http":
 		return s.startHTTP()
@@ -133,29 +134,29 @@ func (s *Server) Start() error {
 	default:
 		// This case should ideally be prevented by SetTransport validation
 		err := errors.Newf("unsupported transport type during start: %s", s.transport)
-		logger.Error("Cannot start server, unsupported transport", "transport", s.transport, "error", fmt.Sprintf("%+v", err))
+		serverLogger.Error("Cannot start server, unsupported transport", "transport", s.transport, "error", fmt.Sprintf("%+v", err))
 		return err
 	}
 }
 
 // startHTTP starts the HTTP transport server.
 func (s *Server) startHTTP() error {
-	logger.Info("Starting HTTP transport...", "address", s.config.GetServerAddress()) // Assuming address is relevant for HTTP
+	serverLogger.Info("Starting HTTP transport...", "address", s.config.GetServerAddress()) // Assuming address is relevant for HTTP
 	// Implementation for HTTP transport
 	err := errors.New("HTTP transport not yet implemented")
-	logger.Error("HTTP transport start failed", "error", fmt.Sprintf("%+v", err))
+	serverLogger.Error("HTTP transport start failed", "error", fmt.Sprintf("%+v", err))
 	return err // Return the error after logging
 }
 
 // startStdio starts the server using the stdio transport.
 func (s *Server) startStdio() error {
-	logger.Info("Starting Stdio transport...") // Add info log for starting stdio
+	serverLogger.Info("Starting Stdio transport...") // Add info log for starting stdio
 
 	// Create a JSON-RPC handler
 	// TODO: Replace this placeholder handler with the actual MCP handler
 	handler := jsonrpc2.HandlerWithError(func(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) (interface{}, error) {
 		// Basic handler implementation - should route to resource/tool managers
-		logger.Warn("Received request with placeholder stdio handler", "method", req.Method)
+		serverLogger.Warn("Received request with placeholder stdio handler", "method", req.Method)
 		return nil, errors.Newf("method '%s' not implemented in placeholder handler", req.Method)
 	})
 
@@ -165,7 +166,7 @@ func (s *Server) startStdio() error {
 		jsonrpc.WithStdioReadTimeout(120 * time.Second), // Consider making these configurable
 		jsonrpc.WithStdioWriteTimeout(30 * time.Second),
 	}
-	logger.Debug("Stdio transport options configured",
+	serverLogger.Debug("Stdio transport options configured",
 		"request_timeout", s.requestTimeout,
 		"read_timeout", "120s",
 		"write_timeout", "30s",
@@ -174,7 +175,7 @@ func (s *Server) startStdio() error {
 	// Start the stdio server
 	if err := jsonrpc.RunStdioServer(handler, stdioOpts...); err != nil {
 		// Log the error before wrapping and returning (as per assessment example intent)
-		logger.Error("Failed to run stdio server", "error", fmt.Sprintf("%+v", err))
+		serverLogger.Error("Failed to run stdio server", "error", fmt.Sprintf("%+v", err))
 
 		// Wrap the error using cgerr details
 		return cgerr.ErrorWithDetails(
@@ -189,13 +190,13 @@ func (s *Server) startStdio() error {
 		)
 	}
 
-	logger.Info("Stdio transport finished.") // Log normal exit if RunStdioServer returns nil
+	serverLogger.Info("Stdio transport finished.") // Log normal exit if RunStdioServer returns nil
 	return nil
 }
 
 // Stop stops the server.
 func (s *Server) Stop() error {
-	logger.Info("Stopping MCP server...")
+	serverLogger.Info("Stopping MCP server...")
 	// Implementation for stopping the server (e.g., closing connections, context cancellation)
 	// Depending on the transport, might need specific shutdown logic.
 	return nil

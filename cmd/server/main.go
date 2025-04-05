@@ -1,4 +1,4 @@
-// cmd/server/main.go
+// file: cmd/server/main.go
 package main
 
 import (
@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-// Version information - should be set during build
+// Version information - should be set during build via ldflags
 var (
-	Version    = "dev"
+	Version    = "0.1.0-dev" // Default development version
 	commitHash = "unknown"
 	buildDate  = "unknown"
 )

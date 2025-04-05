@@ -1,16 +1,16 @@
-// internal/jsonrpc/jsonrpc_handler.go
+// file: internal/jsonrpc/jsonrpc_handler.go
 package jsonrpc
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"      // Import fmt
-	"log/slog" // Import slog
-	"strings"  // Import strings
+	"fmt"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper
+	"github.com/dkoosis/cowgnition/internal/logging"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
@@ -198,7 +198,7 @@ func (a *Adapter) runHandler(ctx context.Context, req *jsonrpc2.Request, handler
 			resultCh <- struct {
 				result interface{}
 				err    error
-			}{nil, cgerr.NewInternalError(panicErr, map[string]interface{}{"method": req.Method})}
+			}{nil, cgerr.NewInternalError("Panic recovered in handler", panicErr, map[string]interface{}{"method": req.Method})}
 		}
 	}()
 
@@ -298,6 +298,11 @@ func (a *Adapter) sendErrorResponse(ctx context.Context, conn *jsonrpc2.Conn, re
 
 	// Convert the internal error to a client-safe JSON-RPC error object
 	rpcErr := cgerr.ToJSONRPCError(originalErr)
+
+	// Remove this section - ID is not a field on jsonrpc2.Error
+	// if req.ID != nil {
+	//     rpcErr.ID = req.ID // Set the ID on the jsonrpc2.Error struct itself
+	// }
 
 	methodLogger.Debug("Sending sanitized error to client", "rpc_error_code", rpcErr.Code, "rpc_error_message", rpcErr.Message)
 	// Send the sanitized error response to the client using ReplyWithError
