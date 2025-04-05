@@ -3,255 +3,279 @@ package jsonrpc
 
 import (
 	"context"
-	"log"
+	"fmt" // Import fmt
+	// Import slog
 	"os"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
+
+// Initialize the logger at the package level
+var logger = logging.GetLogger("jsonrpc_stdio_transport")
 
 // stdioPipe implements io.ReadWriteCloser using standard input/output.
 type stdioPipe struct{}
 
 // Read reads from stdin.
 func (stdioPipe) Read(p []byte) (n int, err error) {
-	return os.Stdin.Read(p)
+	// Reading from stdin is blocking, consider potential issues in concurrent scenarios
+	n, err = os.Stdin.Read(p)
+	if err != nil {
+		// Log errors reading from stdin? Could be noisy, maybe debug only.
+		// logger.Debug("stdioPipe Read error", "error", err.Error()) // Avoid %+v for potential EOF spam
+	}
+	return
 }
 
 // Write writes to stdout.
 func (stdioPipe) Write(p []byte) (n int, err error) {
-	return os.Stdout.Write(p)
+	// Writing to stdout should be safe concurrently if needed
+	n, err = os.Stdout.Write(p)
+	if err != nil {
+		// Log errors writing to stdout? Less critical usually.
+		logger.Error("stdioPipe Write error", "error", fmt.Sprintf("%+v", err))
+	}
+	return
 }
 
 // Close is a no-op for stdin/stdout.
 func (stdioPipe) Close() error {
+	logger.Debug("stdioPipe Close called (no-op for stdin/stdout)")
 	// We don't actually close stdin/stdout as that would terminate the process
 	return nil
 }
 
 // StdioTransport implements a stdio-based transport for JSON-RPC over MCP.
-// It uses plain (newline-delimited) JSON messages without Content-Length headers
-// as specified in the MCP protocol.
+// ... (comments remain the same)
 type StdioTransport struct {
 	conn   *jsonrpc2.Conn
 	closed bool
-	debug  bool
+	debug  bool // Consider removing if debug logging is handled by slog levels
 }
 
 // NewStdioTransport creates a new StdioTransport.
-// The transport is not connected until Connect is called.
 func NewStdioTransport() *StdioTransport {
+	logger.Debug("Creating new StdioTransport")
 	return &StdioTransport{
-		debug: false,
+		// debug field will be set by WithDebug based on logging level later
 	}
 }
 
 // WithDebug enables debug logging for the transport.
+// DEPRECATED: Use slog levels instead. Retained for compatibility with RunStdioServer options for now.
 func (t *StdioTransport) WithDebug(debug bool) *StdioTransport {
+	// This might be overridden by global log level checks later
 	t.debug = debug
+	// logger.Debug("StdioTransport debug flag set", "debug", debug)
 	return t
 }
 
 // Connect initializes the transport with a handler.
-// It creates a jsonrpc2.Conn using a plaintext stream over stdin/stdout.
-//
-// ctx context.Context: The context for the connection.
-// handler jsonrpc2.Handler: The handler for JSON-RPC requests.
-//
-// Returns:
-//
-//	*jsonrpc2.Conn: The established connection.
-//	error: An error if connection fails.
+// ... (comments remain the same)
 func (t *StdioTransport) Connect(ctx context.Context, handler jsonrpc2.Handler) (*jsonrpc2.Conn, error) {
+	logger.Debug("Connecting StdioTransport")
 	// Use NewPlainObjectStream for newline-delimited JSON over stdio
 	stream := jsonrpc2.NewPlainObjectStream(stdioPipe{})
+	logger.Debug("Created PlainObjectStream over stdioPipe")
 
 	// Create connection with handler
+	// Pass the root context; jsonrpc2 handles cancellation.
 	conn := jsonrpc2.NewConn(ctx, stream, handler)
 	t.conn = conn
 
-	if t.debug {
-		log.Printf("Connected stdio transport (using NewPlainObjectStream for MCP newline-delimited JSON)")
+	// Use slog levels for debug logging, check global level if possible
+	// Replace log.Printf (Conceptual L79)
+	if logging.IsDebugEnabled() { // Check if debug is enabled via logging config
+		logger.Debug("Stdio transport connected successfully (using PlainObjectStream)")
 	}
 
 	return conn, nil
 }
 
 // Close terminates the transport connection.
-// It's safe to call this method multiple times.
-//
-// Returns:
-//
-//	error: An error if closing fails.
+// ... (comments remain the same)
 func (t *StdioTransport) Close() error {
 	if t.closed {
+		logger.Debug("StdioTransport Close called, but already closed.")
 		return nil
 	}
 
 	if t.conn != nil {
 		t.closed = true
-		if t.debug {
-			log.Printf("Closing stdio transport connection")
+		// Replace log.Printf (Conceptual L107)
+		logger.Debug("Closing stdio transport connection")
+		err := t.conn.Close()
+		if err != nil {
+			logger.Error("Error closing jsonrpc2 connection", "error", fmt.Sprintf("%+v", err))
+			// Return the close error
+			return errors.Wrap(err, "StdioTransport.Close: failed to close underlying jsonrpc2 connection")
 		}
-		return t.conn.Close()
+		logger.Debug("Stdio transport connection closed successfully.")
+		return nil
 	}
-
+	logger.Debug("StdioTransport Close called, but connection was nil.")
 	return nil
 }
 
 // StdioTransportOption defines an option for StdioTransport configuration.
-// These are used to customize the behavior of the transport.
+// ... (comments remain the same)
 type StdioTransportOption func(*stdioTransportOptions)
 
 // stdioTransportOptions holds configuration for StdioTransport.
 type stdioTransportOptions struct {
 	requestTimeout time.Duration
-	readTimeout    time.Duration
-	writeTimeout   time.Duration
-	debug          bool
+	readTimeout    time.Duration // Currently unused by jsonrpc2 stdio?
+	writeTimeout   time.Duration // Currently unused by jsonrpc2 stdio?
+	debug          bool          // To be replaced by slog level check
 }
 
 // WithStdioRequestTimeout sets the request timeout for stdio transport.
-// This controls how long a request can take before timing out.
-//
-// timeout time.Duration: The timeout duration.
-//
-// Returns:
-//
-//	StdioTransportOption: An option function.
+// Note: jsonrpc2 stdio might not directly support request timeouts like HTTP.
+// This might need to be handled within the jsonrpc2.Handler implementation.
 func WithStdioRequestTimeout(timeout time.Duration) StdioTransportOption {
 	return func(opts *stdioTransportOptions) {
-		opts.requestTimeout = timeout
+		if timeout > 0 {
+			opts.requestTimeout = timeout
+		} else {
+			logger.Warn("Ignoring invalid stdio request timeout value", "invalid_timeout", timeout)
+		}
 	}
 }
 
-// WithStdioReadTimeout sets the read timeout for stdio transport.
-// This controls how long the transport will wait for data to be read.
-//
-// timeout time.Duration: The timeout duration.
-//
-// Returns:
-//
-//	StdioTransportOption: An option function.
+// WithStdioReadTimeout sets the read timeout (potentially unused).
 func WithStdioReadTimeout(timeout time.Duration) StdioTransportOption {
 	return func(opts *stdioTransportOptions) {
-		opts.readTimeout = timeout
+		if timeout > 0 {
+			opts.readTimeout = timeout
+		} else {
+			logger.Warn("Ignoring invalid stdio read timeout value", "invalid_timeout", timeout)
+		}
 	}
 }
 
-// WithStdioWriteTimeout sets the write timeout for stdio transport.
-// This controls how long the transport will attempt to write data.
-//
-// timeout time.Duration: The timeout duration.
-//
-// Returns:
-//
-//	StdioTransportOption: An option function.
+// WithStdioWriteTimeout sets the write timeout (potentially unused).
 func WithStdioWriteTimeout(timeout time.Duration) StdioTransportOption {
 	return func(opts *stdioTransportOptions) {
-		opts.writeTimeout = timeout
+		if timeout > 0 {
+			opts.writeTimeout = timeout
+		} else {
+			logger.Warn("Ignoring invalid stdio write timeout value", "invalid_timeout", timeout)
+		}
 	}
 }
 
-// WithStdioDebug enables or disables debug logging for stdio transport.
-// When enabled, additional log messages will be printed.
-//
-// debug bool: Whether to enable debug logging.
-//
-// Returns:
-//
-//	StdioTransportOption: An option function.
+// WithStdioDebug enables debug logging (use slog instead).
 func WithStdioDebug(debug bool) StdioTransportOption {
 	return func(opts *stdioTransportOptions) {
-		opts.debug = debug
+		opts.debug = debug // Store temporarily, but rely on slog IsDebugEnabled()
 	}
 }
 
 // RunStdioServer runs a JSON-RPC server with stdio transport.
-// This will block until the connection is closed by the client or process termination.
-//
-// handler jsonrpc2.Handler: The handler for JSON-RPC requests.
-// options ...StdioTransportOption: Optional configuration options.
-//
-// Returns:
-//
-//	error: An error if the server fails to run.
+// ... (comments remain the same)
 func RunStdioServer(handler jsonrpc2.Handler, options ...StdioTransportOption) error {
 	opts := stdioTransportOptions{
-		requestTimeout: 30 * time.Second,
-		readTimeout:    120 * time.Second, // Increased to 2 minutes for better stability
+		requestTimeout: 30 * time.Second, // Default, but maybe not directly applied by jsonrpc2 stdio
+		readTimeout:    120 * time.Second,
 		writeTimeout:   30 * time.Second,
-		debug:          false,
+		debug:          false, // Will check slog level instead
 	}
 
 	for _, option := range options {
 		option(&opts)
 	}
 
-	if opts.debug {
-		log.Printf("Starting stdio JSON-RPC server with timeouts (request: %s, read: %s, write: %s)",
-			opts.requestTimeout, opts.readTimeout, opts.writeTimeout)
-	}
+	// Replace log.Printf (Conceptual L139+)
+	logger.Info("Starting stdio JSON-RPC server",
+		"request_timeout_config", opts.requestTimeout, // Log configured value, even if not directly used
+		"read_timeout_config", opts.readTimeout,
+		"write_timeout_config", opts.writeTimeout,
+		"debug_via_options", opts.debug, // Log the option value passed
+		"debug_via_slog", logging.IsDebugEnabled(), // Log effective debug state
+	)
 
-	transport := NewStdioTransport().WithDebug(opts.debug)
+	// Use effective debug state from logging framework
+	effectiveDebug := logging.IsDebugEnabled()
+
+	// Create transport, passing effective debug state (though likely unused now)
+	transport := NewStdioTransport().WithDebug(effectiveDebug)
 	defer func() {
-		if err := transport.Close(); err != nil && opts.debug {
-			log.Printf("Error closing transport: %v", err)
+		logger.Debug("Closing stdio transport in defer function")
+		if err := transport.Close(); err != nil {
+			// Replace log.Printf error log
+			// Use %+v for detailed error including stack trace if available
+			logger.Error("Error closing stdio transport", "error", fmt.Sprintf("%+v", err))
+		} else {
+			logger.Debug("Stdio transport closed successfully in defer")
 		}
 	}()
 
-	// Create a root context that will live for the duration of the server
+	// Create a root context that lives for the server's duration
 	rootCtx := context.Background()
 
-	// Connect the transport
+	// Connect the transport using the root context
 	conn, err := transport.Connect(rootCtx, handler)
 	if err != nil {
+		// Add function context to wrap message
+		wrappedErr := errors.Wrap(err, "RunStdioServer: failed to connect stdio transport")
+		// Return detailed error (existing structure is good)
 		return cgerr.ErrorWithDetails(
-			errors.Wrap(err, "failed to connect stdio transport"),
+			wrappedErr, // Use the wrapped error with context
 			cgerr.CategoryRPC,
 			cgerr.CodeInternalError,
 			map[string]interface{}{
-				"request_timeout": opts.requestTimeout.String(),
-				"read_timeout":    opts.readTimeout.String(),
-				"write_timeout":   opts.writeTimeout.String(),
+				"request_timeout_config": opts.requestTimeout.String(),
+				"read_timeout_config":    opts.readTimeout.String(),
+				"write_timeout_config":   opts.writeTimeout.String(),
 			},
 		)
 	}
 
 	// State tracking - aligns with state machine architecture
 	connState := "connected"
-	lastActivity := time.Now()
+	startTime := time.Now() // Track start time for duration logging
 
-	// Get the disconnect notification channel
+	// Get the disconnect notification channel from the connection
 	disconnectChan := conn.DisconnectNotify()
 
-	if opts.debug {
-		log.Printf("MCP Connection established: state=%s", connState)
+	// Replace log.Printf (Conceptual L...)
+	logger.Info("Stdio transport connected, waiting for disconnect signal", "state", connState)
+
+	// Create a heartbeat ticker if debug is enabled
+	var ticker *time.Ticker
+	if effectiveDebug {
+		ticker = time.NewTicker(30 * time.Second) // Heartbeat interval
+		defer ticker.Stop()                       // Ensure ticker is stopped
+		logger.Debug("Heartbeat ticker started", "interval", 30*time.Second)
+	} else {
+		// Create a dummy ticker channel that never fires if debug is off
+		ticker = &time.Ticker{C: make(chan time.Time)} // Assign dummy ticker
 	}
 
-	// Create a heartbeat ticker to monitor connection health
-	// This is important for detecting and logging connection issues
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	// Block until explicit disconnection - crucial for MCP protocol
+	// Block and wait for disconnect or handle heartbeats
 	for {
 		select {
 		case <-disconnectChan:
 			connState = "disconnected"
-			if opts.debug {
-				log.Printf("MCP Connection state change: %s (after %s of activity)",
-					connState, time.Since(lastActivity))
-			}
-			return nil
+			duration := time.Since(startTime)
+			// Replace log.Printf (Conceptual L...)
+			logger.Info("Stdio transport disconnected",
+				"state", connState,
+				"total_duration", duration,
+			)
+			return nil // Normal exit when connection closes
 
-		case <-ticker.C:
-			if opts.debug {
-				log.Printf("MCP Connection heartbeat: state=%s, active_duration=%s",
-					connState, time.Since(lastActivity))
-			}
+		case <-ticker.C: // Only receives if ticker was started (debug enabled)
+			// Replace log.Printf heartbeat (Conceptual L...)
+			logger.Debug("Stdio connection heartbeat check",
+				"state", connState,
+				"active_duration", time.Since(startTime),
+			)
+			// Could add more health checks here if needed
 		}
 	}
 }

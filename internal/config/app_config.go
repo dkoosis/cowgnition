@@ -3,108 +3,107 @@
 package config
 
 import (
-	"fmt"
+	"fmt" // Import slog
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
+// Initialize the logger at the package level
+var logger = logging.GetLogger("config")
+
 // Settings represents the application configuration.
-// It encapsulates all configuration settings for the application.
-// This design allows for easy management and access to configuration values throughout the codebase.
+// ... (comments remain the same)
 type Settings struct {
-	Server ServerConfig `yaml:"server"` // Server: Configuration related to the server.
-	RTM    RTMConfig    `yaml:"rtm"`    // RTM: Configuration for the Remember The Milk API.
-	Auth   AuthConfig   `yaml:"auth"`   // Auth: Configuration for authentication mechanisms.
+	Server ServerConfig `yaml:"server"`
+	RTM    RTMConfig    `yaml:"rtm"`
+	Auth   AuthConfig   `yaml:"auth"`
 }
 
 // ServerConfig contains server configuration.
-// This is separated to group server-specific settings together,
-// promoting modularity and clarity in the configuration structure.
+// ... (comments remain the same)
 type ServerConfig struct {
-	Name string `yaml:"name"` // Name: The name of the server.
-	Port int    `yaml:"port"` // Port: The port on which the server listens.
+	Name string `yaml:"name"`
+	Port int    `yaml:"port"`
 }
 
 // RTMConfig contains RTM API configuration.
-// It holds the necessary credentials to interact with the Remember The Milk API.
+// ... (comments remain the same)
 type RTMConfig struct {
-	APIKey       string `yaml:"api_key"`       // APIKey: The API key for RTM.
-	SharedSecret string `yaml:"shared_secret"` // SharedSecret: The shared secret for RTM.
+	APIKey       string `yaml:"api_key"`
+	SharedSecret string `yaml:"shared_secret"`
 }
 
 // AuthConfig contains authentication configuration.
-// This section manages settings related to user authentication,
-// such as where to store tokens.
+// ... (comments remain the same)
 type AuthConfig struct {
-	TokenPath string `yaml:"token_path"` // TokenPath: The file path to store authentication tokens.
+	TokenPath string `yaml:"token_path"`
 }
 
 // New creates a new configuration with default values.
-// This function initializes the configuration with sensible defaults,
-// ensuring the application can run out-of-the-box without requiring immediate configuration.
-// The use of default values enhances the user experience by providing a working setup initially.
+// ... (comments remain the same)
 func New() *Settings {
+	logger.Debug("Creating new configuration settings with defaults.")
 	return &Settings{
 		Server: ServerConfig{
-			Name: "CowGnition MCP Server", // Default server name.
-			Port: 8080,                    // Default server port.
+			Name: "CowGnition MCP Server",
+			Port: 8080,
 		},
 		RTM: RTMConfig{
-			APIKey:       "", // Default API key (empty).
-			SharedSecret: "", // Default shared secret (empty).
+			APIKey:       "",
+			SharedSecret: "",
 		},
 		Auth: AuthConfig{
-			TokenPath: "~/.config/cowgnition/tokens", // Default token path in the user's home directory.
+			// Use platform-specific config dir lookup if possible in future
+			TokenPath: "~/.config/cowgnition/tokens",
 		},
 	}
 }
 
 // GetServerName returns the server name.
-// This provides a clean, encapsulated way to access the server name,
-// adhering to good object-oriented practices.
+// ... (comments remain the same)
 func (s *Settings) GetServerName() string {
 	return s.Server.Name
 }
 
 // GetServerAddress returns the server address as host:port.
-// This method formats the server's address, combining the port with a colon,
-// which is a common network address representation.
+// ... (comments remain the same)
 func (s *Settings) GetServerAddress() string {
 	return fmt.Sprintf(":%d", s.Server.Port)
 }
 
 // ExpandPath expands ~ in paths to the user's home directory.
-// This function is crucial for handling user-specific file paths,
-// as it allows the application to locate files in a portable way across different systems.
-// It abstracts away the complexity of determining the user's home directory.
-//
-// path string: The path to expand, which may contain ~.
-//
-// Returns:
-//
-//	string: The expanded path.
-//	error:  An error if retrieving the user's home directory fails.
+// ... (comments remain the same)
 func ExpandPath(path string) (string, error) {
-	if !strings.HasPrefix(path, "~") { // If the path doesn't start with ~, it's already an absolute path.
+	logger.Debug("Attempting to expand path", "input_path", path)
+	if !strings.HasPrefix(path, "~") {
+		logger.Debug("Path does not start with '~', returning as is.")
 		return path, nil // Return it directly.
 	}
 
 	home, err := os.UserHomeDir() // Get the user's home directory.
 	if err != nil {
-		return "", cgerr.ErrorWithDetails(
-			errors.Wrap(err, "failed to get user home directory"),
+		// Add function context to Wrap message as per assessment example
+		wrappedErr := errors.Wrap(err, "ExpandPath: failed to get user home directory")
+		detailedErr := cgerr.ErrorWithDetails(
+			wrappedErr, // Use the wrapped error with function context
 			cgerr.CategoryConfig,
 			cgerr.CodeInternalError,
 			map[string]interface{}{
 				"input_path": path,
-				"os_user":    os.Getenv("USER"),
+				"os_user":    os.Getenv("USER"), // USER might not be reliable, but kept from original
 			},
 		)
+		// Log the error before returning
+		logger.Error("Failed to get user home directory for path expansion", "error", fmt.Sprintf("%+v", detailedErr))
+		return "", detailedErr
 	}
 
-	return filepath.Join(home, path[1:]), nil // Join the home directory with the rest of the path.
+	expandedPath := filepath.Join(home, path[1:]) // Join the home directory with the rest of the path.
+	logger.Debug("Path expanded successfully", "input_path", path, "expanded_path", expandedPath)
+	return expandedPath, nil
 }

@@ -4,13 +4,17 @@ package rtm
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"log"
+	"fmt" // Import slog
 	"sync"
 
+	"github.com/cockroachdb/errors"                  // Import errors
+	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper
 	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
+
+// Initialize the logger at the package level
+var logger = logging.GetLogger("rtm_provider")
 
 const (
 	// Resource URIs.
@@ -34,10 +38,12 @@ type AuthProvider struct {
 func NewAuthProvider(apiKey, sharedSecret, tokenPath string) (*AuthProvider, error) {
 	storage, err := NewTokenStorage(tokenPath)
 	if err != nil {
+		// Apply change from assessment example: Wrap err explicitly before passing to cgerr helper
+		wrappedErr := errors.Wrap(err, "NewAuthProvider: could not create token storage")
 		return nil, cgerr.NewRTMError(
-			0,
+			0, // Assuming 0 means no specific RTM API error code
 			"Failed to create token storage",
-			err,
+			wrappedErr, // Pass the wrapped error
 			map[string]interface{}{
 				"token_path": tokenPath,
 			},
@@ -78,6 +84,7 @@ func (p *AuthProvider) GetResourceDefinitions() []definitions.ResourceDefinition
 // ReadResource handles reading RTM authentication resources.
 func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error) {
 	if name != AuthResourceURI {
+		// This already uses cgerr, no change needed based on specific rule
 		return "", "", cgerr.NewResourceError(
 			fmt.Sprintf("Resource not found: %s", name),
 			nil,
@@ -91,7 +98,14 @@ func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[s
 	// Check for existing token first
 	tokenResult, err := p.checkExistingToken()
 	if err == nil {
+		// Token is valid and checked, return result
 		return tokenResult, "application/json", nil
+	}
+	// Log the error from checkExistingToken if it's not just 'no valid token found'
+	if !cgerr.IsAuthError(err, "No valid token found") {
+		logger.Warn("Failed to check existing token", "error", fmt.Sprintf("%+v", err))
+	} else {
+		logger.Debug("No valid existing token found, proceeding with auth flow.")
 	}
 
 	// Handle authentication with frob if provided
@@ -104,14 +118,18 @@ func (p *AuthProvider) ReadResource(ctx context.Context, name string, args map[s
 }
 
 // checkExistingToken verifies if we already have a valid token.
+// Returns ("", error) if no valid token or error occurred.
+// Returns (jsonData, nil) if valid token found.
 func (p *AuthProvider) checkExistingToken() (string, error) {
 	// Check if a token is already stored
 	token, err := p.storage.LoadToken()
 	if err != nil {
-		log.Printf("AuthProvider.checkExistingToken: error loading token: %v", err)
+		// Replace log.Printf with structured logging
+		logger.Warn("Error loading token from storage", "path", p.storage.TokenPath, "error", fmt.Sprintf("%+v", err))
+		// Wrap error before returning, keeping cgerr type
 		return "", cgerr.NewAuthError(
 			"Failed to load token",
-			err,
+			errors.Wrap(err, "checkExistingToken: failed loading token"), // Add wrap context
 			map[string]interface{}{
 				"token_path": p.storage.TokenPath,
 			},
@@ -121,8 +139,8 @@ func (p *AuthProvider) checkExistingToken() (string, error) {
 	// If we have a token, verify it's still valid
 	if token != "" {
 		p.client.SetAuthToken(token)
-		auth, err := p.client.CheckToken()
-		if err == nil && auth != nil {
+		auth, checkErr := p.client.CheckToken() // Renamed err to checkErr to avoid conflict
+		if checkErr == nil && auth != nil {
 			// Token is valid
 			response := map[string]interface{}{
 				"status":      "authenticated",
@@ -130,25 +148,30 @@ func (p *AuthProvider) checkExistingToken() (string, error) {
 				"fullname":    auth.User.Fullname,
 				"permissions": auth.Perms,
 			}
-			responseJSON, err := json.MarshalIndent(response, "", "  ")
-			if err != nil {
+			responseJSON, marshalErr := json.MarshalIndent(response, "", "  ") // Renamed err to marshalErr
+			if marshalErr != nil {
+				// This already uses cgerr, but let's ensure wrapping consistency
+				wrappedErr := errors.Wrap(marshalErr, "checkExistingToken: failed to marshal valid token response")
 				return "", cgerr.NewResourceError(
 					"Failed to marshal response",
-					err,
+					wrappedErr,
 					map[string]interface{}{
-						"response": fmt.Sprintf("%v", response),
+						"response_struct": fmt.Sprintf("%+v", response), // Log struct representation
 					},
 				)
 			}
+			logger.Info("Existing valid RTM token confirmed", "user", auth.User.Username)
 			return string(responseJSON), nil
 		}
-		// Token is invalid, continue with auth flow
-		log.Printf("AuthProvider.checkExistingToken: invalid token, starting new auth flow")
+		// Token is invalid, log and continue with auth flow
+		// Replace log.Printf with structured logging
+		logger.Info("Existing RTM token found but invalid, proceeding to re-authenticate", "check_error", fmt.Sprintf("%+v", checkErr))
 	}
 
+	// No token loaded or token was invalid
 	return "", cgerr.NewAuthError(
 		"No valid token found",
-		nil,
+		nil, // No underlying error to wrap here, it's a state
 		map[string]interface{}{
 			"token_path": p.storage.TokenPath,
 		},
@@ -160,9 +183,10 @@ func (p *AuthProvider) handleFrobAuthentication(frob string) (string, string, er
 	// Try to get token for frob
 	auth, err := p.client.GetToken(frob)
 	if err != nil {
+		// This already uses cgerr, ensure function context in message
 		return "", "", cgerr.NewAuthError(
-			"Failed to get token for frob",
-			err,
+			fmt.Sprintf("handleFrobAuthentication: Failed to get token for frob '%s'", frob), // Add context
+			err, // Keep original error for wrapping
 			map[string]interface{}{
 				"frob": frob,
 			},
@@ -170,12 +194,17 @@ func (p *AuthProvider) handleFrobAuthentication(frob string) (string, string, er
 	}
 
 	// Store the token
-	if err := p.storage.SaveToken(auth.Token); err != nil {
-		log.Printf("AuthProvider.handleFrobAuthentication: error saving token: %v", err)
-		// Continue even if saving fails
+	if saveErr := p.storage.SaveToken(auth.Token); saveErr != nil { // Renamed err to saveErr
+		// Replace log.Printf with structured logging
+		logger.Error("Failed to save newly acquired token", "path", p.storage.TokenPath, "error", fmt.Sprintf("%+v", saveErr))
+		// Decide if this should be a hard error or just a warning.
+		// Current logic continues, so logging is appropriate.
+		// We could potentially add a detail to the final response indicating the save issue.
+	} else {
+		logger.Info("Successfully saved new RTM token.", "user", auth.User.Username)
 	}
 
-	// Set the token for future requests
+	// Set the token for future requests in this provider instance
 	p.client.SetAuthToken(auth.Token)
 
 	// Return successful authentication response
@@ -186,13 +215,16 @@ func (p *AuthProvider) handleFrobAuthentication(frob string) (string, string, er
 		"permissions": auth.Perms,
 	}
 
-	responseJSON, err := json.MarshalIndent(response, "", "  ")
-	if err != nil {
+	responseJSON, marshalErr := json.MarshalIndent(response, "", "  ") // Renamed err to marshalErr
+	if marshalErr != nil {
+		// This already uses cgerr, ensure function context
+		wrappedErr := errors.Wrap(marshalErr, "handleFrobAuthentication: failed to marshal successful auth response")
 		return "", "", cgerr.NewResourceError(
 			"Failed to marshal authentication response",
-			err,
+			wrappedErr,
 			map[string]interface{}{
-				"frob": frob,
+				"frob":     frob,
+				"username": auth.User.Username,
 			},
 		)
 	}
@@ -204,18 +236,21 @@ func (p *AuthProvider) handleFrobAuthentication(frob string) (string, string, er
 func (p *AuthProvider) startNewAuthFlow(args map[string]string) (string, string, error) {
 	// Get permissions parameter, default to "delete" (highest)
 	perms := PermDelete
-	if p, ok := args["perms"]; ok && (p == PermRead || p == PermWrite || p == PermDelete) {
-		perms = p
+	if pArg, ok := args["perms"]; ok && (pArg == PermRead || pArg == PermWrite || pArg == PermDelete) {
+		perms = pArg
+	} else if ok {
+		logger.Warn("Invalid 'perms' argument provided, defaulting to 'delete'", "provided_perms", pArg)
 	}
 
 	// Start desktop authentication flow
 	frob, err := p.client.GetFrob()
 	if err != nil {
+		// This already uses cgerr, ensure function context
 		return "", "", cgerr.NewAuthError(
-			"Failed to get frob for authentication flow",
+			"startNewAuthFlow: Failed to get frob for authentication flow", // Add context
 			err,
 			map[string]interface{}{
-				"perms": perms,
+				"requested_perms": perms,
 			},
 		)
 	}
@@ -224,6 +259,7 @@ func (p *AuthProvider) startNewAuthFlow(args map[string]string) (string, string,
 	p.mu.Lock()
 	p.authState[frob] = perms
 	p.mu.Unlock()
+	logger.Debug("Obtained new frob for auth flow", "frob", frob, "perms", perms)
 
 	// Generate authentication URL
 	authURL := p.client.GetAuthURL(frob, perms)
@@ -237,11 +273,13 @@ func (p *AuthProvider) startNewAuthFlow(args map[string]string) (string, string,
 		"instructions": "Visit the auth_url to authorize this application, then access this resource again with the frob parameter.",
 	}
 
-	responseJSON, err := json.MarshalIndent(response, "", "  ")
-	if err != nil {
+	responseJSON, marshalErr := json.MarshalIndent(response, "", "  ") // Renamed err to marshalErr
+	if marshalErr != nil {
+		// This already uses cgerr, ensure function context
+		wrappedErr := errors.Wrap(marshalErr, "startNewAuthFlow: failed to marshal auth flow instructions response")
 		return "", "", cgerr.NewResourceError(
 			"Failed to marshal auth flow response",
-			err,
+			wrappedErr,
 			map[string]interface{}{
 				"frob":  frob,
 				"perms": perms,

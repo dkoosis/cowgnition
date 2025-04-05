@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors" // Ensure errors is imported
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
@@ -63,15 +63,17 @@ func (s *TokenStorage) LoadToken() (string, error) {
 
 	data, err := os.ReadFile(s.TokenPath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		// Replace os.IsNotExist(err) with errors.Is(err, os.ErrNotExist)
+		if errors.Is(err, os.ErrNotExist) {
 			return "", nil // Not an error if file doesn't exist yet
 		}
+		// Also update the check within the error details map for consistency
 		return "", cgerr.NewAuthError(
 			"Failed to read token file",
 			errors.Wrap(err, "could not read file"),
 			map[string]interface{}{
 				"token_path":  s.TokenPath,
-				"file_exists": !os.IsNotExist(err),
+				"file_exists": !errors.Is(err, os.ErrNotExist), // Use errors.Is here too
 			},
 		)
 	}

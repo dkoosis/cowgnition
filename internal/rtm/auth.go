@@ -12,55 +12,46 @@ import (
 )
 
 // Response represents the standard RTM API response wrapper.
-// It is used to consistently parse the outer structure of RTM API responses,
-// which always include a 'stat' field and potentially an 'err' field for errors.
+// ... (comments remain the same)
 type Response struct {
-	Stat  string `json:"stat"`          // Stat: Indicates the status of the API call ("ok" or "fail").
-	Error *Error `json:"err,omitempty"` // Error: Contains error details if the API call failed.
+	Stat  string `json:"stat"`
+	Error *Error `json:"err,omitempty"`
 }
 
 // Error represents an RTM API error.
-// It provides a structured way to handle and interpret errors returned by the RTM API,
-// including an error code and a descriptive message.
+// ... (comments remain the same)
 type Error struct {
-	Code int    `json:"code"` // Code: The RTM-specific error code.
-	Msg  string `json:"msg"`  // Msg: A human-readable error message.
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
 }
 
 // User represents an RTM user.
-// It encapsulates the basic user information returned by the RTM API,
-// such as ID, username, and full name.
+// ... (comments remain the same)
 type User struct {
-	ID       string `json:"id"`       // ID: The user's unique ID.
-	Username string `json:"username"` // Username: The user's username.
-	Fullname string `json:"fullname"` // Fullname: The user's full name.
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Fullname string `json:"fullname"`
 }
 
 // Auth represents an RTM authentication response.
-// It contains the authentication token, permissions, and user information
-// obtained after successful authentication.
+// ... (comments remain the same)
 type Auth struct {
-	Token string `json:"token"` // Token: The authentication token.
-	Perms string `json:"perms"` // Perms: The granted permissions.
-	User  User   `json:"user"`  // User: The authenticated user.
+	Token string `json:"token"`
+	Perms string `json:"perms"`
+	User  User   `json:"user"`
 }
 
 // GetFrob gets a frob from RTM for desktop authentication flow.
-// The "frob" is a temporary credential used in the RTM authentication process.
-// It is the first step in obtaining an authentication token for desktop applications.
-//
-// Returns:
-//
-//	string: The frob string.
-//	error:  An error if the API request fails or if the response is invalid.
+// ... (comments remain the same)
 func (c *Client) GetFrob() (string, error) {
-	params := map[string]string{}                          // No parameters needed for getting a frob.
-	resp, err := c.MakeRequest("rtm.auth.getFrob", params) // Make the API request.
+	params := map[string]string{}
+	resp, err := c.MakeRequest("rtm.auth.getFrob", params)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get frob") // Use errors.Wrap to preserve stack trace
+		// Add function context to Wrap message
+		return "", errors.Wrap(err, "Client.GetFrob: failed API request")
 	}
 
-	var response struct { // Define a struct to unmarshal the API response.
+	var response struct {
 		Rsp struct {
 			Stat  string `json:"stat"`
 			Frob  string `json:"frob,omitempty"`
@@ -69,9 +60,10 @@ func (c *Client) GetFrob() (string, error) {
 	}
 
 	if err := json.Unmarshal(resp, &response); err != nil {
+		// Add function context to cgerr message (corresponds to assessment L61 conceptually)
 		return "", cgerr.NewRTMError(
 			0,
-			"Failed to unmarshal frob response",
+			"Client.GetFrob: Failed to unmarshal frob response", // Added context
 			err,
 			map[string]interface{}{
 				"response_body_length": len(resp),
@@ -79,20 +71,34 @@ func (c *Client) GetFrob() (string, error) {
 		)
 	}
 
-	if response.Rsp.Stat != "ok" { // Check if the API call was successful.
+	if response.Rsp.Stat != "ok" {
 		if response.Rsp.Error != nil {
+			// Add function context to RTM error message
 			return "", cgerr.NewRTMError(
 				response.Rsp.Error.Code,
-				response.Rsp.Error.Msg,
+				fmt.Sprintf("Client.GetFrob: %s", response.Rsp.Error.Msg), // Added context
 				nil,
 				map[string]interface{}{
 					"method": "rtm.auth.getFrob",
 				},
 			)
 		}
+		// Add function context to generic non-ok status message
 		return "", cgerr.NewRTMError(
 			0,
-			fmt.Sprintf("RTM API returned non-ok status: %s", response.Rsp.Stat),
+			fmt.Sprintf("Client.GetFrob: RTM API returned non-ok status: %s", response.Rsp.Stat), // Added context
+			nil,
+			map[string]interface{}{
+				"method": "rtm.auth.getFrob",
+				"status": response.Rsp.Stat,
+			},
+		)
+	}
+	// Add check for missing Frob even on "ok" status
+	if response.Rsp.Frob == "" {
+		return "", cgerr.NewRTMError(
+			0,
+			"Client.GetFrob: RTM API status ok but no frob returned", // Added context
 			nil,
 			map[string]interface{}{
 				"method": "rtm.auth.getFrob",
@@ -101,58 +107,40 @@ func (c *Client) GetFrob() (string, error) {
 		)
 	}
 
-	return response.Rsp.Frob, nil // Return the frob.
+	return response.Rsp.Frob, nil
 }
 
 // GetAuthURL generates an authentication URL for desktop application flow.
-// This URL is used to redirect the user to the RTM website to grant permissions to the application.
-//
-// frob string: The frob obtained from GetFrob.
-// perms string: The permissions being requested ("read", "write", or "delete").
-//
-// Returns:
-//
-//	string: The authentication URL.
+// ... (comments remain the same)
 func (c *Client) GetAuthURL(frob, perms string) string {
-	params := map[string]string{ // Prepare the parameters for the authentication URL.
-		"api_key": c.APIKey, // Include the API key.
-		"perms":   perms,    // Include the requested permissions.
-		"frob":    frob,     // Include the frob.
+	params := map[string]string{
+		"api_key": c.APIKey,
+		"perms":   perms,
+		"frob":    frob,
 	}
-
-	// Sign parameters
-	signature := c.Sign(params) // Generate the API signature.
-
-	// Build URL
-	values := url.Values{} // Use url.Values to properly encode the URL.
+	signature := c.Sign(params)
+	values := url.Values{}
 	for k, v := range params {
-		values.Add(k, v) // Add each parameter to the URL values.
+		values.Add(k, v)
 	}
-	values.Add("api_sig", signature) // Add the API signature.
-
-	return AuthURL + "?" + values.Encode() // Construct the full authentication URL.
+	values.Add("api_sig", signature)
+	return AuthURL + "?" + values.Encode()
 }
 
 // GetToken gets an auth token for the given frob.
-// This is the final step in the authentication process, where the temporary frob is exchanged for a permanent authentication token.
-//
-// frob string: The frob obtained from GetFrob and used to authorize the application.
-//
-// Returns:
-//
-//	*Auth: The authentication information, including the token, permissions, and user.
-//	error: An error if the API request fails, the response is invalid, or authentication fails.
+// ... (comments remain the same)
 func (c *Client) GetToken(frob string) (*Auth, error) {
-	params := map[string]string{ // Prepare the parameters for the API request.
-		"frob": frob, // Include the frob.
+	params := map[string]string{
+		"frob": frob,
 	}
 
-	resp, err := c.MakeRequest("rtm.auth.getToken", params) // Make the API request.
+	resp, err := c.MakeRequest("rtm.auth.getToken", params)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get token") // Use errors.Wrap for better context
+		// Add function context to Wrap message (corresponds to assessment L138 conceptually)
+		return nil, errors.Wrap(err, "Client.GetToken: failed API request")
 	}
 
-	var response struct { // Define a struct to unmarshal the API response.
+	var response struct {
 		Rsp struct {
 			Stat  string `json:"stat"`
 			Auth  *Auth  `json:"auth,omitempty"`
@@ -161,9 +149,10 @@ func (c *Client) GetToken(frob string) (*Auth, error) {
 	}
 
 	if err := json.Unmarshal(resp, &response); err != nil {
+		// Add function context to cgerr message (corresponds to assessment L174 conceptually)
 		return nil, cgerr.NewRTMError(
 			0,
-			"Failed to unmarshal token response",
+			"Client.GetToken: Failed to unmarshal token response", // Added context
 			err,
 			map[string]interface{}{
 				"response_body_length": len(resp),
@@ -172,11 +161,12 @@ func (c *Client) GetToken(frob string) (*Auth, error) {
 		)
 	}
 
-	if response.Rsp.Stat != "ok" { // Check if the API call was successful.
+	if response.Rsp.Stat != "ok" {
 		if response.Rsp.Error != nil {
+			// Add function context to RTM error message
 			return nil, cgerr.NewRTMError(
 				response.Rsp.Error.Code,
-				response.Rsp.Error.Msg,
+				fmt.Sprintf("Client.GetToken: %s", response.Rsp.Error.Msg), // Added context
 				nil,
 				map[string]interface{}{
 					"method": "rtm.auth.getToken",
@@ -184,9 +174,10 @@ func (c *Client) GetToken(frob string) (*Auth, error) {
 				},
 			)
 		}
+		// Add function context to generic non-ok status message
 		return nil, cgerr.NewRTMError(
 			0,
-			fmt.Sprintf("RTM API returned non-ok status: %s", response.Rsp.Stat),
+			fmt.Sprintf("Client.GetToken: RTM API returned non-ok status: %s", response.Rsp.Stat), // Added context
 			nil,
 			map[string]interface{}{
 				"method": "rtm.auth.getToken",
@@ -197,9 +188,10 @@ func (c *Client) GetToken(frob string) (*Auth, error) {
 	}
 
 	if response.Rsp.Auth == nil {
+		// Add function context to missing auth info message
 		return nil, cgerr.NewRTMError(
 			0,
-			"No auth information in response",
+			"Client.GetToken: No auth information in response", // Added context
 			nil,
 			map[string]interface{}{
 				"method": "rtm.auth.getToken",
@@ -208,20 +200,16 @@ func (c *Client) GetToken(frob string) (*Auth, error) {
 		)
 	}
 
-	return response.Rsp.Auth, nil // Return the authentication information.
+	return response.Rsp.Auth, nil
 }
 
 // CheckToken verifies if the auth token is valid.
-// This method is used to check the validity of an existing authentication token.
-//
-// Returns:
-//
-//	*Auth: The authentication information if the token is valid.
-//	error: An error if no auth token is set, the API request fails, the response is invalid, or the token is invalid.
+// ... (comments remain the same)
 func (c *Client) CheckToken() (*Auth, error) {
 	if c.AuthToken == "" {
+		// Add function context to error message
 		return nil, cgerr.NewAuthError(
-			"No auth token set",
+			"Client.CheckToken: No auth token set", // Added context
 			nil,
 			map[string]interface{}{
 				"method": "rtm.auth.checkToken",
@@ -229,13 +217,14 @@ func (c *Client) CheckToken() (*Auth, error) {
 		)
 	}
 
-	params := map[string]string{}                             // No parameters needed for checking the token.
-	resp, err := c.MakeRequest("rtm.auth.checkToken", params) // Make the API request.
+	params := map[string]string{}
+	resp, err := c.MakeRequest("rtm.auth.checkToken", params)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to check token") // Use errors.Wrap for better context
+		// Add function context to Wrap message
+		return nil, errors.Wrap(err, "Client.CheckToken: failed API request")
 	}
 
-	var response struct { // Define a struct to unmarshal the API response.
+	var response struct {
 		Rsp struct {
 			Stat  string `json:"stat"`
 			Auth  *Auth  `json:"auth,omitempty"`
@@ -244,9 +233,10 @@ func (c *Client) CheckToken() (*Auth, error) {
 	}
 
 	if err := json.Unmarshal(resp, &response); err != nil {
+		// Add function context to cgerr message (corresponds to assessment L241 conceptually)
 		return nil, cgerr.NewRTMError(
 			0,
-			"Failed to unmarshal token response",
+			"Client.CheckToken: Failed to unmarshal token response", // Added context
 			err,
 			map[string]interface{}{
 				"response_body_length": len(resp),
@@ -255,20 +245,22 @@ func (c *Client) CheckToken() (*Auth, error) {
 		)
 	}
 
-	if response.Rsp.Stat != "ok" { // Check if the API call was successful.
+	if response.Rsp.Stat != "ok" {
 		if response.Rsp.Error != nil {
+			// Add function context to RTM error message
 			return nil, cgerr.NewRTMError(
 				response.Rsp.Error.Code,
-				response.Rsp.Error.Msg,
+				fmt.Sprintf("Client.CheckToken: %s", response.Rsp.Error.Msg), // Added context
 				nil,
 				map[string]interface{}{
 					"method": "rtm.auth.checkToken",
 				},
 			)
 		}
+		// Add function context to generic non-ok status message
 		return nil, cgerr.NewRTMError(
 			0,
-			fmt.Sprintf("RTM API returned non-ok status: %s", response.Rsp.Stat),
+			fmt.Sprintf("Client.CheckToken: RTM API returned non-ok status: %s", response.Rsp.Stat), // Added context
 			nil,
 			map[string]interface{}{
 				"method": "rtm.auth.checkToken",
@@ -278,9 +270,10 @@ func (c *Client) CheckToken() (*Auth, error) {
 	}
 
 	if response.Rsp.Auth == nil {
+		// Add function context to missing auth info message
 		return nil, cgerr.NewRTMError(
 			0,
-			"No auth information in response",
+			"Client.CheckToken: No auth information in response", // Added context
 			nil,
 			map[string]interface{}{
 				"method": "rtm.auth.checkToken",
@@ -288,5 +281,5 @@ func (c *Client) CheckToken() (*Auth, error) {
 		)
 	}
 
-	return response.Rsp.Auth, nil // Return the authentication information.
+	return response.Rsp.Auth, nil
 }

@@ -5,21 +5,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
+	"io" // Import slog
 	"net/http"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
+
+// Initialize the logger at the package level
+var logger = logging.GetLogger("jsonrpc_http_transport")
 
 // HTTPHandler handles JSON-RPC over HTTP requests.
 type HTTPHandler struct {
 	handler         jsonrpc2.Handler
 	requestTimeout  time.Duration
-	shutdownTimeout time.Duration
+	shutdownTimeout time.Duration // Currently unused, consider for graceful shutdown
 }
 
 // HTTPHandlerOption defines a function that configures an HTTPHandler.
@@ -28,14 +31,25 @@ type HTTPHandlerOption func(*HTTPHandler)
 // WithHTTPRequestTimeout sets the request timeout for HTTP handlers.
 func WithHTTPRequestTimeout(timeout time.Duration) HTTPHandlerOption {
 	return func(h *HTTPHandler) {
-		h.requestTimeout = timeout
+		if timeout > 0 {
+			h.requestTimeout = timeout
+			// Log setting application? Potentially noisy. Debug level if desired.
+			// logger.Debug("HTTP request timeout set", "timeout", timeout)
+		} else {
+			logger.Warn("Ignoring invalid HTTP request timeout value", "invalid_timeout", timeout)
+		}
 	}
 }
 
 // WithHTTPShutdownTimeout sets the shutdown timeout for HTTP handlers.
 func WithHTTPShutdownTimeout(timeout time.Duration) HTTPHandlerOption {
 	return func(h *HTTPHandler) {
-		h.shutdownTimeout = timeout
+		if timeout > 0 {
+			h.shutdownTimeout = timeout
+			// logger.Debug("HTTP shutdown timeout set", "timeout", timeout)
+		} else {
+			logger.Warn("Ignoring invalid HTTP shutdown timeout value", "invalid_timeout", timeout)
+		}
 	}
 }
 
@@ -44,82 +58,118 @@ func NewHTTPHandler(handler jsonrpc2.Handler, opts ...HTTPHandlerOption) *HTTPHa
 	h := &HTTPHandler{
 		handler:         handler,
 		requestTimeout:  DefaultTimeout,
-		shutdownTimeout: 5 * time.Second,
+		shutdownTimeout: 5 * time.Second, // Default shutdown timeout
 	}
+	logger.Debug("Initializing new JSON-RPC HTTP Handler", "default_request_timeout", h.requestTimeout, "default_shutdown_timeout", h.shutdownTimeout)
 
 	// Apply options
 	for _, opt := range opts {
 		opt(h)
 	}
+	logger.Debug("HTTP Handler options applied", "final_request_timeout", h.requestTimeout, "final_shutdown_timeout", h.shutdownTimeout)
 
 	return h
 }
 
 // ServeHTTP implements the http.Handler interface.
 func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	requestLogger := logger.With("method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
+	requestLogger.Debug("Handling HTTP request")
+
 	if r.Method != http.MethodPost {
 		methodErr := cgerr.ErrorWithDetails(
-			errors.Newf("method %s not allowed", r.Method),
+			// Add handler context to error message
+			errors.Newf("HTTPHandler.ServeHTTP: method %s not allowed", r.Method),
 			cgerr.CategoryRPC,
 			cgerr.CodeInvalidRequest,
 			map[string]interface{}{
 				"allowed_method": "POST",
 				"actual_method":  r.Method,
-				"path":           r.URL.Path,
+				// No need for path/remote_addr here, already in logger context
 			},
 		)
-		log.Printf("httputils.ServeHTTP: %+v", methodErr)
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		// Replace log.Printf with logger.Error (Conceptual L50)
+		requestLogger.Error("HTTP method not allowed", "error", fmt.Sprintf("%+v", methodErr))
+		// Send standard HTTP error
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Create a cancellable context with timeout
+	// Create a cancellable context with timeout for the request processing
 	ctx, cancel := context.WithTimeout(r.Context(), h.requestTimeout)
-	defer cancel()
+	defer cancel() // Ensure resources are released
 
-	// Create a stream from the request and response
+	// Create a stream wrapper for the HTTP request/response
 	stream := &httpStream{
 		reader: r.Body,
 		writer: w,
+		// closed defaults to false
 	}
 
-	// Create a connection
+	// Create a new jsonrpc2 connection using the stream and the registered handler
 	conn := jsonrpc2.NewConn(ctx, stream, h.handler)
+	requestLogger.Debug("JSON-RPC connection created over HTTP stream")
 
-	// Wait for the request to complete or timeout
+	// Wait for the connection to disconnect (request processed) or context to finish (timeout/cancel)
 	select {
 	case <-conn.DisconnectNotify():
-		// Normal completion
+		requestLogger.Debug("JSON-RPC connection disconnected normally")
+		// Normal completion or handled internally by jsonrpc2 sending response/error
 	case <-ctx.Done():
-		if ctx.Err() == context.DeadlineExceeded {
+		requestLogger.Warn("HTTP request context done", "reason", ctx.Err())
+		// Context finished, check if it was due to timeout
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			// Create a timeout error with details
 			timeoutErr := cgerr.NewTimeoutError(
-				"HTTP request timed out",
+				// Add handler context to error message
+				fmt.Sprintf("HTTPHandler.ServeHTTP: request timed out after %s", h.requestTimeout),
 				map[string]interface{}{
 					"timeout_seconds": h.requestTimeout.Seconds(),
-					"path":            r.URL.Path,
-					"remote_addr":     r.RemoteAddr,
+					// No need for path/remote_addr here, already in logger context
 				},
 			)
-			log.Printf("httputils.ServeHTTP: %+v", timeoutErr)
+			// Replace log.Printf with logger.Error (Conceptual L80)
+			requestLogger.Error("HTTP request timed out", "error", fmt.Sprintf("%+v", timeoutErr))
 
-			// Send timeout response
-			w.WriteHeader(http.StatusGatewayTimeout)
-			_, writeErr := w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32603,"message":"request timed out"},"id":null}`))
+			// Attempt to send a standard JSON-RPC timeout error response
+			// Note: Headers might have already been written by jsonrpc2 internals if processing started.
+			// This write might fail or be ignored. jsonrpc2 might handle timeouts internally too.
+			// Consider if jsonrpc2 needs specific timeout handling configuration.
+			// Best effort:
+			if !headersWritten(w) { // Simple check to avoid superfluous WriteHeader
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusGatewayTimeout) // Use 504 for timeout
+			}
+			// Use the cgerr helper to format the error
+			rpcErr := cgerr.ToJSONRPCError(timeoutErr)
+			// Marshal the standard error
+			errBody, marshalErr := json.Marshal(rpcErr)
+			if marshalErr != nil {
+				requestLogger.Error("Failed to marshal timeout error response body", "marshal_error", fmt.Sprintf("%+v", marshalErr))
+				// Cannot send specific error if marshalling failed. Header might already be sent.
+				return
+			}
+
+			_, writeErr := w.Write(errBody)
 			if writeErr != nil {
+				// Failed to write the timeout response body itself
 				writeErrWithDetails := cgerr.ErrorWithDetails(
-					errors.Wrap(writeErr, "failed to write timeout error response"),
+					// Add handler context to error message
+					errors.Wrap(writeErr, "HTTPHandler.ServeHTTP: failed to write timeout error response body"),
 					cgerr.CategoryRPC,
 					cgerr.CodeInternalError,
 					map[string]interface{}{
-						"path":        r.URL.Path,
-						"remote_addr": r.RemoteAddr,
+						"original_error_code": rpcErr.Code, // Log original intended code
+						// path/remote_addr in logger context
 					},
 				)
-				log.Printf("httputils.ServeHTTP: %+v", writeErrWithDetails)
+				// Replace log.Printf with logger.Error (Conceptual L126)
+				requestLogger.Error("Failed to write timeout error response", "write_error", fmt.Sprintf("%+v", writeErrWithDetails))
 			}
 		}
+		// Handle other context errors? (e.g., context.Canceled) Currently just logs.
 	}
+	requestLogger.Debug("Finished handling HTTP request")
 }
 
 // httpStream implements the jsonrpc2.ObjectStream interface for HTTP.
@@ -132,8 +182,9 @@ type httpStream struct {
 // WriteObject writes a JSON-RPC message to the HTTP response.
 func (s *httpStream) WriteObject(obj interface{}) error {
 	if s.closed {
+		// Add method context to error message
 		return cgerr.ErrorWithDetails(
-			errors.New("connection closed: pipe is closed"),
+			errors.New("httpStream.WriteObject: connection closed"),
 			cgerr.CategoryRPC,
 			cgerr.CodeInternalError,
 			map[string]interface{}{
@@ -144,8 +195,9 @@ func (s *httpStream) WriteObject(obj interface{}) error {
 
 	data, err := json.Marshal(obj)
 	if err != nil {
+		// Add method context to Wrap message
 		return cgerr.ErrorWithDetails(
-			errors.Wrap(err, "failed to marshal object"),
+			errors.Wrap(err, "httpStream.WriteObject: failed to marshal object"),
 			cgerr.CategoryRPC,
 			cgerr.CodeInternalError,
 			map[string]interface{}{
@@ -154,11 +206,16 @@ func (s *httpStream) WriteObject(obj interface{}) error {
 		)
 	}
 
+	// Ensure Content-Type is set before writing
+	// This might conflict if jsonrpc2 internals also set headers.
+	// If headers were already written, this is a no-op.
 	s.writer.Header().Set("Content-Type", "application/json")
+
 	_, err = s.writer.Write(data)
 	if err != nil {
+		// Add method context to Wrap message
 		return cgerr.ErrorWithDetails(
-			errors.Wrap(err, "failed to write response"),
+			errors.Wrap(err, "httpStream.WriteObject: failed to write response"),
 			cgerr.CategoryRPC,
 			cgerr.CodeInternalError,
 			map[string]interface{}{
@@ -166,6 +223,10 @@ func (s *httpStream) WriteObject(obj interface{}) error {
 			},
 		)
 	}
+	// Should we flush here? http.ResponseWriter might buffer.
+	// if f, ok := s.writer.(http.Flusher); ok {
+	// 	f.Flush()
+	// }
 
 	return nil
 }
@@ -173,8 +234,9 @@ func (s *httpStream) WriteObject(obj interface{}) error {
 // ReadObject reads a JSON-RPC message from the HTTP request.
 func (s *httpStream) ReadObject(v interface{}) error {
 	if s.closed {
+		// Add method context to error message
 		return cgerr.ErrorWithDetails(
-			errors.New("connection closed: pipe is closed"),
+			errors.New("httpStream.ReadObject: connection closed"),
 			cgerr.CategoryRPC,
 			cgerr.CodeInternalError,
 			map[string]interface{}{
@@ -184,11 +246,32 @@ func (s *httpStream) ReadObject(v interface{}) error {
 	}
 
 	data, err := io.ReadAll(s.reader)
+	// Check if the error is due to closing the stream normally
+	if s.closed && errors.Is(err, http.ErrBodyReadAfterClose) {
+		// This can happen if Close() is called while ReadObject is waiting.
+		// Return io.EOF or similar standard stream closed error? jsonrpc2 expects io.EOF.
+		logger.Debug("httpStream.ReadObject: Read after close detected, returning io.EOF")
+		return io.EOF
+	}
 	if err != nil {
+		// Add method context to Wrap message
 		return cgerr.ErrorWithDetails(
-			errors.Wrap(err, "failed to read request body"),
+			errors.Wrap(err, "httpStream.ReadObject: failed to read request body"),
 			cgerr.CategoryRPC,
-			cgerr.CodeParseError,
+			cgerr.CodeParseError, // Reading error maps to parse error
+			map[string]interface{}{
+				"target_type": fmt.Sprintf("%T", v),
+			},
+		)
+	}
+
+	// Handle empty request body - jsonrpc2 might handle this, but good practice
+	if len(data) == 0 {
+		logger.Warn("httpStream.ReadObject: Received empty request body")
+		return cgerr.ErrorWithDetails(
+			errors.New("httpStream.ReadObject: empty request body"),
+			cgerr.CategoryRPC,
+			cgerr.CodeInvalidRequest,
 			map[string]interface{}{
 				"target_type": fmt.Sprintf("%T", v),
 			},
@@ -196,13 +279,16 @@ func (s *httpStream) ReadObject(v interface{}) error {
 	}
 
 	if err := json.Unmarshal(data, v); err != nil {
+		// Add method context to Wrap message
 		return cgerr.ErrorWithDetails(
-			errors.Wrap(err, "failed to unmarshal JSON"),
+			errors.Wrap(err, "httpStream.ReadObject: failed to unmarshal JSON"),
 			cgerr.CategoryRPC,
 			cgerr.CodeParseError,
 			map[string]interface{}{
 				"data_size":   len(data),
 				"target_type": fmt.Sprintf("%T", v),
+				// Consider adding a snippet of the invalid JSON? (Risk of logging sensitive data)
+				// "data_snippet": string(data[:min(len(data), 100)]),
 			},
 		)
 	}
@@ -210,11 +296,26 @@ func (s *httpStream) ReadObject(v interface{}) error {
 	return nil
 }
 
-// Close closes the stream.
+// Close closes the stream (specifically the request body reader).
 func (s *httpStream) Close() error {
+	logger.Debug("Closing HTTP stream")
 	if s.closed {
 		return nil
 	}
 	s.closed = true
-	return s.reader.Close()
+	err := s.reader.Close()
+	if err != nil {
+		logger.Error("Error closing HTTP stream reader", "error", fmt.Sprintf("%+v", err))
+		// Return the error from closing the reader
+		return errors.Wrap(err, "httpStream.Close: failed to close underlying reader")
+	}
+	return nil
+}
+
+// Helper function to check if headers have been written (simple heuristic)
+func headersWritten(w http.ResponseWriter) bool {
+	// Accessing ResponseWriter internal state is fragile.
+	// This is a placeholder; a wrapper is better.
+	// For now, assume they might have been written if Content-Type is set.
+	return w.Header().Get("Content-Type") != ""
 }
