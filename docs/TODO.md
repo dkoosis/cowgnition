@@ -2,60 +2,175 @@
 
 ## Top Priority
 
+JSON-RPC and Error Handling Cleanup Recommendations
+Recommended Approach
+
+Standardize on jsonrpc2 library types:
+
+Gradually replace usages of custom types with sourcegraph/jsonrpc2 library types
+Remove the custom types in jsonrpc_types.go
+Update handler functions to work with library types directly
+
+Clean up error handling:
+
+Ensure all error creation uses the helper functions from cgerr package
+Remove duplicate error code definitions
+Centralize error conversion logic in one place
+Remove unused or redundant error utility functions
+
+#2 Error Handling Tidying Opportunities
+
+Remove duplicated error conversion logic:
+
+internal/mcp/errors/utils.go and internal/jsonrpc/jsonrpc_handler.go both contain error conversion logic.
+We could centralize all error conversion in internal/mcp/errors/utils.go and use it consistently.
+
+Standardize error creation patterns:
+
+Some places use direct errors.New/Wrap while others use the helper functions like cgerr.NewToolError.
+We should standardize on using the helper functions for better consistency.
+
+Consolidate error codes:
+
+There are error codes defined in multiple places (internal/mcp/errors/codes.go and internal/httputils/response.go).
+We should have a single source of truth for error codes.
+
+Remove unused error functions:
+
+Some error utility functions in internal/mcp/errors/utils.go are not used throughout the codebase.
+We can simplify by removing them or marking them as deprecated.
+
+#3 JSON-RPC2 Library Tidying Opportunities
+
+Remove custom JSON-RPC types:
+
+internal/jsonrpc/jsonrpc_types.go defines several types that duplicate functionality from sourcegraph/jsonrpc2.
+These could be removed and replaced with direct usage of the library's types.
+
+Standardize on a single Message handling approach:
+
+The codebase has multiple ways of handling JSON-RPC messages: using custom types and using library types.
+We should standardize on using the jsonrpc2.Request and jsonrpc2.Response types directly.
+
+Remove redundant error mapping:
+
+There's redundant mapping between custom error types and jsonrpc2 error objects.
+We could simplify by using the ToJSONRPCError function consistently.
+
+Consolidate transport implementations:
+
+There are multiple transport implementations that could be simplified.
+Standardize on a clear pattern for all transports (stdio, HTTP) using the jsonrpc2 library.
+
+Specific Files to Clean Up
+
+internal/jsonrpc/jsonrpc_types.go:
+
+This file contains custom types like Request, Response, and Notification that duplicate the functionality from the jsonrpc2 library.
+Most of this file could be removed in favor of using the library's types directly.
+
+internal/mcp/errors.go:
+
+This file only re-exports errors from internal/mcp/errors/ package.
+Could be removed and direct imports of cgerr used instead.
+
+internal/jsonrpc/jsonrpc_handler.go:
+
+Contains custom error conversion logic that duplicates ToJSONRPCError from the errors package.
+Should be refactored to use the centralized error conversion.
+
+internal/httputils/response.go:
+
+Contains error code definitions that overlap with internal/mcp/errors/codes.go.
+Should be refactored to use the canonical error codes.
+
 # CowGnition MCP Implementation Roadmap: Urgent Fixes
 
 ## Priority Tasks for Codebase Cleanup and Standardization
 
-### 2. Complete State Machine Implementation
+### 1. Complete State Machine Implementation ✅ (Mostly Complete)
 
-- [ ] Finalize the integration of `qmuntal/stateless` for connection management
-- [ ] Eliminate redundant state tracking mechanisms outside of the state machine
-- [ ] Ensure all state transitions are properly handled by the state machine
-- [ ] Verify event handlers are correctly registered and functioning
-- [ ] Remove any vestigial code from the previous implementation approach
-- [ ] Write state transition tests to validate the new architecture
+- [x] Implement `qmuntal/stateless` for connection management
+- [x] Define state transitions and handlers
+- [x] Integrate connection manager with server logic
+- [ ] Add comprehensive tests for state machine behavior
+- [ ] Review error handling in state transitions
+- [ ] Ensure proper cleanup of resources in all states
 
-### 3. Standardize Error Handling
+### 2. Standardize Error Handling ✅ (Mostly Complete)
 
-- [ ] Audit and document our chosen error handling patterns
-- [ ] Consolidate on `cockroachdb/errors` package for rich error context
-- [ ] Create consistent helpers for converting between domain errors and protocol errors
-- [ ] Establish clear error category boundaries (domain vs. protocol vs. transport)
-- [ ] Ensure proper error propagation across boundaries
-- [ ] Implement consistent error logging with appropriate detail levels
-- [ ] Add unit tests for error handling scenarios
+- [x] Consolidate on `cockroachdb/errors` package for error operations
+- [x] Define consistent error categories and codes
+- [x] Create helper functions for error conversion and wrapping
+- [x] Document error handling approach in `error_handling_guidelines.md`
+- [ ] Add tests for error conversion and handling
+- [ ] Review error messages for consistency and helpfulness
 
-### 4. Standardize on jsonrpc2 Library
+### 3. Standardize on jsonrpc2 Library ⚠️ (In Progress)
 
-- [ ] Remove vestigial custom JSON-RPC implementation code from `internal/jsonrpc/types.go`
-- [ ] Ensure all JSON-RPC related code uses `sourcegraph/jsonrpc2` types directly
-- [ ] Create clean adapter layers where needed (e.g., for error conversion)
-- [ ] Update any remaining code that refers to the custom types
-- [ ] Document the standard pattern for JSON-RPC interactions for future development
+- [x] Adopt `sourcegraph/jsonrpc2` as the core JSON-RPC library
+- [x] Create adapter for HTTP transport
+- [x] Create adapter for stdio transport
+- [ ] Remove vestigial custom JSON-RPC implementation in `internal/jsonrpc/jsonrpc_types.go`
+- [ ] Ensure all code paths use `jsonrpc2` types directly
+- [ ] Add integration tests for JSON-RPC communication
 
-### 5. Documentation and Testing
+### 4. Documentation and Testing ⚠️ (Needs Work)
 
-- [ ] Document architectural decisions in `docs/decision_log.md`
-- [ ] Update code comments to reflect the new patterns
-- [ ] Create integration tests for the entire protocol flow
-- [ ] Set up CI checks to prevent regressions
+- [x] Document architectural decisions in `docs/decision_log.md`
+- [x] Document error handling approach in `error_handling_guidelines.md`
+- [ ] Ensure consistent file and function documentation across codebase
+- [ ] Increase unit test coverage, particularly for core components
+- [ ] Add integration tests for end-to-end protocol flow
+- [ ] Create user-facing documentation for setup and configuration
+
+## Next Steps
+
+### 1. RTM API Integration
+
+- [ ] Complete integration with Remember The Milk API
+- [ ] Implement task resources and tools
+- [ ] Add proper error handling for API failures
+- [ ] Test with real RTM accounts
+
+### 2. Claude Desktop Integration
+
+- [ ] Test integration with Claude Desktop
+- [ ] Verify proper handling of MCP protocol messages
+- [ ] Ensure correct authentication flow with RTM
+- [ ] Document setup process for users
+
+### 3. Structured Logging Implementation
+
+- [x] Implement structured logging with `slog`
+- [x] Define log levels and categories
+- [ ] Ensure consistent logging format across components
+- [ ] Add contextual information to log entries
+- [ ] Configure log level via configuration
+
+### 4. Configuration System
+
+- [ ] Complete `koanf`-based configuration system
+- [ ] Implement configuration validation
+- [ ] Support multiple configuration sources
+- [ ] Document configuration options
 
 ## Implementation Strategy
 
 Start small and validate each change incrementally:
 
-1. First fix the build errors to get a working baseline
-2. Focus on the state machine implementation next
-3. Standardize error handling and validate with tests
-4. Finally, clean up any remaining custom JSON-RPC code
+1. Focus on completing the JSON-RPC standardization first
+2. Add tests for the state machine implementation
+3. Complete RTM API integration
+4. Test with Claude Desktop
+5. Improve documentation and user experience
 
 For each component, follow this approach:
 
-1. Analyze the current implementation
-2. Define the target architecture
-3. Implement incremental changes with tests
-4. Validate with real-world use cases
-5. Document the patterns for future development
+1. Write tests for the intended behavior
+2. Implement the changes
+3. Verify with real-world use cases
+4. Document the implementation
 
 ## Expected Benefits
 
@@ -64,281 +179,3 @@ For each component, follow this approach:
 - **Better error handling** with rich context for debugging
 - **More robust state management** using a proven library
 - **Faster development** by leveraging established libraries
-
-## Technical Details
-
-For the `ToJSONRPCError` function implementation and other specifics, refer to the error logs and code snippets in our GitHub issues and PR discussions.
-
-## Next PRIORITY: Implement State Machine Architecture for MCP Connection Handling
-
-### (may have been completed, see list above)
-
-1. Defining a ConnectionManager struct with explicit connection states (Unconnected, Initializing, Connected, Terminating, Error)
-2. Implementing state transitions with appropriate validation
-3. Creating a message dispatcher that routes messages based on current state and message method
-4. Integrating structured logging throughout with connection and request IDs
-5. Implementing proper error handling that distinguishes between protocol and system errors
-6. Ensuring the transport layer maintains persistent connections throughout the state lifecycle"
-
-Start by designing the core state machine interfaces and structs, then implement the state transition logic, followed by the message dispatch system. Each implementation should include comprehensive logging, error handling, and follow Go best practices.
-
-### Log Entries
-
-- review the log messages for clarity and usefullness
-- review the handling of credentials for RTM and put in place strong defensive coding
-
-## 1. Core JSON-RPC Implementation
-
-- [ ] Create message dispatcher:
-  - [ ] Notification handling
-
-## 2. MCP Protocol Compliance
-
-- [ ] Update MCP server to use JSON-RPC core:
-
-  - [ ] Add validation for MCP-specific message formats
-
-- [ ] Implement transport layer:
-
-  - [ ] Add SSE/HTTP transport support (progress made: timeout handling implemented)
-
-- [ ] Update initialization flow:
-  - [ ] Implement proper capability negotiation
-  - [ ] Add protocol version validation
-  - [ ] Reference: [MCP Lifecycle](https://spec.modelcontextprotocol.io/specification/2024-11-05/basic/lifecycle/)
-
-## 3. RTM API Integration
-
-- [ ] Complete RTM Task Resources:
-
-  - [ ] Implement list resources for viewing tasks
-  - [ ] Add resources for searching tasks
-  - [ ] Implement tag resources
-  - [ ] Reference: [RTM API Methods](https://www.rememberthemilk.com/services/api/)
-
-- [ ] Implement RTM Tools:
-  - [ ] Task creation tool
-  - [ ] Task completion tool
-  - [ ] Task update tool (due dates, priority)
-  - [ ] Tag management tool
-
-## 4. Configuration Enhancements
-
-- [ ] Implement koanf-based configuration system with the following features:
-
-  - [ ] Clear configuration hierarchy (defaults → files → env vars → flags)
-  - [ ] Multiple search paths with precedence rules
-  - [ ] Secure handling of sensitive information
-  - [ ] Strong validation with helpful error messages
-  - [ ] Documentation for users and developers
-  - [ ] we seek to load the config file from known locations. Let's do some defensive coding around that, to warn the user if there are several config files, with one taking precedence. such an warning would surely have save me heartache in the course of my progamming career.
-
-  Implementation plan:
-
-  1. Add koanf dependency to go.mod
-  2. Create new package `internal/kconfig` to replace existing config
-  3. Define configuration structure with appropriate types
-  4. Implement file discovery with explicit search path order
-  5. Add environment variable overrides with clear naming conventions
-  6. Add validation logic for all configuration values
-  7. Implement secure credential handling with masking in logs
-  8. Create config file generator for new users
-  9. Add helper functions for common config operations
-  10. Update all existing code to use the new package
-  11. Write comprehensive tests for the new configuration system
-
-  Reference:
-
-  - Koanf GitHub: https://github.com/knadh/koanf
-
-## 5. Testing & Quality Assurance
-
-- [ ] Add comprehensive tests:
-  - [ ] Unit tests for all packages
-  - [ ] Integration tests for MCP server
-  - [ ] Test RTM API interaction (with mocks)
-  - [ ] End-to-end tests with MCP Inspector
-
-## 6. Security Enhancements
-
-- [ ] API key and token management:
-
-  - [ ] Implement secure token storage (improve current implementation)
-  - [ ] Add token rotation support
-  - [ ] Implement rate limiting
-  - [ ] Add request validation
-
-- [ ] Security auditing:
-  - [ ] Audit dependencies
-  - [ ] Review authentication flow
-  - [ ] Validate input sanitization
-
-## 7. Documentation & User Experience
-
-- [ ] Documentation:
-  - [ ] Add API documentation with OpenAPI/Swagger
-  - [ ] Include examples for common operations
-  - [ ] Document error codes and solutions
-  - [ ] Create usage guides for client applications
-
-## Implementation Strategy
-
-1. Focus on one component at a time, getting it fully working before moving on
-2. Start with core JSON-RPC implementation as the foundation
-3. Build MCP protocol compliance on top of that foundation
-4. Add RTM functionality incrementally
-5. Use the MCP Inspector tool to test each component
-6. Write tests for each component as we develop
-
-## Testing Approach
-
-- Use MCP Inspector for manual testing
-- Write unit tests for each package
-- Implement integration tests for end-to-end validation
-- Test with real Claude Desktop integration
-- Follow test-driven development where possible
-
-## Structured Logging Initiative
-
-- Research and select a structured logging library (e.g., zap, logrus)
-- Define a base JSON schema for log entries
-- Implement a log formatting utility
-- Refactor existing logging to use the utility and structured format
-- Design a mechanism for configuring log levels
-- Implement middleware for HTTP request logging (if applicable)
-
-## Error Handling Simplification
-
-- [ ] Review and consolidate error handling approach:
-
-  - [ ] Standardize on cockroachdb/errors for all error operations
-  - [ ] Create consistent error wrapping patterns
-  - [ ] Update error checking to use errors.Is consistently
-  - [ ] Remove redundant error types where possible
-  - [ ] Ensure all errors include appropriate context
-
-  // TODO: internal/mcp/server.go Error handling simplification needed - The current approach uses three error packages:
-  // 1. Standard "errors" (for errors.Is/As)
-  // 2. "github.com/cockroachdb/errors" (for stack traces and wrapping)
-  // 3. Custom "cgerr" package (for domain-specific errors)
-  // This creates import confusion and makes error handling inconsistent.
-
-  ## MCP
-
-  Message handling
-  Request processing
-
-Validate inputs thoroughly
-Use type-safe schemas
-Handle errors gracefully
-Implement timeouts
-Progress reporting
-
-Use progress tokens for long operations
-Report progress incrementally
-Include total progress when known
-Error management
-
-Use appropriate error codes
-Include helpful error messages
-Clean up resources on errors
-​
-Security considerations
-Transport security
-
-Use TLS for remote connections
-Validate connection origins
-Implement authentication when needed
-Message validation
-
-Validate all incoming messages
-Sanitize inputs
-Check message size limits
-Verify JSON-RPC format
-Resource protection
-
-Implement access controls
-Validate resource paths
-Monitor resource usage
-Rate limit requests
-Error handling
-
-Don’t leak sensitive information
-Log security-relevant errors
-Implement proper cleanup
-Handle DoS scenarios
-​
-Debugging and monitoring
-Logging
-
-Log protocol events
-Track message flow
-Monitor performance
-Record errors
-Diagnostics
-
-Implement health checks
-Monitor connection state
-Track resource usage
-Profile performance
-Testing
-
-Test different transports
-Verify error handling
-Check edge cases
-Load test servers
-
-## MCP
-
-MCP Implementation Roadmap
-
-1. Protocol Analysis & Design
-
-Study the MCP specification in depth: Understand the exact message formats, field names, and protocol flow
-Analyze official SDK implementations: Look at how TypeScript, Python, and other language SDKs structure their code
-Examine Go implementations of similar protocols: Learn from LSP implementations in Go
-Document architecture decisions: Create clear design guidelines before writing any code
-
-2. JSON-RPC 2.0 Foundation
-
-Implement a robust JSON-RPC 2.0 layer: This should handle message serialization, parsing, and validation
-Define proper error handling patterns: Align with JSON-RPC 2.0 error codes and MCP-specific error codes
-Create connection handling abstractions: Support multiple transport types (stdio, HTTP) cleanly
-
-3. Protocol Types & Schema
-
-Define precise Go structs for all MCP message types: Ensure exact field name matching with JSON tags
-Implement validation for all message types: Check required fields and format constraints
-Create clear separation between protocol types and business logic: Use interfaces where appropriate
-
-4. Core Protocol Flow Implementation
-
-Implement initialization flow: Handle protocol version negotiation and capabilities exchange
-Create a capability negotiation system: Track what features are supported by clients/servers
-Implement resource handling: Define interfaces for resource providers and consumers
-Implement tool support: Create a framework for defining and executing tools
-
-5. Testing Strategy
-
-Create unit tests for all protocol components: Test serialization, validation, and error handling
-Implement integration tests: Test the full protocol flow
-Create mock clients/servers: For testing connection handling
-Set up testing with real MCP clients: Test with Claude Desktop
-
-6. Documentation & Examples
-
-Document all types and interfaces: Provide clear usage examples
-Create example servers: Demonstrate resource and tool implementation
-Provide debugging guidelines: How to troubleshoot protocol issues
-
-7. Performance & Robustness
-
-Implement timeout handling: Ensure all operations have appropriate timeouts
-Add observability: Structured logging, metrics, traces
-Handle edge cases: Connection drops, protocol errors, message size limits
-
-Would you like to start with any particular section of this roadmap? I think the most sensible approach would be to begin with the JSON-RPC 2.0 foundation, as this forms the basis for all MCP communication.
-
-```
-
-```
