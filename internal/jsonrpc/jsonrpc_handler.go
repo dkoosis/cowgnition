@@ -1,5 +1,4 @@
 // internal/jsonrpc/jsonrpc_handler.go
-// internal/jsonrpc/adapter.go
 package jsonrpc
 
 import (
@@ -17,7 +16,7 @@ import (
 )
 
 // Initialize the logger at the package level
-var logger = logging.GetLogger("jsonrpc_adapter")
+var logger = logging.GetLogger("jsonrpc_handler")
 
 // DefaultTimeout defines the default timeout duration for JSON-RPC requests.
 const DefaultTimeout = 30 * time.Second
@@ -53,7 +52,7 @@ func NewAdapter(opts ...AdapterOption) *Adapter {
 		handlers:       make(map[string]Handler),
 		requestTimeout: DefaultTimeout,
 	}
-	logger.Debug("Initializing new JSON-RPC Adapter", "default_timeout", DefaultTimeout)
+	logger.Debug("Initializing new JSON-RPC Handler", "default_timeout", DefaultTimeout)
 
 	// Apply options
 	for _, opt := range opts {
