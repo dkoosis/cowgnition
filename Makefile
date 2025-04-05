@@ -1,5 +1,5 @@
 # Specify phony targets (targets not associated with files)
-.PHONY: all build clean test lint golangci-lint fmt check deps install-tools check-line-length tree help
+.PHONY: all tree build clean test lint golangci-lint fmt check deps install-tools check-line-length help
 
 # --- Configuration ---
 
@@ -39,7 +39,7 @@ FAIL_LINES := 650  # Fail if lines exceed this
 # --- Core Targets ---
 
 # Default target - run all checks and build
-all: check deps fmt golangci-lint check-line-length test tree build
+all: tree check deps fmt golangci-lint check-line-length test build
 	@printf "$(GREEN)$(BOLD)✨ All checks passed and build completed successfully! ✨$(NC)\n"
 
 # Build the application

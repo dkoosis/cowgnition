@@ -1,0 +1,63 @@
+.
+├── cmd
+│   └── server
+│       ├── main.go
+│       ├── server_config.go
+│       ├── server_logic.go
+│       └── setup.go
+├── docs
+│   ├── assets
+│   │   └── cowgnition_logo.png
+│   ├── TODO.md
+│   ├── decision_log.md
+│   ├── error_handling_guidelines.md
+│   ├── llm.md
+│   ├── project_directory_tree.txt
+│   └── tree.txt
+├── internal
+│   ├── config
+│   │   └── app_config.go
+│   ├── httputils
+│   │   └── response.go
+│   ├── jsonrpc
+│   │   ├── http_transport.go
+│   │   ├── jsonrpc_handler.go
+│   │   ├── jsonrpc_types.go
+│   │   └── stdio_transport.go
+│   ├── mcp
+│   │   ├── connection
+│   │   │   ├── connection_helpers.go
+│   │   │   ├── connection_types.go
+│   │   │   ├── handlers.go
+│   │   │   ├── manager.go
+│   │   │   └── state.go
+│   │   ├── definitions
+│   │   │   └── mcp_definitions.go
+│   │   ├── errors
+│   │   │   ├── codes.go
+│   │   │   ├── types.go
+│   │   │   └── utils.go
+│   │   ├── connection_adapter.go
+│   │   ├── errors.go
+│   │   ├── interfaces.go
+│   │   ├── resource.go
+│   │   ├── server.go
+│   │   ├── server_with_connection.go
+│   │   └── tool.go
+│   └── rtm
+│       ├── auth.go
+│       ├── client.go
+│       ├── provider.go
+│       └── token.go
+├── scripts
+│   ├── check_file_length.sh
+│   ├── graph.d2
+│   └── pkgdep.sh
+├── Makefile
+├── README.md
+├── coverage.out
+├── cowgnition
+├── go.mod
+└── go.sum
+
+15 directories, 46 files
