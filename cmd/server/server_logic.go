@@ -2,8 +2,8 @@
 package main
 
 import (
-	"context" // Import context, might be needed for logging later
-	"fmt"     // Import slog
+	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,18 +11,18 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config"
-	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper
+	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/mcp"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/dkoosis/cowgnition/internal/rtm"
 )
 
 // Initialize the logger at the package level
-var logger = logging.GetLogger("server_logic")
+var serverLogicLogger = logging.GetLogger("server_logic")
 
 // runServer loads config, creates, configures, and starts the MCP server.
 func runServer(transportType, configPath string, requestTimeout, shutdownTimeout time.Duration) error {
-	logger.Info("Starting server run sequence",
+	serverLogicLogger.Info("Starting server run sequence",
 		"transport", transportType,
 		"config_path", configPath,
 		"request_timeout", requestTimeout,
@@ -35,7 +35,7 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		// L13: Use Wrapf, add configPath context
 		return errors.Wrapf(err, "runServer: failed to load configuration from '%s'", configPath)
 	}
-	logger.Info("Configuration loaded successfully")
+	serverLogicLogger.Info("Configuration loaded successfully")
 
 	// Create base server
 	// Note: NewServer doesn't currently return an error in the snippet, but handle if it could
@@ -45,11 +45,11 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		return errors.Wrapf(err, "runServer: failed to create base server instance")
 	}
 	// L29 area log: Server created
-	logger.Info("Base MCP server instance created", "server_name", cfg.GetServerName())
+	serverLogicLogger.Info("Base MCP server instance created", "server_name", cfg.GetServerName())
 
 	// Set version
 	server.SetVersion(Version) // Assuming Version is defined elsewhere in main
-	logger.Debug("Server version set", "version", Version)
+	serverLogicLogger.Debug("Server version set", "version", Version)
 
 	// Set transport type
 	if err := server.SetTransport(transportType); err != nil {
@@ -71,7 +71,7 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	server.SetRequestTimeout(requestTimeout)
 	server.SetShutdownTimeout(shutdownTimeout)
 	// L52 area log: Configured timeouts
-	logger.Debug("Server transport and timeouts configured", "transport", transportType, "request_timeout", requestTimeout, "shutdown_timeout", shutdownTimeout)
+	serverLogicLogger.Debug("Server transport and timeouts configured", "transport", transportType, "request_timeout", requestTimeout, "shutdown_timeout", shutdownTimeout)
 
 	// Get RTM credentials
 	apiKey, sharedSecret, err := getRTMCredentials(cfg)
@@ -79,7 +79,7 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		// L65: Wrap error from getRTMCredentials
 		return errors.Wrap(err, "runServer: failed to get RTM credentials") // Wrapf not needed if no extra vars
 	}
-	logger.Info("RTM credentials obtained/validated")
+	serverLogicLogger.Info("RTM credentials obtained/validated")
 
 	// Get and expand token path
 	tokenPath, err := getTokenPath(cfg)
@@ -87,7 +87,7 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		// L93: Wrap error from getTokenPath
 		return errors.Wrap(err, "runServer: failed to get token path") // Wrapf not needed
 	}
-	logger.Debug("Token path determined", "path", tokenPath)
+	serverLogicLogger.Debug("Token path determined", "path", tokenPath)
 
 	// Register RTM provider
 	if err := registerRTMProvider(server, apiKey, sharedSecret, tokenPath); err != nil {
@@ -102,7 +102,7 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		// L136: Use Wrapf
 		return errors.Wrapf(err, "runServer: failed to create connection server wrapper")
 	}
-	logger.Info("Connection server wrapper created")
+	serverLogicLogger.Info("Connection server wrapper created")
 
 	// Setup graceful shutdown *before* starting the server
 	// Using cancellable context is often preferred over signal handling here,
@@ -113,39 +113,39 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 		sig := <-signals
 		// L142: Use slog Info
-		logger.Info("Received shutdown signal", "signal", sig.String())
+		serverLogicLogger.Info("Received shutdown signal", "signal", sig.String())
 
 		// Initiate graceful shutdown with timeout
 		_, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 
-		logger.Info("Attempting graceful server shutdown", "timeout", shutdownTimeout)
+		serverLogicLogger.Info("Attempting graceful server shutdown", "timeout", shutdownTimeout)
 		if stopErr := connServer.Stop(); stopErr != nil { // Renamed err
 			// L145 area log: Use slog Error with %+v
-			logger.Error("Error stopping server during graceful shutdown", "error", fmt.Sprintf("%+v", stopErr))
+			serverLogicLogger.Error("Error stopping server during graceful shutdown", "error", fmt.Sprintf("%+v", stopErr))
 		} else {
-			logger.Info("Server stopped gracefully.")
+			serverLogicLogger.Info("Server stopped gracefully.")
 		}
 		close(stopChan) // Signal that shutdown attempt is complete
 	}()
-	logger.Debug("Graceful shutdown handler configured")
+	serverLogicLogger.Debug("Graceful shutdown handler configured")
 
 	// Start the connection server
 	// L162: Use slog Info
-	logger.Info("Starting CowGnition MCP server...", "transport", transportType, "architecture", "connection_state_machine")
+	serverLogicLogger.Info("Starting CowGnition MCP server...", "transport", transportType, "architecture", "connection_state_machine")
 	if err := connServer.Start(); err != nil {
 		// L159: Use Wrapf
 		// Check if it's a normal exit signal or a real error? jsonrpc2 might return nil on disconnect.
 		// Assuming any error here is problematic for startup.
 		wrappedErr := errors.Wrapf(err, "runServer: connection server failed to start or exited unexpectedly")
-		logger.Error("Server start failed", "error", fmt.Sprintf("%+v", wrappedErr))
+		serverLogicLogger.Error("Server start failed", "error", fmt.Sprintf("%+v", wrappedErr))
 		return wrappedErr
 	}
 
 	// If Start() returns nil (e.g., stdio disconnect), wait for shutdown signal goroutine to finish.
 	// This prevents the main function exiting before shutdown completes.
 	<-stopChan
-	logger.Info("Server run sequence finished.")
+	serverLogicLogger.Info("Server run sequence finished.")
 	return nil
 }
 
@@ -153,7 +153,7 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 //
 //nolint:unused
 func createAndConfigureServer(cfg *config.Settings, transportType string, requestTimeout, shutdownTimeout time.Duration) (*mcp.Server, error) {
-	logger.Debug("Creating and configuring server (in unused function)", "transport", transportType)
+	serverLogicLogger.Debug("Creating and configuring server (in unused function)", "transport", transportType)
 	// Create server
 	server, err := mcp.NewServer(cfg)
 	if err != nil {
@@ -183,13 +183,13 @@ func createAndConfigureServer(cfg *config.Settings, transportType string, reques
 	// Set timeout configurations
 	server.SetRequestTimeout(requestTimeout)
 	server.SetShutdownTimeout(shutdownTimeout)
-	logger.Debug("Server configured (in unused function)")
+	serverLogicLogger.Debug("Server configured (in unused function)")
 	return server, nil
 }
 
 // getRTMCredentials gets and validates RTM API credentials.
 func getRTMCredentials(cfg *config.Settings) (string, string, error) {
-	logger.Debug("Getting RTM credentials")
+	serverLogicLogger.Debug("Getting RTM credentials")
 	// Get RTM API credentials from environment or config
 	apiKey := os.Getenv("RTM_API_KEY")
 	usingEnvKey := apiKey != ""
@@ -202,7 +202,7 @@ func getRTMCredentials(cfg *config.Settings) (string, string, error) {
 	if !usingEnvSecret {
 		sharedSecret = cfg.RTM.SharedSecret
 	}
-	logger.Debug("Credential source check", "api_key_from_env", usingEnvKey, "shared_secret_from_env", usingEnvSecret)
+	serverLogicLogger.Debug("Credential source check", "api_key_from_env", usingEnvKey, "shared_secret_from_env", usingEnvSecret)
 
 	// Ensure API key and shared secret are available
 	if apiKey == "" || sharedSecret == "" {
@@ -221,24 +221,24 @@ func getRTMCredentials(cfg *config.Settings) (string, string, error) {
 				"server_name":       cfg.GetServerName(),
 			},
 		)
-		logger.Error("Missing RTM credentials", "error", fmt.Sprintf("%+v", err)) // Log the detailed error
+		serverLogicLogger.Error("Missing RTM credentials", "error", fmt.Sprintf("%+v", err)) // Log the detailed error
 		return "", "", err
 	}
 
-	logger.Debug("RTM credentials retrieved successfully")
+	serverLogicLogger.Debug("RTM credentials retrieved successfully")
 	return apiKey, sharedSecret, nil
 }
 
 // getTokenPath gets the expanded token path.
 func getTokenPath(cfg *config.Settings) (string, error) {
-	logger.Debug("Getting token path")
+	serverLogicLogger.Debug("Getting token path")
 	// Get token path from config or env
 	tokenPath := os.Getenv("RTM_TOKEN_PATH")
 	usingEnv := tokenPath != ""
 	if !usingEnv {
 		tokenPath = cfg.Auth.TokenPath
 	}
-	logger.Debug("Token path source check", "from_env", usingEnv, "raw_path", tokenPath)
+	serverLogicLogger.Debug("Token path source check", "from_env", usingEnv, "raw_path", tokenPath)
 
 	// Expand ~ in token path if present
 	expandedPath, err := config.ExpandPath(tokenPath) // Assumes config.ExpandPath logs its own errors/debug info
@@ -250,13 +250,13 @@ func getTokenPath(cfg *config.Settings) (string, error) {
 	}
 
 	// L260 area log: Log success
-	logger.Debug("Token path expanded", "raw_path", tokenPath, "expanded_path", expandedPath)
+	serverLogicLogger.Debug("Token path expanded", "raw_path", tokenPath, "expanded_path", expandedPath)
 	return expandedPath, nil
 }
 
 // registerRTMProvider creates and registers the RTM authentication provider.
 func registerRTMProvider(server *mcp.Server, apiKey, sharedSecret, tokenPath string) error {
-	logger.Debug("Registering RTM provider", "token_path", tokenPath)
+	serverLogicLogger.Debug("Registering RTM provider", "token_path", tokenPath)
 	// Create RTM auth provider
 	authProvider, err := rtm.NewAuthProvider(apiKey, sharedSecret, tokenPath)
 	if err != nil {
@@ -268,7 +268,7 @@ func registerRTMProvider(server *mcp.Server, apiKey, sharedSecret, tokenPath str
 	// Register provider with the server
 	server.RegisterResourceProvider(authProvider) // Assumes RegisterResourceProvider logs success
 	// L281 area log: (Handled by RegisterResourceProvider log)
-	logger.Info("RTM authentication provider registered successfully")
+	serverLogicLogger.Info("RTM authentication provider registered successfully")
 	return nil
 }
 

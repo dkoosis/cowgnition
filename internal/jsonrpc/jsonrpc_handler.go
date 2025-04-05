@@ -15,7 +15,7 @@ import (
 	"github.com/sourcegraph/jsonrpc2"
 )
 
-// Initialize the logger at the package level
+// Initialize the logger at the package level.
 var handlerLogger = logging.GetLogger("jsonrpc_handler")
 
 // DefaultTimeout defines the default timeout duration for JSON-RPC requests.
@@ -182,7 +182,6 @@ func (a *Adapter) runHandler(ctx context.Context, req *jsonrpc2.Request, handler
 	result interface{}
 	err    error
 }, methodLogger *slog.Logger) {
-
 	var params json.RawMessage
 	if req.Params != nil {
 		params = *req.Params
@@ -316,7 +315,9 @@ func (a *Adapter) sendErrorResponse(ctx context.Context, conn *jsonrpc2.Conn, re
 	return sendErr // Return error related to sending, not the original error
 }
 
-// Helper function to check if a string might contain sensitive information (remains the same)
+// containsSensitiveKeyword checks if a string might contain sensitive information.
+//
+//nolint:unused
 func containsSensitiveKeyword(key string) bool {
 	// Use lowercase comparison for broader matching
 	lowerKey := strings.ToLower(key)

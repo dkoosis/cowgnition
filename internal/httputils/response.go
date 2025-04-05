@@ -3,15 +3,15 @@ package httputils
 
 import (
 	"encoding/json"
-	"fmt" // Import slog
+	"fmt" // Import slog.
 	"net/http"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper
+	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper.
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
-// Initialize the logger at the package level
+// Initialize the logger at the package level.
 var logger = logging.GetLogger("httputils")
 
 // ErrorCode defines standardized error codes according to JSON-RPC 2.0.
@@ -19,32 +19,32 @@ type ErrorCode int
 
 const (
 	// Standard JSON-RPC 2.0 error codes.
-	ParseError     ErrorCode = -32700 // Invalid JSON
-	InvalidRequest ErrorCode = -32600 // Request object invalid
-	MethodNotFound ErrorCode = -32601 // Method doesn't exist
-	InvalidParams  ErrorCode = -32602 // Invalid method parameters
-	InternalError  ErrorCode = -32603 // Internal JSON-RPC error
+	ParseError     ErrorCode = -32700 // Invalid JSON.
+	InvalidRequest ErrorCode = -32600 // Request object invalid.
+	MethodNotFound ErrorCode = -32601 // Method doesn't exist.
+	InvalidParams  ErrorCode = -32602 // Invalid method parameters.
+	InternalError  ErrorCode = -32603 // Internal JSON-RPC error.
 
 	// Custom MCP-specific error codes.
-	AuthError       ErrorCode = -31000 // Authentication errors
-	ResourceError   ErrorCode = -31001 // Resource not found or unavailable
-	ServiceError    ErrorCode = -31002 // External service errors
-	ToolError       ErrorCode = -31003 // Tool execution errors
-	ValidationError ErrorCode = -31004 // Input validation errors
+	AuthError       ErrorCode = -31000 // Authentication errors.
+	ResourceError   ErrorCode = -31001 // Resource not found or unavailable.
+	ServiceError    ErrorCode = -31002 // External service errors.
+	ToolError       ErrorCode = -31003 // Tool execution errors.
+	ValidationError ErrorCode = -31004 // Input validation errors.
 )
 
 // ErrorResponse represents a JSON-RPC 2.0 error response.
 type ErrorResponse struct {
 	JSONRPC string      `json:"jsonrpc"`
 	Error   ErrorObject `json:"error"`
-	ID      interface{} `json:"id,omitempty"` // Can be string, number, or null
+	ID      interface{} `json:"id,omitempty"` // Can be string, number, or null.
 }
 
 // ErrorObject represents the error object within a JSON-RPC 2.0 error response.
 type ErrorObject struct {
-	Code    ErrorCode   `json:"code"`           // Numerical error code
-	Message string      `json:"message"`        // Human-readable description
-	Data    interface{} `json:"data,omitempty"` // Additional error information
+	Code    ErrorCode   `json:"code"`           // Numerical error code.
+	Message string      `json:"message"`        // Human-readable description.
+	Data    interface{} `json:"data,omitempty"` // Additional error information.
 }
 
 // WriteJSONResponse writes a JSON response with appropriate headers.

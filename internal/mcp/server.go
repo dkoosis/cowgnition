@@ -3,20 +3,20 @@ package mcp
 
 import (
 	"context"
-	"fmt" // Import fmt for error formatting
+	"fmt" // Import fmt for error formatting.
 
-	// Import slog
+	// Import slog.
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/jsonrpc"
-	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper
+	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper.
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
-// Initialize the logger at the package level
-var serverLogger = logging.GetLogger("mcp_server") // Changed from logger to serverLogger
+// Initialize the logger at the package level.
+var serverLogger = logging.GetLogger("mcp_server") // Changed from logger to serverLogger.
 
 // Config defines the interface for server configuration.
 type Config interface {

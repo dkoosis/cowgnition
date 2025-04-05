@@ -5,17 +5,17 @@ import (
 	"context"
 	"fmt" // Import fmt
 
-	// Import slog
+	// Import slog.
 	"os"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper
+	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper.
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
-// Initialize the logger at the package level
+// Initialize the logger at the package level.
 var stdioTransportLogger = logging.GetLogger("jsonrpc_stdio_transport")
 
 // stdioPipe implements io.ReadWriteCloser using standard input/output.
@@ -51,7 +51,7 @@ func (stdioPipe) Close() error {
 }
 
 // StdioTransport implements a stdio-based transport for JSON-RPC over MCP.
-// ... (comments remain the same)
+// ... (comments remain the same).
 type StdioTransport struct {
 	conn   *jsonrpc2.Conn
 	closed bool
@@ -76,7 +76,7 @@ func (t *StdioTransport) WithDebug(debug bool) *StdioTransport {
 }
 
 // Connect initializes the transport with a handler.
-// ... (comments remain the same)
+// ... (comments remain the same).
 func (t *StdioTransport) Connect(ctx context.Context, handler jsonrpc2.Handler) (*jsonrpc2.Conn, error) {
 	stdioTransportLogger.Debug("Connecting StdioTransport")
 	// Use NewPlainObjectStream for newline-delimited JSON over stdio
@@ -98,7 +98,7 @@ func (t *StdioTransport) Connect(ctx context.Context, handler jsonrpc2.Handler) 
 }
 
 // Close terminates the transport connection.
-// ... (comments remain the same)
+// ... (comments remain the same).
 func (t *StdioTransport) Close() error {
 	if t.closed {
 		stdioTransportLogger.Debug("StdioTransport Close called, but already closed.")
@@ -123,7 +123,7 @@ func (t *StdioTransport) Close() error {
 }
 
 // StdioTransportOption defines an option for StdioTransport configuration.
-// ... (comments remain the same)
+// ... (comments remain the same).
 type StdioTransportOption func(*stdioTransportOptions)
 
 // stdioTransportOptions holds configuration for StdioTransport.
@@ -177,7 +177,7 @@ func WithStdioDebug(debug bool) StdioTransportOption {
 }
 
 // RunStdioServer runs a JSON-RPC server with stdio transport.
-// ... (comments remain the same)
+// ... (comments remain the same).
 func RunStdioServer(handler jsonrpc2.Handler, options ...StdioTransportOption) error {
 	opts := stdioTransportOptions{
 		requestTimeout: 30 * time.Second, // Default, but maybe not directly applied by jsonrpc2 stdio
@@ -190,7 +190,7 @@ func RunStdioServer(handler jsonrpc2.Handler, options ...StdioTransportOption) e
 		option(&opts)
 	}
 
-	// Replace log.Printf (Conceptual L139+)
+	// Replace log.Printf (Conceptual L139+).
 	stdioTransportLogger.Info("Starting stdio JSON-RPC server",
 		"request_timeout_config", opts.requestTimeout, // Log configured value, even if not directly used
 		"read_timeout_config", opts.readTimeout,
@@ -202,7 +202,7 @@ func RunStdioServer(handler jsonrpc2.Handler, options ...StdioTransportOption) e
 	// Use effective debug state from logging framework
 	effectiveDebug := logging.IsDebugEnabled()
 
-	// Create transport, passing effective debug state (though likely unused now)
+	// Create transport, passing effective debug state (though likely unused now).
 	transport := NewStdioTransport().WithDebug(effectiveDebug)
 	defer func() {
 		stdioTransportLogger.Debug("Closing stdio transport in defer function")

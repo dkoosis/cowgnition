@@ -7,13 +7,13 @@ import (
 	"fmt" // Import slog
 	"sync"
 
-	"github.com/cockroachdb/errors"                  // Import errors
-	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper
+	"github.com/cockroachdb/errors"                  // Import errors.
+	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper.
 	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
-// Initialize the logger at the package level
+// Initialize the logger at the package level.
 var logger = logging.GetLogger("rtm_provider")
 
 const (

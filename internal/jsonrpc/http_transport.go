@@ -15,7 +15,7 @@ import (
 	"github.com/sourcegraph/jsonrpc2"
 )
 
-// Initialize the logger at the package level
+// Initialize the logger at the package level.
 var httpTransportLogger = logging.GetLogger("jsonrpc_http_transport")
 
 // Rest of the file remains the same, but replace all instances of "logger" with "httpTransportLogger"
@@ -313,7 +313,7 @@ func (s *httpStream) Close() error {
 	return nil
 }
 
-// Helper function to check if headers have been written (simple heuristic)
+// Helper function to check if headers have been written (simple heuristic).
 func headersWritten(w http.ResponseWriter) bool {
 	// Accessing ResponseWriter internal state is fragile.
 	// This is a placeholder; a wrapper is better.

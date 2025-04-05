@@ -9,11 +9,11 @@ import (
 	"time"
 )
 
-// Version information - should be set during build via ldflags
+// Version information - should be set during build via ldflags.
 var (
 	Version    = "0.1.0-dev" // Default development version
-	commitHash = "unknown"
-	buildDate  = "unknown"
+	commitHash = "unknown"   //nolint:unused // Set via ldflags during build
+	buildDate  = "unknown"   //nolint:unused // Set via ldflags during build
 )
 
 // Global debugging flag.

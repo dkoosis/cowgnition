@@ -4,16 +4,16 @@ package mcp
 
 import (
 	"context"
-	"fmt" // Import slog
+	"fmt"
 	"time"
 
-	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper
+	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
-// Initialize the logger at the package level
-var logger = logging.GetLogger("mcp_resource")
+// Initialize the logger at the package level.
+var resourceLogger = logging.GetLogger("mcp_resource")
 
 // ResourceManagerImpl implements the ResourceManager interface.
 type ResourceManagerImpl struct {
@@ -23,7 +23,7 @@ type ResourceManagerImpl struct {
 // NewResourceManager creates a new resource manager.
 // It initializes the ResourceManagerImpl with an empty list of providers.
 func NewResourceManager() ResourceManager {
-	logger.Debug("Initializing new resource manager")
+	resourceLogger.Debug("Initializing new resource manager")
 	return &ResourceManagerImpl{
 		providers: []ResourceProvider{}, // Initialize with no providers.
 	}
@@ -34,7 +34,7 @@ func NewResourceManager() ResourceManager {
 // allowing the ResourceManager to access its resources.
 func (rm *ResourceManagerImpl) RegisterProvider(provider ResourceProvider) {
 	providerType := fmt.Sprintf("%T", provider)
-	logger.Info("Registering resource provider", "provider_type", providerType)
+	resourceLogger.Info("Registering resource provider", "provider_type", providerType)
 	rm.providers = append(rm.providers, provider) // Add the provider to the list.
 }
 
@@ -42,14 +42,14 @@ func (rm *ResourceManagerImpl) RegisterProvider(provider ResourceProvider) {
 // This aggregates the definitions from each provider into a single list,
 // providing a comprehensive view of available resources.
 func (rm *ResourceManagerImpl) GetAllResourceDefinitions() []definitions.ResourceDefinition {
-	logger.Debug("Getting all resource definitions")
+	resourceLogger.Debug("Getting all resource definitions")
 	var allResources []definitions.ResourceDefinition
 	for _, provider := range rm.providers {
 		defs := provider.GetResourceDefinitions()
-		logger.Debug("Fetched definitions from provider", "provider_type", fmt.Sprintf("%T", provider), "count", len(defs))
+		resourceLogger.Debug("Fetched definitions from provider", "provider_type", fmt.Sprintf("%T", provider), "count", len(defs))
 		allResources = append(allResources, defs...) // Collect definitions from each provider.
 	}
-	logger.Debug("Total resource definitions fetched", "count", len(allResources))
+	resourceLogger.Debug("Total resource definitions fetched", "count", len(allResources))
 	return allResources
 }
 
@@ -59,12 +59,12 @@ func (rm *ResourceManagerImpl) GetAllResourceDefinitions() []definitions.Resourc
 // If no provider is found, it returns an error with a list of available resources
 // to aid in debugging.
 func (rm *ResourceManagerImpl) FindResourceProvider(name string) (ResourceProvider, error) {
-	logger.Debug("Finding resource provider", "resource_name", name)
+	resourceLogger.Debug("Finding resource provider", "resource_name", name)
 	for _, provider := range rm.providers {
 		providerType := fmt.Sprintf("%T", provider)
 		for _, res := range provider.GetResourceDefinitions() {
 			if res.Name == name {
-				logger.Debug("Found provider for resource", "resource_name", name, "provider_type", providerType)
+				resourceLogger.Debug("Found provider for resource", "resource_name", name, "provider_type", providerType)
 				return provider, nil // Return the provider if found.
 			}
 		}
@@ -77,7 +77,7 @@ func (rm *ResourceManagerImpl) FindResourceProvider(name string) (ResourceProvid
 			availableResources = append(availableResources, res.Name) // Collect all resource names.
 		}
 	}
-	logger.Warn("Resource provider not found", "resource_name", name, "available_count", len(availableResources))
+	resourceLogger.Warn("Resource provider not found", "resource_name", name, "available_count", len(availableResources))
 
 	// This already returns a detailed cgerr type, which is good.
 	return nil, cgerr.NewResourceError(
@@ -95,12 +95,12 @@ func (rm *ResourceManagerImpl) FindResourceProvider(name string) (ResourceProvid
 // and then calls the provider's ReadResource method to retrieve the content.
 // It also handles context timeouts and wraps errors with additional context.
 func (rm *ResourceManagerImpl) ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error) {
-	logger.Info("Reading resource", "resource_name", name, "args", args)
+	resourceLogger.Info("Reading resource", "resource_name", name, "args", args)
 	provider, err := rm.FindResourceProvider(name) // Find the provider for the resource.
 	if err != nil {
 		// Log the error from FindResourceProvider before returning it (as per assessment intent for L67)
 		// The error from FindResourceProvider is already a detailed cgerr.NewResourceError.
-		logger.Error("Failed to find resource provider",
+		resourceLogger.Error("Failed to find resource provider",
 			"resource_name", name,
 			"args", args,
 			"error", fmt.Sprintf("%+v", err), // Log with full details
@@ -113,7 +113,7 @@ func (rm *ResourceManagerImpl) ReadResource(ctx context.Context, name string, ar
 	// Capture the start time for timing information
 	startTime := time.Now()
 	providerType := fmt.Sprintf("%T", provider)
-	logger.Debug("Calling ReadResource on provider", "resource_name", name, "provider_type", providerType)
+	resourceLogger.Debug("Calling ReadResource on provider", "resource_name", name, "provider_type", providerType)
 
 	// Check for context cancellation or deadline *before* calling the provider
 	if ctxErr := ctx.Err(); ctxErr != nil {
@@ -125,7 +125,7 @@ func (rm *ResourceManagerImpl) ReadResource(ctx context.Context, name string, ar
 				"context_error": ctxErr.Error(), // Include context error in the timeout error.
 			},
 		)
-		logger.Error("Context error before reading resource",
+		resourceLogger.Error("Context error before reading resource",
 			"resource_name", name,
 			"args", args,
 			"error", fmt.Sprintf("%+v", timeoutErr),
@@ -137,7 +137,7 @@ func (rm *ResourceManagerImpl) ReadResource(ctx context.Context, name string, ar
 	readDuration := time.Since(startTime)
 	if err != nil {
 		// Log the error from provider.ReadResource before returning (as per assessment intent for L117)
-		logger.Error("Provider failed to read resource",
+		resourceLogger.Error("Provider failed to read resource",
 			"resource_name", name,
 			"provider_type", providerType,
 			"args", args,
@@ -158,7 +158,7 @@ func (rm *ResourceManagerImpl) ReadResource(ctx context.Context, name string, ar
 		)
 	}
 
-	logger.Info("Successfully read resource",
+	resourceLogger.Info("Successfully read resource",
 		"resource_name", name,
 		"provider_type", providerType,
 		"mime_type", mimeType,

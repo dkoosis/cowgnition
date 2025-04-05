@@ -17,7 +17,7 @@ import (
 var logger = logging.GetLogger("config")
 
 // Settings represents the application configuration.
-// ... (comments remain the same)
+// ... (comments remain the same).
 type Settings struct {
 	Server ServerConfig `yaml:"server"`
 	RTM    RTMConfig    `yaml:"rtm"`
@@ -25,27 +25,27 @@ type Settings struct {
 }
 
 // ServerConfig contains server configuration.
-// ... (comments remain the same)
+// ... (comments remain the same).
 type ServerConfig struct {
 	Name string `yaml:"name"`
 	Port int    `yaml:"port"`
 }
 
 // RTMConfig contains RTM API configuration.
-// ... (comments remain the same)
+// ... (comments remain the same).
 type RTMConfig struct {
 	APIKey       string `yaml:"api_key"`
 	SharedSecret string `yaml:"shared_secret"`
 }
 
 // AuthConfig contains authentication configuration.
-// ... (comments remain the same)
+// ... (comments remain the same).
 type AuthConfig struct {
 	TokenPath string `yaml:"token_path"`
 }
 
 // New creates a new configuration with default values.
-// ... (comments remain the same)
+// ... (comments remain the same).
 func New() *Settings {
 	logger.Debug("Creating new configuration settings with defaults.")
 	return &Settings{
@@ -65,19 +65,19 @@ func New() *Settings {
 }
 
 // GetServerName returns the server name.
-// ... (comments remain the same)
+// ... (comments remain the same).
 func (s *Settings) GetServerName() string {
 	return s.Server.Name
 }
 
 // GetServerAddress returns the server address as host:port.
-// ... (comments remain the same)
+// ... (comments remain the same).
 func (s *Settings) GetServerAddress() string {
 	return fmt.Sprintf(":%d", s.Server.Port)
 }
 
 // ExpandPath expands ~ in paths to the user's home directory.
-// ... (comments remain the same)
+// ... (comments remain the same).
 func ExpandPath(path string) (string, error) {
 	logger.Debug("Attempting to expand path", "input_path", path)
 	if !strings.HasPrefix(path, "~") {

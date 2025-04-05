@@ -12,21 +12,21 @@ import (
 )
 
 // Response represents the standard RTM API response wrapper.
-// ... (comments remain the same)
+// ... (comments remain the same).
 type Response struct {
 	Stat  string `json:"stat"`
 	Error *Error `json:"err,omitempty"`
 }
 
 // Error represents an RTM API error.
-// ... (comments remain the same)
+// ... (comments remain the same).
 type Error struct {
 	Code int    `json:"code"`
 	Msg  string `json:"msg"`
 }
 
 // User represents an RTM user.
-// ... (comments remain the same)
+// ... (comments remain the same).
 type User struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
@@ -34,7 +34,7 @@ type User struct {
 }
 
 // Auth represents an RTM authentication response.
-// ... (comments remain the same)
+// ... (comments remain the same).
 type Auth struct {
 	Token string `json:"token"`
 	Perms string `json:"perms"`
@@ -42,7 +42,7 @@ type Auth struct {
 }
 
 // GetFrob gets a frob from RTM for desktop authentication flow.
-// ... (comments remain the same)
+// ... (comments remain the same).
 func (c *Client) GetFrob() (string, error) {
 	params := map[string]string{}
 	resp, err := c.MakeRequest("rtm.auth.getFrob", params)
@@ -94,7 +94,7 @@ func (c *Client) GetFrob() (string, error) {
 			},
 		)
 	}
-	// Add check for missing Frob even on "ok" status
+	// Add check for missing Frob even on "ok" status.
 	if response.Rsp.Frob == "" {
 		return "", cgerr.NewRTMError(
 			0,
@@ -111,7 +111,7 @@ func (c *Client) GetFrob() (string, error) {
 }
 
 // GetAuthURL generates an authentication URL for desktop application flow.
-// ... (comments remain the same)
+// ... (comments remain the same).
 func (c *Client) GetAuthURL(frob, perms string) string {
 	params := map[string]string{
 		"api_key": c.APIKey,
@@ -128,7 +128,7 @@ func (c *Client) GetAuthURL(frob, perms string) string {
 }
 
 // GetToken gets an auth token for the given frob.
-// ... (comments remain the same)
+// ... (comments remain the same).
 func (c *Client) GetToken(frob string) (*Auth, error) {
 	params := map[string]string{
 		"frob": frob,
@@ -204,7 +204,7 @@ func (c *Client) GetToken(frob string) (*Auth, error) {
 }
 
 // CheckToken verifies if the auth token is valid.
-// ... (comments remain the same)
+// ... (comments remain the same).
 func (c *Client) CheckToken() (*Auth, error) {
 	if c.AuthToken == "" {
 		// Add function context to error message

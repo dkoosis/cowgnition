@@ -2,25 +2,26 @@
 package main
 
 import (
-	"fmt" // Import fmt
-	// Import slog
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config"
-	"github.com/dkoosis/cowgnition/internal/logging" // Import project logging helper
+	"github.com/dkoosis/cowgnition/internal/logging"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"gopkg.in/yaml.v3"
 )
 
-// Initialize the logger at the package level
-var logger = logging.GetLogger("server_config")
+// Initialize the logger at the package level.
+var configLogger = logging.GetLogger("server_config")
 
 // findOrCreateConfig tries to find an existing config or create a default one.
 // Returns the path to the config file and a boolean indicating success.
 // NOTE: This function was marked nolint:unused in the original code.
 // Ensure it's actually needed or remove it if truly unused.
+//
+//nolint:unused
 func findOrCreateConfig() (string, bool) {
 	// Try standard locations in this order
 	possiblePaths := []string{
@@ -34,12 +35,12 @@ func findOrCreateConfig() (string, bool) {
 		userConfig := filepath.Join(homeDir, ".config", "cowgnition", "cowgnition.yaml")
 		possiblePaths = append(possiblePaths, userConfig)
 	} else if err != nil {
-		logger.Warn("Could not determine user home directory", "error", err)
+		configLogger.Warn("Could not determine user home directory", "error", err)
 	}
 
 	// Log potential config locations (Debug Level)
 	// Replaces L21 log.Printf
-	logger.Debug("Searching for config file", "possible_paths", possiblePaths)
+	configLogger.Debug("Searching for config file", "possible_paths", possiblePaths)
 
 	// Check each path for an existing config
 	for _, path := range possiblePaths {
@@ -48,22 +49,22 @@ func findOrCreateConfig() (string, bool) {
 		if expandErr != nil {
 			// Replaces L25 log.Printf
 			// Log error during expansion but continue searching
-			logger.Debug("Error expanding path, skipping", "path", path, "error", fmt.Sprintf("%+v", expandErr))
+			configLogger.Debug("Error expanding path, skipping", "path", path, "error", fmt.Sprintf("%+v", expandErr))
 			continue
 		}
 
 		// Check if file exists
 		if _, statErr := os.Stat(expandedPath); statErr == nil { // Renamed err variable
 			// Replaces L30 log.Printf
-			logger.Info("Found existing configuration", "path", expandedPath)
+			configLogger.Info("Found existing configuration", "path", expandedPath)
 			return expandedPath, true
 		} else if !os.IsNotExist(statErr) {
 			// Log unexpected error checking file existence
-			logger.Warn("Error checking config file status", "path", expandedPath, "error", statErr)
+			configLogger.Warn("Error checking config file status", "path", expandedPath, "error", statErr)
 		}
 	}
 
-	logger.Info("No existing configuration found, attempting to create default.")
+	configLogger.Info("No existing configuration found, attempting to create default.")
 
 	// --- Try to create one ---
 
@@ -71,22 +72,22 @@ func findOrCreateConfig() (string, bool) {
 	tryCreate := func(path string) (string, bool) {
 		expandedPath, expandErr := config.ExpandPath(path)
 		if expandErr != nil {
-			logger.Warn("Cannot create config, failed to expand path", "path", path, "error", fmt.Sprintf("%+v", expandErr))
+			configLogger.Warn("Cannot create config, failed to expand path", "path", path, "error", fmt.Sprintf("%+v", expandErr))
 			return "", false
 		}
 		configDir := filepath.Dir(expandedPath)
 		if mkdirErr := os.MkdirAll(configDir, 0755); mkdirErr != nil { // Renamed err variable
-			logger.Warn("Failed to create config directory", "dir", configDir, "error", mkdirErr)
+			configLogger.Warn("Failed to create config directory", "dir", configDir, "error", mkdirErr)
 			return "", false
 		}
 		// Assuming createDefaultConfig exists elsewhere in the package
 		if createErr := createDefaultConfig(expandedPath); createErr != nil { // Renamed err variable
 			// Replaces L71 log.Printf
-			logger.Warn("Failed to create default config file", "path", expandedPath, "error", fmt.Sprintf("%+v", createErr))
+			configLogger.Warn("Failed to create default config file", "path", expandedPath, "error", fmt.Sprintf("%+v", createErr))
 			return "", false
 		}
 		// Replaces L51 log.Printf
-		logger.Info("Created new default configuration", "path", expandedPath)
+		configLogger.Info("Created new default configuration", "path", expandedPath)
 		return expandedPath, true
 	}
 
@@ -106,7 +107,7 @@ func findOrCreateConfig() (string, bool) {
 
 	// Failed to find or create config
 	// Replaces L98 log.Printf
-	logger.Error("Failed to find or create any configuration file after checking all locations.")
+	configLogger.Error("Failed to find or create any configuration file after checking all locations.")
 	return "", false
 }
 
@@ -117,21 +118,21 @@ func loadConfiguration(configPath string) (*config.Settings, error) {
 
 	// Load configuration from file only if a path is provided
 	if configPath == "" {
-		logger.Warn("No config path provided, using default settings only.")
+		configLogger.Warn("No config path provided, using default settings only.")
 		return cfg, nil
 	}
 
 	// Expand path in case it contains ~
 	expandedPath, expandErr := config.ExpandPath(configPath)
 	if expandErr != nil {
-		logger.Error("Failed to expand provided config path", "config_path", configPath, "error", fmt.Sprintf("%+v", expandErr))
+		configLogger.Error("Failed to expand provided config path", "config_path", configPath, "error", fmt.Sprintf("%+v", expandErr))
 		// Return error as we cannot proceed without a valid path
 		return nil, errors.Wrapf(expandErr, "loadConfiguration: failed to expand config path '%s'", configPath)
 	}
 	configPath = expandedPath // Use expanded path going forward
 
 	// Replaces L117 log.Printf
-	logger.Info("Loading configuration", "config_path", configPath)
+	configLogger.Info("Loading configuration", "config_path", configPath)
 
 	// Read the file
 	data, err := os.ReadFile(configPath)
@@ -155,7 +156,7 @@ func loadConfiguration(configPath string) (*config.Settings, error) {
 	if logging.IsDebugEnabled() { // Check effective log level
 		yamlData := string(data)
 		// Use structured logging for the snippet
-		logger.Debug("Raw YAML data snippet read from file", "config_path", configPath, "snippet", sanitizeForLogging(yamlData, 100))
+		configLogger.Debug("Raw YAML data snippet read from file", "config_path", configPath, "snippet", sanitizeForLogging(yamlData, 100))
 	}
 
 	// Unmarshal YAML into config struct
@@ -178,7 +179,7 @@ func loadConfiguration(configPath string) (*config.Settings, error) {
 	// Debug: Print the loaded config values using structured logging
 	// Replaces multiple log.Printf calls
 	if logging.IsDebugEnabled() { // Check effective log level
-		logger.Debug("Loaded configuration values",
+		configLogger.Debug("Loaded configuration values",
 			"config_path", configPath,
 			"server_name", cfg.Server.Name,
 			"server_port", cfg.Server.Port,
@@ -187,14 +188,14 @@ func loadConfiguration(configPath string) (*config.Settings, error) {
 			"auth_token_path", cfg.Auth.TokenPath,
 		)
 		// Example of logging potentially sensitive data if REALLY needed for debug (use with caution)
-		// logger.Debug("Sensitive Config Values (Masked)",
+		// configLogger.Debug("Sensitive Config Values (Masked)",
 		// 	"rtm_api_key", maskCredential(cfg.RTM.APIKey),
 		// 	"rtm_shared_secret", maskCredential(cfg.RTM.SharedSecret),
 		// )
 	}
 
 	// Replaces final log.Printf
-	logger.Info("Configuration loaded successfully", "config_path", configPath)
+	configLogger.Info("Configuration loaded successfully", "config_path", configPath)
 	return cfg, nil
 }
 
@@ -204,6 +205,8 @@ func loadConfiguration(configPath string) (*config.Settings, error) {
 // func createDefaultConfig(path string) error { ... }
 
 // min returns the minimum of two integers. (Keep as is)
+//
+//nolint:unused
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -211,7 +214,7 @@ func min(a, b int) int {
 	return b
 }
 
-// Helper function to sanitize data for logging. (Keep as is)
+// Helper function to sanitize data for logging. (Keep as is).
 func sanitizeForLogging(data string, maxLen int) string {
 	if len(data) <= maxLen {
 		return data
@@ -220,6 +223,8 @@ func sanitizeForLogging(data string, maxLen int) string {
 }
 
 // Helper function to mask credentials in logs. (Keep as is)
+//
+//nolint:unused
 func maskCredential(cred string) string {
 	if len(cred) < 6 {
 		return "****" // Mask short credentials completely

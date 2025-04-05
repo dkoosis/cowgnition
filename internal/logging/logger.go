@@ -10,7 +10,7 @@ import (
 	"sync"
 )
 
-// LogLevel represents logging level
+// LogLevel represents logging level.
 type LogLevel string
 
 const (
@@ -21,47 +21,43 @@ const (
 )
 
 var (
-	// Default logger instance
+	// Default logger instance.
 	defaultLogger *slog.Logger
 
-	// Component-specific loggers cache
+	// Component-specific loggers cache.
 	loggers      = make(map[string]*slog.Logger)
 	loggersMutex sync.RWMutex
 
-	// Current log level
+	// Current log level.
 	currentLevel = new(slog.LevelVar)
 
-	// Flag to track if logging has been initialized
-	initialized = false
-	initMutex   sync.Mutex
+	// Flag to track if logging has been initialized - removed unused variable.
+	initMutex sync.Mutex
 )
 
-// init initializes the default logger with INFO level
+// init initializes the default logger with INFO level.
 func init() {
-	// Set default level to INFO
+	// Set default level to INFO.
 	currentLevel.Set(slog.LevelInfo)
 
-	// Create the default JSON handler
+	// Create the default JSON handler.
 	handler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: currentLevel,
 	})
 
-	// Create the default logger
+	// Create the default logger.
 	defaultLogger = slog.New(handler)
 
-	// Set as the default logger for the slog package
+	// Set as the default logger for the slog package.
 	slog.SetDefault(defaultLogger)
-
-	// Mark as initialized
-	initialized = true
 }
 
-// InitLogging initializes the logging system with the specified configuration
+// InitLogging initializes the logging system with the specified configuration.
 func InitLogging(level LogLevel, output io.Writer) {
 	initMutex.Lock()
 	defer initMutex.Unlock()
 
-	// Convert string level to slog.Level
+	// Convert string level to slog.Level.
 	var slogLevel slog.Level
 	switch strings.ToUpper(string(level)) {
 	case string(LevelDebug):
@@ -76,10 +72,10 @@ func InitLogging(level LogLevel, output io.Writer) {
 		slogLevel = slog.LevelInfo
 	}
 
-	// Set the level
+	// Set the level.
 	currentLevel.Set(slogLevel)
 
-	// If output is nil, use stderr
+	// If output is nil, use stderr.
 	if output == nil {
 		output = os.Stderr
 	}
@@ -89,7 +85,7 @@ func InitLogging(level LogLevel, output io.Writer) {
 		Level: currentLevel,
 	})
 
-	// Update the default logger
+	// Update the default logger.
 	defaultLogger = slog.New(handler)
 
 	// Set as the default logger for the slog package
@@ -99,12 +95,9 @@ func InitLogging(level LogLevel, output io.Writer) {
 	loggersMutex.Lock()
 	loggers = make(map[string]*slog.Logger)
 	loggersMutex.Unlock()
-
-	// Mark as initialized
-	initialized = true
 }
 
-// GetLogger returns a logger for the specified component
+// GetLogger returns a logger for the specified component.
 func GetLogger(component string) *slog.Logger {
 	loggersMutex.RLock()
 	logger, exists := loggers[component]
@@ -125,7 +118,7 @@ func GetLogger(component string) *slog.Logger {
 	return newLogger
 }
 
-// SetLevel sets the logging level
+// SetLevel sets the logging level.
 func SetLevel(level LogLevel) {
 	var slogLevel slog.Level
 	switch strings.ToUpper(string(level)) {
@@ -144,17 +137,17 @@ func SetLevel(level LogLevel) {
 	currentLevel.Set(slogLevel)
 }
 
-// IsDebugEnabled returns true if debug logging is enabled
+// IsDebugEnabled returns true if debug logging is enabled.
 func IsDebugEnabled() bool {
 	return currentLevel.Level() <= slog.LevelDebug
 }
 
-// IsInfoEnabled returns true if info logging is enabled
+// IsInfoEnabled returns true if info logging is enabled.
 func IsInfoEnabled() bool {
 	return currentLevel.Level() <= slog.LevelInfo
 }
 
-// WithContext returns a logger with context values
+// WithContext returns a logger with context values.
 func WithContext(ctx context.Context, logger *slog.Logger) *slog.Logger {
 	// This method can be expanded to extract relevant values from the context
 	// and add them to the logger
