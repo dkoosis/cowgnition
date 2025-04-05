@@ -21,8 +21,8 @@
 │   ├── jsonrpc
 │   │   ├── http_transport.go
 │   │   ├── jsonrpc_handler.go
-│   │   ├── jsonrpc_types.go
-│   │   └── stdio_transport.go
+│   │   ├── stdio_transport.go
+│   │   └── utils.go
 │   ├── logging
 │   │   ├── logger.go
 │   │   └── logger_test.go

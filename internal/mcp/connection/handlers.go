@@ -3,11 +3,10 @@ package connection
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dkoosis/cowgnition/internal/jsonrpc"
 	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/sourcegraph/jsonrpc2"
@@ -26,14 +25,14 @@ func (m *Manager) handleSubscribe(_ context.Context, req *jsonrpc2.Request) (int
 		URI string `json:"uri"`
 	}
 
-	if err := json.Unmarshal(*req.Params, &subscribeReq); err != nil {
+	if err := jsonrpc.ParseParams(req, &subscribeReq); err != nil {
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "failed to parse subscribe request"),
 			cgerr.CategoryRPC,
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    fmt.Sprintf("%v", req.ID),
+				"request_id":    jsonrpc.FormatRequestID(req.ID),
 			},
 		)
 	}
@@ -45,7 +44,7 @@ func (m *Manager) handleSubscribe(_ context.Context, req *jsonrpc2.Request) (int
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    fmt.Sprintf("%v", req.ID),
+				"request_id":    jsonrpc.FormatRequestID(req.ID),
 			},
 		)
 	}
@@ -70,14 +69,14 @@ const (
 // handleInitialize processes the initialize request.
 func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var initReq definitions.InitializeRequest
-	if err := json.Unmarshal(*req.Params, &initReq); err != nil {
+	if err := jsonrpc.ParseParams(req, &initReq); err != nil {
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "failed to parse initialize request"),
 			cgerr.CategoryRPC,
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    fmt.Sprintf("%v", req.ID),
+				"request_id":    jsonrpc.FormatRequestID(req.ID),
 			},
 		)
 	}
@@ -145,14 +144,14 @@ func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request)
 		Args map[string]string `json:"args,omitempty"`
 	}
 
-	if err := json.Unmarshal(*req.Params, &readReq); err != nil {
+	if err := jsonrpc.ParseParams(req, &readReq); err != nil {
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "failed to parse read_resource request"),
 			cgerr.CategoryRPC,
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    fmt.Sprintf("%v", req.ID),
+				"request_id":    jsonrpc.FormatRequestID(req.ID),
 			},
 		)
 	}
@@ -164,7 +163,7 @@ func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request)
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    fmt.Sprintf("%v", req.ID),
+				"request_id":    jsonrpc.FormatRequestID(req.ID),
 			},
 		)
 	}
@@ -205,14 +204,14 @@ func (m *Manager) handleListTools(_ context.Context, _ *jsonrpc2.Request) (inter
 // handleCallTool processes a call_tool request.
 func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	var callReq definitions.CallToolRequest
-	if err := json.Unmarshal(*req.Params, &callReq); err != nil {
+	if err := jsonrpc.ParseParams(req, &callReq); err != nil {
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "failed to parse call_tool request"),
 			cgerr.CategoryRPC,
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    fmt.Sprintf("%v", req.ID),
+				"request_id":    jsonrpc.FormatRequestID(req.ID),
 			},
 		)
 	}
@@ -224,14 +223,14 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 			cgerr.CodeInvalidParams,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"request_id":    fmt.Sprintf("%v", req.ID),
+				"request_id":    jsonrpc.FormatRequestID(req.ID),
 			},
 		)
 	}
 
 	// Add context values that might be useful for the tool implementation.
 	childCtx := context.WithValue(ctx, connectionIDKey, m.connectionID)
-	childCtx = context.WithValue(childCtx, requestIDKey, fmt.Sprintf("%v", req.ID))
+	childCtx = context.WithValue(childCtx, requestIDKey, jsonrpc.FormatRequestID(req.ID))
 
 	startTime := time.Now()
 	// Call the tool manager.

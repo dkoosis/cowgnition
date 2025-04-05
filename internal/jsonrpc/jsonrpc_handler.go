@@ -298,11 +298,6 @@ func (a *Adapter) sendErrorResponse(ctx context.Context, conn *jsonrpc2.Conn, re
 	// Convert the internal error to a client-safe JSON-RPC error object
 	rpcErr := cgerr.ToJSONRPCError(originalErr)
 
-	// Remove this section - ID is not a field on jsonrpc2.Error
-	// if req.ID != nil {
-	//     rpcErr.ID = req.ID // Set the ID on the jsonrpc2.Error struct itself
-	// }
-
 	methodLogger.Debug("Sending sanitized error to client", "rpc_error_code", rpcErr.Code, "rpc_error_message", rpcErr.Message)
 	// Send the sanitized error response to the client using ReplyWithError
 	sendErr := conn.ReplyWithError(ctx, req.ID, rpcErr) // ReplyWithError uses the ID internally too
