@@ -17,7 +17,7 @@ import (
 	"github.com/dkoosis/cowgnition/internal/rtm"
 )
 
-// Initialize the logger at the package level
+// Initialize the logger at the package level.
 var serverLogicLogger = logging.GetLogger("server_logic")
 
 // runServer loads config, creates, configures, and starts the MCP server.
@@ -29,31 +29,28 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		"shutdown_timeout", shutdownTimeout,
 	)
 
-	// Load configuration
+	// Load configuration.
 	cfg, err := loadConfiguration(configPath)
 	if err != nil {
-		// L13: Use Wrapf, add configPath context
 		return errors.Wrapf(err, "runServer: failed to load configuration from '%s'", configPath)
 	}
 	serverLogicLogger.Info("Configuration loaded successfully")
 
-	// Create base server
-	// Note: NewServer doesn't currently return an error in the snippet, but handle if it could
+	// Create base server.
+	// Note: NewServer doesn't currently return an error in the snippet, but handle if it could.
 	server, err := mcp.NewServer(cfg)
 	if err != nil {
-		// L28: Use Wrapf
 		return errors.Wrapf(err, "runServer: failed to create base server instance")
 	}
-	// L29 area log: Server created
 	serverLogicLogger.Info("Base MCP server instance created", "server_name", cfg.GetServerName())
 
-	// Set version
-	server.SetVersion(Version) // Assuming Version is defined elsewhere in main
+	// Set version.
+	server.SetVersion(Version) // Assuming Version is defined elsewhere in main.
 	serverLogicLogger.Debug("Server version set", "version", Version)
 
-	// Set transport type
+	// Set transport type.
 	if err := server.SetTransport(transportType); err != nil {
-		// L47: Add function context to existing Wrap message within cgerr
+		// L47: Add function context to existing Wrap message within cgerr.
 		wrappedErr := errors.Wrap(err, "runServer: failed to set transport type")
 		return cgerr.ErrorWithDetails(
 			wrappedErr,
@@ -67,39 +64,33 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		)
 	}
 
-	// Set timeout configurations
+	// Set timeout configurations.
 	server.SetRequestTimeout(requestTimeout)
 	server.SetShutdownTimeout(shutdownTimeout)
-	// L52 area log: Configured timeouts
 	serverLogicLogger.Debug("Server transport and timeouts configured", "transport", transportType, "request_timeout", requestTimeout, "shutdown_timeout", shutdownTimeout)
 
 	// Get RTM credentials
 	apiKey, sharedSecret, err := getRTMCredentials(cfg)
 	if err != nil {
-		// L65: Wrap error from getRTMCredentials
-		return errors.Wrap(err, "runServer: failed to get RTM credentials") // Wrapf not needed if no extra vars
+		return errors.Wrap(err, "runServer: failed to get RTM credentials") // Wrapf not needed if no extra vars.
 	}
 	serverLogicLogger.Info("RTM credentials obtained/validated")
 
-	// Get and expand token path
+	// Get and expand token path.
 	tokenPath, err := getTokenPath(cfg)
 	if err != nil {
-		// L93: Wrap error from getTokenPath
 		return errors.Wrap(err, "runServer: failed to get token path") // Wrapf not needed
 	}
 	serverLogicLogger.Debug("Token path determined", "path", tokenPath)
 
 	// Register RTM provider
 	if err := registerRTMProvider(server, apiKey, sharedSecret, tokenPath); err != nil {
-		// L114: Wrap error from registerRTMProvider
 		return errors.Wrap(err, "runServer: failed to register RTM provider") // Wrapf not needed
 	}
-	// L281 area log: (Handled within registerRTMProvider log now)
 
 	// Create the connection server wrapper
 	connServer, err := mcp.NewConnectionServer(server)
 	if err != nil {
-		// L136: Use Wrapf
 		return errors.Wrapf(err, "runServer: failed to create connection server wrapper")
 	}
 	serverLogicLogger.Info("Connection server wrapper created")
@@ -112,7 +103,6 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		signals := make(chan os.Signal, 1)
 		signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 		sig := <-signals
-		// L142: Use slog Info
 		serverLogicLogger.Info("Received shutdown signal", "signal", sig.String())
 
 		// Initiate graceful shutdown with timeout
@@ -131,10 +121,8 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	serverLogicLogger.Debug("Graceful shutdown handler configured")
 
 	// Start the connection server
-	// L162: Use slog Info
 	serverLogicLogger.Info("Starting CowGnition MCP server...", "transport", transportType, "architecture", "connection_state_machine")
 	if err := connServer.Start(); err != nil {
-		// L159: Use Wrapf
 		// Check if it's a normal exit signal or a real error? jsonrpc2 might return nil on disconnect.
 		// Assuming any error here is problematic for startup.
 		wrappedErr := errors.Wrapf(err, "runServer: connection server failed to start or exited unexpectedly")
@@ -157,7 +145,6 @@ func createAndConfigureServer(cfg *config.Settings, transportType string, reques
 	// Create server
 	server, err := mcp.NewServer(cfg)
 	if err != nil {
-		// L184: Use Wrapf
 		return nil, errors.Wrapf(err, "createAndConfigureServer: failed to create server")
 	}
 
@@ -166,7 +153,6 @@ func createAndConfigureServer(cfg *config.Settings, transportType string, reques
 
 	// Set transport type
 	if err := server.SetTransport(transportType); err != nil {
-		// L210: Add function context to existing Wrap message
 		wrappedErr := errors.Wrap(err, "createAndConfigureServer: failed to set transport")
 		return nil, cgerr.ErrorWithDetails(
 			wrappedErr,
@@ -206,7 +192,6 @@ func getRTMCredentials(cfg *config.Settings) (string, string, error) {
 
 	// Ensure API key and shared secret are available
 	if apiKey == "" || sharedSecret == "" {
-		// L229: Error creation already good (uses cgerr, New, has context)
 		err := cgerr.ErrorWithDetails(
 			errors.New("getRTMCredentials: missing RTM API credentials - you'll need to mooove these into place"), // Already has function context
 			cgerr.CategoryConfig,
@@ -243,13 +228,8 @@ func getTokenPath(cfg *config.Settings) (string, error) {
 	// Expand ~ in token path if present
 	expandedPath, err := config.ExpandPath(tokenPath) // Assumes config.ExpandPath logs its own errors/debug info
 	if err != nil {
-		// L253: Error creation already good (uses cgerr, Wrap, has context)
-		// Just ensure the wrap message inside cgerr included function context (it did)
-		// We just need to wrap it again here for the caller (runServer) context.
 		return "", errors.Wrapf(err, "getTokenPath: failed to expand token path '%s'", tokenPath)
 	}
-
-	// L260 area log: Log success
 	serverLogicLogger.Debug("Token path expanded", "raw_path", tokenPath, "expanded_path", expandedPath)
 	return expandedPath, nil
 }
@@ -260,18 +240,11 @@ func registerRTMProvider(server *mcp.Server, apiKey, sharedSecret, tokenPath str
 	// Create RTM auth provider
 	authProvider, err := rtm.NewAuthProvider(apiKey, sharedSecret, tokenPath)
 	if err != nil {
-		// NewAuthProvider already returns a detailed cgerr. Wrap it for caller context.
-		// L273: Use Wrapf
 		return errors.Wrapf(err, "registerRTMProvider: failed to create RTM auth provider")
 	}
 
 	// Register provider with the server
 	server.RegisterResourceProvider(authProvider) // Assumes RegisterResourceProvider logs success
-	// L281 area log: (Handled by RegisterResourceProvider log)
 	serverLogicLogger.Info("RTM authentication provider registered successfully")
 	return nil
 }
-
-// setupGracefulShutdown - Removed as logic is now inline in runServer and this was unused.
-// //nolint:unused
-// func setupGracefulShutdown(server *mcp.Server, transportType string) { ... }

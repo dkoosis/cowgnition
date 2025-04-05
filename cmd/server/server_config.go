@@ -1,4 +1,4 @@
-// cmd/server/server_config.go
+// file: cmd/server/server_config.go
 package main
 
 import (
@@ -39,23 +39,20 @@ func findOrCreateConfig() (string, bool) {
 	}
 
 	// Log potential config locations (Debug Level)
-	// Replaces L21 log.Printf
 	configLogger.Debug("Searching for config file", "possible_paths", possiblePaths)
 
 	// Check each path for an existing config
 	for _, path := range possiblePaths {
 		// Expand ~ in path if present
-		expandedPath, expandErr := config.ExpandPath(path) // Renamed err variable
+		expandedPath, expandErr := config.ExpandPath(path)
 		if expandErr != nil {
-			// Replaces L25 log.Printf
 			// Log error during expansion but continue searching
 			configLogger.Debug("Error expanding path, skipping", "path", path, "error", fmt.Sprintf("%+v", expandErr))
 			continue
 		}
 
 		// Check if file exists
-		if _, statErr := os.Stat(expandedPath); statErr == nil { // Renamed err variable
-			// Replaces L30 log.Printf
+		if _, statErr := os.Stat(expandedPath); statErr == nil {
 			configLogger.Info("Found existing configuration", "path", expandedPath)
 			return expandedPath, true
 		} else if !os.IsNotExist(statErr) {
@@ -81,8 +78,7 @@ func findOrCreateConfig() (string, bool) {
 			return "", false
 		}
 		// Assuming createDefaultConfig exists elsewhere in the package
-		if createErr := createDefaultConfig(expandedPath); createErr != nil { // Renamed err variable
-			// Replaces L71 log.Printf
+		if createErr := createDefaultConfig(expandedPath); createErr != nil {
 			configLogger.Warn("Failed to create default config file", "path", expandedPath, "error", fmt.Sprintf("%+v", createErr))
 			return "", false
 		}
@@ -106,7 +102,6 @@ func findOrCreateConfig() (string, bool) {
 	}
 
 	// Failed to find or create config
-	// Replaces L98 log.Printf
 	configLogger.Error("Failed to find or create any configuration file after checking all locations.")
 	return "", false
 }
@@ -130,14 +125,11 @@ func loadConfiguration(configPath string) (*config.Settings, error) {
 		return nil, errors.Wrapf(expandErr, "loadConfiguration: failed to expand config path '%s'", configPath)
 	}
 	configPath = expandedPath // Use expanded path going forward
-
-	// Replaces L117 log.Printf
 	configLogger.Info("Loading configuration", "config_path", configPath)
 
 	// Read the file
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		// Existing error handling is good (uses cgerr)
 		wrappedErr := errors.Wrap(err, "loadConfiguration: failed to read configuration file")
 		return nil, cgerr.ErrorWithDetails(
 			wrappedErr,
@@ -152,16 +144,13 @@ func loadConfiguration(configPath string) (*config.Settings, error) {
 	}
 
 	// Debug: Print raw YAML data snippet
-	// Replaces L141 log.Printf
-	if logging.IsDebugEnabled() { // Check effective log level
+	if logging.IsDebugEnabled() {
 		yamlData := string(data)
-		// Use structured logging for the snippet
 		configLogger.Debug("Raw YAML data snippet read from file", "config_path", configPath, "snippet", sanitizeForLogging(yamlData, 100))
 	}
 
 	// Unmarshal YAML into config struct
 	if err := yaml.Unmarshal(data, cfg); err != nil {
-		// Existing error handling is good (uses cgerr)
 		wrappedErr := errors.Wrap(err, "loadConfiguration: failed to parse configuration file (YAML)")
 		return nil, cgerr.ErrorWithDetails(
 			wrappedErr,
@@ -177,7 +166,6 @@ func loadConfiguration(configPath string) (*config.Settings, error) {
 	}
 
 	// Debug: Print the loaded config values using structured logging
-	// Replaces multiple log.Printf calls
 	if logging.IsDebugEnabled() { // Check effective log level
 		configLogger.Debug("Loaded configuration values",
 			"config_path", configPath,
@@ -194,7 +182,6 @@ func loadConfiguration(configPath string) (*config.Settings, error) {
 		// )
 	}
 
-	// Replaces final log.Printf
 	configLogger.Info("Configuration loaded successfully", "config_path", configPath)
 	return cfg, nil
 }

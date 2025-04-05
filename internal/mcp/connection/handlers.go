@@ -1,3 +1,4 @@
+// file: internal/mcp/connection/handlers.go
 package connection
 
 import (
@@ -13,10 +14,10 @@ import (
 )
 
 // handlePing processes a ping request.
-// Returns pong response and nil error.
-func (m *Manager) handlePing(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) {
+// Returns pong response.
+func (m *Manager) handlePing(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) { //nolint:unparam
 	m.logf(definitions.LogLevelDebug, "Received ping request")
-	return map[string]interface{}{"pong": true}, nil // Added nil error return
+	return map[string]interface{}{"pong": true}, nil
 }
 
 // handleSubscribe processes a resource subscription request.
@@ -49,9 +50,8 @@ func (m *Manager) handleSubscribe(_ context.Context, req *jsonrpc2.Request) (int
 		)
 	}
 
-	// In a full implementation, you would store the subscription
-	// and set up notifications when the resource changes
-
+	// In a full implementation, you would store the subscription.
+	// and set up notifications when the resource changes.
 	m.logf(definitions.LogLevelDebug, "Subscribed to resource %s", subscribeReq.URI)
 
 	return map[string]interface{}{"status": "subscribed"}, nil
@@ -61,8 +61,10 @@ func (m *Manager) handleSubscribe(_ context.Context, req *jsonrpc2.Request) (int
 type contextKey string
 
 const (
+	// connectionIDKey is the context key for the connection ID.
 	connectionIDKey contextKey = "connection_id"
-	requestIDKey    contextKey = "request_id"
+	// requestIDKey is the context key for the request ID.
+	requestIDKey contextKey = "request_id"
 )
 
 // handleInitialize processes the initialize request.
@@ -80,17 +82,19 @@ func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (in
 		)
 	}
 
+	// Handle potential legacy field names for client info.
 	clientName := initReq.ClientInfo.Name
 	clientVersion := initReq.ClientInfo.Version
 	if clientName == "" {
-		clientName = initReq.ServerName // Using legacy snake_case field
+		clientName = initReq.ServerName // Using legacy snake_case field.
 	}
 	if clientVersion == "" {
-		clientVersion = initReq.ServerVersion // Using legacy snake_case field
+		clientVersion = initReq.ServerVersion // Using legacy snake_case field.
 	}
 	m.logf(definitions.LogLevelInfo, "Processing initialize request from client: %s (version: %s)",
 		clientName, clientVersion)
 
+	// Check protocol version compatibility (using the function from state.go).
 	clientProtoVersion := initReq.ProtocolVersion
 	if !isCompatibleProtocolVersion(clientProtoVersion) {
 		return nil, cgerr.ErrorWithDetails(
@@ -100,7 +104,7 @@ func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (in
 			map[string]interface{}{
 				"connection_id":      m.connectionID,
 				"client_version":     clientProtoVersion,
-				"supported_versions": []string{"2.0", "2024-11-05"},
+				"supported_versions": []string{"2.0", "2024-11-05"}, // Ideally get this from where isCompatibleProtocolVersion is defined.
 			},
 		)
 	}
@@ -117,7 +121,7 @@ func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (in
 	response := definitions.InitializeResponse{
 		ServerInfo:      serverInfo,
 		Capabilities:    m.config.Capabilities,
-		ProtocolVersion: clientProtoVersion, // Echo back compatible version client sent
+		ProtocolVersion: clientProtoVersion, // Echo back compatible version client sent.
 	}
 
 	m.logf(definitions.LogLevelDebug, "handleInitialize successful")
@@ -125,15 +129,13 @@ func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (in
 }
 
 // handleListResources processes a list_resources request.
-// Returns resource definitions and nil error.
-func (m *Manager) handleListResources(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) {
-	// Get resource definitions
+// Returns resource definitions.
+func (m *Manager) handleListResources(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) { //nolint:unparam
 	resources := m.resourceManager.GetAllResourceDefinitions()
-
 	m.logf(definitions.LogLevelDebug, "Listed %d resources", len(resources))
 	return definitions.ListResourcesResponse{
 		Resources: resources,
-	}, nil // Added nil error return
+	}, nil
 }
 
 // handleReadResource processes a read_resource request.
@@ -167,11 +169,10 @@ func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request)
 		)
 	}
 
-	// Call the resource manager
+	// Call the resource manager.
 	contentStr, mimeType, err := m.resourceManager.ReadResource(ctx, readReq.Name, readReq.Args)
 	if err != nil {
-		// Attempt to get a specific code, default otherwise
-		errCode := cgerr.GetErrorCode(err)
+		errCode := cgerr.GetErrorCode(err) // Attempt to get specific code.
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "failed to read resource"),
 			cgerr.CategoryResource,
@@ -194,13 +195,11 @@ func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request)
 }
 
 // handleListTools processes a list_tools request.
-// Returns tool definitions and nil error.
-func (m *Manager) handleListTools(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) {
-	// Get tool definitions
+// Returns tool definitions.
+func (m *Manager) handleListTools(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) { //nolint:unparam
 	tools := m.toolManager.GetAllToolDefinitions()
-
 	m.logf(definitions.LogLevelDebug, "Listed %d tools", len(tools))
-	return definitions.ListToolsResponse{Tools: tools}, nil // Added nil error return
+	return definitions.ListToolsResponse{Tools: tools}, nil
 }
 
 // handleCallTool processes a call_tool request.
@@ -230,17 +229,17 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 		)
 	}
 
-	// Add context values that might be useful for the tool implementation
+	// Add context values that might be useful for the tool implementation.
 	childCtx := context.WithValue(ctx, connectionIDKey, m.connectionID)
 	childCtx = context.WithValue(childCtx, requestIDKey, fmt.Sprintf("%v", req.ID))
 
 	startTime := time.Now()
-	// Call the tool manager
+	// Call the tool manager.
 	resultStr, err := m.toolManager.CallTool(childCtx, callReq.Name, callReq.Arguments)
 	duration := time.Since(startTime)
 
 	if err != nil {
-		errCode := cgerr.GetErrorCode(err)
+		errCode := cgerr.GetErrorCode(err) // Attempt to get specific code.
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "failed to call tool"),
 			cgerr.CategoryTool,
@@ -261,12 +260,12 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 }
 
 // handleShutdownRequest handles the RPC message for shutdown.
-// Returns acknowledgement status and nil error.
-func (m *Manager) handleShutdownRequest(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) {
+// Returns acknowledgement status.
+func (m *Manager) handleShutdownRequest(_ context.Context, _ *jsonrpc2.Request) (interface{}, error) { //nolint:unparam
 	m.logf(definitions.LogLevelInfo, "Received shutdown request via RPC")
 
-	// Acknowledges the request immediately. Actual shutdown action is triggered
+	// Acknowledges the request immediately. Actual shutdown action is triggered.
 	// via state machine (e.g., firing TriggerShutdown).
 	// The response here confirms receipt, not completion.
-	return map[string]interface{}{"status": "shutdown_acknowledged"}, nil // Added nil error return
+	return map[string]interface{}{"status": "shutdown_acknowledged"}, nil
 }

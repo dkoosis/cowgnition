@@ -13,7 +13,7 @@ import (
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 )
 
-// Initialize the logger at the package level
+// Initialize the logger at the package level.
 var logger = logging.GetLogger("config")
 
 // Settings represents the application configuration.

@@ -1,4 +1,4 @@
-// internal/jsonrpc/stdio_transport.go
+// file: internal/jsonrpc/stdio_transport.go
 package jsonrpc
 
 import (
@@ -25,10 +25,6 @@ type stdioPipe struct{}
 func (stdioPipe) Read(p []byte) (n int, err error) {
 	// Reading from stdin is blocking, consider potential issues in concurrent scenarios
 	n, err = os.Stdin.Read(p)
-	if err != nil {
-		// Log errors reading from stdin? Could be noisy, maybe debug only.
-		// logger.Debug("stdioPipe Read error", "error", err.Error()) // Avoid %+v for potential EOF spam
-	}
 	return
 }
 

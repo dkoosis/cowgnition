@@ -154,7 +154,7 @@ func (a *Adapter) executeHandler(ctx context.Context, conn *jsonrpc2.Conn, req *
 }
 
 // handleNotification executes a notification handler (fire-and-forget).
-func (a *Adapter) handleNotification(ctx context.Context, handler Handler, req *jsonrpc2.Request, methodLogger *slog.Logger) {
+func (a *Adapter) handleNotification(_ context.Context, handler Handler, req *jsonrpc2.Request, methodLogger *slog.Logger) {
 	var params json.RawMessage // Handle nil params gracefully
 	if req.Params != nil {
 		params = *req.Params
