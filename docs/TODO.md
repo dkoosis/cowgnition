@@ -86,6 +86,8 @@ Should be refactored to use the canonical error codes.
 
 # CowGnition MCP Implementation Roadmap: Urgent Fixes
 
+fix connection between claude desktop and cowgnition
+
 ## Priority Tasks for Codebase Cleanup and Standardization
 
 1. JSON-RPC and Error Handling Cleanup
