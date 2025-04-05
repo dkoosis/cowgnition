@@ -12,6 +12,8 @@ import (
 )
 
 // Initialize the logger at the package level.
+//
+//nolint:unused
 var utilsLogger = logging.GetLogger("jsonrpc_utils")
 
 // ParseParams unmarshals the params of a jsonrpc2.Request into the specified struct
@@ -37,22 +39,20 @@ func ParseParams(req *jsonrpc2.Request, dst interface{}) error {
 }
 
 // FormatRequestID safely formats a request ID as a string for logging purposes.
-// This avoids potential issues with different ID types (numbers, strings, null).
-func FormatRequestID(id interface{}) string {
-	if id == nil {
-		return "null"
-	}
+// This avoids potential issues with different ID types.
+func FormatRequestID(id jsonrpc2.ID) string {
 	return fmt.Sprintf("%v", id)
 }
 
 // IsNotification checks if a request is a notification (has no ID).
 func IsNotification(req *jsonrpc2.Request) bool {
-	return req.ID == nil
+	// Check if the request is a notification based on JSON-RPC 2.0 spec
+	return req.Notif
 }
 
 // CreateErrorResponse creates a JSON-RPC 2.0 error response using our cgerr error format.
 // This is a convenience function for generating error responses in handler code.
-func CreateErrorResponse(id interface{}, err error) (*jsonrpc2.Response, error) {
+func CreateErrorResponse(id jsonrpc2.ID, err error) (*jsonrpc2.Response, error) {
 	rpcErr := cgerr.ToJSONRPCError(err)
 
 	// Create a JSON-RPC 2.0 response
