@@ -200,3 +200,25 @@ Improve documentation and testing coverage:
 Standardize file and function documentation
 Increase unit test coverage
 Add integration tests for end-to-end flows
+
+### Assess for documenting the "stateless" FSM
+
+Automatically Documenting Your State Machine
+
+The primary tool provided by qmuntal/stateless for documentation is visualization via Graphviz (DOT format). While not fully "automatic" in the sense of generating narrative text, it automatically generates a structural representation.
+
+How it Works: The library includes a method, typically called ToGraph(), which you can call on your configured \*stateless.StateMachine instance.
+graph := sm.ToGraph()
+Output: This method returns a string formatted in the DOT language. This language describes graph structures (nodes and edges).
+Generating Visuals: You need a tool that can process DOT files to create images (like PNG, SVG, PDF). The standard tool is Graphviz:
+Install Graphviz on your system (e.g., via brew install graphviz on macOS, apt-get install graphviz on Debian/Ubuntu, or download from the Graphviz website).
+Save the output of ToGraph() to a .dot file (e.g., fsm.dot).
+Run the Graphviz command-line tool dot:
+Bash
+
+dot -Tpng fsm.dot -o fsm.png
+dot -Tsvg fsm.dot -o fsm.svg
+Integration:
+Project Documentation: Embed the generated image (PNG or SVG) into your project's README.md, wiki pages, or other documentation. SVG is often preferred for web documentation as it scales well.
+Build Process: You could potentially add a step to your build or test process to generate this .dot file or even the image, ensuring your visual documentation stays reasonably up-to-date. You might write a small Go program or test function specifically for generating the graph.
+Limitations: This visualizes the structure (states, triggers, transitions). It doesn't document the logic inside your entry/exit actions or guards. That still requires good code comments and standard Go documentation (godoc).

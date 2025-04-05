@@ -1,4 +1,4 @@
-// file: internal/mcp/mcp_definitions/types.go
+// file: internal/mcp/definitions/mcp_definitions.go
 package definitions
 
 // LogLevel represents the severity of a log message.

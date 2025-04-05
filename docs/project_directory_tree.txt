@@ -32,6 +32,7 @@
 │   │   │   ├── connection_types.go
 │   │   │   ├── handlers.go
 │   │   │   ├── manager.go
+│   │   │   ├── manager_test.go
 │   │   │   └── state.go
 │   │   ├── definitions
 │   │   │   └── mcp_definitions.go
@@ -63,4 +64,4 @@
 ├── go.mod
 └── go.sum
 
-16 directories, 48 files
+16 directories, 49 files

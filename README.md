@@ -29,18 +29,6 @@ TODO: assess if any of the following makes sense
 
 ## Installation
 
-```bash
-# Install directly (easiest)
-go install [github.com/dkoosis/cowgnition@latest](https://www.google.com/search?q=https://github.com/dkoosis/cowgnition%40latest)
-
-# Or build from source
-git clone [https://github.com/dkoosis/cowgnition.git](https://github.com/dkoosis/cowgnition.git)
-cd cowgnition
-make build
-# Optionally run tests to verify
-make test
-```
-
 ## Configuration
 
 1. Get Your RTM Credentials
@@ -69,26 +57,10 @@ auth:
 
 3. Start It Up
 
-```Bash
-
-# Ensure you are in the cloned repository directory if built from source
-./cowgnition serve --config configs/config.yaml
-```
-
 4. Connect to Claude
    Install it in Claude Desktop:
 
-```Bash
-
-mcp install --name "Remember The Milk" --command cowgnition --args "serve --config configs/config.yaml"
-```
-
 Or test it first with:
-
-```Bash
-
-mcp dev --command ./cowgnition --args "serve --config configs/config.yaml"
-```
 
 ## What Can CowGnition Do?
 
