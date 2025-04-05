@@ -12,8 +12,7 @@
 │   ├── decision_log.md
 │   ├── error_handling_guidelines.md
 │   ├── llm.md
-│   ├── project_directory_tree.txt
-│   └── tree.txt
+│   └── project_directory_tree.txt
 ├── internal
 │   ├── config
 │   │   └── app_config.go
@@ -24,6 +23,9 @@
 │   │   ├── jsonrpc_handler.go
 │   │   ├── jsonrpc_types.go
 │   │   └── stdio_transport.go
+│   ├── logging
+│   │   ├── logger.go
+│   │   └── logger_test.go
 │   ├── mcp
 │   │   ├── connection
 │   │   │   ├── connection_helpers.go
@@ -60,4 +62,4 @@
 ├── go.mod
 └── go.sum
 
-15 directories, 46 files
+16 directories, 47 files
