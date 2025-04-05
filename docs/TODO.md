@@ -88,94 +88,113 @@ Should be refactored to use the canonical error codes.
 
 ## Priority Tasks for Codebase Cleanup and Standardization
 
-### 1. Complete State Machine Implementation ✅ (Mostly Complete)
+1. JSON-RPC and Error Handling Cleanup
 
-- [x] Implement `qmuntal/stateless` for connection management
-- [x] Define state transitions and handlers
-- [x] Integrate connection manager with server logic
-- [ ] Add comprehensive tests for state machine behavior
-- [ ] Review error handling in state transitions
-- [ ] Ensure proper cleanup of resources in all states
+Status: In Progress (~60% complete)
 
-### 2. Standardize Error Handling ✅ (Mostly Complete)
+✅ Basic integration with sourcegraph/jsonrpc2 library is in place
+✅ Core error handling framework using cockroachdb/errors is established
+⚠️ Need to remove custom JSON-RPC type definitions (jsonrpc_types.go not visible in shared files but mentioned in TODOs)
+⚠️ Need to consolidate error codes between internal/mcp/errors/codes.go and internal/httputils/response.go
+⚠️ Need to standardize error creation patterns across codebase (some places use direct errors.New/Wrap, others use helper functions)
 
-- [x] Consolidate on `cockroachdb/errors` package for error operations
-- [x] Define consistent error categories and codes
-- [x] Create helper functions for error conversion and wrapping
-- [x] Document error handling approach in `error_handling_guidelines.md`
-- [ ] Add tests for error conversion and handling
-- [ ] Review error messages for consistency and helpfulness
+2. State Machine Implementation
 
-### 3. Standardize on jsonrpc2 Library ⚠️ (In Progress)
+Status: Mostly Complete (~80% complete)
 
-- [x] Adopt `sourcegraph/jsonrpc2` as the core JSON-RPC library
-- [x] Create adapter for HTTP transport
-- [x] Create adapter for stdio transport
-- [ ] Remove vestigial custom JSON-RPC implementation in `internal/jsonrpc/jsonrpc_types.go`
-- [ ] Ensure all code paths use `jsonrpc2` types directly
-- [ ] Add integration tests for JSON-RPC communication
+✅ Using qmuntal/stateless library for connection management
+✅ States and transitions defined in internal/mcp/connection/state.go
+✅ Manager implementation in internal/mcp/connection/manager.go
+✅ Connection adapters implemented
+❌ Missing comprehensive tests for state machine behavior
+⚠️ Need to review error handling in state transitions
+⚠️ Need to ensure proper resource cleanup in all states
 
-### 4. Documentation and Testing ⚠️ (Needs Work)
+3. Error Handling Standardization
 
-- [x] Document architectural decisions in `docs/decision_log.md`
-- [x] Document error handling approach in `error_handling_guidelines.md`
-- [ ] Ensure consistent file and function documentation across codebase
-- [ ] Increase unit test coverage, particularly for core components
-- [ ] Add integration tests for end-to-end protocol flow
-- [ ] Create user-facing documentation for setup and configuration
+Status: Mostly Complete (~75% complete)
 
-## Next Steps
+✅ Well-defined error categories and codes
+✅ Helper functions for error creation and conversion
+✅ Comprehensive documentation in error_handling_guidelines.md
+❌ Missing tests for error conversion and handling
+⚠️ Need to review error messages for consistency and clarity
+⚠️ Some places still use direct error creation instead of helpers
 
-### 1. RTM API Integration
+4. Documentation and Testing
 
-- [ ] Complete integration with Remember The Milk API
-- [ ] Implement task resources and tools
-- [ ] Add proper error handling for API failures
-- [ ] Test with real RTM accounts
+Status: Needs Work (~40% complete)
 
-### 2. Claude Desktop Integration
+✅ Architectural decisions documented in decision_log.md
+✅ Error handling guidelines documented
+⚠️ File and function documentation present but inconsistent
+❌ Limited unit test coverage (only a few test files present)
+❌ Missing integration tests for end-to-end protocol flow
+❌ Missing user-facing documentation for setup and configuration
 
-- [ ] Test integration with Claude Desktop
-- [ ] Verify proper handling of MCP protocol messages
-- [ ] Ensure correct authentication flow with RTM
-- [ ] Document setup process for users
+Next Steps 5. RTM API Integration
 
-### 3. Structured Logging Implementation
+Status: Partially Implemented (~60% complete)
 
-- [x] Implement structured logging with `slog`
-- [x] Define log levels and categories
-- [ ] Ensure consistent logging format across components
-- [ ] Add contextual information to log entries
-- [ ] Configure log level via configuration
+✅ Basic RTM API client implemented
+✅ Authentication and token handling in place
+✅ MCP provider for RTM authentication implemented
+⚠️ Task resources implementation incomplete
+⚠️ Task tools implementation incomplete
+❌ Missing tests with real RTM accounts
 
-### 4. Configuration System
+6. Claude Desktop Integration
 
-- [ ] Complete `koanf`-based configuration system
-- [ ] Implement configuration validation
-- [ ] Support multiple configuration sources
-- [ ] Document configuration options
+Status: Partially Implemented (~50% complete)
 
-## Implementation Strategy
+✅ Basic setup for integration implemented
+✅ MCP protocol handling implemented
+⚠️ Authentication flow needs testing
+❌ Lacking end-to-end testing with Claude Desktop
+❌ Missing comprehensive documentation for users
 
-Start small and validate each change incrementally:
+7. Structured Logging Implementation
 
-1. Focus on completing the JSON-RPC standardization first
-2. Add tests for the state machine implementation
-3. Complete RTM API integration
-4. Test with Claude Desktop
-5. Improve documentation and user experience
+Status: Mostly Complete (~80% complete)
 
-For each component, follow this approach:
+✅ Implementation using slog in place
+✅ Log levels and basic structure defined
+✅ Logging integrated throughout the codebase
+⚠️ Need to ensure consistent logging format across components
+⚠️ Some log messages may need additional context
 
-1. Write tests for the intended behavior
-2. Implement the changes
-3. Verify with real-world use cases
-4. Document the implementation
+8. Configuration System
 
-## Expected Benefits
+Status: Basic Implementation (~40% complete)
 
-- **Simplified codebase** with fewer parallel implementations
-- **Improved maintainability** through standardized patterns
-- **Better error handling** with rich context for debugging
-- **More robust state management** using a proven library
-- **Faster development** by leveraging established libraries
+✅ Basic configuration structure implemented
+❌ Not yet using koanf as mentioned in decision log
+❌ Missing configuration validation
+❌ Limited support for multiple configuration sources
+❌ Missing documentation for configuration options
+
+Suggested Next Actions
+
+Complete the JSON-RPC standardization:
+
+Remove custom JSON-RPC type definitions
+Consolidate error code definitions
+Standardize error handling patterns
+
+Add tests for the state machine implementation:
+
+Create comprehensive unit tests for state transitions
+Test error handling pathways
+Test resource cleanup
+
+Enhance RTM integration:
+
+Complete task resources implementation
+Complete task tools implementation
+Test with real RTM accounts
+
+Improve documentation and testing coverage:
+
+Standardize file and function documentation
+Increase unit test coverage
+Add integration tests for end-to-end flows
