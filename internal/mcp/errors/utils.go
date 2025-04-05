@@ -209,3 +209,44 @@ func containsSensitiveKeyword(key string) bool {
 	}
 	return false
 }
+
+// internal/mcp/errors/utils.go
+// Add this function to the file:
+
+// NewInternalError creates a new internal error with context
+// Example usage:
+//
+//	properties := map[string]interface{}{"resource_uri": "auth://rtm"}
+//	return cgerr.NewInternalError("Internal server error", err, properties)
+func NewInternalError(message string, cause error, properties map[string]interface{}) error {
+	if cause == nil {
+		err := errors.Newf("%s", message)
+		return ErrorWithDetails(err, CategoryRPC, CodeInternalError, properties)
+	}
+
+	err := errors.Wrapf(cause, "%s", message)
+	return ErrorWithDetails(err, CategoryRPC, CodeInternalError, properties)
+}
+
+// internal/mcp/errors/utils.go
+// Add this function to the file:
+
+// IsAuthError checks if the error is an auth error with a specific message
+// Example usage:
+//
+//	if cgerr.IsAuthError(err, "No valid token found") {
+//	    // Handle no valid token case
+//	}
+func IsAuthError(err error, msgSubstr string) bool {
+	category := GetErrorCategory(err)
+	if category != CategoryAuth {
+		return false
+	}
+
+	if msgSubstr == "" {
+		return true
+	}
+
+	// Check if the error message contains the substring
+	return strings.Contains(err.Error(), msgSubstr)
+}

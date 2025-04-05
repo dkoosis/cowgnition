@@ -116,7 +116,7 @@ func runServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		logger.Info("Received shutdown signal", "signal", sig.String())
 
 		// Initiate graceful shutdown with timeout
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		_, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 
 		logger.Info("Attempting graceful server shutdown", "timeout", shutdownTimeout)

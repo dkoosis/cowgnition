@@ -16,7 +16,7 @@ import (
 )
 
 // Initialize the logger at the package level
-var logger = logging.GetLogger("jsonrpc_handler")
+var handlerLogger = logging.GetLogger("jsonrpc_handler")
 
 // DefaultTimeout defines the default timeout duration for JSON-RPC requests.
 const DefaultTimeout = 30 * time.Second
@@ -39,9 +39,9 @@ func WithTimeout(timeout time.Duration) AdapterOption {
 	return func(a *Adapter) {
 		if timeout > 0 {
 			a.requestTimeout = timeout
-			logger.Debug("Adapter request timeout set", "timeout", timeout)
+			handlerLogger.Debug("Adapter request timeout set", "timeout", timeout)
 		} else {
-			logger.Warn("Ignoring invalid timeout value", "invalid_timeout", timeout)
+			handlerLogger.Warn("Ignoring invalid timeout value", "invalid_timeout", timeout)
 		}
 	}
 }
@@ -52,13 +52,13 @@ func NewAdapter(opts ...AdapterOption) *Adapter {
 		handlers:       make(map[string]Handler),
 		requestTimeout: DefaultTimeout,
 	}
-	logger.Debug("Initializing new JSON-RPC Handler", "default_timeout", DefaultTimeout)
+	handlerLogger.Debug("Initializing new JSON-RPC Handler", "default_timeout", DefaultTimeout)
 
 	// Apply options
 	for _, opt := range opts {
 		opt(a)
 	}
-	logger.Debug("Adapter options applied", "final_timeout", a.requestTimeout, "handler_count", len(a.handlers))
+	handlerLogger.Debug("Adapter options applied", "final_timeout", a.requestTimeout, "handler_count", len(a.handlers))
 
 	return a
 }
@@ -66,17 +66,17 @@ func NewAdapter(opts ...AdapterOption) *Adapter {
 // RegisterHandler registers a handler function for a specific method.
 func (a *Adapter) RegisterHandler(method string, handler Handler) {
 	if method == "" || handler == nil {
-		logger.Error("Attempted to register handler with empty method or nil handler", "method", method, "handler_is_nil", handler == nil)
+		handlerLogger.Error("Attempted to register handler with empty method or nil handler", "method", method, "handler_is_nil", handler == nil)
 		return
 	}
-	logger.Info("Registering JSON-RPC handler", "method", method)
+	handlerLogger.Info("Registering JSON-RPC handler", "method", method)
 	a.handlers[method] = handler
 }
 
 // Handle implements the jsonrpc2.Handler interface.
 // It determines if the request is a notification or a standard request and routes accordingly.
 func (a *Adapter) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) {
-	methodLogger := logger.With("method", req.Method, "req_id", req.ID, "is_notification", req.Notif)
+	methodLogger := handlerLogger.With("method", req.Method, "req_id", req.ID, "is_notification", req.Notif)
 	methodLogger.Debug("Handling incoming JSON-RPC request")
 
 	if !req.Notif {
@@ -298,11 +298,6 @@ func (a *Adapter) sendErrorResponse(ctx context.Context, conn *jsonrpc2.Conn, re
 
 	// Convert the internal error to a client-safe JSON-RPC error object
 	rpcErr := cgerr.ToJSONRPCError(originalErr)
-
-	// Add request ID if available (helps client correlate)
-	if req.ID != nil {
-		rpcErr.ID = req.ID // Set the ID on the jsonrpc2.Error struct itself
-	}
 
 	methodLogger.Debug("Sending sanitized error to client", "rpc_error_code", rpcErr.Code, "rpc_error_message", rpcErr.Message)
 	// Send the sanitized error response to the client using ReplyWithError

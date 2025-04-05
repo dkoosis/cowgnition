@@ -9,6 +9,13 @@ import (
 	"time"
 )
 
+// Version information - should be set during build
+var (
+	Version    = "dev"
+	commitHash = "unknown"
+	buildDate  = "unknown"
+)
+
 // Global debugging flag.
 var debugMode bool
 

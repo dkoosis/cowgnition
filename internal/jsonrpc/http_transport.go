@@ -16,8 +16,9 @@ import (
 )
 
 // Initialize the logger at the package level
-var logger = logging.GetLogger("jsonrpc_http_transport")
+var httpTransportLogger = logging.GetLogger("jsonrpc_http_transport")
 
+// Rest of the file remains the same, but replace all instances of "logger" with "httpTransportLogger"
 // HTTPHandler handles JSON-RPC over HTTP requests.
 type HTTPHandler struct {
 	handler         jsonrpc2.Handler
@@ -36,7 +37,7 @@ func WithHTTPRequestTimeout(timeout time.Duration) HTTPHandlerOption {
 			// Log setting application? Potentially noisy. Debug level if desired.
 			// logger.Debug("HTTP request timeout set", "timeout", timeout)
 		} else {
-			logger.Warn("Ignoring invalid HTTP request timeout value", "invalid_timeout", timeout)
+			httpTransportLogger.Warn("Ignoring invalid HTTP request timeout value", "invalid_timeout", timeout)
 		}
 	}
 }
@@ -48,7 +49,7 @@ func WithHTTPShutdownTimeout(timeout time.Duration) HTTPHandlerOption {
 			h.shutdownTimeout = timeout
 			// logger.Debug("HTTP shutdown timeout set", "timeout", timeout)
 		} else {
-			logger.Warn("Ignoring invalid HTTP shutdown timeout value", "invalid_timeout", timeout)
+			httpTransportLogger.Warn("Ignoring invalid HTTP shutdown timeout value", "invalid_timeout", timeout)
 		}
 	}
 }
@@ -60,20 +61,20 @@ func NewHTTPHandler(handler jsonrpc2.Handler, opts ...HTTPHandlerOption) *HTTPHa
 		requestTimeout:  DefaultTimeout,
 		shutdownTimeout: 5 * time.Second, // Default shutdown timeout
 	}
-	logger.Debug("Initializing new JSON-RPC HTTP Handler", "default_request_timeout", h.requestTimeout, "default_shutdown_timeout", h.shutdownTimeout)
+	httpTransportLogger.Debug("Initializing new JSON-RPC HTTP Handler", "default_request_timeout", h.requestTimeout, "default_shutdown_timeout", h.shutdownTimeout)
 
 	// Apply options
 	for _, opt := range opts {
 		opt(h)
 	}
-	logger.Debug("HTTP Handler options applied", "final_request_timeout", h.requestTimeout, "final_shutdown_timeout", h.shutdownTimeout)
+	httpTransportLogger.Debug("HTTP Handler options applied", "final_request_timeout", h.requestTimeout, "final_shutdown_timeout", h.shutdownTimeout)
 
 	return h
 }
 
 // ServeHTTP implements the http.Handler interface.
 func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	requestLogger := logger.With("method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
+	requestLogger := httpTransportLogger.With("method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
 	requestLogger.Debug("Handling HTTP request")
 
 	if r.Method != http.MethodPost {
@@ -250,7 +251,7 @@ func (s *httpStream) ReadObject(v interface{}) error {
 	if s.closed && errors.Is(err, http.ErrBodyReadAfterClose) {
 		// This can happen if Close() is called while ReadObject is waiting.
 		// Return io.EOF or similar standard stream closed error? jsonrpc2 expects io.EOF.
-		logger.Debug("httpStream.ReadObject: Read after close detected, returning io.EOF")
+		httpTransportLogger.Debug("httpStream.ReadObject: Read after close detected, returning io.EOF")
 		return io.EOF
 	}
 	if err != nil {
@@ -267,7 +268,7 @@ func (s *httpStream) ReadObject(v interface{}) error {
 
 	// Handle empty request body - jsonrpc2 might handle this, but good practice
 	if len(data) == 0 {
-		logger.Warn("httpStream.ReadObject: Received empty request body")
+		httpTransportLogger.Warn("httpStream.ReadObject: Received empty request body")
 		return cgerr.ErrorWithDetails(
 			errors.New("httpStream.ReadObject: empty request body"),
 			cgerr.CategoryRPC,
@@ -298,14 +299,14 @@ func (s *httpStream) ReadObject(v interface{}) error {
 
 // Close closes the stream (specifically the request body reader).
 func (s *httpStream) Close() error {
-	logger.Debug("Closing HTTP stream")
+	httpTransportLogger.Debug("Closing HTTP stream")
 	if s.closed {
 		return nil
 	}
 	s.closed = true
 	err := s.reader.Close()
 	if err != nil {
-		logger.Error("Error closing HTTP stream reader", "error", fmt.Sprintf("%+v", err))
+		httpTransportLogger.Error("Error closing HTTP stream reader", "error", fmt.Sprintf("%+v", err))
 		// Return the error from closing the reader
 		return errors.Wrap(err, "httpStream.Close: failed to close underlying reader")
 	}
