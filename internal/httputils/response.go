@@ -1,6 +1,4 @@
 // internal/httputils/response.go
-// Package httputils provides helper functions for handling HTTP requests and responses,
-// specifically focusing on JSON and JSON-RPC 2.0 error formatting.
 package httputils
 
 import (
@@ -16,40 +14,6 @@ import (
 // logger initializes the structured logger for the httputils package.
 var logger = logging.GetLogger("httputils")
 
-// ErrorCode defines standardized error codes, primarily following the JSON-RPC 2.0 specification,
-// with custom codes for specific application (MCP) errors.
-type ErrorCode int
-
-// Constants defining standard JSON-RPC 2.0 and custom MCP error codes.
-const (
-	// Standard JSON-RPC 2.0 error codes.
-
-	// ParseError indicates invalid JSON was received by the server.
-	// An error occurred on the server while parsing the JSON text.
-	ParseError ErrorCode = -32700
-	// InvalidRequest indicates the JSON sent is not a valid Request object.
-	InvalidRequest ErrorCode = -32600
-	// MethodNotFound indicates the method does not exist or is not available.
-	MethodNotFound ErrorCode = -32601
-	// InvalidParams indicates invalid method parameters were provided.
-	InvalidParams ErrorCode = -32602
-	// InternalError indicates an internal JSON-RPC error occurred.
-	InternalError ErrorCode = -32603
-
-	// Custom MCP-specific error codes (outside the reserved JSON-RPC range -32000 to -32099).
-
-	// AuthError signifies issues related to authentication or authorization.
-	AuthError ErrorCode = -31000
-	// ResourceError indicates problems accessing a required resource (e.g., not found, unavailable).
-	ResourceError ErrorCode = -31001
-	// ServiceError represents errors originating from external services relied upon by the application.
-	ServiceError ErrorCode = -31002
-	// ToolError denotes errors occurring during the execution of specific tools or operations.
-	ToolError ErrorCode = -31003
-	// ValidationError flags issues with input data validation (e.g., format, range).
-	ValidationError ErrorCode = -31004
-)
-
 // ErrorResponse represents a JSON-RPC 2.0 error response structure.
 // It conforms to the standard structure for reporting errors over JSON-RPC.
 type ErrorResponse struct {
@@ -60,7 +24,7 @@ type ErrorResponse struct {
 
 // ErrorObject represents the structured error information within a JSON-RPC 2.0 error response.
 type ErrorObject struct {
-	Code    ErrorCode   `json:"code"`           // A number indicating the error type that occurred.
+	Code    int         `json:"code"`           // A number indicating the error type that occurred.
 	Message string      `json:"message"`        // A string providing a short description of the error.
 	Data    interface{} `json:"data,omitempty"` // Additional data about the error, if available.
 }
@@ -94,7 +58,7 @@ func WriteJSONResponse(w http.ResponseWriter, data interface{}) {
 // set the headers or status code. If encoding the error response itself fails,
 // it logs the encoding error and attempts a plain text HTTP error fallback
 // only if headers haven't already been written.
-func WriteErrorResponse(w http.ResponseWriter, code ErrorCode, message string, data interface{}) {
+func WriteErrorResponse(w http.ResponseWriter, code int, message string, data interface{}) {
 	errResp := ErrorResponse{
 		JSONRPC: "2.0",
 		Error: ErrorObject{
@@ -122,7 +86,7 @@ func WriteErrorResponse(w http.ResponseWriter, code ErrorCode, message string, d
 			cgerr.CategoryRPC,
 			cgerr.CodeInternalError,
 			map[string]interface{}{
-				"original_error_code":    int(code),
+				"original_error_code":    code,
 				"original_error_message": message,
 			},
 		)
@@ -142,15 +106,15 @@ func WriteErrorResponse(w http.ResponseWriter, code ErrorCode, message string, d
 
 // httpStatusFromErrorCode maps JSON-RPC/MCP error codes to appropriate HTTP status codes.
 // This provides a reasonable mapping for standard HTTP clients.
-func httpStatusFromErrorCode(code ErrorCode) int {
+func httpStatusFromErrorCode(code int) int {
 	switch code {
-	case ParseError, InvalidRequest, InvalidParams:
+	case cgerr.CodeParseError, cgerr.CodeInvalidRequest, cgerr.CodeInvalidParams:
 		return http.StatusBadRequest // 400.
-	case MethodNotFound:
+	case cgerr.CodeMethodNotFound:
 		return http.StatusNotFound // 404.
-	case AuthError:
+	case cgerr.CodeAuthError:
 		return http.StatusUnauthorized // 401.
-	case ResourceError:
+	case cgerr.CodeResourceNotFound:
 		// Often maps to 404, but could be others depending on context. 404 is a common default.
 		return http.StatusNotFound // 404.
 	default:

@@ -28,6 +28,10 @@ const (
 	CodeAuthError        = -32003 // Authentication error
 	CodeRTMError         = -32004 // Remember The Milk API error
 	CodeTimeoutError     = -32005 // Operation timed out
+
+	// Custom MCP-specific error codes (outside the reserved JSON-RPC range -32000 to -32099).
+	CodeServiceError    = -31002
+	CodeValidationError = -31004
 )
 
 // UserFacingMessage returns a user-friendly message based on error code.
@@ -53,6 +57,11 @@ func UserFacingMessage(code int) string {
 		return "Error communicating with Remember The Milk"
 	case CodeTimeoutError:
 		return "Request timed out"
+	// Moved from httputils/response.go
+	case CodeServiceError:
+		return "Service error"
+	case CodeValidationError:
+		return "Validation error"
 	default:
 		return "Internal server error"
 	}

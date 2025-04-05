@@ -1,6 +1,4 @@
 // file: internal/jsonrpc/http_transport.go
-// Package jsonrpc provides implementations for JSON-RPC 2.0 communication,
-// including transport mechanisms like HTTP.
 package jsonrpc
 
 import (
@@ -96,10 +94,8 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Enforce POST method for JSON-RPC requests according to common practice.
 	if r.Method != http.MethodPost {
-		methodErr := cgerr.ErrorWithDetails(
-			errors.Newf("JSON-RPC requires POST method, received %s.", r.Method),
-			cgerr.CategoryRPC,
-			cgerr.CodeInvalidRequest, // Mapping: Incorrect HTTP method is an invalid request structure.
+		methodErr := cgerr.NewInvalidArgumentsError(
+			fmt.Sprintf("JSON-RPC requires POST method, received %s", r.Method),
 			map[string]interface{}{
 				"allowed_method": http.MethodPost,
 				"actual_method":  r.Method,
@@ -140,7 +136,7 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			// Create a specific timeout error conforming to project standards.
 			timeoutErr := cgerr.NewTimeoutError(
-				fmt.Sprintf("JSON-RPC request timed out after %s.", h.requestTimeout),
+				fmt.Sprintf("JSON-RPC request timed out after %s", h.requestTimeout),
 				map[string]interface{}{
 					"timeout_duration": h.requestTimeout.String(),
 				},
@@ -172,10 +168,9 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_, writeErr := w.Write(errBody)
 			if writeErr != nil {
 				// Log failure to write the error body.
-				writeErrWithDetails := cgerr.ErrorWithDetails(
-					errors.Wrap(writeErr, "failed to write timeout error response body"),
-					cgerr.CategoryRPC,
-					cgerr.CodeInternalError,
+				writeErrWithDetails := cgerr.NewInternalError(
+					"failed to write timeout error response body",
+					writeErr,
 					map[string]interface{}{
 						"original_error_code": rpcErr.Code,
 					},
@@ -201,10 +196,9 @@ type httpStream struct {
 // Returns an error if marshaling or writing fails, or if the stream is already closed.
 func (s *httpStream) WriteObject(obj interface{}) error {
 	if s.closed {
-		return cgerr.ErrorWithDetails(
-			errors.New("write attempt on closed httpStream."),
-			cgerr.CategoryRPC,
-			cgerr.CodeInternalError,
+		return cgerr.NewInternalError(
+			"write attempt on closed httpStream",
+			nil,
 			map[string]interface{}{
 				"object_type": fmt.Sprintf("%T", obj),
 			},
@@ -214,10 +208,9 @@ func (s *httpStream) WriteObject(obj interface{}) error {
 	// Marshal the JSON-RPC message object to bytes.
 	data, err := json.Marshal(obj)
 	if err != nil {
-		return cgerr.ErrorWithDetails(
-			errors.Wrap(err, "failed to marshal JSON-RPC object for HTTP response."),
-			cgerr.CategoryRPC,
-			cgerr.CodeInternalError, // Marshaling failure is an internal server error.
+		return cgerr.NewInternalError(
+			"failed to marshal JSON-RPC object for HTTP response",
+			err,
 			map[string]interface{}{
 				"object_type": fmt.Sprintf("%T", obj),
 			},
@@ -233,10 +226,9 @@ func (s *httpStream) WriteObject(obj interface{}) error {
 	// Write the JSON data to the HTTP response.
 	_, err = s.writer.Write(data)
 	if err != nil {
-		return cgerr.ErrorWithDetails(
-			errors.Wrap(err, "failed to write JSON-RPC response to HTTP stream."),
-			cgerr.CategoryRPC,
-			cgerr.CodeInternalError, // Failure to write response is an internal server error.
+		return cgerr.NewInternalError(
+			"failed to write JSON-RPC response to HTTP stream",
+			err,
 			map[string]interface{}{
 				"data_size": len(data),
 			},
@@ -274,11 +266,11 @@ func (s *httpStream) ReadObject(v interface{}) error {
 			httpTransportLogger.Debug("httpStream.ReadObject: Read after close detected, returning io.EOF.")
 			return io.EOF
 		}
-		// For other read errors, wrap and return them.
+		// For other read errors, use ErrorWithDetails with appropriate code
 		return cgerr.ErrorWithDetails(
-			errors.Wrap(err, "failed to read JSON-RPC request body from HTTP stream."),
+			errors.Wrap(err, "failed to read JSON-RPC request body from HTTP stream"),
 			cgerr.CategoryRPC,
-			cgerr.CodeParseError, // Error reading the request body implies a parsing/request formation issue.
+			cgerr.CodeParseError,
 			map[string]interface{}{
 				"target_type": fmt.Sprintf("%T", v),
 			},
@@ -289,10 +281,8 @@ func (s *httpStream) ReadObject(v interface{}) error {
 	if len(data) == 0 {
 		httpTransportLogger.Warn("httpStream.ReadObject: Received empty request body.")
 		// Consider if io.EOF is more appropriate, but InvalidRequest seems clearer.
-		return cgerr.ErrorWithDetails(
-			errors.New("received empty request body."),
-			cgerr.CategoryRPC,
-			cgerr.CodeInvalidRequest,
+		return cgerr.NewInvalidArgumentsError(
+			"received empty request body",
 			map[string]interface{}{
 				"target_type": fmt.Sprintf("%T", v),
 			},
@@ -302,9 +292,9 @@ func (s *httpStream) ReadObject(v interface{}) error {
 	// Unmarshal the JSON data into the provided struct `v`.
 	if err := json.Unmarshal(data, v); err != nil {
 		return cgerr.ErrorWithDetails(
-			errors.Wrap(err, "failed to unmarshal JSON-RPC request from HTTP body."),
+			errors.Wrap(err, "failed to unmarshal JSON-RPC request from HTTP body"),
 			cgerr.CategoryRPC,
-			cgerr.CodeParseError, // JSON unmarshaling failure is a classic ParseError.
+			cgerr.CodeParseError,
 			map[string]interface{}{
 				"data_size":   len(data),
 				"target_type": fmt.Sprintf("%T", v),
@@ -333,8 +323,13 @@ func (s *httpStream) Close() error {
 	err := s.reader.Close()
 	if err != nil {
 		httpTransportLogger.Error("Error closing HTTP stream reader (request body).", "error", fmt.Sprintf("%+v", err))
-		// Wrap the error for context.
-		return errors.Wrap(err, "httpStream.Close: failed to close underlying reader")
+		return cgerr.NewInternalError(
+			"failed to close underlying HTTP stream reader",
+			err,
+			map[string]interface{}{
+				"reader_type": fmt.Sprintf("%T", s.reader),
+			},
+		)
 	}
 	return nil
 }

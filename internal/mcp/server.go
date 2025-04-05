@@ -63,7 +63,14 @@ func (s *Server) Version() string {
 // SetTransport sets the transport type (http or stdio).
 func (s *Server) SetTransport(transportType string) error {
 	if transportType != "http" && transportType != "stdio" {
-		err := errors.Newf("unsupported transport type: %s", transportType)
+		// Standardized error creation using cgerr helper
+		err := cgerr.NewInvalidArgumentsError(
+			fmt.Sprintf("unsupported transport type: %s", transportType),
+			map[string]interface{}{
+				"transport_type": transportType,
+				"valid_types":    []string{"http", "stdio"},
+			},
+		)
 		serverLogger.Error("Invalid transport type specified", "transport", transportType, "error", fmt.Sprintf("%+v", err))
 		return err
 	}
@@ -133,7 +140,14 @@ func (s *Server) Start() error {
 		return s.startStdio()
 	default:
 		// This case should ideally be prevented by SetTransport validation
-		err := errors.Newf("unsupported transport type during start: %s", s.transport)
+		// Standardized error creation using cgerr helper
+		err := cgerr.NewInvalidArgumentsError(
+			fmt.Sprintf("unsupported transport type during start: %s", s.transport),
+			map[string]interface{}{
+				"transport_type": s.transport,
+				"valid_types":    []string{"http", "stdio"},
+			},
+		)
 		serverLogger.Error("Cannot start server, unsupported transport", "transport", s.transport, "error", fmt.Sprintf("%+v", err))
 		return err
 	}
@@ -143,7 +157,14 @@ func (s *Server) Start() error {
 func (s *Server) startHTTP() error {
 	serverLogger.Info("Starting HTTP transport...", "address", s.config.GetServerAddress()) // Assuming address is relevant for HTTP
 	// Implementation for HTTP transport
-	err := errors.New("HTTP transport not yet implemented")
+	// Standardized error creation using cgerr helper
+	err := cgerr.NewInternalError(
+		"HTTP transport not yet implemented",
+		nil,
+		map[string]interface{}{
+			"server_name": s.config.GetServerName(),
+		},
+	)
 	serverLogger.Error("HTTP transport start failed", "error", fmt.Sprintf("%+v", err))
 	return err // Return the error after logging
 }
@@ -157,7 +178,14 @@ func (s *Server) startStdio() error {
 	handler := jsonrpc2.HandlerWithError(func(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) (interface{}, error) {
 		// Basic handler implementation - should route to resource/tool managers
 		serverLogger.Warn("Received request with placeholder stdio handler", "method", req.Method)
-		return nil, errors.Newf("method '%s' not implemented in placeholder handler", req.Method)
+		// Standardized error creation using cgerr helper
+		return nil, cgerr.NewMethodNotFoundError(
+			req.Method,
+			map[string]interface{}{
+				"server_name":  s.config.GetServerName(),
+				"handler_type": "placeholder",
+			},
+		)
 	})
 
 	// Set up stdio transport options

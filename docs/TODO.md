@@ -94,7 +94,7 @@ Status: In Progress (~60% complete)
 
 ✅ Basic integration with sourcegraph/jsonrpc2 library is in place
 ✅ Core error handling framework using cockroachdb/errors is established
-⚠️ Need to remove custom JSON-RPC type definitions (jsonrpc_types.go not visible in shared files but mentioned in TODOs)
+✅ Need to remove custom JSON-RPC type definitions
 ⚠️ Need to consolidate error codes between internal/mcp/errors/codes.go and internal/httputils/response.go
 ⚠️ Need to standardize error creation patterns across codebase (some places use direct errors.New/Wrap, others use helper functions)
 

@@ -48,7 +48,7 @@ func (tm *ToolManagerImpl) FindToolProvider(name string) (ToolProvider, error) {
 		}
 	}
 
-	// Get all available tool names for better error context
+	// Get all available tool names for better error context.
 	var availableTools []string
 	for _, provider := range tm.providers {
 		for _, tool := range provider.GetToolDefinitions() {
@@ -70,13 +70,14 @@ func (tm *ToolManagerImpl) FindToolProvider(name string) (ToolProvider, error) {
 func (tm *ToolManagerImpl) CallTool(ctx context.Context, name string, args map[string]interface{}) (string, error) {
 	provider, err := tm.FindToolProvider(name)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to find tool provider")
+		// Corrected: Use %w to wrap the error.
+		return "", errors.Wrapf(err, "failed to find tool provider: %s", name)
 	}
 
-	// Capture the start time for timing information
+	// Capture the start time for timing information.
 	startTime := time.Now()
 
-	// Check for context cancellation or deadline
+	// Check for context cancellation or deadline.
 	if ctx.Err() != nil {
 		return "", cgerr.NewTimeoutError(
 			fmt.Sprintf("context ended before executing tool '%s'", name),
