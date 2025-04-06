@@ -11,6 +11,12 @@ Gradually replace usages of custom types with sourcegraph/jsonrpc2 library types
 Remove the custom types in jsonrpc_types.go
 Update handler functions to work with library types directly
 
+make a note in code and decision_log or somewhere:
+The transport layer framing convention for the "Model Context Protocol" (MCP) using JSON stdio does not include headers like Content-Length. Instead, the stdio transport mechanism relies on newline-delimited JSON-RPC messages for framing. Each message is sent as a UTF-8 encoded JSON object, and the end of a message is indicated by a newline character. Embedded newlines within messages are not allowed, ensuring clear separation between individual messages.
+
+This approach eliminates the need for additional headers such as Content-Length, as the newline delimiter inherently marks the boundary of each message
+thereforec we use NewPlainObjectStream
+
 Clean up error handling:
 
 Ensure all error creation uses the helper functions from cgerr package

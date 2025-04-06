@@ -1,4 +1,6 @@
 // file: internal/mcp/connection/manager.go
+// Package connection manages the state and communication for individual MCP client connections.
+// Terminate all comments with a period.
 package connection
 
 import (
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	// Use the corrected definitions package.
 	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
 	"github.com/google/uuid"
@@ -22,44 +25,57 @@ type ServerConfig struct {
 	Version         string
 	RequestTimeout  time.Duration
 	ShutdownTimeout time.Duration
-	Capabilities    map[string]interface{}
+	// This should now ideally use definitions.ServerCapabilities struct.
+	// Using map for flexibility as passed from adapter, but ensure content matches spec.
+	Capabilities map[string]interface{}
 }
 
 // Manager orchestrates the state and communication for a single client connection.
 type Manager struct {
-	connectionID    string
-	config          ServerConfig
-	resourceManager ResourceManagerContract
-	toolManager     ToolManagerContract
-	stateMachine    *stateless.StateMachine
-	// Use the RPCConnection interface to allow for different connection implementations (real/mock).
-	jsonrpcConn        RPCConnection
-	clientCapabilities map[string]interface{}
-	dataMu             sync.RWMutex // Protects clientCapabilities and jsonrpcConn.
+	connectionID string
+	config       ServerConfig
+	// Use the contracts defined in connection_types.go, which MUST match mcp interfaces.
+	resourceManager    ResourceManagerContract
+	toolManager        ToolManagerContract
+	stateMachine       *stateless.StateMachine
+	jsonrpcConn        RPCConnection                  // Use the RPCConnection interface.
+	clientCapabilities definitions.ClientCapabilities // Store parsed client capabilities struct.
+	dataMu             sync.RWMutex                   // Protects clientCapabilities and jsonrpcConn.
 	logger             *log.Logger
 	initialized        bool // Tracks if the client has been initialized properly.
+}
+
+// ClientCapabilities represents the capabilities reported by the client during initialization.
+// Defined locally as it's specific to the manager's state. Use definitions if needed elsewhere.
+type ClientCapabilities struct {
+	Experimental map[string]interface{} `json:"experimental,omitempty"`
+	Roots        *struct {
+		ListChanged *bool `json:"listChanged,omitempty"`
+	} `json:"roots,omitempty"`
+	Sampling map[string]interface{} `json:"sampling,omitempty"`
 }
 
 // NewManager creates and initializes a new Manager.
 func NewManager(
 	config ServerConfig,
-	resourceMgr ResourceManagerContract,
-	toolMgr ToolManagerContract,
+	resourceMgr ResourceManagerContract, // Use contract interface.
+	toolMgr ToolManagerContract, // Use contract interface.
 ) *Manager {
 	connID := uuid.NewString()
+	// TODO: Consider injecting a structured logger (like slog) instead of stdlib log.
 	logger := log.New(log.Default().Writer(), fmt.Sprintf("CONN [%s] ", connID), log.LstdFlags|log.Lmicroseconds|log.Lshortfile)
 
 	m := &Manager{
-		connectionID:       connID,
-		config:             config,
-		resourceManager:    resourceMgr,
-		toolManager:        toolMgr,
-		logger:             logger,
-		clientCapabilities: make(map[string]interface{}),
+		connectionID:    connID,
+		config:          config,
+		resourceManager: resourceMgr,
+		toolManager:     toolMgr,
+		logger:          logger,
+		// clientCapabilities initialized in handleInitialize.
 		// jsonrpcConn is initially nil.
 	}
 
-	// State Machine Setup.
+	// State Machine Setup (Assuming State/Trigger types are defined correctly, e.g., in connection_types.go).
 	m.stateMachine = stateless.NewStateMachine(StateUnconnected)
 
 	m.stateMachine.Configure(StateUnconnected).
@@ -74,15 +90,15 @@ func NewManager(
 
 	m.stateMachine.Configure(StateConnected).
 		OnEntry(m.onEnterConnected).
-		PermitReentry(TriggerListResources). // Pass req via args.
-		PermitReentry(TriggerReadResource).  // Pass req via args.
-		PermitReentry(TriggerListTools).     // Pass req via args.
-		PermitReentry(TriggerCallTool).      // Pass req via args.
-		PermitReentry(TriggerPing).          // Pass req via args.
-		PermitReentry(TriggerSubscribe).     // Pass req via args.
+		PermitReentry(TriggerListResources). // Args: req *jsonrpc2.Request.
+		PermitReentry(TriggerReadResource).  // Args: req *jsonrpc2.Request.
+		PermitReentry(TriggerListTools).     // Args: req *jsonrpc2.Request.
+		PermitReentry(TriggerCallTool).      // Args: req *jsonrpc2.Request.
+		PermitReentry(TriggerPing).          // Args: req *jsonrpc2.Request.
+		PermitReentry(TriggerSubscribe).     // Args: req *jsonrpc2.Request.
 		Permit(TriggerShutdown, StateTerminating).
 		Permit(TriggerDisconnect, StateTerminating).
-		Permit(TriggerErrorOccurred, StateError) // Pass error via args.
+		Permit(TriggerErrorOccurred, StateError) // Args: err error.
 
 	m.stateMachine.Configure(StateTerminating).
 		OnEntry(m.onEnterTerminating).
@@ -90,10 +106,10 @@ func NewManager(
 		Permit(TriggerDisconnect, StateUnconnected) // Allow direct disconnect.
 
 	m.stateMachine.Configure(StateError).
-		OnEntry(m.onEnterError). // Pass error via args.
+		OnEntry(m.onEnterError). // Args: err error.
 		Permit(TriggerDisconnect, StateUnconnected)
 
-	m.logf(definitions.LogLevelDebug, "Connection manager created.")
+	m.logf(definitions.LogLevelDebug, "Connection manager created.") // Use definitions constant.
 	return m
 }
 
@@ -104,82 +120,94 @@ func (m *Manager) onEnterUnconnected(ctx context.Context, args ...interface{}) e
 	// Clear connection reference on disconnect.
 	m.dataMu.Lock()
 	m.jsonrpcConn = nil
+	// Clear client capabilities on disconnect.
+	m.clientCapabilities = ClientCapabilities{} // Re-initialize or set to nil.
 	m.dataMu.Unlock()
 	return nil
 }
 
 // Handle is the main entry point for incoming JSON-RPC requests.
-// It accepts any connection type that satisfies the RPCConnection interface.
 func (m *Manager) Handle(ctx context.Context, conn RPCConnection, req *jsonrpc2.Request) {
-	// Store the connection for future use within this manager instance.
+	// Store/verify the connection.
 	m.dataMu.Lock()
 	if m.jsonrpcConn == nil {
 		m.jsonrpcConn = conn
-	} else {
-		// If Handle is called again with a new connection instance, log a warning.
-		// Behavior depends on whether Manager instances are reused.
-		// Assuming one connection per manager lifecycle for now.
-		if m.jsonrpcConn != conn {
-			m.logf(definitions.LogLevelWarn, "Handle called with a new connection instance while one already exists.")
-			// Optionally update to the new connection: m.jsonrpcConn = conn
-		}
+	} else if m.jsonrpcConn != conn {
+		m.logf(definitions.LogLevelWarning, "Handle called with a new connection instance while one already exists.") // Fixed LogLevel constant.
 	}
 	m.dataMu.Unlock()
 
-	// Map the method to a state machine trigger.
+	// Map method to trigger.
 	trigger, ok := MapMethodToTrigger(req.Method)
 	if !ok {
-		m.handleUnknownMethod(ctx, conn, req) // Pass the interface.
+		m.handleUnknownMethod(ctx, conn, req)
 		return
 	}
 
 	currentState := m.stateMachine.MustState().(State)
 	m.logf(definitions.LogLevelDebug, "Processing method '%s' (trigger '%s') in state '%s'.", req.Method, trigger, currentState)
 
-	// Process the request based on the current state and determined trigger.
-	if err := m.processStateAndTrigger(ctx, conn, req, trigger, currentState); err != nil { // Pass the interface.
-		m.logf(definitions.LogLevelError, "Error processing request: %v.", err)
-		// If this isn't a notification, send an error response using the interface method.
+	// Process based on state and trigger.
+	if err := m.processStateAndTrigger(ctx, conn, req, trigger, currentState); err != nil {
+		m.logf(definitions.LogLevelError, "Error processing request: %+v.", err) // Use %+v for detailed error.
 		if !req.Notif {
 			respErr := cgerr.ToJSONRPCError(err)
 			if replyErr := conn.ReplyWithError(ctx, req.ID, respErr); replyErr != nil {
-				m.logf(definitions.LogLevelError, "Error sending error response: %v.", replyErr)
+				m.logf(definitions.LogLevelError, "Error sending error response: %+v.", replyErr)
 			}
 		}
-
-		// Fire error trigger if the error warrants a state change.
-		m.handleErrorOccurrence(err) // This internal method doesn't need conn.
+		// Consider if all processing errors should trigger StateError.
+		// The handlers might already do this via handleErrorOccurrence.
 	}
 }
 
-// processStateAndTrigger routes the request based on the current state and trigger.
-// It accepts the connection as an RPCConnection interface.
+// processStateAndTrigger routes the request.
 func (m *Manager) processStateAndTrigger(ctx context.Context, conn RPCConnection, req *jsonrpc2.Request,
 	trigger Trigger, currentState State) error {
-	// Special case: initialize is allowed only from unconnected state.
+
+	// Initialize only allowed from unconnected.
 	if trigger == TriggerInitialize && currentState == StateUnconnected {
-		// FIXED: Pass request to the state machine's OnEntryFrom handler via FireCtx args.
-		// Using trigger directly instead of string(trigger)
+		// Pass request via FireCtx args for OnEntryFrom handler.
 		return m.stateMachine.FireCtx(ctx, trigger, req)
 	}
 
-	// Special case: shutdown is handled differently in connected state.
+	// Allow ping regardless of initialization state (useful for diagnostics).
+	// But requires a connection.
+	if trigger == TriggerPing && (currentState == StateConnected || currentState == StateInitializing) {
+		// Ping is simple request/response, handle directly or via connected handler.
+		return m.handleConnectedStateRequest(ctx, conn, req, trigger)
+	}
+
+	// Check if initialized before allowing other operations.
+	if !m.initialized && trigger != TriggerInitialize && trigger != TriggerPing {
+		return cgerr.ErrorWithDetails(
+			errors.Newf("operation '%s' not allowed before initialization", req.Method),
+			cgerr.CategoryRPC,
+			cgerr.CodeInvalidRequest,
+			map[string]interface{}{
+				"connection_id": m.connectionID,
+				"current_state": string(currentState),
+				"method":        req.Method,
+			},
+		)
+	}
+
+	// Handle shutdown trigger.
 	if trigger == TriggerShutdown && currentState == StateConnected {
-		return m.handleShutdownInConnectedState(ctx, conn, req) // Pass the interface.
+		return m.handleShutdownInConnectedState(ctx, conn, req)
 	}
 
-	// Handle normal request/response methods in connected state.
+	// Handle standard request/response methods in connected state.
 	if currentState == StateConnected && !req.Notif {
-		return m.handleConnectedStateRequest(ctx, conn, req, trigger) // Pass the interface.
+		return m.handleConnectedStateRequest(ctx, conn, req, trigger)
 	}
 
-	// Handle notifications (no response expected) in connected state.
+	// Handle notifications in connected state.
 	if currentState == StateConnected && req.Notif {
-		// Note: handleConnectedStateNotification does not use conn to reply.
 		return m.handleConnectedStateNotification(ctx, req, trigger)
 	}
 
-	// If none of the above conditions match, the operation is not allowed in the current state.
+	// Fallback: operation not allowed in current state.
 	return cgerr.ErrorWithDetails(
 		errors.Newf("operation '%s' not allowed in state '%s'", req.Method, currentState),
 		cgerr.CategoryRPC,
@@ -188,258 +216,206 @@ func (m *Manager) processStateAndTrigger(ctx context.Context, conn RPCConnection
 			"connection_id": m.connectionID,
 			"current_state": string(currentState),
 			"method":        req.Method,
-			"trigger":       string(trigger),
 		},
 	)
 }
 
 // handleErrorOccurrence potentially transitions the state machine to the Error state.
-// This does not directly interact with the connection.
 func (m *Manager) handleErrorOccurrence(err error) {
-	// Only transition to error state for certain severe error codes.
-	if cgerr.GetErrorCode(err) <= cgerr.CodeInternalError {
-		// FIXED: Pass the error details to the Error state's OnEntry handler.
-		// Using TriggerErrorOccurred directly instead of string(TriggerErrorOccurred)
+	// Only transition for severe errors. Customize this logic as needed.
+	// Consider using errors.Is to check for specific error types if necessary.
+	if cgerr.GetErrorCode(err) <= cgerr.CodeInternalError || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		if fireErr := m.stateMachine.Fire(TriggerErrorOccurred, err); fireErr != nil {
-			m.logf(definitions.LogLevelWarn, "Failed to fire error trigger: %v.", fireErr)
+			// Use LogLevelWarning as per original code intent. Corrected constant name.
+			m.logf(definitions.LogLevelWarning, "Failed to fire error trigger: %v.", fireErr)
 		}
 	}
 }
 
 // handleUnknownMethod handles requests with methods not mapped to triggers.
-// It accepts the connection as an RPCConnection interface to send replies.
 func (m *Manager) handleUnknownMethod(ctx context.Context, conn RPCConnection, req *jsonrpc2.Request) {
-	m.logf(definitions.LogLevelWarn, "Received unknown method: %s.", req.Method)
-
-	// Silently ignore unknown notifications per JSON-RPC spec.
+	m.logf(definitions.LogLevelWarning, "Received unknown method: %s.", req.Method) // Corrected LogLevel constant.
 	if req.Notif {
-		return
+		return // Ignore unknown notifications.
 	}
-
-	// Create a "MethodNotFound" error.
-	err := cgerr.NewMethodNotFoundError(req.Method, map[string]interface{}{
-		"connection_id": m.connectionID,
-		"request_id":    fmt.Sprintf("%v", req.ID),
-	})
-
-	// Convert to JSON-RPC error format and send reply using the interface method.
+	err := cgerr.NewMethodNotFoundError(req.Method, map[string]interface{}{"connection_id": m.connectionID})
 	respErr := cgerr.ToJSONRPCError(err)
 	if replyErr := conn.ReplyWithError(ctx, req.ID, respErr); replyErr != nil {
-		m.logf(definitions.LogLevelError, "Error sending MethodNotFound reply: %v.", replyErr)
+		m.logf(definitions.LogLevelError, "Error sending MethodNotFound reply: %+v.", replyErr)
 	}
 }
 
-// handleShutdownInConnectedState handles the shutdown request specifically.
-// It accepts the connection as an RPCConnection interface to send the reply before transitioning state.
+// handleShutdownInConnectedState handles the shutdown request.
 func (m *Manager) handleShutdownInConnectedState(ctx context.Context, conn RPCConnection, req *jsonrpc2.Request) error {
-	// Call the internal handler logic for shutdown.
-	result, err := m.handleShutdownRequest(ctx, req) // This handler likely doesn't need conn.
+	// Call internal handler (doesn't need conn).
+	result, err := m.handleShutdownRequest(ctx, req)
 	if err != nil {
-		// If the handler itself errors, report it and potentially enter error state.
-		m.logf(definitions.LogLevelError, "Shutdown handler failed: %v.", err)
+		m.logf(definitions.LogLevelError, "Shutdown handler failed: %+v.", err)
 		m.handleErrorOccurrence(err)
-		// Send error reply if it's not a notification.
 		if !req.Notif {
 			respErr := cgerr.ToJSONRPCError(err)
 			if replyErr := conn.ReplyWithError(ctx, req.ID, respErr); replyErr != nil {
-				m.logf(definitions.LogLevelError, "Error sending shutdown handler error reply: %v.", replyErr)
+				m.logf(definitions.LogLevelError, "Error sending shutdown handler error reply: %+v.", replyErr)
 			}
 		}
-		return err // Return the error from the handler.
+		return err
 	}
 
-	// Send success response first if required.
+	// Send success reply first if needed.
 	if !req.Notif {
-		// Use the interface method to send the reply.
 		if replyErr := conn.Reply(ctx, req.ID, result); replyErr != nil {
-			m.logf(definitions.LogLevelError, "Error sending shutdown success reply: %v.", replyErr)
-			// Treat failure to send reply as an error condition.
+			m.logf(definitions.LogLevelError, "Error sending shutdown success reply: %+v.", replyErr)
 			m.handleErrorOccurrence(errors.Wrap(replyErr, "failed sending shutdown reply"))
-			// Continue to fire shutdown trigger despite reply error.
+			// Continue shutdown even if reply fails.
 		}
 	}
 
-	// Fire the state machine trigger asynchronously to allow the reply to be sent.
+	// Fire state change async.
 	go func() {
-		time.Sleep(50 * time.Millisecond) // Short delay.
-		// FIXED: Fire the trigger directly without string conversion
+		time.Sleep(50 * time.Millisecond)
 		if fireErr := m.stateMachine.Fire(TriggerShutdown); fireErr != nil {
 			m.logf(definitions.LogLevelError, "Error firing shutdown trigger post-reply: %v.", fireErr)
-			// If firing fails (e.g., wrong state), force disconnect as fallback.
-			// FIXED: Use trigger directly instead of string(trigger)
-			_ = m.stateMachine.Fire(TriggerDisconnect)
+			_ = m.stateMachine.Fire(TriggerDisconnect) // Force disconnect on trigger fail.
 		}
 	}()
-
-	return nil // Indicates the handler logic (handleShutdownRequest) succeeded.
+	return nil // Handler succeeded.
 }
 
-// onEnterTerminating is called when entering the Terminating state.
-// It retrieves the connection via the interface and calls Close().
+// onEnterTerminating closes the connection.
 func (m *Manager) onEnterTerminating(ctx context.Context, args ...interface{}) error {
 	m.logf(definitions.LogLevelInfo, "Connection terminating...")
-
-	// Get the connection interface and clear the field under lock.
 	m.dataMu.Lock()
 	conn := m.jsonrpcConn
-	m.jsonrpcConn = nil // Clear the reference immediately.
+	m.jsonrpcConn = nil
 	m.dataMu.Unlock()
 
-	// Close the connection if it exists, using the interface method.
 	if conn != nil {
 		if err := conn.Close(); err != nil {
-			m.logf(definitions.LogLevelWarn, "Error closing connection during termination: %v.", err)
-			// Continue shutdown process even if close fails.
+			m.logf(definitions.LogLevelWarning, "Error closing connection during termination: %+v.", err) // Corrected LogLevel, use %+v.
 		}
 	} else {
-		m.logf(definitions.LogLevelWarn, "Termination started but connection was already nil.")
+		m.logf(definitions.LogLevelWarning, "Termination started but connection was already nil.") // Corrected LogLevel.
 	}
 
-	// Asynchronously fire the completion trigger to allow state machine to settle.
+	// Async trigger completion.
 	go func() {
-		time.Sleep(50 * time.Millisecond) // Allow time for Close() potentially.
-		// Try ShutdownComplete first.
-		// FIXED: Fire trigger directly without string conversion
+		time.Sleep(50 * time.Millisecond)
 		if fireErr := m.stateMachine.Fire(TriggerShutdownComplete); fireErr != nil {
-			m.logf(definitions.LogLevelWarn, "Could not fire ShutdownComplete (%v), forcing disconnect.", fireErr)
-			// Force disconnect if ShutdownComplete fails (e.g., wrong state).
-			// FIXED: Use trigger directly instead of string(trigger)
+			m.logf(definitions.LogLevelWarning, "Could not fire ShutdownComplete (%+v), forcing disconnect.", fireErr) // Corrected LogLevel, use %+v.
 			if disconnectErr := m.stateMachine.Fire(TriggerDisconnect); disconnectErr != nil {
-				m.logf(definitions.LogLevelError, "Failed to force disconnect after termination: %v.", disconnectErr)
+				m.logf(definitions.LogLevelError, "Failed to force disconnect after termination: %+v.", disconnectErr)
 			}
 		}
 	}()
-
 	return nil
 }
 
-// onEnterError is called when entering the Error state.
-// It attempts to close the connection and schedules a transition back to Unconnected.
+// onEnterError logs error and attempts disconnect.
 func (m *Manager) onEnterError(ctx context.Context, args ...interface{}) error {
 	errMsg := "Unknown internal error."
 	var originalErr error
 	if len(args) > 0 {
 		if err, ok := args[0].(error); ok {
 			originalErr = err
-			errMsg = err.Error()
+			errMsg = fmt.Sprintf("%+v", err) // Use %+v for detailed error logging.
 		} else {
 			errMsg = fmt.Sprintf("%+v", args[0])
 		}
 	}
 	m.logf(definitions.LogLevelError, "Connection entered error state: %s.", errMsg)
 
-	// Attempt to close the connection immediately when an error occurs.
+	// Close connection immediately on error.
 	m.dataMu.RLock()
 	conn := m.jsonrpcConn
 	m.dataMu.RUnlock()
-
 	if conn != nil {
-		// Use the interface method to close.
 		if closeErr := conn.Close(); closeErr != nil {
-			m.logf(definitions.LogLevelWarn, "Error closing connection during error state entry: %v.", closeErr)
+			m.logf(definitions.LogLevelWarning, "Error closing connection during error state entry: %+v.", closeErr) // Corrected LogLevel, use %+v.
 		}
 	} else {
-		m.logf(definitions.LogLevelWarn, "Error state entered but connection was already nil.")
+		m.logf(definitions.LogLevelWarning, "Error state entered but connection was already nil.") // Corrected LogLevel.
 	}
 
-	// After a delay, trigger disconnect to move to Unconnected, allowing cleanup/reconnection.
+	// Schedule disconnect.
 	go func() {
-		time.Sleep(1 * time.Second) // Reduced delay from 5s.
-		// FIXED: Fire trigger directly without string conversion
-		// Pass original error if available for context on disconnect trigger.
+		time.Sleep(1 * time.Second)
 		if fireErr := m.stateMachine.Fire(TriggerDisconnect, originalErr); fireErr != nil {
-			m.logf(definitions.LogLevelError, "Failed to auto-disconnect after error state timeout: %v.", fireErr)
+			m.logf(definitions.LogLevelError, "Failed to auto-disconnect after error state timeout: %+v.", fireErr)
 		}
 	}()
-
-	// Returning an error from OnEntry can halt state machine processing, so return nil.
 	return nil
 }
 
-// onEnterInitializing is called when entering the Initializing state via the TriggerInitialize trigger.
-// It retrieves the connection via the interface stored in the manager.
+// onEnterInitializing handles the initialization logic.
 func (m *Manager) onEnterInitializing(ctx context.Context, args ...interface{}) error {
 	if len(args) == 0 {
-		return errors.New("missing request argument for onEnterInitializing")
+		return errors.New("missing request argument for onEnterInitializing.")
 	}
 	req, ok := args[0].(*jsonrpc2.Request)
 	if !ok {
-		return errors.New("invalid request argument type for onEnterInitializing")
+		return errors.New("invalid request argument type for onEnterInitializing.")
 	}
 
-	// Get the active connection (interface type) stored during Handle().
 	m.dataMu.RLock()
 	conn := m.jsonrpcConn
 	m.dataMu.RUnlock()
 
-	// Check if the connection is somehow nil (e.g., race condition or logic error).
 	if conn == nil {
-		err := errors.New("connection is nil during initialization trigger")
-		m.logf(definitions.LogLevelError, "%v.", err)
-		// Fire failure immediately if no connection is stored.
-		// Use background context if original ctx might be cancelled.
-		// FIXED: Fire trigger directly without string conversion
+		err := errors.New("connection is nil during initialization trigger.")
+		m.logf(definitions.LogLevelError, "%+v.", err)
 		_ = m.stateMachine.FireCtx(context.Background(), TriggerInitFailure, err)
 		return err
 	}
 
 	// Call the specific handler logic for initialization.
-	result, err := m.handleInitialize(ctx, req) // Handler likely doesn't need conn.
+	// handleInitialize returns interface{} which should be definitions.InitializeResult.
+	result, err := m.handleInitialize(ctx, req)
 
 	if err != nil {
 		// Initialization handler failed.
-		m.logf(definitions.LogLevelError, "Initialization handler failed: %v.", err)
+		m.logf(definitions.LogLevelError, "Initialization handler failed: %+v.", err)
 		respErr := cgerr.ToJSONRPCError(err)
-		// Send error reply using the interface method.
 		if replyErr := conn.ReplyWithError(ctx, req.ID, respErr); replyErr != nil {
-			m.logf(definitions.LogLevelError, "Error sending initialization failure reply: %v.", replyErr)
+			m.logf(definitions.LogLevelError, "Error sending initialization failure reply: %+v.", replyErr)
 		}
-		// Fire failure trigger, passing the original handler error.
-		// Use background context if original ctx might be cancelled.
-		// FIXED: Fire trigger directly without string conversion
+		// Fire failure trigger.
 		if fireErr := m.stateMachine.FireCtx(context.Background(), TriggerInitFailure, err); fireErr != nil {
-			m.logf(definitions.LogLevelError, "Error firing TriggerInitFailure: %v.", fireErr)
+			m.logf(definitions.LogLevelError, "Error firing TriggerInitFailure: %+v.", fireErr)
 		}
-		return err // Return the original handler error.
+		return err
 	}
 
 	// Initialization handler succeeded, send success reply.
-	// Use the interface method to send the reply.
 	if replyErr := conn.Reply(ctx, req.ID, result); replyErr != nil {
-		m.logf(definitions.LogLevelError, "Error sending initialization success reply: %v.", replyErr)
-		// If reply fails, treat this as an overall initialization failure.
-		// Fire failure trigger, passing the reply error.
-		// Use background context if original ctx might be cancelled.
-		// FIXED: Fire trigger directly without string conversion
+		m.logf(definitions.LogLevelError, "Error sending initialization success reply: %+v.", replyErr)
+		// Treat reply failure as init failure.
 		if fireErr := m.stateMachine.FireCtx(context.Background(), TriggerInitFailure, replyErr); fireErr != nil {
-			m.logf(definitions.LogLevelError, "Error firing TriggerInitFailure after reply error: %v.", fireErr)
+			m.logf(definitions.LogLevelError, "Error firing TriggerInitFailure after reply error: %+v.", fireErr)
 		}
-		return replyErr // Return the reply error.
+		return replyErr
 	}
 
-	// Mark manager as initialized and fire success trigger.
-	// FIXED: Fire trigger directly without string conversion
-	m.initialized = true
+	// Mark as initialized and fire success trigger.
+	m.initialized = true // Set initialized flag only after successful reply.
 	if fireErr := m.stateMachine.FireCtx(ctx, TriggerInitSuccess); fireErr != nil {
-		m.logf(definitions.LogLevelError, "Error firing TriggerInitSuccess: %v.", fireErr)
-		return fireErr // Return the trigger fire error.
+		m.logf(definitions.LogLevelError, "Error firing TriggerInitSuccess: %+v.", fireErr)
+		return fireErr
 	}
 
 	return nil // Initialization successful.
 }
 
-// onEnterConnected is called when entering the Connected state.
+// onEnterConnected logs entry to connected state.
 func (m *Manager) onEnterConnected(ctx context.Context, args ...interface{}) error {
 	m.logf(definitions.LogLevelInfo, "Connection established and initialized.")
 	return nil
 }
 
-// logf is a helper for logging with connection ID and state prefix.
+// logf logs with connection context.
 func (m *Manager) logf(level definitions.LogLevel, format string, v ...interface{}) {
-	// Check state machine is initialized before trying to get state.
-	var currentState State = "UNKNOWN" // Default if state machine not ready or state retrieval fails.
+	var currentState State = "UNKNOWN"
 	if m.stateMachine != nil {
-		s, err := m.stateMachine.State(context.Background())
+		s, err := m.stateMachine.State(context.Background()) // Use background context for logging state.
 		if err == nil {
 			if stateTyped, ok := s.(State); ok {
 				currentState = stateTyped
@@ -448,119 +424,102 @@ func (m *Manager) logf(level definitions.LogLevel, format string, v ...interface
 	}
 	message := fmt.Sprintf(format, v...)
 	// Format: LEVEL [CONN_ID] [STATE] Message
-	m.logger.Printf("%-5s [%s] [%s] %s", level, m.connectionID, currentState, message) // Added level alignment.
+	// Ensure level is valid before logging. Consider adding a check or default.
+	m.logger.Printf("%-9s [%s] [%s] %s", level, m.connectionID, currentState, message) // Adjusted padding for longer level names.
 }
 
-// NewConnectionServer provides a simple factory function if needed elsewhere.
-func NewConnectionServer(serverConfig ServerConfig, resourceMgr ResourceManagerContract, toolMgr ToolManagerContract) (*Manager, error) {
-	// Could add validation for config/managers here if necessary.
+// NewConnectionServer factory function.
+// Renamed from original to avoid conflict if Manager.New was intended.
+func NewConnectionServerFactory(serverConfig ServerConfig, resourceMgr ResourceManagerContract, toolMgr ToolManagerContract) (*Manager, error) {
+	// Add validation if needed.
 	return NewManager(serverConfig, resourceMgr, toolMgr), nil
 }
 
-// Additional methods like handleListResources, handleReadResource, etc. would be present in the file
-// but don't need changes if they don't fire state machine triggers.
-// file: internal/mcp/connection/manager.go
-
-// Add these methods to the Manager struct implementation:
-
-// handleConnectedStateRequest handles standard request/response calls in the Connected state.
-// It accepts the connection as an RPCConnection interface to send replies.
+// handleConnectedStateRequest handles standard calls in Connected state.
 func (m *Manager) handleConnectedStateRequest(ctx context.Context, conn RPCConnection, req *jsonrpc2.Request,
 	trigger Trigger) error {
-	var result interface{}
+	var result interface{} // Will hold complex result structs now.
 	var handlerErr error
 
-	// Fire the reentry trigger associated with the method.
-	// Use trigger directly, not string conversion
+	// Fire reentry trigger.
 	if fireErr := m.stateMachine.Fire(trigger, req); fireErr != nil {
-		m.logf(definitions.LogLevelWarn, "Failed to fire reentry trigger %s: %v.", trigger, fireErr)
-		// Decide if failing to fire a reentry trigger is fatal; currently, we proceed.
+		m.logf(definitions.LogLevelWarning, "Failed to fire reentry trigger %s: %v.", trigger, fireErr) // Corrected LogLevel.
 	}
 
 	// Call the specific internal handler based on the trigger.
+	// Note: Handlers now return complex results or errors.
 	switch trigger {
 	case TriggerListResources:
 		result, handlerErr = m.handleListResources(ctx, req)
 	case TriggerReadResource:
+		// handleReadResource now returns (definitions.ReadResourceResult, error).
+		// The result variable will hold this struct.
 		result, handlerErr = m.handleReadResource(ctx, req)
 	case TriggerListTools:
 		result, handlerErr = m.handleListTools(ctx, req)
 	case TriggerCallTool:
+		// handleCallTool now returns (definitions.CallToolResult, error).
 		result, handlerErr = m.handleCallTool(ctx, req)
 	case TriggerPing:
 		result, handlerErr = m.handlePing(ctx, req)
 	case TriggerSubscribe:
 		result, handlerErr = m.handleSubscribe(ctx, req)
 	default:
-		// This case should ideally not be reached if MapMethodToTrigger is comprehensive.
 		handlerErr = cgerr.NewMethodNotFoundError(req.Method, map[string]interface{}{"state": "connected"})
 	}
 
-	// Handle errors returned from the specific handler.
+	// Handle errors from the specific handler.
 	if handlerErr != nil {
-		m.logf(definitions.LogLevelError, "Handler for %s failed: %v.", req.Method, handlerErr)
-		// Send an error reply using the interface method.
+		m.logf(definitions.LogLevelError, "Handler for %s failed: %+v.", req.Method, handlerErr) // Use %+v.
 		respErr := cgerr.ToJSONRPCError(handlerErr)
 		if replyErr := conn.ReplyWithError(ctx, req.ID, respErr); replyErr != nil {
-			m.logf(definitions.LogLevelError, "Error sending handler error reply for %s: %v.", req.Method, replyErr)
+			m.logf(definitions.LogLevelError, "Error sending handler error reply for %s: %+v.", req.Method, replyErr)
 		}
-		// Potentially transition to Error state based on the handler error severity.
 		m.handleErrorOccurrence(handlerErr)
-		return handlerErr // Propagate the handler error.
+		return handlerErr
 	}
 
-	// Send the successful result.
-	// Use the interface method to send the reply.
+	// Send the successful result (which might be a complex struct).
 	if replyErr := conn.Reply(ctx, req.ID, result); replyErr != nil {
 		wrappedErr := cgerr.ErrorWithDetails(
-			errors.Wrapf(replyErr, "failed to send success response for %s", req.Method),
+			errors.Wrapf(replyErr, "failed to send success response for %s.", req.Method), // Added period.
 			cgerr.CategoryRPC,
 			cgerr.CodeInternalError,
 			map[string]interface{}{"method": req.Method},
 		)
-		m.logf(definitions.LogLevelError, "%v.", wrappedErr)
-		// Trigger error state if sending the reply fails.
+		m.logf(definitions.LogLevelError, "%+v.", wrappedErr) // Use %+v.
 		m.handleErrorOccurrence(wrappedErr)
-		return wrappedErr // Return error if reply fails.
+		return wrappedErr
 	}
 
 	return nil // Success.
 }
 
-// handleConnectedStateNotification handles notifications received in the Connected state.
-// It does not use the connection object to send replies.
+// handleConnectedStateNotification handles notifications.
 func (m *Manager) handleConnectedStateNotification(ctx context.Context, req *jsonrpc2.Request,
 	trigger Trigger) error {
-	// Fire the trigger to allow state machine logging or actions if needed.
-	// Use trigger directly, not string conversion
+	// Fire trigger.
 	if fireErr := m.stateMachine.Fire(trigger, req); fireErr != nil {
-		m.logf(definitions.LogLevelWarn, "Failed to fire notification trigger %s: %v.", trigger, fireErr)
+		m.logf(definitions.LogLevelWarning, "Failed to fire notification trigger %s: %v.", trigger, fireErr) // Corrected LogLevel.
 	}
 
-	// Process the notification by calling the relevant handler.
-	// Ignore the result and errors per JSON-RPC spec for notifications.
+	// Process the notification, ignore result/errors per spec.
 	var handlerErr error
 	switch trigger {
-	case TriggerListResources:
-		_, handlerErr = m.handleListResources(ctx, req)
-	case TriggerReadResource:
-		_, handlerErr = m.handleReadResource(ctx, req)
-	case TriggerListTools:
-		_, handlerErr = m.handleListTools(ctx, req)
-	case TriggerCallTool:
-		_, handlerErr = m.handleCallTool(ctx, req)
-	case TriggerPing:
-		_, handlerErr = m.handlePing(ctx, req)
-	case TriggerSubscribe:
-		_, handlerErr = m.handleSubscribe(ctx, req)
+	// Add cases for notification handlers if any exist (e.g., InitializedNotification).
+	// Currently, calling request handlers for notifications, which is likely incorrect.
+	// Need specific notification handlers or logic to ignore if no action needed.
+	case TriggerListResources, TriggerReadResource, TriggerListTools, TriggerCallTool, TriggerPing, TriggerSubscribe:
+		// Example: _, handlerErr = m.someNotificationHandler(ctx, req)
+		m.logf(definitions.LogLevelDebug, "Received notification for method %s, no specific handler implemented.", req.Method)
+		// Fallthrough or handle specific notifications if needed.
 	default:
 		m.logf(definitions.LogLevelDebug, "Ignoring unhandled notification: %s.", req.Method)
 	}
 
-	// Log errors from notification handlers but take no further action.
+	// Log errors from handlers but take no further action for notifications.
 	if handlerErr != nil {
-		m.logf(definitions.LogLevelWarn, "Error processing notification %s: %v.", req.Method, handlerErr)
+		m.logf(definitions.LogLevelWarning, "Error processing notification %s: %+v.", req.Method, handlerErr) // Corrected LogLevel, use %+v.
 	}
-
 	return nil // Always return nil for notifications.
 }

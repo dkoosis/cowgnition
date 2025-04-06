@@ -52,6 +52,7 @@ func (stdioPipe) Close() error {
 
 // StdioTransport manages a JSON-RPC 2.0 connection over standard input/output.
 // It uses jsonrpc2.NewPlainObjectStream, which expects newline-delimited JSON messages.
+// NOTE: this means NO content-length headers, unlike other transports.
 type StdioTransport struct {
 	conn   *jsonrpc2.Conn // The underlying jsonrpc2 connection instance.
 	closed bool           // Flag indicating if the transport's Close method has been called.

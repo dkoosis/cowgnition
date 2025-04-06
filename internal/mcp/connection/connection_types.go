@@ -1,33 +1,42 @@
 // file: internal/mcp/connection/connection_types.go
+// Package connection defines types and interfaces related to managing MCP connections.
+// These interfaces MUST align with the corresponding interfaces in the mcp package
+// and use the corrected MCP data structures from the definitions package.
+// Terminate all comments with a period.
 package connection
 
 import (
 	"context"
 
+	// Use the corrected definitions package.
 	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 	"github.com/sourcegraph/jsonrpc2" // Needed for RPCConnection interface types.
 )
 
 // ResourceManagerContract defines the interface expected by the connection manager
-// for resource management operations.
+// for resource management operations. This MUST match mcp.ResourceManager.
 type ResourceManagerContract interface {
 	// GetAllResourceDefinitions returns all available resource definitions.
-	GetAllResourceDefinitions() []definitions.ResourceDefinition
+	// Return type updated to use corrected definitions.Resource.
+	GetAllResourceDefinitions() []definitions.Resource
 
-	// ReadResource reads a resource with the given name and arguments.
-	// Returns the resource content, MIME type, and any error encountered.
-	ReadResource(ctx context.Context, name string, args map[string]string) (string, string, error)
+	// ReadResource reads a resource identified by its URI.
+	// Returns a definitions.ReadResourceResult containing the resource contents.
+	// Signature updated to use URI and return definitions.ReadResourceResult.
+	ReadResource(ctx context.Context, uri string) (definitions.ReadResourceResult, error)
 }
 
 // ToolManagerContract defines the interface expected by the connection manager
-// for tool management operations.
+// for tool management operations. This MUST match mcp.ToolManager.
 type ToolManagerContract interface {
 	// GetAllToolDefinitions returns all available tool definitions.
+	// Return type updated to use corrected definitions.ToolDefinition.
 	GetAllToolDefinitions() []definitions.ToolDefinition
 
 	// CallTool attempts to execute a tool with the given name and arguments.
-	// Returns the result of the tool execution and any error encountered.
-	CallTool(ctx context.Context, name string, args map[string]interface{}) (string, error)
+	// Returns a definitions.CallToolResult containing the tool's output or error status.
+	// Return type updated to definitions.CallToolResult.
+	CallTool(ctx context.Context, name string, args map[string]interface{}) (definitions.CallToolResult, error)
 }
 
 // RPCConnection defines the subset of *jsonrpc2.Conn methods used by Manager.
@@ -44,7 +53,7 @@ type RPCConnection interface {
 }
 
 // State represents the connection lifecycle states.
-// type State string
+// type State string // Definition likely exists elsewhere in package (e.g., state.go).
 
 // Trigger represents events that cause state transitions.
-// type Trigger string
+// type Trigger string // Definition likely exists elsewhere in package (e.g., state.go).
