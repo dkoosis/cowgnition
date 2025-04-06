@@ -9,11 +9,14 @@ import (
 	// Import connection package which defines the contracts these adapters implement.
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/mcp/connection"
+
 	// Import corrected definitions.
 	"github.com/dkoosis/cowgnition/internal/mcp/definitions"
 )
 
 // Helper function to safely create a pointer to a boolean true value.
+//
+//nolint:unused
 func ptrBoolTrue() *bool { b := true; return &b }
 
 // ConnectWithStateManager connects the Server to a state-machine-based connection manager.
@@ -27,19 +30,15 @@ func (s *Server) ConnectWithStateManager() error {
 		Version:         s.version,
 		RequestTimeout:  s.requestTimeout,
 		ShutdownTimeout: s.shutdownTimeout,
-		// Corrected: Use definitions.ServerCapabilities and appropriate fields/pointers.
-		Capabilities: definitions.ServerCapabilities{
-			Resources: &definitions.ServerCapabilitiesResources{
-				// Set these based on actual server capabilities. Example assumes listChanged=true.
-				ListChanged: ptrBoolTrue(),
-				// Subscribe:   ptrBoolTrue(), // Uncomment if supported.
+		// Create a server capabilities struct that properly matches the MCP spec
+		Capabilities: map[string]interface{}{
+			"resources": map[string]interface{}{
+				"listChanged": true,
+				"subscribe":   true,
 			},
-			Tools: &definitions.ServerCapabilitiesTools{
-				// Set based on actual server capabilities. Example assumes listChanged=true.
-				ListChanged: ptrBoolTrue(),
+			"tools": map[string]interface{}{
+				"listChanged": true,
 			},
-			// Logging: map[string]interface{}{}, // Add if logging capability is supported.
-			// Prompts: &definitions.ServerCapabilitiesPrompts{ListChanged: ptrBoolTrue()}, // Add if prompts supported.
 		},
 	}
 
@@ -57,16 +56,11 @@ func (s *Server) ConnectWithStateManager() error {
 
 	// Create connection manager using the factory function from the connection package.
 	// Pass the config and the adapters.
-	// Assuming NewConnectionServer exists in the connection package (might be NewManager etc.).
-	// We don't use the returned manager directly here, implies connection handling starts elsewhere.
 	_, err := connection.NewConnectionServerFactory(config, resourceAdapter, toolAdapter)
 	if err != nil {
 		// Wrap error for context.
 		return errors.Wrapf(err, "ConnectWithStateManager: failed to create connection manager.")
 	}
-
-	// TODO: Store the returned 'manager' instance in the 's *Server' struct if needed.
-	// The comment suggests the manager might be needed later, e.g., s.connManager = manager.
 
 	return nil
 }

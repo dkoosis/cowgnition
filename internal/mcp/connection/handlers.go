@@ -32,7 +32,7 @@ func (m *Manager) handleSubscribe(_ context.Context, req *jsonrpc2.Request) (int
 		URI string `json:"uri"`
 	}
 
-	if err := jsonrpc.ParseParams(req.Params, &subscribeReq); err != nil { // Pass req.Params directly.
+	if err := jsonrpc.ParseParams(req, &subscribeReq); err != nil { // Pass the full request
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "handleSubscribe: failed to parse subscribe request params."), // Added func context.
 			cgerr.CategoryRPC,
@@ -80,8 +80,8 @@ const (
 // handleInitialize processes the initialize request.
 func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	// Corrected: Parse into InitializeRequestParams struct.
-	var params definitions.InitializeRequestParams
-	if err := jsonrpc.ParseParams(req.Params, &subscribeReq); err != nil { // Pass req.Params.
+	var initParams definitions.InitializeRequestParams
+	if err := jsonrpc.ParseParams(req, &initParams); err != nil { // Pass the full request
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "handleInitialize: failed to parse initialize request params."), // Added func context.
 			cgerr.CategoryRPC,
@@ -94,13 +94,13 @@ func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (in
 	}
 
 	// Handle client info (no legacy fields needed if parsing InitializeRequestParams directly).
-	clientName := params.ClientInfo.Name
-	clientVersion := params.ClientInfo.Version
+	clientName := initParams.ClientInfo.Name
+	clientVersion := initParams.ClientInfo.Version
 	m.logf(definitions.LogLevelInfo, "Processing initialize request from client: %s (version: %s).",
 		clientName, clientVersion) // Added period.
 
 	// Check protocol version compatibility.
-	clientProtoVersion := params.ProtocolVersion
+	clientProtoVersion := initParams.ProtocolVersion
 	// Assuming isCompatibleProtocolVersion is defined elsewhere in the package.
 	if !isCompatibleProtocolVersion(clientProtoVersion) {
 		return nil, cgerr.ErrorWithDetails(
@@ -117,27 +117,131 @@ func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (in
 
 	// Store client capabilities (already correct type definitions.ClientCapabilities).
 	m.dataMu.Lock()
-	m.clientCapabilities = params.Capabilities // Store the parsed capabilities struct.
+	m.clientCapabilities = initParams.Capabilities // Store the parsed capabilities struct.
 	m.dataMu.Unlock()
 
 	// Construct the response using the corrected definitions.InitializeResult struct.
-	// The ServerCapabilities in m.config MUST have been corrected elsewhere (e.g., adapter).
+	// Avoid type assertion since Capabilities is a map[string]interface{}
 	response := definitions.InitializeResult{
 		// Corrected: Use definitions.Implementation for ServerInfo.
 		ServerInfo: definitions.Implementation{
 			Name:    m.config.Name,
 			Version: m.config.Version,
 		},
-		// Corrected: Assign ServerCapabilities struct directly.
-		// This assumes m.config.Capabilities is now the correct struct type or compatible map.
-		Capabilities:    m.config.Capabilities.(definitions.ServerCapabilities), // Type assertion needed if config still holds map[string]interface{}.
-		ProtocolVersion: clientProtoVersion,                                     // Echo back compatible version client sent.
+		// Convert map to ServerCapabilities
+		Capabilities:    convertMapToServerCapabilities(m.config.Capabilities),
+		ProtocolVersion: clientProtoVersion, // Echo back compatible version client sent.
 		// Instructions: &instructionsString, // Add if defined.
 	}
 
 	m.logf(definitions.LogLevelDebug, "handleInitialize successful.") // Added period.
 	// Return the result struct directly. JSON marshalling happens later.
 	return response, nil
+}
+
+// Helper function to convert map to ServerCapabilities.
+func convertMapToServerCapabilities(capMap map[string]interface{}) definitions.ServerCapabilities {
+	var caps definitions.ServerCapabilities
+
+	// Process basic fields
+	processBasicCapabilities(&caps, capMap)
+
+	// Process resource capabilities
+	processResourceCapabilities(&caps, capMap)
+
+	// Process tool capabilities
+	processToolCapabilities(&caps, capMap)
+
+	// Process prompt capabilities
+	processPromptCapabilities(&caps, capMap)
+
+	return caps
+}
+
+// Process basic/top-level capability fields.
+func processBasicCapabilities(caps *definitions.ServerCapabilities, capMap map[string]interface{}) {
+	// Copy experimental field if present
+	if exp, ok := capMap["experimental"].(map[string]interface{}); ok {
+		caps.Experimental = exp
+	}
+
+	// Copy logging field if present
+	if logging, ok := capMap["logging"].(map[string]interface{}); ok {
+		caps.Logging = logging
+	}
+}
+
+// Process resource-specific capabilities.
+func processResourceCapabilities(caps *definitions.ServerCapabilities, capMap map[string]interface{}) {
+	// Extract resources data if present
+	resourcesData, hasResources := capMap["resources"].(map[string]interface{})
+	if !hasResources {
+		return
+	}
+
+	// Check for listChanged capability
+	if listChanged, ok := resourcesData["listChanged"].(bool); ok && listChanged {
+		ensureResourcesInitialized(caps)
+		trueVal := true
+		caps.Resources.ListChanged = &trueVal
+	}
+
+	// Check for subscribe capability
+	if subscribe, ok := resourcesData["subscribe"].(bool); ok && subscribe {
+		ensureResourcesInitialized(caps)
+		trueVal := true
+		caps.Resources.Subscribe = &trueVal
+	}
+}
+
+// Ensure Resources field is initialized.
+func ensureResourcesInitialized(caps *definitions.ServerCapabilities) {
+	if caps.Resources == nil {
+		caps.Resources = &struct {
+			Subscribe   *bool `json:"subscribe,omitempty"`
+			ListChanged *bool `json:"listChanged,omitempty"`
+		}{}
+	}
+}
+
+// Process tool-specific capabilities.
+func processToolCapabilities(caps *definitions.ServerCapabilities, capMap map[string]interface{}) {
+	// Extract tools data if present
+	toolsData, hasTools := capMap["tools"].(map[string]interface{})
+	if !hasTools {
+		return
+	}
+
+	// Check for listChanged capability
+	if listChanged, ok := toolsData["listChanged"].(bool); ok && listChanged {
+		if caps.Tools == nil {
+			caps.Tools = &struct {
+				ListChanged *bool `json:"listChanged,omitempty"`
+			}{}
+		}
+		trueVal := true
+		caps.Tools.ListChanged = &trueVal
+	}
+}
+
+// Process prompt-specific capabilities.
+func processPromptCapabilities(caps *definitions.ServerCapabilities, capMap map[string]interface{}) {
+	// Extract prompts data if present
+	promptsData, hasPrompts := capMap["prompts"].(map[string]interface{})
+	if !hasPrompts {
+		return
+	}
+
+	// Check for listChanged capability
+	if listChanged, ok := promptsData["listChanged"].(bool); ok && listChanged {
+		if caps.Prompts == nil {
+			caps.Prompts = &struct {
+				ListChanged *bool `json:"listChanged,omitempty"`
+			}{}
+		}
+		trueVal := true
+		caps.Prompts.ListChanged = &trueVal
+	}
 }
 
 // handleListResources processes a resources/list request.
@@ -164,8 +268,8 @@ type readResourceRequestParams struct {
 // handleReadResource processes a resources/read request.
 func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	// Corrected: Parse into local struct expecting URI.
-	var params readResourceRequestParams
-	if err := jsonrpc.ParseParams(req.Params, &subscribeReq); err != nil { // Pass req.Params.
+	var readParams readResourceRequestParams
+	if err := jsonrpc.ParseParams(req, &readParams); err != nil { // Pass the full request
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "handleReadResource: failed to parse request params."), // Added func context.
 			cgerr.CategoryRPC,
@@ -178,7 +282,7 @@ func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request)
 	}
 
 	// Corrected: Validate URI instead of Name.
-	if params.URI == "" {
+	if readParams.URI == "" {
 		return nil, cgerr.ErrorWithDetails(
 			errors.New("handleReadResource: missing required parameter: uri."), // Added func context.
 			cgerr.CategoryRPC,
@@ -192,23 +296,23 @@ func (m *Manager) handleReadResource(ctx context.Context, req *jsonrpc2.Request)
 
 	// Corrected: Call the resource manager using the updated contract signature.
 	// It now returns (definitions.ReadResourceResult, error).
-	result, err := m.resourceManager.ReadResource(ctx, params.URI)
+	result, err := m.resourceManager.ReadResource(ctx, readParams.URI)
 	if err != nil {
 		// Error is already wrapped by the ResourceManager, add connection context.
 		errCode := cgerr.GetErrorCode(err)
 		return nil, cgerr.ErrorWithDetails(
-			errors.Wrapf(err, "handleReadResource: failed to read resource URI '%s'.", params.URI), // Added func context.
+			errors.Wrapf(err, "handleReadResource: failed to read resource URI '%s'.", readParams.URI), // Added func context.
 			cgerr.CategoryResource,
 			errCode,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
-				"resource_uri":  params.URI, // Use URI in context.
+				"resource_uri":  readParams.URI, // Use URI in context.
 			},
 		)
 	}
 
 	// Log success, result contains details.
-	m.logf(definitions.LogLevelDebug, "Read resource %s successfully.", params.URI) // Added period.
+	m.logf(definitions.LogLevelDebug, "Read resource %s successfully.", readParams.URI) // Added period.
 
 	// Corrected: Return the definitions.ReadResourceResult directly.
 	return result, nil
@@ -233,8 +337,8 @@ func (m *Manager) handleListTools(_ context.Context, req *jsonrpc2.Request) (int
 // handleCallTool processes a tools/call request.
 func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (interface{}, error) {
 	// Corrected: Parse into definitions.CallToolRequestParams struct.
-	var params definitions.CallToolRequestParams
-	if err := jsonrpc.ParseParams(req.Params, &subscribeReq); err != nil { // Pass req.Params.
+	var callParams definitions.CallToolRequestParams
+	if err := jsonrpc.ParseParams(req, &callParams); err != nil { // Pass the full request
 		return nil, cgerr.ErrorWithDetails(
 			errors.Wrap(err, "handleCallTool: failed to parse request params."), // Added func context.
 			cgerr.CategoryRPC,
@@ -247,7 +351,7 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 	}
 
 	// Corrected: Validate Name from params struct.
-	if params.Name == "" {
+	if callParams.Name == "" {
 		return nil, cgerr.ErrorWithDetails(
 			errors.New("handleCallTool: missing required parameter: name."), // Added func context.
 			cgerr.CategoryRPC,
@@ -268,7 +372,7 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 	startTime := time.Now()
 	// Corrected: Call the tool manager using the updated contract signature.
 	// It now returns (definitions.CallToolResult, error).
-	result, err := m.toolManager.CallTool(childCtx, params.Name, params.Arguments)
+	result, err := m.toolManager.CallTool(childCtx, callParams.Name, callParams.Arguments)
 	duration := time.Since(startTime)
 
 	// Handle Go errors returned from the manager (protocol errors, internal errors, etc.).
@@ -276,14 +380,14 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 		errCode := cgerr.GetErrorCode(err)
 		// Error already wrapped by ToolManager, add connection context details.
 		return nil, cgerr.ErrorWithDetails(
-			errors.Wrapf(err, "handleCallTool: failed to call tool '%s'.", params.Name), // Added func context.
+			errors.Wrapf(err, "handleCallTool: failed to call tool '%s'.", callParams.Name), // Added func context.
 			cgerr.CategoryTool, // Keep category set by lower layer if appropriate.
 			errCode,
 			map[string]interface{}{
 				"connection_id": m.connectionID,
 				"request_id":    jsonrpc.FormatRequestID(req.ID),
-				"tool_name":     params.Name,
-				"tool_args":     params.Arguments,
+				"tool_name":     callParams.Name,
+				"tool_args":     callParams.Arguments,
 				"duration_ms":   duration.Milliseconds(),
 			},
 		)
@@ -293,7 +397,7 @@ func (m *Manager) handleCallTool(ctx context.Context, req *jsonrpc2.Request) (in
 	// The 'result' (definitions.CallToolResult) contains the actual tool output
 	// and potentially an 'IsError' flag indicating a tool-specific failure.
 	// We simply return the result struct; the client interprets IsError.
-	m.logf(definitions.LogLevelDebug, "Called tool %s, execution time: %s.", params.Name, duration) // Added period.
+	m.logf(definitions.LogLevelDebug, "Called tool %s, execution time: %s.", callParams.Name, duration) // Added period.
 
 	// Corrected: Return the definitions.CallToolResult directly.
 	return result, nil

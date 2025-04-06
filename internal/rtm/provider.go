@@ -193,7 +193,10 @@ func (p *AuthProvider) checkExistingToken(ctx context.Context) (map[string]inter
 		p.client.SetAuthToken(token)
 		// Pass context to the API client call - assumes client method CheckTokenCtx exists.
 		auth, checkErr := p.client.CheckTokenCtx(ctx)
-		if checkErr == nil && auth != nil && auth.Auth != nil && auth.Auth.User != nil {
+		// Fix: Check if auth and auth.Auth are nil before trying to access Auth.User
+		// User is a struct, not a pointer, so we check if parent pointers are nil and then
+		// check a field of User to see if it contains meaningful data
+		if checkErr == nil && auth != nil && auth.Auth != nil && auth.Auth.User.ID != "" {
 			// Token is valid. Prepare the success status map.
 			statusMap := map[string]interface{}{
 				"status":      "authenticated",
@@ -318,7 +321,7 @@ func (p *AuthProvider) callCompleteAuthTool(ctx context.Context, args map[string
     var username, fullname, perms string
     if auth.Auth != nil {
         perms = auth.Auth.Perms
-        if auth.Auth.User != nil {
+        if auth.Auth.User.ID != "" {
              username = auth.Auth.User.Username
              fullname = auth.Auth.User.Fullname
         }

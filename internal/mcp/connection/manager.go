@@ -45,16 +45,6 @@ type Manager struct {
 	initialized        bool // Tracks if the client has been initialized properly.
 }
 
-// ClientCapabilities represents the capabilities reported by the client during initialization.
-// Defined locally as it's specific to the manager's state. Use definitions if needed elsewhere.
-type ClientCapabilities struct {
-	Experimental map[string]interface{} `json:"experimental,omitempty"`
-	Roots        *struct {
-		ListChanged *bool `json:"listChanged,omitempty"`
-	} `json:"roots,omitempty"`
-	Sampling map[string]interface{} `json:"sampling,omitempty"`
-}
-
 // NewManager creates and initializes a new Manager.
 func NewManager(
 	config ServerConfig,
@@ -121,7 +111,7 @@ func (m *Manager) onEnterUnconnected(ctx context.Context, args ...interface{}) e
 	m.dataMu.Lock()
 	m.jsonrpcConn = nil
 	// Clear client capabilities on disconnect.
-	m.clientCapabilities = ClientCapabilities{} // Re-initialize or set to nil.
+	m.clientCapabilities = definitions.ClientCapabilities{} // Re-initialize or set to nil.
 	m.dataMu.Unlock()
 	return nil
 }
@@ -164,7 +154,6 @@ func (m *Manager) Handle(ctx context.Context, conn RPCConnection, req *jsonrpc2.
 // processStateAndTrigger routes the request.
 func (m *Manager) processStateAndTrigger(ctx context.Context, conn RPCConnection, req *jsonrpc2.Request,
 	trigger Trigger, currentState State) error {
-
 	// Initialize only allowed from unconnected.
 	if trigger == TriggerInitialize && currentState == StateUnconnected {
 		// Pass request via FireCtx args for OnEntryFrom handler.
@@ -496,6 +485,8 @@ func (m *Manager) handleConnectedStateRequest(ctx context.Context, conn RPCConne
 }
 
 // handleConnectedStateNotification handles notifications.
+//
+//nolint:unparam
 func (m *Manager) handleConnectedStateNotification(ctx context.Context, req *jsonrpc2.Request,
 	trigger Trigger) error {
 	// Fire trigger.
