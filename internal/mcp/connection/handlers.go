@@ -1,6 +1,6 @@
-// file: internal/mcp/connection/handlers.go
 // Package connection contains handlers for processing specific MCP methods within a connection's lifecycle.
 // Terminate all comments with a period.
+// file: internal/mcp/connection/handlers.go
 package connection
 
 import (
@@ -137,6 +137,24 @@ func (m *Manager) handleInitialize(_ context.Context, req *jsonrpc2.Request) (in
 	m.logf(definitions.LogLevelDebug, "handleInitialize successful.") // Added period.
 	// Return the result struct directly. JSON marshalling happens later.
 	return response, nil
+}
+
+// handleInitialized handles the 'notifications/initialized' notification.
+// This confirms the client has processed the initialize response and is ready.
+//
+//nolint:unparam
+func (m *Manager) handleInitialized(ctx context.Context, req *jsonrpc2.Request) error {
+	// This notification confirms the client is ready after receiving the initialize response.
+	m.logf(definitions.LogLevelInfo, "Received 'notifications/initialized' from client.")
+
+	// Log client capabilities stored during handleInitialize for context.
+	m.dataMu.RLock()
+	clientCaps := m.clientCapabilities
+	m.dataMu.RUnlock()
+	m.logf(definitions.LogLevelDebug, "Client capabilities confirmed during initialized: %+v", clientCaps)
+
+	// Notifications don't have responses, so typically return nil
+	return nil
 }
 
 // Helper function to convert map to ServerCapabilities.

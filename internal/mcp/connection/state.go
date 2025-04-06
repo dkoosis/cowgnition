@@ -19,19 +19,20 @@ func (s State) String() string { return string(s) } // Updated receiver type
 type Trigger string
 
 const (
-	TriggerInitialize       Trigger = "Initialize"
-	TriggerInitSuccess      Trigger = "InitSuccess"
-	TriggerInitFailure      Trigger = "InitFailure"
-	TriggerListResources    Trigger = "ListResources"
-	TriggerReadResource     Trigger = "ReadResource"
-	TriggerListTools        Trigger = "ListTools"
-	TriggerCallTool         Trigger = "CallTool"
-	TriggerShutdown         Trigger = "Shutdown"
-	TriggerShutdownComplete Trigger = "ShutdownComplete"
-	TriggerErrorOccurred    Trigger = "ErrorOccurred"
-	TriggerDisconnect       Trigger = "Disconnect"
-	TriggerPing             Trigger = "Ping"
-	TriggerSubscribe        Trigger = "Subscribe"
+	TriggerInitialize              Trigger = "Initialize"
+	TriggerInitSuccess             Trigger = "InitSuccess"
+	TriggerInitFailure             Trigger = "InitFailure"
+	TriggerListResources           Trigger = "ListResources"
+	TriggerReadResource            Trigger = "ReadResource"
+	TriggerListTools               Trigger = "ListTools"
+	TriggerCallTool                Trigger = "CallTool"
+	TriggerShutdown                Trigger = "Shutdown"
+	TriggerShutdownComplete        Trigger = "ShutdownComplete"
+	TriggerErrorOccurred           Trigger = "ErrorOccurred"
+	TriggerDisconnect              Trigger = "Disconnect"
+	TriggerPing                    Trigger = "Ping"
+	TriggerSubscribe               Trigger = "Subscribe"
+	TriggerInitializedNotification Trigger = "InitializedNotification" // Added for client's initialized notification
 )
 
 func (t Trigger) String() string { return string(t) }
@@ -40,8 +41,9 @@ func (t Trigger) String() string { return string(t) }
 // corresponding state machine Triggers.
 var methodToTriggerMap = map[string]Trigger{
 	// Initialization / Lifecycle
-	"initialize": TriggerInitialize,
-	"shutdown":   TriggerShutdown,
+	"initialize":                TriggerInitialize,
+	"shutdown":                  TriggerShutdown,
+	"notifications/initialized": TriggerInitializedNotification, // Added mapping for initialized notification
 
 	// Resources
 	"resources/list":      TriggerListResources,

@@ -484,33 +484,29 @@ func (m *Manager) handleConnectedStateRequest(ctx context.Context, conn RPCConne
 	return nil // Success.
 }
 
-// handleConnectedStateNotification handles notifications.
-//
-//nolint:unparam
 func (m *Manager) handleConnectedStateNotification(ctx context.Context, req *jsonrpc2.Request,
 	trigger Trigger) error {
 	// Fire trigger.
 	if fireErr := m.stateMachine.Fire(trigger, req); fireErr != nil {
-		m.logf(definitions.LogLevelWarning, "Failed to fire notification trigger %s: %v.", trigger, fireErr) // Corrected LogLevel.
+		m.logf(definitions.LogLevelWarning, "Failed to fire notification trigger %s: %v.", trigger, fireErr)
 	}
 
 	// Process the notification, ignore result/errors per spec.
 	var handlerErr error
 	switch trigger {
-	// Add cases for notification handlers if any exist (e.g., InitializedNotification).
-	// Currently, calling request handlers for notifications, which is likely incorrect.
-	// Need specific notification handlers or logic to ignore if no action needed.
+	// Add case for handling the initialized notification
+	case TriggerInitializedNotification:
+		handlerErr = m.handleInitialized(ctx, req)
+	// Existing cases for other notification handlers
 	case TriggerListResources, TriggerReadResource, TriggerListTools, TriggerCallTool, TriggerPing, TriggerSubscribe:
-		// Example: _, handlerErr = m.someNotificationHandler(ctx, req)
 		m.logf(definitions.LogLevelDebug, "Received notification for method %s, no specific handler implemented.", req.Method)
-		// Fallthrough or handle specific notifications if needed.
 	default:
 		m.logf(definitions.LogLevelDebug, "Ignoring unhandled notification: %s.", req.Method)
 	}
 
 	// Log errors from handlers but take no further action for notifications.
 	if handlerErr != nil {
-		m.logf(definitions.LogLevelWarning, "Error processing notification %s: %+v.", req.Method, handlerErr) // Corrected LogLevel, use %+v.
+		m.logf(definitions.LogLevelWarning, "Error processing notification %s: %+v.", req.Method, handlerErr)
 	}
 	return nil // Always return nil for notifications.
 }
