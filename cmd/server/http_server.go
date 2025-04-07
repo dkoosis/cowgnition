@@ -1,4 +1,4 @@
-// file: cmd/server/server.go
+// file: cmd/server/http_server.go
 package server
 
 import (
@@ -22,6 +22,7 @@ import (
 // configPath string: Path to the configuration file.
 // requestTimeout time.Duration: Timeout for request processing.
 // shutdownTimeout time.Duration: Timeout for graceful shutdown.
+// debug bool: Enable debug mode for verbose logging.
 //
 // Returns:
 //
@@ -50,7 +51,7 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		cfg = config.DefaultConfig()
 	}
 
-	if debugMode {
+	if debug {
 		log.Printf("Server configuration: %+v", cfg)
 	}
 
@@ -58,7 +59,7 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	opts := mcp.ServerOptions{
 		RequestTimeout:  requestTimeout,
 		ShutdownTimeout: shutdownTimeout,
-		Debug:           debugMode,
+		Debug:           debug,
 	}
 
 	// Create MCP server instance
@@ -70,7 +71,7 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	// Start the server based on transport type
 	switch transportType {
 	case "stdio":
-		if debugMode {
+		if debug {
 			log.Println("Starting server with stdio transport")
 		}
 		go func() {
@@ -82,7 +83,7 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 
 	case "http":
 		addr := fmt.Sprintf(":%d", cfg.Server.Port)
-		if debugMode {
+		if debug {
 			log.Printf("Starting server with HTTP transport on %s", addr)
 		}
 		go func() {

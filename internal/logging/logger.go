@@ -9,7 +9,7 @@ import (
 // This abstraction allows for different logger implementations while
 // maintaining consistent logging conventions throughout the codebase.
 type Logger interface {
-	// Debug logs a debug-level message
+	// Debug logs a debug-level message.
 	Debug(msg string, args ...any)
 
 	// Info logs an info-level message
@@ -39,25 +39,25 @@ func (l *NoopLogger) Error(msg string, args ...any)          {}
 func (l *NoopLogger) WithContext(ctx context.Context) Logger { return l }
 func (l *NoopLogger) WithField(key string, value any) Logger { return l }
 
-// Global singleton instance of NoopLogger
+// Global singleton instance of NoopLogger.
 var noop = &NoopLogger{}
 
-// GetNoopLogger returns the no-op logger instance
+// GetNoopLogger returns the no-op logger instance.
 func GetNoopLogger() Logger {
 	return noop
 }
 
-// defaultLogger is the application's default logger instance
+// defaultLogger is the application's default logger instance.
 var defaultLogger Logger = GetNoopLogger()
 
-// SetDefaultLogger sets the default logger for the application
+// SetDefaultLogger sets the default logger for the application.
 func SetDefaultLogger(logger Logger) {
 	if logger != nil {
 		defaultLogger = logger
 	}
 }
 
-// GetLogger returns a logger, used by packages to get their own logger
+// GetLogger returns a logger, used by packages to get their own logger.
 func GetLogger(name string) Logger {
 	return defaultLogger.WithField("component", name)
 }

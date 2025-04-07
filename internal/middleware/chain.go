@@ -7,6 +7,20 @@ import (
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
 
+// Middleware represents a component in the middleware chain.
+// It can be either a function or a struct implementing the Middleware interface.
+type Middleware interface {
+	Handle(ctx context.Context, message []byte, next transport.MessageHandler) ([]byte, error)
+}
+
+// FuncMiddleware wraps a function to implement the Middleware interface.
+type FuncMiddleware func(ctx context.Context, message []byte, next transport.MessageHandler) ([]byte, error)
+
+// Handle implements the Middleware interface for FuncMiddleware.
+func (f FuncMiddleware) Handle(ctx context.Context, message []byte, next transport.MessageHandler) ([]byte, error) {
+	return f(ctx, message, next)
+}
+
 // Chain represents a middleware chain that processes messages sequentially.
 // The chain pattern provides flexibility and separation of concerns by allowing
 // multiple processing steps to be composed into a single handler.
@@ -19,7 +33,7 @@ import (
 // - Performance: Unused middleware can be omitted from the chain
 type Chain struct {
 	// middlewares is the ordered list of middleware handlers.
-	middlewares []transport.MessageHandler
+	middlewares []Middleware
 
 	// final is the handler that processes the message after all middleware.
 	final transport.MessageHandler
@@ -29,64 +43,52 @@ type Chain struct {
 // The final handler is the core message processor that runs after all middleware.
 func NewChain(final transport.MessageHandler) *Chain {
 	return &Chain{
-		middlewares: make([]transport.MessageHandler, 0),
+		middlewares: make([]Middleware, 0),
 		final:       final,
 	}
 }
 
 // Use adds a middleware to the chain.
-// Middleware will be executed in the order they are added.
-func (c *Chain) Use(middleware transport.MessageHandler) {
-	c.middlewares = append(c.middlewares, middleware)
+// It accepts either a Middleware interface or a function that can be converted to FuncMiddleware.
+func (c *Chain) Use(middleware interface{}) {
+	switch m := middleware.(type) {
+	case Middleware:
+		c.middlewares = append(c.middlewares, m)
+	case func(ctx context.Context, message []byte, next transport.MessageHandler) ([]byte, error):
+		c.middlewares = append(c.middlewares, FuncMiddleware(m))
+	case transport.MessageHandler:
+		// Convert MessageHandler to Middleware
+		c.UseFunc(func(ctx context.Context, message []byte, next transport.MessageHandler) ([]byte, error) {
+			result, err := m(ctx, message)
+			if err != nil || result != nil {
+				return result, err
+			}
+			return next(ctx, message)
+		})
+	default:
+		panic("middleware must be a Middleware interface or compatible function")
+	}
+}
+
+// UseFunc adds a function middleware to the chain.
+func (c *Chain) UseFunc(fn func(ctx context.Context, message []byte, next transport.MessageHandler) ([]byte, error)) {
+	c.middlewares = append(c.middlewares, FuncMiddleware(fn))
 }
 
 // Handler builds the middleware chain and returns a handler function.
 // The returned handler encapsulates the entire processing pipeline.
-//
-// The chain is built from the end to the beginning, so that the first middleware
-// in the list is the first to process the message, and the final handler is the last.
 func (c *Chain) Handler() transport.MessageHandler {
-	handler := c.final
+	// Start with the final handler
+	var handler transport.MessageHandler = c.final
 
 	// Build the chain from the end to the beginning
-	// This creates a nested structure where each middleware wraps the next one
 	for i := len(c.middlewares) - 1; i >= 0; i-- {
 		middleware := c.middlewares[i]
+		next := handler // Capture the current handler to use as "next" in the closure
 
-		// For middleware that implement the SetNext interface
-		// This approach allows middleware to maintain state between calls
-		if nextSetter, ok := middleware.(interface {
-			SetNext(transport.MessageHandler)
-		}); ok {
-			nextSetter.SetNext(handler)
-			handler = middleware
-		} else {
-			// For simple middleware functions
-			// This is a workaround for regular function middlewares
-			// We need to wrap the original middleware and the next handler in a closure
-			// that allows for proper chaining
-			nextHandler := handler // Store the next handler to use in our closure
-
-			// Create a new handler function that will first call the middleware
-			// and then manually call the next handler if the middleware doesn't return
-			handler = func(ctx context.Context, message []byte) ([]byte, error) {
-				// Assume simple middleware doesn't chain internally
-				// So we'll handle the result and chain manually
-				result, err := middleware(ctx, message)
-				if err != nil {
-					// If middleware returns an error, propagate it
-					return nil, err
-				}
-
-				// If middleware returned a result, it means it handled the request completely
-				// (like returning an error response to a malformed request)
-				if result != nil {
-					return result, nil
-				}
-
-				// Otherwise, continue the chain by calling the next handler
-				return nextHandler(ctx, message)
-			}
+		// Create a new handler that uses this middleware and the captured "next" handler
+		handler = func(ctx context.Context, message []byte) ([]byte, error) {
+			return middleware.Handle(ctx, message, next)
 		}
 	}
 

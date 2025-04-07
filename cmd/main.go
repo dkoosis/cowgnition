@@ -1,4 +1,4 @@
-// file: cmd/server/main.go
+// file: cmd/main.go
 package main
 
 import (
@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/dkoosis/cowgnition/cmd/server"
 )
 
 // Version information - should be set during build via ldflags.
@@ -61,7 +63,7 @@ func main() {
 			log.Printf("Debug logging enabled")
 		}
 
-		if err := runServer(*transportType, *serveConfigPath, *requestTimeout, *shutdownTimeout); err != nil {
+		if err := server.RunServer(*transportType, *serveConfigPath, *requestTimeout, *shutdownTimeout, debugMode); err != nil {
 			log.Fatalf("Server failed: %+v", err)
 		}
 
@@ -79,7 +81,6 @@ func printUsage() {
 	log.Println("\nRun 'cowgnition <command> -h' for help on a specific command.")
 }
 
-// TODO: fix configuration file handling
 // getDefaultConfigPath returns the default path for the configuration file.
 func getDefaultConfigPath() string {
 	homeDir, err := os.UserHomeDir()
