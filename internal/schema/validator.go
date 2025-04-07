@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -179,12 +180,14 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 
 // compileSubSchema compiles a sub-schema from the base schema.
 func (v *SchemaValidator) compileSubSchema(name, pointer string) error {
-	subSchema, err := v.compiler.CompileWithID(pointer, "mcp-schema.json")
+	// In the santhosh-tekuri/jsonschema/v5 library, we use Compile with a pointer
+	// instead of CompileWithID which doesn't exist
+	subSchema, err := v.compiler.Compile(pointer)
 	if err != nil {
 		return NewValidationError(
 			ErrSchemaCompileFailed,
 			fmt.Sprintf("Failed to compile %s schema", name),
-			errors.Wrap(err, fmt.Sprintf("compiler.CompileWithID failed for %s", name)),
+			errors.Wrap(err, fmt.Sprintf("compiler.Compile failed for %s", name)),
 		).WithContext("schemaPointer", pointer)
 	}
 
@@ -323,9 +326,41 @@ func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data
 
 // convertValidationError converts a jsonschema.ValidationError to our custom ValidationError.
 func convertValidationError(valErr *jsonschema.ValidationError, messageType string, data []byte) *ValidationError {
-	schemaPath := valErr.SchemaPath
-	instancePath := valErr.InstancePath
+	// Extract error details
+	// In this library, the error details are in the Basic Output format described in JSON Schema spec
 
+	// Extract schema path and instance path from the error
+	var schemaPath string
+	var instancePath string
+
+	// Get basic path from the error message
+	errorMsg := valErr.Error()
+	if strings.Contains(errorMsg, "schema path") {
+		// Try to extract schema path from the error message
+		parts := strings.Split(errorMsg, "schema path:")
+		if len(parts) > 1 {
+			schemaPathPart := strings.TrimSpace(parts[1])
+			endIdx := strings.Index(schemaPathPart, ":")
+			if endIdx != -1 {
+				schemaPath = schemaPathPart[:endIdx]
+			} else {
+				schemaPath = schemaPathPart
+			}
+		}
+	}
+
+	// Try to extract instance path using BasicOutput() if available
+	basicOutput := valErr.BasicOutput()
+	if len(basicOutput.Errors) > 0 {
+		for _, errorDetail := range basicOutput.Errors {
+			if errorDetail.InstanceLocation != "" {
+				instancePath = errorDetail.InstanceLocation
+				break
+			}
+		}
+	}
+
+	// Create our custom error with the extracted paths
 	customErr := NewValidationError(
 		ErrValidationFailed,
 		valErr.Message,

@@ -1,402 +1,283 @@
-// file: internal/schema/validator.go
-package schema
+// file: internal/middleware/validation.go
+package middleware
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/santhosh-tekuri/jsonschema/v5"
+	"github.com/dkoosis/cowgnition/internal/schema"
+	"github.com/dkoosis/cowgnition/internal/transport"
 )
 
-// SchemaSource defines where to load the schema from.
-type SchemaSource struct {
-	// URL is the remote location of the schema, if applicable.
-	URL string
-	// FilePath is the local file path of the schema, if applicable.
-	FilePath string
-	// Embedded is the embedded schema content, if applicable.
-	Embedded []byte
+// ValidationOptions contains configuration options for the validation middleware.
+// These options balance correctness, performance, and operational flexibility.
+type ValidationOptions struct {
+	// Enabled determines if validation is active. If false, validation is skipped entirely.
+	//
+	// Motivation:
+	// - Performance: In high-throughput production environments, validation might be too costly
+	// - A/B Testing: Measure real-world performance impact by enabling/disabling for different traffic
+	// - Emergency Override: Provides an escape hatch if validation issues occur in production
+	// - Development vs Production: Different environments may have different validation needs
+	Enabled bool
+
+	// SkipTypes is a map of message types to skip validation for.
+	// Key is the message type (e.g., "ping"), value is a boolean (always true).
+	//
+	// Motivation:
+	// - Performance: High-frequency messages (like heartbeats) can bypass validation to reduce overhead
+	// - Latency-Sensitive: Time-critical operations can skip validation to minimize processing time
+	// - Well-Tested Paths: For message types that rarely change and are well-tested, validation adds little value
+	// - Operational Safety: Critical management commands might need to work even with schema issues
+	SkipTypes map[string]bool
+
+	// StrictMode determines if validation errors result in rejection.
+	// If true (default), validation failures cause messages to be rejected.
+	// If false, validation errors are logged but messages still pass through.
+	//
+	// Motivation:
+	// - Development Environment: Log issues but don't block testing with minor schema violations
+	// - Graceful Degradation: Better to process a slightly malformed message than reject it entirely
+	// - Migration Periods: Temporarily accommodate clients using older schemas during upgrades
+	// - Telemetry: Identify problematic clients without disrupting their functionality
+	// - Robustness: Some systems prioritize availability over strict correctness
+	StrictMode bool
+
+	// MeasurePerformance enables logging of validation performance metrics.
+	// This helps identify which message types or schemas have high validation costs.
+	//
+	// Motivation:
+	// - Performance Optimization: Identify which message types are expensive to validate
+	// - Capacity Planning: Understand validation overhead for infrastructure sizing
+	// - Schema Complexity Analysis: Detect when schema changes significantly increase validation time
+	// - Runtime Monitoring: Track validation performance in production
+	MeasurePerformance bool
 }
 
-// SchemaValidator handles loading, compiling, and validating against JSON schemas.
-// It is designed to validate JSON-RPC messages against the MCP schema specification.
-type SchemaValidator struct {
-	// source contains the configuration for where to load the schema from.
-	source SchemaSource
-	// compiler is the JSONSchema compiler used to process schemas.
-	compiler *jsonschema.Compiler
-	// schemas maps message types to their compiled schema.
-	schemas map[string]*jsonschema.Schema
-	// mu protects concurrent access to the schemas map.
-	mu sync.RWMutex
-	// httpClient is used for remote schema fetching.
-	httpClient *http.Client
-}
+// DefaultValidationOptions returns the default validation options.
+// These defaults prioritize correctness and security over performance.
+func DefaultValidationOptions() ValidationOptions {
+	return ValidationOptions{
+		// Enabled by default as validation provides important guarantees for protocol correctness
+		Enabled: true,
 
-// ErrorCode defines validation error codes.
-type ErrorCode int
+		// Skip validation for simple, frequent messages by default
+		// Ping is a standard health check in JSON-RPC that rarely contains complex data
+		SkipTypes: map[string]bool{"ping": true},
 
-// Defined validation error codes.
-const (
-	ErrSchemaNotFound ErrorCode = iota + 1000
-	ErrSchemaLoadFailed
-	ErrSchemaCompileFailed
-	ErrValidationFailed
-	ErrInvalidJSONFormat
-)
+		// Default to strict mode for maximum correctness and security
+		// This ensures all messages fully conform to the protocol specification
+		StrictMode: true,
 
-// ValidationError represents a schema validation error.
-type ValidationError struct {
-	// Code is the numeric error code.
-	Code ErrorCode
-	// Message is a human-readable error message.
-	Message string
-	// Cause is the underlying error, if any.
-	Cause error
-	// SchemaPath identifies the specific part of the schema that was violated.
-	SchemaPath string
-	// InstancePath identifies the specific part of the validated instance that violated the schema.
-	InstancePath string
-	// Context contains additional error context.
-	Context map[string]interface{}
-}
-
-// Error implements the error interface.
-func (e *ValidationError) Error() string {
-	base := fmt.Sprintf("[%d] %s", e.Code, e.Message)
-	if e.SchemaPath != "" {
-		base += fmt.Sprintf(" (schema path: %s)", e.SchemaPath)
+		// Performance measurement disabled by default to avoid logging overhead
+		// Enable this when specifically analyzing validation performance
+		MeasurePerformance: false,
 	}
-	if e.InstancePath != "" {
-		base += fmt.Sprintf(" (instance path: %s)", e.InstancePath)
-	}
-	if e.Cause != nil {
-		base += fmt.Sprintf(": %v", e.Cause)
-	}
-	return base
 }
 
-// Unwrap returns the underlying error.
-func (e *ValidationError) Unwrap() error {
-	return e.Cause
+// ValidationMiddleware validates incoming and outgoing messages against JSON schemas.
+// It serves as a guardian of protocol correctness while providing flexibility for
+// different operational requirements.
+type ValidationMiddleware struct {
+	// validator is the schema validator used to validate messages.
+	validator *schema.SchemaValidator
+
+	// options contains the configuration options for this middleware.
+	options ValidationOptions
+
+	// next is the next handler in the middleware chain.
+	next transport.MessageHandler
+
+	// logger for validation-related events.
+	logger interface{} // Will be replaced with proper logger implementation
 }
 
-// WithContext adds context information to the validation error.
-func (e *ValidationError) WithContext(key string, value interface{}) *ValidationError {
-	if e.Context == nil {
-		e.Context = make(map[string]interface{})
+// NewValidationMiddleware creates a new validation middleware with the given options.
+func NewValidationMiddleware(validator *schema.SchemaValidator, options ValidationOptions) *ValidationMiddleware {
+	return &ValidationMiddleware{
+		validator: validator,
+		options:   options,
+		// logger will be set separately
 	}
-	e.Context[key] = value
-	return e
 }
 
-// NewValidationError creates a new ValidationError.
-func NewValidationError(code ErrorCode, message string, cause error) *ValidationError {
-	return &ValidationError{
-		Code:    code,
-		Message: message,
-		Cause:   errors.WithStack(cause), // Preserve stack trace
-		Context: map[string]interface{}{
-			"timestamp": time.Now().UTC(),
+// SetNext sets the next handler in the middleware chain.
+func (m *ValidationMiddleware) SetNext(next transport.MessageHandler) {
+	m.next = next
+}
+
+// HandleMessage implements the MessageHandler interface.
+// It validates the message if validation is enabled, then passes it to the next handler.
+// The behavior is controlled by the options provided during initialization.
+func (m *ValidationMiddleware) HandleMessage(ctx context.Context, message []byte) ([]byte, error) {
+	// Fast path: If validation is disabled, skip directly to the next handler.
+	// This provides a zero-overhead option for high-performance environments.
+	if !m.options.Enabled {
+		return m.next(ctx, message)
+	}
+
+	// Start measuring performance if enabled.
+	// This allows precise tracking of validation costs per message.
+	var startTime time.Time
+	if m.options.MeasurePerformance {
+		startTime = time.Now()
+	}
+
+	// Identify the message type and extract the request ID.
+	// This is a lightweight operation that examines just enough of the message structure.
+	msgType, reqID, err := m.identifyMessage(message)
+	if err != nil {
+		// For parse errors, we can't proceed with normal processing.
+		// JSON-RPC parse errors (-32700) are fundamental issues that prevent further handling.
+		return createParseErrorResponse(reqID, err)
+	}
+
+	// Skip validation for exempted message types.
+	// This allows high-frequency or time-sensitive messages to bypass validation.
+	if m.options.SkipTypes[msgType] {
+		return m.next(ctx, message)
+	}
+
+	// Perform the validation against the schema.
+	// This is the core functionality that ensures protocol compliance.
+	err = m.validator.Validate(ctx, msgType, message)
+
+	// Log performance metrics if enabled.
+	// This provides visibility into validation costs for optimization.
+	if m.options.MeasurePerformance {
+		elapsed := time.Since(startTime)
+		// Use proper logger here
+		fmt.Printf("Validation of %s took %v\n", msgType, elapsed)
+	}
+
+	if err != nil {
+		// Handle validation errors according to strict mode setting.
+		if m.options.StrictMode {
+			// In strict mode, validation errors result in immediate rejection.
+			// This enforces protocol correctness but may impact availability.
+			return createValidationErrorResponse(reqID, err)
+		}
+
+		// In non-strict mode, log the error but allow processing to continue.
+		// This prioritizes availability over strict correctness.
+		// Use proper logger here
+		fmt.Printf("Validation error (passing through in non-strict mode): %v\n", err)
+	}
+
+	// If validation passes or we're in non-strict mode with errors, continue to next handler.
+	return m.next(ctx, message)
+}
+
+// identifyMessage extracts the message type and request ID from a JSON-RPC message.
+// Returns message type (method name or response type), request ID (if present), and error.
+func (m *ValidationMiddleware) identifyMessage(message []byte) (string, interface{}, error) {
+	// Parse just enough of the message to identify type
+	var parsed map[string]json.RawMessage
+	if err := json.Unmarshal(message, &parsed); err != nil {
+		return "", nil, errors.Wrap(err, "failed to parse message for identification")
+	}
+
+	// Extract ID if present
+	var id interface{}
+	if idRaw, ok := parsed["id"]; ok {
+		if err := json.Unmarshal(idRaw, &id); err != nil {
+			return "", id, errors.Wrap(err, "failed to parse id")
+		}
+	}
+
+	// Check if it's a request/notification (has 'method') or response (has 'result' or 'error')
+	if methodRaw, ok := parsed["method"]; ok {
+		// It's a request or notification, extract the method name
+		var method string
+		if err := json.Unmarshal(methodRaw, &method); err != nil {
+			return "", id, errors.Wrap(err, "failed to parse method")
+		}
+
+		// Special case for JSON-RPC notifications (no ID)
+		if _, hasID := parsed["id"]; !hasID {
+			return method + "_notification", nil, nil
+		}
+
+		return method, id, nil
+	}
+
+	// If it has 'result', it's a success response
+	if _, hasResult := parsed["result"]; hasResult {
+		return "success_response", id, nil
+	}
+
+	// If it has 'error', it's an error response
+	if _, hasError := parsed["error"]; hasError {
+		return "error_response", id, nil
+	}
+
+	// If we can't identify the message type, return an error
+	return "", id, errors.New("unable to identify message type")
+}
+
+// createParseErrorResponse creates a JSON-RPC parse error response.
+// Parse errors (-32700) occur when the message is not valid JSON or cannot be interpreted.
+func createParseErrorResponse(id interface{}, err error) ([]byte, error) {
+	response := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      id, // This might be nil for notifications, which is fine
+		"error": map[string]interface{}{
+			"code":    -32700, // JSON-RPC parse error
+			"message": "Parse error",
+			"data": map[string]interface{}{
+				"details": err.Error(),
+			},
 		},
 	}
+
+	responseJSON, marshalErr := json.Marshal(response)
+	if marshalErr != nil {
+		// This shouldn't happen, but if it does, we have a serious problem
+		return nil, errors.Wrap(marshalErr, "failed to marshal error response")
+	}
+
+	return responseJSON, nil
 }
 
-// NewSchemaValidator creates a new SchemaValidator with the given schema source.
-func NewSchemaValidator(source SchemaSource) *SchemaValidator {
-	compiler := jsonschema.NewCompiler()
+// createValidationErrorResponse creates a JSON-RPC validation error response.
+// Different error codes are used based on the nature of the validation failure:
+// - Invalid Request (-32600): For structural/protocol-level validation errors
+// - Invalid Params (-32602): For parameter-specific validation errors
+func createValidationErrorResponse(id interface{}, err error) ([]byte, error) {
+	code := -32600 // Default to Invalid Request
+	message := "Invalid Request"
 
-	// Set up draft-2020-12 dialect
-	compiler.Draft = jsonschema.Draft2020
-
-	// Provide schemas for metaschema (required for draft-2020-12)
-	compiler.AssertFormat = true
-	compiler.AssertContent = true
-
-	return &SchemaValidator{
-		source:     source,
-		compiler:   compiler,
-		schemas:    make(map[string]*jsonschema.Schema),
-		httpClient: &http.Client{Timeout: 30 * time.Second},
-	}
-}
-
-// Initialize loads and compiles the MCP schema definitions.
-// This should be called during application startup before any validation occurs.
-func (v *SchemaValidator) Initialize(ctx context.Context) error {
-	schemaData, err := v.loadSchemaData(ctx)
-	if err != nil {
-		return errors.Wrap(err, "failed to load schema data")
-	}
-
-	// Add the schema to the compiler
-	if err := v.compiler.AddResource("mcp-schema.json", bytes.NewReader(schemaData)); err != nil {
-		return NewValidationError(
-			ErrSchemaLoadFailed,
-			"Failed to add schema resource to compiler",
-			errors.Wrap(err, "compiler.AddResource failed"),
-		).WithContext("schemaSize", len(schemaData))
-	}
-
-	// Compile the base schema
-	baseSchema, err := v.compiler.Compile("mcp-schema.json")
-	if err != nil {
-		return NewValidationError(
-			ErrSchemaCompileFailed,
-			"Failed to compile base schema",
-			errors.Wrap(err, "compiler.Compile failed"),
-		)
-	}
-
-	// Store the schema
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	v.schemas["base"] = baseSchema
-
-	// Compile specific message type schemas
-	// For example: ClientRequest, ServerRequest, ClientNotification, etc.
-	// We'll derive these from the definitions in the base schema
-
-	// Add more specific schemas here as needed
-	// This would involve extracting and compiling specific parts of the schema
-	// For example:
-	/*
-		if err := v.compileSubSchema("ClientRequest", "#/definitions/ClientRequest"); err != nil {
-			return err
-		}
-	*/
-
-	return nil
-}
-
-// compileSubSchema compiles a sub-schema from the base schema.
-// This uses the main schema but with a specific reference pointer.
-func (v *SchemaValidator) compileSubSchema(name, pointer string) error {
-	// In the santhosh-tekuri/jsonschema/v5 library, CompileWithID doesn't exist
-	// Instead, we need to manually add the schema with the pointer as the ID
-	subSchema, err := v.compiler.Compile(pointer)
-	if err != nil {
-		return NewValidationError(
-			ErrSchemaCompileFailed,
-			fmt.Sprintf("Failed to compile %s schema", name),
-			errors.Wrap(err, fmt.Sprintf("compiler.Compile failed for %s", name)),
-		).WithContext("schemaPointer", pointer)
-	}
-
-	v.schemas[name] = subSchema
-	return nil
-}
-
-// loadSchemaData loads the schema data from the configured source.
-func (v *SchemaValidator) loadSchemaData(ctx context.Context) ([]byte, error) {
-	// Try to load from each source in order of preference
-
-	// 1. Try embedded schema if provided
-	if len(v.source.Embedded) > 0 {
-		return v.source.Embedded, nil
-	}
-
-	// 2. Try local file if path is provided
-	if v.source.FilePath != "" {
-		data, err := os.ReadFile(v.source.FilePath)
-		if err == nil {
-			return data, nil
-		}
-		// If file read failed, log and continue to next source
-		// We don't return error yet, we'll try URL next
-	}
-
-	// 3. Try URL if provided
-	if v.source.URL != "" {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.source.URL, nil)
-		if err != nil {
-			return nil, NewValidationError(
-				ErrSchemaLoadFailed,
-				"Failed to create HTTP request for schema URL",
-				errors.Wrap(err, "http.NewRequestWithContext failed"),
-			).WithContext("url", v.source.URL)
-		}
-
-		resp, err := v.httpClient.Do(req)
-		if err != nil {
-			return nil, NewValidationError(
-				ErrSchemaLoadFailed,
-				"Failed to fetch schema from URL",
-				errors.Wrap(err, "httpClient.Do failed"),
-			).WithContext("url", v.source.URL)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return nil, NewValidationError(
-				ErrSchemaLoadFailed,
-				fmt.Sprintf("Failed to fetch schema: HTTP status %d", resp.StatusCode),
-				nil,
-			).WithContext("url", v.source.URL).
-				WithContext("statusCode", resp.StatusCode)
-		}
-
-		data, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, NewValidationError(
-				ErrSchemaLoadFailed,
-				"Failed to read schema from HTTP response",
-				errors.Wrap(err, "io.ReadAll failed"),
-			).WithContext("url", v.source.URL)
-		}
-
-		return data, nil
-	}
-
-	// 4. If we get here, all sources failed
-	return nil, NewValidationError(
-		ErrSchemaNotFound,
-		"No valid schema source configured",
-		nil,
-	).WithContext("sources", map[string]interface{}{
-		"embedded": len(v.source.Embedded) > 0,
-		"filePath": v.source.FilePath,
-		"url":      v.source.URL,
-	})
-}
-
-// Validate validates the given JSON data against the schema for the specified message type.
-// The messageType parameter should identify which schema to use (e.g., "ClientRequest").
-func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data []byte) error {
-	// First, ensure the data is valid JSON
-	var instance interface{}
-	if err := json.Unmarshal(data, &instance); err != nil {
-		return NewValidationError(
-			ErrInvalidJSONFormat,
-			"Invalid JSON format",
-			errors.Wrap(err, "json.Unmarshal failed"),
-		).WithContext("messageType", messageType).
-			WithContext("dataPreview", string(data[:min(len(data), 100)]))
-	}
-
-	// Get the schema for the message type
-	v.mu.RLock()
-	schema, ok := v.schemas[messageType]
-	v.mu.RUnlock()
-
-	if !ok {
-		// If we don't have a specific schema for this message type, use the base schema
-		v.mu.RLock()
-		schema, ok = v.schemas["base"]
-		v.mu.RUnlock()
-
-		if !ok {
-			return NewValidationError(
-				ErrSchemaNotFound,
-				fmt.Sprintf("No schema found for message type: %s", messageType),
-				nil,
-			).WithContext("messageType", messageType).
-				WithContext("availableSchemas", getSchemaKeys(v.schemas))
+	// If the error path indicates it's a parameter issue, use -32602
+	var valErr *schema.ValidationError
+	if errors.As(err, &valErr) {
+		// Check if the error is in the params
+		if valErr.InstancePath != "" && (strings.Contains(valErr.InstancePath, "/params") ||
+			strings.Contains(valErr.InstancePath, "params")) {
+			code = -32602
+			message = "Invalid params"
 		}
 	}
 
-	// Validate the instance against the schema
-	err := schema.Validate(instance)
-	if err != nil {
-		// Convert jsonschema validation error to our custom error type
-		var valErr *jsonschema.ValidationError
-		if errors.As(err, &valErr) {
-			return convertValidationError(valErr, messageType, data)
-		}
-
-		// For other types of errors
-		return NewValidationError(
-			ErrValidationFailed,
-			"Schema validation failed",
-			errors.Wrap(err, "schema.Validate failed"),
-		).WithContext("messageType", messageType).
-			WithContext("dataPreview", string(data[:min(len(data), 100)]))
+	response := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      id, // This might be nil for notifications, which is fine
+		"error": map[string]interface{}{
+			"code":    code,
+			"message": message,
+			"data": map[string]interface{}{
+				"details": err.Error(),
+			},
+		},
 	}
 
-	return nil
-}
-
-// convertValidationError converts a jsonschema.ValidationError to our custom ValidationError.
-func convertValidationError(valErr *jsonschema.ValidationError, messageType string, data []byte) *ValidationError {
-	// Extract error details
-	// In this library, the error details are in the Basic Output format described in JSON Schema spec
-
-	// Extract schema path and instance path from the error
-	var schemaPath string
-	var instancePath string
-
-	// Get basic path from the error message
-	errorMsg := valErr.Error()
-	if strings.Contains(errorMsg, "schema path") {
-		// Try to extract schema path from the error message
-		parts := strings.Split(errorMsg, "schema path:")
-		if len(parts) > 1 {
-			schemaPathPart := strings.TrimSpace(parts[1])
-			endIdx := strings.Index(schemaPathPart, ":")
-			if endIdx != -1 {
-				schemaPath = schemaPathPart[:endIdx]
-			} else {
-				schemaPath = schemaPathPart
-			}
-		}
+	responseJSON, marshalErr := json.Marshal(response)
+	if marshalErr != nil {
+		return nil, errors.Wrap(marshalErr, "failed to marshal error response")
 	}
 
-	// Try to extract instance path using BasicOutput() if available
-	basicOutput := valErr.BasicOutput()
-	if len(basicOutput.Errors) > 0 {
-		for _, errorDetail := range basicOutput.Errors {
-			if errorDetail.InstanceLocation != "" {
-				instancePath = errorDetail.InstanceLocation
-				break
-			}
-		}
-	}
-
-	// Create our custom error with the extracted paths
-	customErr := NewValidationError(
-		ErrValidationFailed,
-		valErr.Message,
-		valErr,
-	).WithContext("messageType", messageType).
-		WithContext("dataPreview", string(data[:min(len(data), 100)]))
-
-	customErr.SchemaPath = schemaPath
-	customErr.InstancePath = instancePath
-
-	// Add basic info about the validation error causes
-	if len(valErr.Causes) > 0 {
-		causes := make([]string, 0, len(valErr.Causes))
-		for _, cause := range valErr.Causes {
-			causes = append(causes, cause.Error())
-		}
-		customErr.WithContext("causes", causes)
-	}
-
-	return customErr
-}
-
-// getSchemaKeys returns the keys of the schemas map for debugging purposes.
-func getSchemaKeys(schemas map[string]*jsonschema.Schema) []string {
-	keys := make([]string, 0, len(schemas))
-	for k := range schemas {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
-// min returns the smaller of two integers.
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	return responseJSON, nil
 }
