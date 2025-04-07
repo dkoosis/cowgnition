@@ -18,8 +18,8 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-// SchemaSource defines where to load the schema from.
-type SchemaSource struct {
+// Source defines where to load the schema from.
+type Source struct {
 	// URL is the remote location of the schema, if applicable.
 	URL string
 	// FilePath is the local file path of the schema, if applicable.
@@ -28,11 +28,11 @@ type SchemaSource struct {
 	Embedded []byte
 }
 
-// SchemaValidator handles loading, compiling, and validating against JSON schemas.
+// Validator handles loading, compiling, and validating against JSON schemas.
 // It is designed to validate JSON-RPC messages against the MCP schema specification.
-type SchemaValidator struct {
+type Validator struct {
 	// source contains the configuration for where to load the schema from.
-	source SchemaSource
+	source Source
 	// compiler is the JSONSchema compiler used to process schemas.
 	compiler *jsonschema.Compiler
 	// schemas maps message types to their compiled schema.
@@ -116,8 +116,8 @@ func NewValidationError(code ErrorCode, message string, cause error) *Validation
 	}
 }
 
-// NewSchemaValidator creates a new SchemaValidator with the given schema source.
-func NewSchemaValidator(source SchemaSource, logger logging.Logger) *SchemaValidator {
+// NewValidator creates a new Validator with the given schema source.
+func NewValidator(source Source, logger logging.Logger) *Validator {
 	if logger == nil {
 		logger = logging.GetNoopLogger()
 	}
@@ -131,7 +131,7 @@ func NewSchemaValidator(source SchemaSource, logger logging.Logger) *SchemaValid
 	compiler.AssertFormat = true
 	compiler.AssertContent = true
 
-	return &SchemaValidator{
+	return &Validator{
 		source:     source,
 		compiler:   compiler,
 		schemas:    make(map[string]*jsonschema.Schema),
@@ -142,7 +142,7 @@ func NewSchemaValidator(source SchemaSource, logger logging.Logger) *SchemaValid
 
 // Initialize loads and compiles the MCP schema definitions.
 // This should be called during application startup before any validation occurs.
-func (v *SchemaValidator) Initialize(ctx context.Context) error {
+func (v *Validator) Initialize(ctx context.Context) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -191,7 +191,7 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 
 // Shutdown performs any cleanup needed for the schema validator.
 // Should be called during application shutdown.
-func (v *SchemaValidator) Shutdown() error {
+func (v *Validator) Shutdown() error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -214,14 +214,15 @@ func (v *SchemaValidator) Shutdown() error {
 }
 
 // IsInitialized returns whether the validator has been initialized.
-func (v *SchemaValidator) IsInitialized() bool {
+func (v *Validator) IsInitialized() bool {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 	return v.initialized
 }
 
 // compileSubSchema compiles a sub-schema from the base schema.
-func (v *SchemaValidator) compileSubSchema(name, pointer string) error {
+// nolint:unused // Reserved for future schema compilation features
+func (v *Validator) compileSubSchema(name, pointer string) error {
 	// In the santhosh-tekuri/jsonschema/v5 library, we use Compile with a pointer
 	// instead of CompileWithID which doesn't exist
 	subSchema, err := v.compiler.Compile(pointer)
@@ -238,7 +239,7 @@ func (v *SchemaValidator) compileSubSchema(name, pointer string) error {
 }
 
 // loadSchemaData loads the schema data from the configured source.
-func (v *SchemaValidator) loadSchemaData(ctx context.Context) ([]byte, error) {
+func (v *Validator) loadSchemaData(ctx context.Context) ([]byte, error) {
 	// Try to load from each source in order of preference
 
 	// 1. Try embedded schema if provided
@@ -324,7 +325,7 @@ func (v *SchemaValidator) loadSchemaData(ctx context.Context) ([]byte, error) {
 
 // Validate validates the given JSON data against the schema for the specified message type.
 // The messageType parameter should identify which schema to use (e.g., "ClientRequest").
-func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data []byte) error {
+func (v *Validator) Validate(ctx context.Context, messageType string, data []byte) error {
 	// Check if initialized
 	if !v.IsInitialized() {
 		return NewValidationError(
@@ -440,7 +441,8 @@ func convertValidationError(valErr *jsonschema.ValidationError, messageType stri
 		for _, cause := range valErr.Causes {
 			causes = append(causes, cause.Error())
 		}
-		customErr.WithContext("causes", causes)
+		// Use _ to explicitly ignore the error return value
+		_ = customErr.WithContext("causes", causes)
 	}
 
 	return customErr
@@ -456,6 +458,7 @@ func getSchemaKeys(schemas map[string]*jsonschema.Schema) []string {
 }
 
 // min returns the smaller of two integers.
+// nolint:unparam // Kept generic for clarity and potential future use
 func min(a, b int) int {
 	if a < b {
 		return a
