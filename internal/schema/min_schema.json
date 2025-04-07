@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "JSONRPCRequest": {
+      "description": "A request that expects a response.",
+      "properties": {
+        "id": {
+          "type": ["string", "integer"]
+        },
+        "jsonrpc": {
+          "const": "2.0",
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      "required": ["id", "jsonrpc", "method"],
+      "type": "object"
+    }
+  }
+}

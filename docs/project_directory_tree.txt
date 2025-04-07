@@ -1,58 +1,35 @@
 .
 ├── cmd
-│   └── server
-│       ├── main.go
-│       ├── server_config.go
-│       ├── server_logic.go
-│       └── setup.go
+│   ├── schema_test
+│   │   └── main.go
+│   ├── main.go
+│   └── setup.go
 ├── docs
+│   ├── adr
+│   │   ├── 001_error_handling_strategy.md
+│   │   └── 002_schema_validation_strategy.md
 │   ├── assets
 │   │   └── cowgnition_logo.png
 │   ├── TODO.md
-│   ├── decision_log.md
-│   ├── error_handling_guidelines.md
 │   ├── llm.md
 │   └── project_directory_tree.txt
 ├── internal
-│   ├── config
-│   │   └── app_config.go
-│   ├── httputils
-│   │   └── response.go
-│   ├── jsonrpc
-│   │   ├── http_transport.go
-│   │   ├── jsonrpc_handler.go
-│   │   ├── stdio_transport.go
-│   │   └── utils.go
-│   ├── logging
-│   │   ├── logger.go
-│   │   └── logger_test.go
-│   ├── mcp
-│   │   ├── connection
-│   │   │   ├── connection_helpers.go
-│   │   │   ├── connection_types.go
-│   │   │   ├── handlers.go
-│   │   │   ├── manager.go
-│   │   │   ├── manager_test.go
-│   │   │   └── state.go
-│   │   ├── definitions
-│   │   │   └── mcp_definitions.go
-│   │   ├── errors
-│   │   │   ├── codes.go
-│   │   │   ├── types.go
-│   │   │   └── utils.go
-│   │   ├── connection_adapter.go
-│   │   ├── errors.go
-│   │   ├── interfaces.go
-│   │   ├── resource.go
-│   │   ├── server.go
-│   │   ├── server_with_connection.go
-│   │   └── tool.go
-│   └── rtm
-│       ├── auth.go
-│       ├── client.go
-│       ├── provider.go
-│       ├── token.go
-│       └── token_test.go
+│   ├── middleware
+│   │   └── validation.go
+│   ├── rtm
+│   │   ├── transport
+│   │   ├── auth.go
+│   │   ├── client.go
+│   │   ├── provider.go
+│   │   └── token.go
+│   ├── schema
+│   │   ├── min_schema.json
+│   │   ├── schema.json
+│   │   └── validator.go
+│   ├── server
+│   └── transport
+│       ├── errors.go
+│       └── transport.go
 ├── scripts
 │   ├── check_file_length.sh
 │   ├── graph.d2
@@ -64,4 +41,4 @@
 ├── go.mod
 └── go.sum
 
-16 directories, 49 files
+14 directories, 28 files
