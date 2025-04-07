@@ -1,4 +1,5 @@
-// file: internal/rtm/auth.go
+//gobuild:ignor
+// // file: internal/rtm/auth.go
 // Package rtm handles Remember The Milk (RTM) authentication.
 // This file contains RTM API method implementations related to authentication.
 // Terminate all comments with a period.
@@ -8,12 +9,8 @@ import (
 	"context" // Import context package.
 	"encoding/json"
 	"fmt"
-
-	// "net/url" // No longer needed here if GetAuthURL is removed.
-
 	"github.com/cockroachdb/errors"
-	cgerr "github.com/dkoosis/cowgnition/internal/mcp/errors"
-)
+
 
 // Response represents the standard RTM API response wrapper.
 // It contains the status and an optional error structure.

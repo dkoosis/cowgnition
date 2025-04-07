@@ -4,11 +4,11 @@ package middleware
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
@@ -93,15 +93,20 @@ type ValidationMiddleware struct {
 	next transport.MessageHandler
 
 	// logger for validation-related events.
-	logger interface{} // Will be replaced with proper logger implementation
+	logger logging.Logger
 }
 
 // NewValidationMiddleware creates a new validation middleware with the given options.
-func NewValidationMiddleware(validator *schema.SchemaValidator, options ValidationOptions) *ValidationMiddleware {
+func NewValidationMiddleware(validator *schema.SchemaValidator, options ValidationOptions, logger logging.Logger) *ValidationMiddleware {
+	// Use NoopLogger if no logger is provided
+	if logger == nil {
+		logger = logging.GetNoopLogger()
+	}
+
 	return &ValidationMiddleware{
 		validator: validator,
 		options:   options,
-		// logger will be set separately
+		logger:    logger.WithField("middleware", "validation"),
 	}
 }
 
@@ -133,12 +138,14 @@ func (m *ValidationMiddleware) HandleMessage(ctx context.Context, message []byte
 	if err != nil {
 		// For parse errors, we can't proceed with normal processing.
 		// JSON-RPC parse errors (-32700) are fundamental issues that prevent further handling.
+		m.logger.Error("Failed to parse message", "error", err)
 		return createParseErrorResponse(reqID, err)
 	}
 
 	// Skip validation for exempted message types.
 	// This allows high-frequency or time-sensitive messages to bypass validation.
 	if m.options.SkipTypes[msgType] {
+		m.logger.Debug("Skipping validation for message type", "type", msgType)
 		return m.next(ctx, message)
 	}
 
@@ -150,8 +157,9 @@ func (m *ValidationMiddleware) HandleMessage(ctx context.Context, message []byte
 	// This provides visibility into validation costs for optimization.
 	if m.options.MeasurePerformance {
 		elapsed := time.Since(startTime)
-		// Use proper logger here
-		fmt.Printf("Validation of %s took %v\n", msgType, elapsed)
+		m.logger.Debug("Message validation performance",
+			"messageType", msgType,
+			"duration", elapsed)
 	}
 
 	if err != nil {
@@ -159,13 +167,17 @@ func (m *ValidationMiddleware) HandleMessage(ctx context.Context, message []byte
 		if m.options.StrictMode {
 			// In strict mode, validation errors result in immediate rejection.
 			// This enforces protocol correctness but may impact availability.
+			m.logger.Warn("Message validation failed (strict mode, rejecting)",
+				"messageType", msgType,
+				"error", err)
 			return createValidationErrorResponse(reqID, err)
 		}
 
 		// In non-strict mode, log the error but allow processing to continue.
 		// This prioritizes availability over strict correctness.
-		// Use proper logger here
-		fmt.Printf("Validation error (passing through in non-strict mode): %v\n", err)
+		m.logger.Warn("Validation error (passing through in non-strict mode)",
+			"messageType", msgType,
+			"error", err)
 	}
 
 	// If validation passes or we're in non-strict mode with errors, continue to next handler.

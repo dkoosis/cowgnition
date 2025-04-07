@@ -63,8 +63,9 @@ func (c *Chain) Handler() transport.MessageHandler {
 		} else {
 			// For simple middleware functions
 			// This approach works for stateless middleware functions
-			next := handler // Capture the current handler in the closure
+			currentHandler := handler // Capture the current handler in the closure
 			handler = func(ctx context.Context, message []byte) ([]byte, error) {
+				// Call the middleware, which should in turn call the next handler
 				return middleware(ctx, message)
 			}
 		}

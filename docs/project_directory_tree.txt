@@ -14,14 +14,17 @@
 │   ├── llm.md
 │   └── project_directory_tree.txt
 ├── internal
+│   ├── logging
+│   │   └── logger.go
 │   ├── middleware
+│   │   ├── chain.go
 │   │   └── validation.go
 │   ├── rtm
 │   │   ├── transport
-│   │   ├── auth.go
-│   │   ├── client.go
-│   │   ├── provider.go
-│   │   └── token.go
+│   │   ├── auth.txt
+│   │   ├── client.txt
+│   │   ├── provider.txt
+│   │   └── token.txt
 │   ├── schema
 │   │   ├── min_schema.json
 │   │   ├── schema.json
@@ -41,4 +44,4 @@
 ├── go.mod
 └── go.sum
 
-14 directories, 28 files
+15 directories, 30 files

@@ -5,10 +5,7 @@ go 1.22
 
 require (
 	github.com/cockroachdb/errors v1.11.1
-	github.com/google/uuid v1.3.0
-	github.com/qmuntal/stateless v1.7.1
-	github.com/sourcegraph/jsonrpc2 v0.2.0
-	gopkg.in/yaml.v3 v3.0.1
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 )
 
 require (
@@ -20,7 +17,6 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
-	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 // indirect
 	golang.org/x/sys v0.5.0 // indirect
 	golang.org/x/text v0.7.0 // indirect
 )

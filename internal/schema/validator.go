@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
@@ -40,6 +41,10 @@ type SchemaValidator struct {
 	mu sync.RWMutex
 	// httpClient is used for remote schema fetching.
 	httpClient *http.Client
+	// initialized indicates whether the validator has been initialized.
+	initialized bool
+	// logger for validation-related events.
+	logger logging.Logger
 }
 
 // ErrorCode defines validation error codes.
@@ -112,7 +117,11 @@ func NewValidationError(code ErrorCode, message string, cause error) *Validation
 }
 
 // NewSchemaValidator creates a new SchemaValidator with the given schema source.
-func NewSchemaValidator(source SchemaSource) *SchemaValidator {
+func NewSchemaValidator(source SchemaSource, logger logging.Logger) *SchemaValidator {
+	if logger == nil {
+		logger = logging.GetNoopLogger()
+	}
+
 	compiler := jsonschema.NewCompiler()
 
 	// Set up draft-2020-12 dialect
@@ -127,12 +136,24 @@ func NewSchemaValidator(source SchemaSource) *SchemaValidator {
 		compiler:   compiler,
 		schemas:    make(map[string]*jsonschema.Schema),
 		httpClient: &http.Client{Timeout: 30 * time.Second},
+		logger:     logger.WithField("component", "schema_validator"),
 	}
 }
 
 // Initialize loads and compiles the MCP schema definitions.
 // This should be called during application startup before any validation occurs.
 func (v *SchemaValidator) Initialize(ctx context.Context) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	// Check if already initialized
+	if v.initialized {
+		v.logger.Warn("Schema validator already initialized, skipping")
+		return nil
+	}
+
+	v.logger.Info("Initializing schema validator")
+
 	schemaData, err := v.loadSchemaData(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to load schema data")
@@ -158,24 +179,45 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 	}
 
 	// Store the schema
-	v.mu.Lock()
-	defer v.mu.Unlock()
 	v.schemas["base"] = baseSchema
+	v.initialized = true
 
-	// Compile specific message type schemas
-	// For example: ClientRequest, ServerRequest, ClientNotification, etc.
-	// We'll derive these from the definitions in the base schema
-
-	// Add more specific schemas here as needed
-	// This would involve extracting the relevant part of the schema for each message type
-	// For example:
-	/*
-		if err := v.compileSubSchema("ClientRequest", "#/definitions/ClientRequest"); err != nil {
-			return err
-		}
-	*/
+	v.logger.Info("Schema validator initialized successfully",
+		"schemaSize", len(schemaData),
+		"schemas", getSchemaKeys(v.schemas))
 
 	return nil
+}
+
+// Shutdown performs any cleanup needed for the schema validator.
+// Should be called during application shutdown.
+func (v *SchemaValidator) Shutdown() error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	if !v.initialized {
+		return nil
+	}
+
+	v.logger.Info("Shutting down schema validator")
+
+	// Close HTTP client if needed
+	if transport, ok := v.httpClient.Transport.(*http.Transport); ok {
+		transport.CloseIdleConnections()
+	}
+
+	// Clear cached schemas to free memory
+	v.schemas = nil
+	v.initialized = false
+
+	return nil
+}
+
+// IsInitialized returns whether the validator has been initialized.
+func (v *SchemaValidator) IsInitialized() bool {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	return v.initialized
 }
 
 // compileSubSchema compiles a sub-schema from the base schema.
@@ -201,21 +243,30 @@ func (v *SchemaValidator) loadSchemaData(ctx context.Context) ([]byte, error) {
 
 	// 1. Try embedded schema if provided
 	if len(v.source.Embedded) > 0 {
+		v.logger.Debug("Loading schema from embedded data")
 		return v.source.Embedded, nil
 	}
 
 	// 2. Try local file if path is provided
 	if v.source.FilePath != "" {
+		v.logger.Debug("Attempting to load schema from file", "path", v.source.FilePath)
 		data, err := os.ReadFile(v.source.FilePath)
 		if err == nil {
+			v.logger.Debug("Successfully loaded schema from file",
+				"path", v.source.FilePath,
+				"size", len(data))
 			return data, nil
 		}
+		v.logger.Warn("Failed to load schema from file, will try URL next",
+			"path", v.source.FilePath,
+			"error", err)
 		// If file read failed, log and continue to next source
 		// We don't return error yet, we'll try URL next
 	}
 
 	// 3. Try URL if provided
 	if v.source.URL != "" {
+		v.logger.Debug("Attempting to load schema from URL", "url", v.source.URL)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.source.URL, nil)
 		if err != nil {
 			return nil, NewValidationError(
@@ -253,6 +304,9 @@ func (v *SchemaValidator) loadSchemaData(ctx context.Context) ([]byte, error) {
 			).WithContext("url", v.source.URL)
 		}
 
+		v.logger.Debug("Successfully loaded schema from URL",
+			"url", v.source.URL,
+			"size", len(data))
 		return data, nil
 	}
 
@@ -271,6 +325,15 @@ func (v *SchemaValidator) loadSchemaData(ctx context.Context) ([]byte, error) {
 // Validate validates the given JSON data against the schema for the specified message type.
 // The messageType parameter should identify which schema to use (e.g., "ClientRequest").
 func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data []byte) error {
+	// Check if initialized
+	if !v.IsInitialized() {
+		return NewValidationError(
+			ErrSchemaNotFound,
+			"Schema validator not initialized",
+			nil,
+		)
+	}
+
 	// First, ensure the data is valid JSON
 	var instance interface{}
 	if err := json.Unmarshal(data, &instance); err != nil {
