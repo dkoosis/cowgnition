@@ -13,6 +13,7 @@
 │   ├── assets
 │   │   └── cowgnition_logo.png
 │   ├── TODO.md
+│   ├── contributing.md
 │   ├── llm.md
 │   └── project_directory_tree.txt
 ├── internal
@@ -53,4 +54,4 @@
 ├── go.mod
 └── go.sum
 
-19 directories, 35 files
+19 directories, 36 files

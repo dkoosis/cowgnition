@@ -1,5 +1,5 @@
 // file: cmd/server/server.go
-package main
+package server
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/dkoosis/cowgnition/internal/mcp"
 )
 
-// runServer starts the MCP server with the specified transport type.
+// RunServer starts the MCP server with the specified transport type.
 // It handles setup, startup, and graceful shutdown of the server.
 //
 // transportType string: The type of transport to use ("http" or "stdio").
@@ -26,7 +26,7 @@ import (
 // Returns:
 //
 //	error: An error if the server fails to start or encounters a fatal error.
-func runServer(transportType, configPath string, requestTimeout, shutdownTimeout time.Duration) error {
+func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout time.Duration, debug bool) error {
 	// Create a context that can be canceled
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
