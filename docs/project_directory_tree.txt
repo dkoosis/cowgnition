@@ -2,6 +2,8 @@
 ├── cmd
 │   ├── schema_test
 │   │   └── main.go
+│   ├── server
+│   │   └── server.go
 │   ├── main.go
 │   └── setup.go
 ├── docs
@@ -14,8 +16,15 @@
 │   ├── llm.md
 │   └── project_directory_tree.txt
 ├── internal
+│   ├── config
+│   │   └── config.go
 │   ├── logging
-│   │   └── logger.go
+│   │   ├── logger.go
+│   │   └── slog.go
+│   ├── mcp
+│   │   ├── errors
+│   │   │   └── errors.go
+│   │   └── server.go
 │   ├── middleware
 │   │   ├── chain.go
 │   │   └── validation.go
@@ -44,4 +53,4 @@
 ├── go.mod
 └── go.sum
 
-15 directories, 30 files
+19 directories, 35 files
