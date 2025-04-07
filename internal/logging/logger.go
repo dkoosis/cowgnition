@@ -57,7 +57,7 @@ func SetDefaultLogger(logger Logger) {
 	}
 }
 
-// GetLogger returns a logger, typically used by packages to get their own logger
+// GetLogger returns a logger, used by packages to get their own logger
 func GetLogger(name string) Logger {
 	return defaultLogger.WithField("component", name)
 }

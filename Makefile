@@ -175,7 +175,7 @@ check:
 # Generate a tree view of the project
 tree:
 	@printf "$(ICON_START) $(BOLD)$(BLUE)Generating project tree...$(NC)\n"
-	@tree -I 'vendor|test' --dirsfirst > ./docs/project_directory_tree.txt
+	@tree -F -I 'vendor|test' --dirsfirst > ./docs/project_directory_tree.txt
 	@printf "   $(ICON_OK) $(GREEN)Project tree generated at ./docs/project_directory_tree.txt$(NC)\n"
 
 
