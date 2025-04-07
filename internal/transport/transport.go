@@ -262,7 +262,7 @@ func ValidateMessage(message []byte) error {
 				}
 			}
 
-			if message, exists := errorMap["message"]; !exists {
+			if messageText, exists := errorMap["message"]; !exists {
 				return NewError(
 					ErrInvalidMessage,
 					"error object must contain 'message' field",
@@ -270,12 +270,12 @@ func ValidateMessage(message []byte) error {
 				).WithContext("messagePreview", string(message[:min(len(message), 100)]))
 			} else {
 				// Message must be a string
-				if _, ok := message.(string); !ok {
+				if _, ok := messageText.(string); !ok {
 					return NewError(
 						ErrInvalidMessage,
 						"error message must be a string",
 						nil,
-					).WithContext("messageType", fmt.Sprintf("%T", message)).
+					).WithContext("messageType", fmt.Sprintf("%T", messageText)).
 						WithContext("messagePreview", string(message[:min(len(message), 100)]))
 				}
 			}

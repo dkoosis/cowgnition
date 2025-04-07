@@ -62,11 +62,30 @@ func (c *Chain) Handler() transport.MessageHandler {
 			handler = middleware
 		} else {
 			// For simple middleware functions
-			// This approach works for stateless middleware functions
-			currentHandler := handler // Capture the current handler in the closure
+			// This is a workaround for regular function middlewares
+			// We need to wrap the original middleware and the next handler in a closure
+			// that allows for proper chaining
+			nextHandler := handler // Store the next handler to use in our closure
+
+			// Create a new handler function that will first call the middleware
+			// and then manually call the next handler if the middleware doesn't return
 			handler = func(ctx context.Context, message []byte) ([]byte, error) {
-				// Call the middleware, which should in turn call the next handler
-				return middleware(ctx, message)
+				// Assume simple middleware doesn't chain internally
+				// So we'll handle the result and chain manually
+				result, err := middleware(ctx, message)
+				if err != nil {
+					// If middleware returns an error, propagate it
+					return nil, err
+				}
+
+				// If middleware returned a result, it means it handled the request completely
+				// (like returning an error response to a malformed request)
+				if result != nil {
+					return result, nil
+				}
+
+				// Otherwise, continue the chain by calling the next handler
+				return nextHandler(ctx, message)
 			}
 		}
 	}
