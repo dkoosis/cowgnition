@@ -257,8 +257,8 @@ func createParseErrorResponse(id interface{}, err error) ([]byte, error) {
 
 // createValidationErrorResponse creates a JSON-RPC validation error response.
 // Different error codes are used based on the nature of the validation failure:
-// - Invalid Request (-32600): For structural/protocol-level validation errors
-// - Invalid Params (-32602): For parameter-specific validation errors
+// - Invalid Request (-32600): For structural/protocol-level validation errors.
+// - Invalid Params (-32602): For parameter-specific validation errors.
 func createValidationErrorResponse(id interface{}, err error) ([]byte, error) {
 	code := -32600 // Default to Invalid Request
 	message := "Invalid Request"

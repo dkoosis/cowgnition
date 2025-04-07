@@ -163,14 +163,14 @@ func NewClosedError(operation string) *Error {
 
 // JSON-RPC 2.0 error codes as defined in the specification.
 const (
-	// Standard JSON-RPC 2.0 error codes
+	// Standard JSON-RPC 2.0 error codes.
 	JSONRPCParseError     = -32700
 	JSONRPCInvalidRequest = -32600
 	JSONRPCMethodNotFound = -32601
 	JSONRPCInvalidParams  = -32602
 	JSONRPCInternalError  = -32603
 
-	// Server error codes (reserved range)
+	// Server error codes (reserved range).
 	JSONRPCServerErrorStart = -32099
 	JSONRPCServerErrorEnd   = -32000
 )

@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	// We'll import just the schema package for now
+	// We'll import just the schema package for now.
 	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/schema"
 )
@@ -37,7 +37,7 @@ func main() {
 		URL: "https://raw.githubusercontent.com/anthropics/ModelContextProtocol/main/schema/mcp-schema.json",
 	}
 
-	// Create and initialize schema validator with our logger
+	// Create and initialize schema validator with our logger.
 	validator := schema.NewSchemaValidator(schemaSource, customLogger)
 	ctx := context.Background()
 
@@ -48,7 +48,7 @@ func main() {
 
 	logger.Println("Schema validator initialized successfully")
 
-	// Test validation directly without the middleware
+	// Test validation directly without the middleware.
 	testMessage := []byte(`{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}`)
 	logger.Println("Testing validation with message:", string(testMessage))
 
@@ -62,7 +62,7 @@ func main() {
 	logger.Println("Schema validation test completed")
 }
 
-// stdLogger adapts a standard log.Logger to our logging.Logger interface
+// stdLogger adapts a standard log.Logger to our logging.Logger interface.
 type stdLogger struct {
 	logger *log.Logger
 }
