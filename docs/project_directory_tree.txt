@@ -1,52 +1,52 @@
-.
-├── cmd
-│   ├── schema_test
+./
+├── cmd/
+│   ├── schema_test/
 │   │   └── main.go
-│   ├── server
-│   │   └── server.go
+│   ├── server/
+│   │   └── http_server.go
 │   ├── main.go
 │   └── setup.go
-├── docs
-│   ├── adr
+├── docs/
+│   ├── adr/
 │   │   ├── 001_error_handling_strategy.md
 │   │   └── 002_schema_validation_strategy.md
-│   ├── assets
+│   ├── assets/
 │   │   └── cowgnition_logo.png
 │   ├── TODO.md
 │   ├── contributing.md
 │   ├── llm.md
 │   └── project_directory_tree.txt
-├── internal
-│   ├── config
+├── internal/
+│   ├── config/
 │   │   └── config.go
-│   ├── logging
+│   ├── logging/
 │   │   ├── logger.go
 │   │   └── slog.go
-│   ├── mcp
-│   │   ├── errors
+│   ├── mcp/
+│   │   ├── mcp_errors/
 │   │   │   └── errors.go
-│   │   └── server.go
-│   ├── middleware
+│   │   └── mcp_server.go
+│   ├── middleware/
 │   │   ├── chain.go
 │   │   └── validation.go
-│   ├── rtm
-│   │   └── transport
-│   ├── schema
+│   ├── rtm/
+│   │   └── transport/
+│   ├── schema/
 │   │   ├── min_schema.json
 │   │   ├── schema.json
 │   │   └── validator.go
-│   ├── server
-│   └── transport
-│       ├── errors.go
-│       └── transport.go
-├── scripts
-│   ├── check_file_length.sh
+│   ├── server/
+│   └── transport/
+│       ├── transport.go
+│       └── transport_errors.go
+├── scripts/
+│   ├── check_file_length.sh*
 │   ├── graph.d2
-│   └── pkgdep.sh
+│   └── pkgdep.sh*
 ├── Makefile
 ├── README.md
 ├── coverage.out
-├── cowgnition
+├── cowgnition*
 ├── go.mod
 └── go.sum
 

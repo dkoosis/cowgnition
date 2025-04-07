@@ -32,13 +32,117 @@ Additionally, we need to ensure compliance with:
 4.  All other internal application errors (unhandled exceptions, service integration failures, etc.) caught by central error handling middleware will be logged in detail server-side and mapped to appropriate JSON-RPC error codes (`-32603` or custom `-320xx` codes) for the client response.
 5.  Structured logging (`slog` recommended) will be used, adhering to the MCP logging specification fields for errors.
 
-Key implementation patterns:
+### Key implementation patterns:
 
 - **Domain-Specific Error Types**: Create custom error types embedding standard error interfaces.
 - **Context Attachment**: Use `errors.WithDetail()` to attach key-value pairs.
 - **Stack Capture**: Use `errors.WithStack()` or standard constructors (`errors.New`, `errors.Wrap`).
 - **Consistent Wrapping**: Always wrap errors when crossing domain boundaries or adding context.
 - **Central Error Processing**: Implement middleware (after routing, before response serialization) that transforms internal application errors (not validation or tool errors handled earlier) into detailed logs and sanitized JSON-RPC responses.
+
+# Error Handling Architecture: Transport and MCP Error Relationship
+
+## Overview
+
+This document elaborates on the relationship between error types defined in our two main error handling modules:
+
+1. Transport-level errors (`internal/transport/errors.go`)
+2. MCP-level errors (`internal/mcp/errors/errors.go`)
+
+## Error Domain Separation
+
+Our architecture maintains a clear separation between errors that occur at different layers:
+
+### Transport Layer Errors
+
+- **Domain**: Low-level communication issues
+- **Location**: `internal/transport/errors.go`
+- **Examples**: Message size limits, connection closures, timeouts, JSON parsing failures
+- **Primary Consumers**: Internal transport handling components
+
+### MCP Layer Errors
+
+- **Domain**: Protocol and application-level issues
+- **Location**: `internal/mcp/errors/errors.go`
+- **Examples**: Authentication failures, RTM API failures, resource access issues
+- **Primary Consumers**: MCP handlers and client responses
+
+## Error Flow Through The System
+
+The error flow follows a consistent pattern:
+
+1. **Error Origin**: Errors are created at their respective layers:
+
+   - Transport errors during reading/writing of messages
+   - MCP errors during protocol handling or external service integration
+
+2. **Error Propagation**:
+
+   - Transport errors propagate up to middleware
+   - Middleware decides how to map transport errors to MCP responses
+   - MCP errors propagate to response handlers
+
+3. **Error Translation**:
+
+   - Transport errors are mapped to appropriate JSON-RPC error codes in the central error handler
+   - MCP tool execution errors are caught and returned in `CallToolResult` for visibility to the LLM
+
+4. **Error Response**:
+   - All errors are eventually mapped to standard JSON-RPC error responses
+   - Appropriate error codes and details are included
+
+## When To Use Which Error Type
+
+### Use Transport Errors When:
+
+- Handling raw IO operations (read/write failures)
+- Dealing with message framing issues
+- Encountering JSON parsing or validation failures
+- Managing connection lifecycle events
+
+### Use MCP Errors When:
+
+- Processing MCP protocol-specific requests (method not found, invalid params)
+- Handling authentication or authorization failures
+- Interacting with external services (RTM API)
+- Dealing with resource access or state issues
+
+## Error Mapping Guidelines
+
+Transport errors are mapped to JSON-RPC error codes as follows:
+
+| Transport Error    | JSON-RPC Error Code | JSON-RPC Message               |
+| ------------------ | ------------------- | ------------------------------ |
+| ErrJSONParseFailed | -32700              | Parse Error                    |
+| ErrInvalidMessage  | -32600              | Invalid Request                |
+| ErrMessageTooLarge | -32600              | Invalid Request                |
+| Others             | -32603 or custom    | Internal Error or Custom Error |
+
+MCP errors are mapped to either:
+
+- Tool execution errors (in successful JSON-RPC responses with `isError: true`)
+- Appropriate JSON-RPC error responses with custom error codes in the server-defined range (-32000 to -32099)
+
+## Error Context Guidelines
+
+1. **Transport Errors**: Include technical details like:
+
+   - Message size/limits
+   - Timeout durations
+   - Connection IDs
+
+2. **MCP Errors**: Include application context like:
+   - Resource identifiers
+   - Request parameters
+   - Authentication details (tokens, not credentials)
+
+## Future Considerations
+
+1. **Error Telemetry**: We plan to enhance error tracking across layers.
+2. **Error Recovery Strategies**: Add specific recovery paths for transient errors.
+3. **Client-Friendly Error Details**: Improve error messages for LLM consumption.
+
+This document will be updated as our error handling evolves.
 
 ## JSON-RPC & MCP Error Codes
 
