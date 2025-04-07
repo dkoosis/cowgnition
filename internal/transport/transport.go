@@ -1,12 +1,16 @@
 // file: internal/transport/transport.go
-FIXME
-// file: internal/transport/transport.go
 package transport
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"sync"
+
+	"github.com/cockroachdb/errors"
 )
 
 // MaxMessageSize defines the maximum allowed size for a single JSON-RPC message in bytes.
@@ -47,13 +51,17 @@ func DefaultErrorHandler(ctx context.Context, err error) {
 
 // ValidateMessage performs basic validation on a JSON-RPC message.
 // It ensures the message has the required fields for a JSON-RPC 2.0 message.
+// ValidateMessage performs thorough validation on a JSON-RPC message according to
+// the JSON-RPC 2.0 specification (https://www.jsonrpc.org/specification).
+// It ensures the message has all required fields and follows the correct format.
 func ValidateMessage(message []byte) error {
+	// First check if it's valid JSON
 	var msg map[string]interface{}
 	if err := json.Unmarshal(message, &msg); err != nil {
 		return NewParseError(message, err)
 	}
 
-	// Check for required JSON-RPC 2.0 fields
+	// Check for required "jsonrpc" field with value "2.0"
 	version, ok := msg["jsonrpc"]
 	if !ok {
 		return NewError(
@@ -72,360 +80,237 @@ func ValidateMessage(message []byte) error {
 			WithContext("messagePreview", string(message[:min(len(message), 100)]))
 	}
 
-	// Check if it's a request, notification, or response
-	if _, hasMethod := msg["method"]; hasMethod {
-		// It's a request or notification
-		if id, hasID := msg["id"]; hasID {
-			// It's a request - validate ID format
-			switch id.(type) {
-			case string, float64, nil, json.Number:
-				// These are valid ID types
-			default:
-				return NewError(
-					ErrInvalidMessage,
-					"invalid request ID type",
-					nil,
-				).WithContext("idType", id).
-					WithContext("messagePreview", string(message[:min(len(message), 100)]))
-			}
+	// Check if it's a batch request/response (array of messages)
+	if _, isArray := msg["_isBatch"]; isArray {
+		// For batch requests/responses, each individual message
+		// should be validated separately
+		return nil
+	}
+
+	// Determine message type and validate accordingly
+	hasMethod := false
+	if method, exists := msg["method"]; exists {
+		hasMethod = true
+
+		// Method must be a string
+		methodStr, ok := method.(string)
+		if !ok {
+			return NewError(
+				ErrInvalidMessage,
+				"method must be a string",
+				nil,
+			).WithContext("method", method).
+				WithContext("messagePreview", string(message[:min(len(message), 100)]))
 		}
-		// If no ID, it's a notification which is valid
-	} else {
-		// Should be a response - must have either result or error
-		if _, hasResult := msg["result"]; !hasResult {
-			if _, hasError := msg["error"]; !hasError {
+
+		// Method cannot be empty
+		if methodStr == "" {
+			return NewError(
+				ErrInvalidMessage,
+				"method cannot be empty",
+				nil,
+			).WithContext("messagePreview", string(message[:min(len(message), 100)]))
+		}
+
+		// Reserved method names starting with "rpc." are for internal use
+		if len(methodStr) >= 4 && methodStr[:4] == "rpc." {
+			return NewError(
+				ErrInvalidMessage,
+				"method names starting with 'rpc.' are reserved for internal use",
+				nil,
+			).WithContext("method", methodStr).
+				WithContext("messagePreview", string(message[:min(len(message), 100)]))
+		}
+	}
+
+	hasID := false
+	if id, exists := msg["id"]; exists {
+		hasID = true
+
+		// ID must be a string, number, or null
+		switch id.(type) {
+		case string, float64, nil, json.Number:
+			// Valid ID types
+		default:
+			return NewError(
+				ErrInvalidMessage,
+				"invalid request ID type",
+				nil,
+			).WithContext("idType", fmt.Sprintf("%T", id)).
+				WithContext("messagePreview", string(message[:min(len(message), 100)]))
+		}
+	}
+
+	// Based on the combination of method and id, determine message type
+	if hasMethod {
+		if hasID {
+			// Request: check for params
+			if params, exists := msg["params"]; exists {
+				// Params must be an object or array
+				switch params.(type) {
+				case map[string]interface{}, []interface{}:
+					// Valid params types
+				default:
+					return NewError(
+						ErrInvalidMessage,
+						"params must be an object or array",
+						nil,
+					).WithContext("paramsType", fmt.Sprintf("%T", params)).
+						WithContext("messagePreview", string(message[:min(len(message), 100)]))
+				}
+			}
+
+			// Requests shouldn't have result or error fields
+			if _, hasResult := msg["result"]; hasResult {
 				return NewError(
 					ErrInvalidMessage,
-					"response message must contain either 'result' or 'error' field",
+					"request message cannot contain 'result' field",
+					nil,
+				).WithContext("messagePreview", string(message[:min(len(message), 100)]))
+			}
+
+			if _, hasError := msg["error"]; hasError {
+				return NewError(
+					ErrInvalidMessage,
+					"request message cannot contain 'error' field",
+					nil,
+				).WithContext("messagePreview", string(message[:min(len(message), 100)]))
+			}
+		} else {
+			// Notification: similar to request but no id field
+			if params, exists := msg["params"]; exists {
+				// Params must be an object or array
+				switch params.(type) {
+				case map[string]interface{}, []interface{}:
+					// Valid params types
+				default:
+					return NewError(
+						ErrInvalidMessage,
+						"params must be an object or array",
+						nil,
+					).WithContext("paramsType", fmt.Sprintf("%T", params)).
+						WithContext("messagePreview", string(message[:min(len(message), 100)]))
+				}
+			}
+
+			// Notifications shouldn't have result or error fields
+			if _, hasResult := msg["result"]; hasResult {
+				return NewError(
+					ErrInvalidMessage,
+					"notification message cannot contain 'result' field",
+					nil,
+				).WithContext("messagePreview", string(message[:min(len(message), 100)]))
+			}
+
+			if _, hasError := msg["error"]; hasError {
+				return NewError(
+					ErrInvalidMessage,
+					"notification message cannot contain 'error' field",
 					nil,
 				).WithContext("messagePreview", string(message[:min(len(message), 100)]))
 			}
 		}
-		// Must have an ID
-		if _, hasID := msg["id"]; !hasID {
+	} else {
+		// Response: must have id and either result or error
+		if !hasID {
 			return NewError(
 				ErrInvalidMessage,
 				"response message must contain 'id' field",
 				nil,
 			).WithContext("messagePreview", string(message[:min(len(message), 100)]))
 		}
-	}
 
-	return nil
-}
-
-// min returns the smaller of x or y.
-func min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
-}
-
-// BaseTransport provides common functionality for transport implementations.
-// It can be embedded in concrete transport types to reduce code duplication.
-type BaseTransport struct {
-	// Fields and methods common to all transport implementations
-}
-
-// Specific transport implementations should be in subpackages:
-// internal/transport/stdio
-// internal/transport/http
-// internal/transport/sse
-
-###
-package transport
-
-import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"time"
-
-	"github.com/cockroachdb/errors"
-)
-
-// MaxMessageSize defines the maximum allowed size for a single JSON-RPC message in bytes.
-// This helps prevent memory exhaustion attacks.
-const MaxMessageSize = 1024 * 1024 // 1MB
-
-// ErrorCode defines known error codes for the transport layer.
-type ErrorCode int
-
-// Defined error codes for the transport layer.
-const (
-	ErrGeneric ErrorCode = iota + 1000
-	ErrInvalidMessage
-	ErrMessageTooLarge
-	ErrTransportClosed
-	ErrReadTimeout
-	ErrWriteTimeout
-	ErrJSONParseFailed
-)
-
-// Transport defines the interface for sending and receiving JSON-RPC messages.
-// Implementations must be concurrency-safe.
-type Transport interface {
-	// ReadMessage reads a single JSON-RPC message from the transport.
-	// It returns the raw message bytes, or an error if reading fails.
-	// The context allows for cancellation of long-running reads.
-	ReadMessage(ctx context.Context) ([]byte, error)
-
-	// WriteMessage sends a single JSON-RPC message over the transport.
-	// It takes raw message bytes and returns an error if writing fails.
-	// The context allows for cancellation of long-running writes.
-	WriteMessage(ctx context.Context, message []byte) error
-
-	// Close shuts down the transport, closing any underlying connections.
-	// Any blocked Read or Write operations will be unblocked and return errors.
-	Close() error
-}
-
-// MessageHandler defines the signature for a function that processes JSON-RPC messages.
-// It receives the raw message bytes and returns a response message or error.
-type MessageHandler func(ctx context.Context, message []byte) ([]byte, error)
-
-// ErrorHandler defines the signature for functions that handle transport errors.
-// It allows customized error handling strategies.
-type ErrorHandler func(ctx context.Context, err error)
-
-// DefaultErrorHandler provides a basic error handling implementation.
-func DefaultErrorHandler(ctx context.Context, err error) {
-	// Default implementation does nothing; implementations should replace with
-	// appropriate logging, metrics, etc.
-}
-
-// TransportError is the base error type for all transport-related errors.
-// It implements the error interface and includes context and error codes.
-type TransportError struct {
-	// Code is the numeric error code for this error.
-	Code ErrorCode
-
-	// Message is a human-readable description of the error.
-	Message string
-
-	// Cause is the underlying error that caused this one, if any.
-	Cause error
-
-	// Context contains additional key-value pairs that provide context for debugging.
-	Context map[string]interface{}
-}
-
-// Error implements the error interface for TransportError.
-func (e *TransportError) Error() string {
-	base := fmt.Sprintf("[%d] %s", e.Code, e.Message)
-	if e.Cause != nil {
-		return fmt.Sprintf("%s: %v", base, e.Cause)
-	}
-	return base
-}
-
-// Unwrap returns the underlying error for TransportError.
-func (e *TransportError) Unwrap() error {
-	return e.Cause
-}
-
-// WithContext adds or updates context information to the error.
-func (e *TransportError) WithContext(key string, value interface{}) *TransportError {
-	if e.Context == nil {
-		e.Context = make(map[string]interface{})
-	}
-	e.Context[key] = value
-	return e
-}
-
-// NewTransportError creates a new transport error with the given code and message.
-func NewTransportError(code ErrorCode, message string, cause error) *TransportError {
-	return &TransportError{
-		Code:    code,
-		Message: message,
-		Cause:   errors.WithStack(cause), // Preserve stack trace
-		Context: map[string]interface{}{
-			"timestamp": time.Now().UTC(),
-		},
-	}
-}
-
-// MessageSizeError is returned when a message exceeds the maximum allowed size.
-type MessageSizeError struct {
-	*TransportError
-	Size     int
-	MaxSize  int
-	Fragment []byte // First few bytes of the oversized message for debugging
-}
-
-// NewMessageSizeError creates a new MessageSizeError with the provided details.
-func NewMessageSizeError(size, maxSize int, fragment []byte) *MessageSizeError {
-	err := &MessageSizeError{
-		TransportError: &TransportError{
-			Code:    ErrMessageTooLarge,
-			Message: fmt.Sprintf("message size %d exceeds maximum allowed size %d", size, maxSize),
-			Context: map[string]interface{}{
-				"messageSize": size,
-				"maxSize":     maxSize,
-				"timestamp":   time.Now().UTC(),
-			},
-		},
-		Size:     size,
-		MaxSize:  maxSize,
-		Fragment: fragment,
-	}
-
-	if len(fragment) > 0 {
-		err.Context["messagePreview"] = string(fragment)
-	}
-
-	return err
-}
-
-// ParseError is returned when a message cannot be parsed as valid JSON-RPC.
-type ParseError struct {
-	*TransportError
-	RawMessage []byte
-}
-
-// NewParseError creates a new ParseError with the provided details.
-func NewParseError(message []byte, cause error) *ParseError {
-	preview := message
-	if len(preview) > 100 {
-		preview = preview[:100]
-	}
-
-	return &ParseError{
-		TransportError: &TransportError{
-			Code:    ErrJSONParseFailed,
-			Message: "failed to parse JSON-RPC message",
-			Cause:   errors.WithStack(cause), // Preserve stack trace
-			Context: map[string]interface{}{
-				"messagePreview": string(preview),
-				"messageLength":  len(message),
-				"timestamp":      time.Now().UTC(),
-			},
-		},
-		RawMessage: message,
-	}
-}
-
-// JSON-RPC 2.0 error codes as defined in the specification.
-const (
-	// Standard JSON-RPC 2.0 error codes
-	JSONRPCParseError     = -32700
-	JSONRPCInvalidRequest = -32600
-	JSONRPCMethodNotFound = -32601
-	JSONRPCInvalidParams  = -32602
-	JSONRPCInternalError  = -32603
-
-	// Server error codes (reserved range)
-	JSONRPCServerErrorStart = -32099
-	JSONRPCServerErrorEnd   = -32000
-)
-
-// MapErrorToJSONRPC maps internal transport errors to JSON-RPC 2.0 error codes and messages.
-// This function helps maintain a consistent mapping between our application errors and JSON-RPC errors.
-func MapErrorToJSONRPC(err error) (int, string, map[string]interface{}) {
-	// Default values
-	code := JSONRPCInternalError
-	message := "Internal error"
-	data := map[string]interface{}{}
-
-	// Check for specific error types
-	var transportErr *TransportError
-	if errors.As(err, &transportErr) {
-		data["errorCode"] = transportErr.Code
-
-		// Map transport error codes to JSON-RPC error codes
-		switch transportErr.Code {
-		case ErrJSONParseFailed:
-			code = JSONRPCParseError
-			message = "Parse error"
-		case ErrInvalidMessage:
-			code = JSONRPCInvalidRequest
-			message = "Invalid Request"
-		case ErrMessageTooLarge:
-			code = JSONRPCInvalidRequest
-			message = "Message too large"
-		default:
-			// Use the server-defined error range for other transport errors
-			code = JSONRPCServerErrorStart + int(transportErr.Code)
-			message = transportErr.Message
+		hasResult := false
+		if _, exists := msg["result"]; exists {
+			hasResult = true
 		}
 
-		// Add safe context data (be careful not to expose sensitive information)
-		for k, v := range transportErr.Context {
-			// Filter out potentially sensitive context keys
-			if k != "messagePreview" && k != "timestamp" && k != "messageSize" && k != "maxSize" {
-				continue
-			}
-			data[k] = v
-		}
-	}
+		hasError := false
+		if errorObj, exists := msg["error"]; exists {
+			hasError = true
 
-	return code, message, data
-}
-
-// ValidateMessage performs basic validation on a JSON-RPC message.
-// It ensures the message has the required fields for a JSON-RPC 2.0 message.
-func ValidateMessage(message []byte) error {
-	var msg map[string]interface{}
-	if err := json.Unmarshal(message, &msg); err != nil {
-		return NewParseError(message, err)
-	}
-
-	// Check for required JSON-RPC 2.0 fields
-	version, ok := msg["jsonrpc"]
-	if !ok {
-		return NewTransportError(
-			ErrInvalidMessage,
-			"missing 'jsonrpc' field",
-			nil,
-		).WithContext("messagePreview", string(message[:min(len(message), 100)]))
-	}
-
-	if version != "2.0" {
-		return NewTransportError(
-			ErrInvalidMessage,
-			fmt.Sprintf("unsupported JSON-RPC version: %v", version),
-			nil,
-		).WithContext("version", version).
-			WithContext("messagePreview", string(message[:min(len(message), 100)]))
-	}
-
-	// Check if it's a request, notification, or response
-	if _, hasMethod := msg["method"]; hasMethod {
-		// It's a request or notification
-		if id, hasID := msg["id"]; hasID {
-			// It's a request - validate ID format
-			switch id.(type) {
-			case string, float64, nil, json.Number:
-				// These are valid ID types
-			default:
-				return NewTransportError(
+			// If error is present, it must be an object with code and message
+			errorMap, ok := errorObj.(map[string]interface{})
+			if !ok {
+				return NewError(
 					ErrInvalidMessage,
-					fmt.Sprintf("invalid request ID type: %T", id),
+					"error must be an object",
 					nil,
-				).WithContext("idType", fmt.Sprintf("%T", id)).
-					WithContext("idValue", fmt.Sprintf("%v", id)).
+				).WithContext("errorType", fmt.Sprintf("%T", errorObj)).
 					WithContext("messagePreview", string(message[:min(len(message), 100)]))
 			}
-		}
-		// If no ID, it's a notification which is valid
-	} else {
-		// Should be a response - must have either result or error
-		if _, hasResult := msg["result"]; !hasResult {
-			if _, hasError := msg["error"]; !hasError {
-				return NewTransportError(
+
+			// Error must have code (number) and message (string)
+			if code, exists := errorMap["code"]; !exists {
+				return NewError(
 					ErrInvalidMessage,
-					"response message must contain either 'result' or 'error' field",
+					"error object must contain 'code' field",
 					nil,
 				).WithContext("messagePreview", string(message[:min(len(message), 100)]))
+			} else {
+				// Code must be a number
+				switch code.(type) {
+				case float64, json.Number:
+					// Valid code types
+				default:
+					return NewError(
+						ErrInvalidMessage,
+						"error code must be a number",
+						nil,
+					).WithContext("codeType", fmt.Sprintf("%T", code)).
+						WithContext("messagePreview", string(message[:min(len(message), 100)]))
+				}
+			}
+
+			if message, exists := errorMap["message"]; !exists {
+				return NewError(
+					ErrInvalidMessage,
+					"error object must contain 'message' field",
+					nil,
+				).WithContext("messagePreview", string(message[:min(len(message), 100)]))
+			} else {
+				// Message must be a string
+				if _, ok := message.(string); !ok {
+					return NewError(
+						ErrInvalidMessage,
+						"error message must be a string",
+						nil,
+					).WithContext("messageType", fmt.Sprintf("%T", message)).
+						WithContext("messagePreview", string(message[:min(len(message), 100)]))
+				}
 			}
 		}
-		// Must have an ID
-		if _, hasID := msg["id"]; !hasID {
-			return NewTransportError(
+
+		// Response must have either result or error, but not both
+		if !hasResult && !hasError {
+			return NewError(
 				ErrInvalidMessage,
-				"response message must contain 'id' field",
+				"response message must contain either 'result' or 'error' field",
+				nil,
+			).WithContext("messagePreview", string(message[:min(len(message), 100)]))
+		}
+
+		if hasResult && hasError {
+			return NewError(
+				ErrInvalidMessage,
+				"response message cannot contain both 'result' and 'error' fields",
+				nil,
+			).WithContext("messagePreview", string(message[:min(len(message), 100)]))
+		}
+
+		// Response shouldn't have method or params
+		if _, hasMethod := msg["method"]; hasMethod {
+			return NewError(
+				ErrInvalidMessage,
+				"response message cannot contain 'method' field",
+				nil,
+			).WithContext("messagePreview", string(message[:min(len(message), 100)]))
+		}
+
+		if _, hasParams := msg["params"]; hasParams {
+			return NewError(
+				ErrInvalidMessage,
+				"response message cannot contain 'params' field",
 				nil,
 			).WithContext("messagePreview", string(message[:min(len(message), 100)]))
 		}
@@ -442,66 +327,180 @@ func min(x, y int) int {
 	return y
 }
 
-// NewIOTransport creates a transport from an io.Reader and io.Writer.
-// This is a general-purpose constructor that works with any paired Reader/Writer,
-// and can be used by more specific transport implementations like stdio or network.
-func NewIOTransport(reader io.Reader, writer io.Writer, closer io.Closer) Transport {
-	return &ioTransport{
-		reader: reader,
+// NDJSONTransport implements the Transport interface for newline-delimited JSON.
+// It supports both stdio and socket-based communications.
+type NDJSONTransport struct {
+	reader    *bufio.Reader
+	writer    io.Writer
+	closer    io.Closer
+	writeLock sync.Mutex // Ensures atomic writes
+	closed    bool
+	closeLock sync.RWMutex
+}
+
+// NewNDJSONTransport creates a new Transport that reads and writes newline-delimited JSON.
+// It works with any paired Reader/Writer, including stdio, TCP connections, etc.
+func NewNDJSONTransport(reader io.Reader, writer io.Writer, closer io.Closer) Transport {
+	return &NDJSONTransport{
+		reader: bufio.NewReader(reader),
 		writer: writer,
 		closer: closer,
 	}
 }
 
-// ioTransport implements Transport using an io.Reader and io.Writer.
-type ioTransport struct {
-	reader io.Reader
-	writer io.Writer
-	closer io.Closer
+// ReadMessage implements Transport.ReadMessage for NDJSON.
+// It reads a single line of JSON data delimited by a newline character.
+func (t *NDJSONTransport) ReadMessage(ctx context.Context) ([]byte, error) {
+	// Check if the transport is closed
+	t.closeLock.RLock()
+	if t.closed {
+		t.closeLock.RUnlock()
+		return nil, NewClosedError("read")
+	}
+	t.closeLock.RUnlock()
+
+	// Create a channel for the result
+	type readResult struct {
+		data []byte
+		err  error
+	}
+	resultCh := make(chan readResult, 1)
+
+	// Read in a separate goroutine to allow for context cancellation
+	go func() {
+		// Start reading the line
+		var line []byte
+		var prefix bool
+		var err error
+		var totalSize int
+
+		// Buffer to store message parts if they exceed a single read
+		var buffer bytes.Buffer
+
+		// Read until we hit a newline or an error
+		for {
+			line, prefix, err = t.reader.ReadLine()
+			if err != nil {
+				resultCh <- readResult{nil, errors.Wrap(err, "failed to read message")}
+				return
+			}
+
+			// Append the line to our buffer
+			buffer.Write(line)
+			totalSize += len(line)
+
+			// Check if we've hit the size limit
+			if totalSize > MaxMessageSize {
+				fragment := buffer.Bytes()
+				if len(fragment) > 100 {
+					fragment = fragment[:100]
+				}
+				resultCh <- readResult{nil, NewMessageSizeError(totalSize, MaxMessageSize, fragment)}
+				return
+			}
+
+			// If there's no more to read, we're done
+			if !prefix {
+				break
+			}
+		}
+
+		// Get the full message
+		message := buffer.Bytes()
+
+		// Validate the message
+		if err := ValidateMessage(message); err != nil {
+			resultCh <- readResult{nil, err}
+			return
+		}
+
+		resultCh <- readResult{message, nil}
+	}()
+
+	// Wait for either the read to complete or the context to be canceled
+	select {
+	case <-ctx.Done():
+		return nil, NewTimeoutError("read", ctx.Err())
+	case result := <-resultCh:
+		return result.data, result.err
+	}
 }
 
-// ReadMessage implements Transport.ReadMessage using an io.Reader.
-func (t *ioTransport) ReadMessage(ctx context.Context) ([]byte, error) {
-	// TODO: Implement bounded buffer reading with context support
-	// This should include:
-	// 1. Protection against lines that exceed MaxMessageSize
-	// 2. Context cancellation support
-	// 3. Proper error handling for malformed NDJSON
+// WriteMessage implements Transport.WriteMessage for NDJSON.
+// It writes a single line of JSON data with a trailing newline character.
+func (t *NDJSONTransport) WriteMessage(ctx context.Context, message []byte) error {
+	// Check if the transport is closed
+	t.closeLock.RLock()
+	if t.closed {
+		t.closeLock.RUnlock()
+		return NewClosedError("write")
+	}
+	t.closeLock.RUnlock()
 
-	// For now, return a placeholder error with stack trace
-	return nil, errors.WithStack(NewTransportError(
-		ErrGeneric,
-		"ioTransport.ReadMessage not implemented",
-		nil,
-	))
-}
+	// Validate the message first
+	if err := ValidateMessage(message); err != nil {
+		return err
+	}
 
-// WriteMessage implements Transport.WriteMessage using an io.Writer.
-func (t *ioTransport) WriteMessage(ctx context.Context, message []byte) error {
-	// TODO: Implement bounded buffer writing with context support
-	// This should include:
-	// 1. Adding newline termination for NDJSON format
-	// 2. Context cancellation support
-	// 3. Atomic writes to avoid message corruption
+	// Check message size
+	if len(message) > MaxMessageSize {
+		fragment := message
+		if len(fragment) > 100 {
+			fragment = fragment[:100]
+		}
+		return NewMessageSizeError(len(message), MaxMessageSize, fragment)
+	}
 
-	// For now, return a placeholder error with stack trace
-	return errors.WithStack(NewTransportError(
-		ErrGeneric,
-		"ioTransport.WriteMessage not implemented",
-		nil,
-	).WithContext("messageLength", len(message)))
+	// Create a channel for the result
+	resultCh := make(chan error, 1)
+
+	// Lock to ensure no concurrent writes
+	t.writeLock.Lock()
+	defer t.writeLock.Unlock()
+
+	// Write in a separate goroutine to allow for context cancellation
+	go func() {
+		// Create a buffer that ends with a newline
+		buf := make([]byte, len(message)+1)
+		copy(buf, message)
+		buf[len(message)] = '\n'
+
+		// Try to write the full message at once
+		_, err := t.writer.Write(buf)
+		resultCh <- err
+	}()
+
+	// Wait for either the write to complete or the context to be canceled
+	select {
+	case <-ctx.Done():
+		return NewTimeoutError("write", ctx.Err())
+	case err := <-resultCh:
+		if err != nil {
+			return errors.Wrap(err, "failed to write message")
+		}
+		return nil
+	}
 }
 
 // Close implements Transport.Close.
-func (t *ioTransport) Close() error {
+func (t *NDJSONTransport) Close() error {
+	t.closeLock.Lock()
+	defer t.closeLock.Unlock()
+
+	// If already closed, just return
+	if t.closed {
+		return nil
+	}
+
+	// Mark as closed
+	t.closed = true
+
+	// Close the underlying closer if available
 	if t.closer != nil {
 		if err := t.closer.Close(); err != nil {
-			return errors.WithStack(NewTransportError(
-				ErrGeneric,
-				"failed to close transport",
-				err,
-			))
+			return errors.Wrap(err, "failed to close transport")
 		}
 	}
+
 	return nil
 }

@@ -1,115 +1,109 @@
+Okay, I can help rewrite the technical sections of the README to align with the architecture we've planned and include the requested links. I'll keep the introduction and general purpose sections mostly intact, as they seem appropriate.
+
+Here's a revised README.md:
+
+---
+
 # CowGnition 🐄 🧠
 
 <img src="/docs/assets/cowgnition_logo.png" alt="CowGnition Logo" width="100" height="100">
 
 ## Have you Herd?
 
-CowGnition connects your [Remember The Milk](https://www.rememberthemilk.com/) (RTM) tasks with Claude Desktop. This MCP server lets you ask your AI assistant to manage your to-do lists, look up due dates, and get insights about your tasks through simple conversations. The [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) allows Claude Desktop, and other conversational agents that are MCP clients, to use "tools" like RTM to do things on your behalf.
+CowGnition connects your [Remember The Milk](https://www.rememberthemilk.com/) (RTM) tasks with Claude Desktop and other MCP clients. This MCP server lets you ask your AI assistant to manage your to-do lists, look up due dates, and get insights about your tasks through simple conversations. The [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) allows conversational agents that are MCP clients to use "tools" and "resources" like those provided by this server to interact with services like RTM on your behalf.
 
 ## Quick Links
 
-- [TODO](docs/TODO.md) - For developers, our active TODO list (TODO: move this to GH issues)
-- [Decision Log](docs/decision_log.md) - Record of decisions about tools and architecture
+- [Architecture Decisions](#architectural-decisions-adrs) - Key design choices made for this project.
+- [TODO](docs/TODO.md) - Current development tasks and roadmap items.
 
-TODO: assess if any of the following makes sense
+## Core Architecture
 
-- [Installation](#installation) - Get up and running
-- [Configuration](#configuration) - Set up your connection
-- [What Can It Do?](#what-can-cowgnition-do) - See it in action
-- [Development Overview](docs/development_overview.md) - For the technically curious
-- [Project Organization](docs/PROJECT_ORGANIZATION.md) - How it all fits together
+This MCP server is implemented in **Go** and follows modern development practices. Key architectural features include:
 
-## Key Features
+- **Protocol:** Implements **JSON-RPC 2.0** as required by MCP.
+- **Transport:** Uses **Newline Delimited JSON (NDJSON)** over standard I/O (`stdio`) for communication with local clients (like Claude Desktop) or potentially raw TCP sockets. This transport is custom-built using Go's standard library (`net`, `bufio`, `encoding/json`) for efficiency and control.
+- **Validation:** Incoming messages are rigorously validated against the official **MCP JSON Schema** using the `santhosh-tekuri/jsonschema/v5` library within a dedicated middleware layer. This ensures strict compliance with both JSON-RPC 2.0 structure and MCP-specific method/parameter definitions.
+- **Error Handling:** Leverages the `cockroachdb/errors` library for rich, context-aware internal error handling and stack traces, mapped appropriately to JSON-RPC 2.0 error responses and detailed server-side logs.
+- **Logging:** Employs structured logging (using `slog`) adhering to the recommendations in the MCP specification, providing detailed operational and error information.
+- **Configuration:** Prioritizes simplicity, primarily using **environment variables** for configuration (like API keys).
 
-- **View tasks and lists** - See what's due or browse specific lists from RTM
-- **Create and update tasks** - Add new items or modify existing ones
-- **Complete tasks** - Check things off right from Claude
-- **Manage due dates** - Schedule and reschedule with natural language
-- **Work with tags** - Organize and filter your tasks
+## Architectural Decisions (ADRs)
 
-## Installation
+Detailed explanations for key architectural choices are recorded in ADRs:
+
+- [ADR 001: Error Handling Strategy](docs/001_error_handling_strategy.md) - Decision to use `cockroachdb/errors` and specific error handling patterns.
+- [ADR 002: Schema Validation Strategy](docs/002_schema_validation_strategy.md) - Decision to use JSON Schema validation via middleware.
+- _(Other ADRs for Transport, Logging, Configuration may be added here)_
+
+## Project Status / TODO
+
+Please see the [TODO.md](docs/TODO.md) file for the current development status, planned features, and known issues.
+
+## Getting Started (Development)
+
+1.  **Prerequisites:** Go (version 1.21 or later recommended).
+2.  **Clone:** `git clone <repository-url>`
+3.  **Build:** `go build -o cowgnition_server ./cmd/server/`
+4.  **Run Tests:** `go test ./...`
 
 ## Configuration
 
-1. Get Your RTM Credentials
-   Head over to the Remember The Milk API key page to get your API key and shared secret.
+Configuration is primarily handled via environment variables for simplicity:
 
-2. Create Your Config
-   Create a configuration file at configs/config.yaml with the following content:
+- `RTM_API_KEY`: **Required.** Your Remember The Milk API key.
+- `RTM_SHARED_SECRET`: **Required.** Your Remember The Milk shared secret.
+- `LOG_LEVEL`: Optional. Set the logging level (e.g., `debug`, `info`, `warn`, `error`). Defaults to `info`.
+- _(Add other variables as needed, e.g., for auth token storage path if not derived)_
 
-```YAML
+Example:
 
-server:
-  name: "CowGnition RTM"
-  port: 8080
-
-rtm:
-  api_key: "your_api_key"
-  shared_secret: "your_shared_secret"
-
-auth:
-  # Directory to store authentication tokens.
-  # Ensure this directory exists or the application has permissions to create it.
-  token_path: "~/.config/cowgnition/tokens"
+```bash
+export RTM_API_KEY="YOUR_RTM_API_KEY"
+export RTM_SHARED_SECRET="YOUR_RTM_SHARED_SECRET"
+./cowgnition_server
 ```
 
-(Note: The application may need the directory specified in auth.token_path to exist.)
+_(Note: A mechanism for handling the RTM authentication flow (likely OAuth) and storing tokens securely will be required. See TODO.)_
 
-3. Start It Up
+## Running / Connecting to Clients
 
-4. Connect to Claude
-   Install it in Claude Desktop:
+The server primarily communicates via **stdio** when launched by a client like Claude Desktop.
 
-Or test it first with:
+**Example `claude_desktop_config.json` entry:**
 
-## What Can CowGnition Do?
+```json
+{
+  "mcpServers": {
+    "cowgnition-rtm": {
+      "command": "/path/to/your/built/cowgnition_server",
+      "args": [],
+      "env": {
+        "RTM_API_KEY": "YOUR_RTM_API_KEY_HERE",
+        "RTM_SHARED_SECRET": "YOUR_RTM_SHARED_SECRET_HERE",
+        "LOG_LEVEL": "debug"
+      }
+    }
+  }
+}
+```
 
-Once connected to Claude Desktop, just start chatting naturally:
+_Replace `/path/to/your/built/cowgnition_server` with the absolute path to the compiled binary._
+_Ensure the API key and secret are correctly set, potentially using a more secure method than directly in the config file for sensitive keys._
+_Restart Claude Desktop after modifying the configuration._
 
-"What's due today on RTM?"
-"Add milk to my shopping list"
-"Show me all my tasks tagged as 'important'"
-"Set the dentist appointment for next Tuesday"
-"What's on my work list in Remember The Milk?"
+Once connected, the server status and its capabilities (Tools, Resources, Prompts it exposes) should appear in the client UI.
 
-## Authentication
+## MCP Implementation Details
 
-First time connecting? Here's how it works:
+CowGnition implements the server-side of the Model Context Protocol to interact with Remember The Milk. This involves:
 
-Ask Claude about your Remember The Milk tasks
-Claude provides an authorization link from CowGnition
-Visit the link and approve CowGnition access to your RTM account on rememberthemilk.com
-You'll get a special code (frob)
-Tell Claude this code
-You're connected!
-Your RTM credentials stay secure throughout this process using OAuth.
+- Handling the MCP **initialization handshake**.
+- Exposing RTM functionalities as MCP **Tools** (e.g., `createTask`, `completeTask`, `getTasksByFilter`). The specific tools are defined by the server's implementation (see `TODO.md`). Tool definitions include JSON Schemas for their inputs.
+- Potentially exposing RTM data views as MCP **Resources** (e.g., lists, tags, specific tasks). Resource definitions include URIs and MIME types.
+- Responding correctly to core MCP requests like `tools/list`, `tools/call`, `resources/list`, `resources/read`.
 
-## Under the Hood
-
-CowGnition uses the Model Context Protocol (MCP) to connect Claude with your RTM account. For the technically curious, here's what Claude can access:
-
-### Resources
-
-auth://rtm - Your gateway to RTM
-tasks://today - See what's due today
-tasks://list/{list_id} - View tasks in specific lists
-lists://all - Browse your RTM lists
-tags://all - See all your organizational tags
-
-### Tools
-
-CowGnition gives Claude these capabilities:
-
-Creating tasks in any list
-Completing tasks
-Changing due dates
-Setting priorities
-Adding tags
-
-## And more!
-
-For Developers
-Want to contribute? Check out the Development Overview and Project Organization. We follow standard Go project structure with clean architecture principles.
+The exact set of supported Tools and Resources is subject to ongoing development (see `TODO.md`).
 
 ## License
 
@@ -117,8 +111,10 @@ This project is licensed under the MIT License. See the LICENSE file for details
 
 ## Thank You
 
-The Remember The Milk team for their wonderful task system
-Anthropic for creating the Model Context Protocol
-The Go community for excellent development tools
+- The Remember The Milk team for their wonderful task system and API.
+- Anthropic for creating the Model Context Protocol.
+- The Go community for excellent development tools and libraries.
 
 Moo-ve your productivity forward with CowGnition and Claude! 🐄 🧠
+
+---
