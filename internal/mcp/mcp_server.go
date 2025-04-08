@@ -326,10 +326,7 @@ func extractRequestID(msgBytes []byte) json.RawMessage {
 
 // mapErrorToJSONRPCComponents maps Go errors to JSON-RPC code, message, and data.
 func (s *Server) mapErrorToJSONRPCComponents(err error) (code int, message string, data interface{}) {
-	// Default values.
-	code = transport.JSONRPCInternalError // -32603.
-	message = "Internal server error."    // Default message.
-	data = nil                            // Keep data nil unless safe.
+	data = nil // Keep data nil unless explicitly set by mapping functions.
 
 	var mcpErr *mcperrors.BaseError
 	var transportErr *transport.Error
@@ -338,10 +335,12 @@ func (s *Server) mapErrorToJSONRPCComponents(err error) (code int, message strin
 	// Check error types in order of specificity.
 	switch {
 	case errors.As(err, &validationErr):
-		message = "Validation error." // More specific default for validation.
+		// REMOVED: Default assignment for message was here.
 		code, message, data = mapValidationError(validationErr)
 	case errors.As(err, &mcpErr):
-		code, message, data = mapMCPError(mcpErr)
+		// Update call signature for mapMCPError to match the corrected version below
+		code, message = mapMCPError(mcpErr)
+		// data remains nil as mapMCPError no longer returns it
 	case errors.As(err, &transportErr):
 		code, message, data = transport.MapErrorToJSONRPC(transportErr)
 	default:
@@ -372,7 +371,7 @@ func mapValidationError(validationErr *schema.ValidationError) (code int, messag
 }
 
 // mapMCPError maps mcperrors.BaseError to JSON-RPC components.
-func mapMCPError(mcpErr *mcperrors.BaseError) (code int, message string, data interface{}) {
+func mapMCPError(mcpErr *mcperrors.BaseError) (code int, message string) {
 	message = mcpErr.Message // Use the message from the custom error.
 	code = mcpErr.Code       // Use the code from the custom error.
 
@@ -395,8 +394,8 @@ func mapMCPError(mcpErr *mcperrors.BaseError) (code int, message string, data in
 			code = -32000 // Generic implementation-defined server error.
 		}
 	}
-	// data = mcpErr.Context // Optionally include sanitized context. Be cautious.
-	return code, message, data
+	// data = mcpErr.Context // Keep this commented out or implement proper sanitization if needed.
+	return code, message
 }
 
 // mapGenericGoError maps generic Go errors to JSON-RPC components.

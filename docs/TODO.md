@@ -10,136 +10,83 @@ This implementation will prioritize:
 - Testability built into the design from the start
 - Simple but maintainable architecture with clear separation of concerns
 
-### Phase 0: HIGHEST PRIORITY IMMEDIATE FOCUS
+# CowGnition MCP Implementation Roadmap: Clean Architecture Approach
 
-# MCP Implementation Strategy Prompt
+**Status:** Active Development
 
-When reviewing this CowGnition codebase, please consider the following architectural components and their relationships:
+---
 
-## File Structure Understanding
+## Phase 0: HIGHEST PRIORITY IMMEDIATE FOCUS
 
-The codebase has several key files that may seem redundant but serve different purposes:
+**Goal:** Achieve a basic "hello world" MCP conversation between CowGnition and Claude Desktop.
 
-1. **MCP Server Implementation**:
+**Key Actions:**
 
-   - `internal/mcp/mcp_server.go` is the primary server implementation
-   - `internal/mcp/server.go` is an alternative or older implementation
-   - Review both to determine which is currently active and should be enhanced
+1.  **[PENDING]** Integrate Validation Middleware Chain (`internal/middleware/chain.go`, `internal/middleware/validation.go`) into the main server loop (`internal/mcp/mcp_server.go`).
+2.  **[PENDING]** Implement actual RTM Tool logic for `tools/list` and `tools/call`.
+3.  **[PENDING]** Implement actual RTM Resource logic for `resources/list` and `resources/read`.
+4.  **[PENDING]** Enhance logging to include connection/request IDs.
 
-2. **Handler Structure**:
+---
 
-   - Check if `internal/mcp/mcp_handlers.go` exists
-   - Determine if handlers are implemented directly within the server file
-   - Look for any standalone handlers in separate files
+## Phase 1: Core Transport
 
-3. **Error Handling**:
-   - `internal/mcp/errors/errors.go` defines domain-specific error types
-   - Any new implementation should use these error types rather than creating new ones
+**Status:** [COMPLETE]
 
-## MCP Protocol Requirements
+- [x] Create NDJSON transport layer (`internal/transport/transport.go`)
+- [x] Implement message reading with bounded buffer size (`MaxMessageSize`)
+- [x] Add strict validation of JSON-RPC 2.0 message format (`ValidateMessage` in `transport.go`)
+- [x] Support graceful error handling for malformed messages (`transport_errors.go`, middleware error responses)
+- [x] Implement robust connection lifecycle management (`Close` method, EOF handling)
+- [x] Create clean separation between transport and message handling (Separate packages)
 
-To achieve a working MCP conversation with Claude Desktop, focus on:
+---
 
-1. **Essential MCP Methods**:
+## Phase 2: Schema Validation
 
-   - `initialize` - Required for handshake
-   - `ping` - For heartbeat
-   - `tools/list` - For exposing capabilities
-   - `tools/call` - For handling tool invocations
-   - `resources/list` - For exposing available resources
-   - `resources/read` - For reading resource content
+**Status:** [PARTIALLY COMPLETE]
 
-2. **JSON-RPC Compliance**:
-   - Ensure proper handling of JSON-RPC 2.0 message format
-   - Maintain proper error codes and responses
+- [x] Create schema validator (`internal/schema/validator.go`)
+- [x] Implement schema loading from multiple sources
+- [x] Create validation middleware (`internal/middleware/validation.go`)
+- [x] Generate detailed validation errors with context (`schema.ValidationError`)
+- [x] Pre-compile schemas for performance (`Initialize` method)
+- [ ] **[INCOMPLETE]** Integrate Validation Middleware into the server's main processing loop (`internal/mcp/mcp_server.go`)
 
-## Integration Strategy
+---
 
-When enhancing the codebase:
+## Phase 3: Request Router & Handler Framework
 
-1. **Build on existing validation and error handling**:
+**Status:** [PARTIALLY COMPLETE]
 
-   - Use the existing middleware for validation
-   - Leverage existing error types from `internal/mcp/errors/errors.go`
-   - Maintain consistent logging patterns
+- [x] Implement request router (map-based in `mcp_server.go`)
+- [x] Create method registration framework (`registerMethods` in `mcp_server.go`)
+- [x] Implement middleware support (`internal/middleware/chain.go`)
+- [x] Add context propagation throughout handlers
+- [x] Ensure proper error mapping to JSON-RPC format (`createErrorResponse` in `mcp_server.go`)
+- [ ] **[INCOMPLETE]** Integrate Middleware Chain (including Validation) into the server's main processing loop (`internal/mcp/mcp_server.go`)
 
-2. **Complete missing functionality**:
+---
 
-   - Identify which MCP methods are not fully implemented
-   - Implement only what's missing to avoid redundancy
-   - Ensure proper registration of method handlers
+## Phase 4: Core MCP Method Implementations
 
-3. **Defer RTM integration**:
-   - Focus solely on MCP protocol compliance
-   - Use mock data for resources and tools where needed
+**Status:** [PARTIALLY COMPLETE]
 
-Remember, we're optimizing for a working "hello world" MCP conversation between CowGnition and Claude Desktop as the immediate goal, not a full-featured implementation.
+- [x] Implement protocol methods:
+  - [x] `initialize`
+  - [ ] `resources/list` - **[INCOMPLETE - Placeholder]** (Needs RTM logic)
+  - [ ] `resources/read` - **[INCOMPLETE - Placeholder]** (Needs RTM logic)
+  - [x] `tools/list` - **[PARTIALLY COMPLETE - Placeholder]** (Needs RTM tools)
+  - [x] `tools/call` - **[PARTIALLY COMPLETE - Placeholder]** (Needs RTM tool logic)
+  - [x] `ping`
+  - [x] `shutdown`
+- [ ] **[INCOMPLETE]** Implement RTM-specific resource/tool handlers.
 
-### Phase 1: Core Transport
+---
 
-- [ ] Create NDJSON transport layer:
-  - [ ] Implement message reading with bounded buffer size
-  - [ ] Add strict validation of JSON-RPC 2.0 message format
-  - [ ] Support graceful error handling for malformed messages
-  - [ ] Implement robust connection lifecycle management
-  - [ ] Create clean separation between transport and message handling
+## Phase 5: Testing Framework
 
-Key implementation details:
-
-- Use standard library `bufio` for efficient line reading
-- Implement size limits to prevent memory attacks
-- Close connections on receipt of malformed data
-- Create an abstraction for message dispatch to handlers
-
-### Phase 2: Schema Validation
-
-- [ ] Create schema validator:
-  - [ ] Implement schema loading from multiple sources
-  - [ ] Create validation middleware for all messages
-  - [ ] Generate detailed validation errors with context
-  - [ ] Pre-compile schemas for performance
-
-Key implementation details:
-
-- Use the official MCP JSON schema
-- Support fallbacks (URL → local file → embedded)
-- Cache compiled schemas for performance
-- Add clear context to validation errors
-
-### Phase 3: Request Router & Handler Framework
-
-- [ ] Implement request router:
-  - [ ] Create method registration framework
-  - [ ] Implement middleware support
-  - [ ] Add context propagation throughout handlers
-  - [ ] Ensure proper error mapping to JSON-RPC format
-
-Key implementation details:
-
-- Use a simple but structured router
-- Support middleware for cross-cutting concerns
-- Create a clean pattern for handler dependencies
-- Ensure consistent error handling
-
-### Phase 4: Core MCP Method Implementations
-
-- [ ] Implement protocol methods:
-  - [ ] `initialize` - Server initialization
-  - [ ] `resources/list` - List available resources
-  - [ ] `resources/read` - Read a specific resource
-  - [ ] `tools/list` - List available tools
-  - [ ] `tools/call` - Call a specific tool
-  - [ ] `ping` - Connection check
-  - [ ] `shutdown` - Graceful shutdown
-
-Key implementation details:
-
-- Ensure all methods conform exactly to the MCP spec
-- Implement RTM-specific resource/tool handlers
-- Add comprehensive error handling
-- Test against schema validation
-
-### Phase 5: Testing Framework
+**Status:** [INCOMPLETE]
 
 - [ ] Create comprehensive test suite:
   - [ ] Unit tests for components
@@ -148,27 +95,28 @@ Key implementation details:
   - [ ] Fuzzing tests for robustness
   - [ ] Benchmark tests for performance
 
-Key implementation details:
+---
 
-- Build a library of test messages (valid and invalid)
-- Test error paths thoroughly
-- Create framework for testing handler implementations
-- Use Go 1.18+ fuzzing capabilities
+## Phase 6: Observability
 
-### Phase 6: Observability
+**Status:** [PARTIALLY COMPLETE]
 
-- [ ] Add structured logging:
-
-  - [ ] Connection lifecycle events
-  - [ ] Request/response details
-  - [ ] Validation failures
-  - [ ] Error handling
-
+- [x] Add structured logging (`internal/logging/`):
+  - [x] Connection lifecycle events
+  - [x] Request/response details
+  - [x] Validation failures
+  - [x] Error handling
+  - [ ] **[INCOMPLETE]** Include connection ID and request ID in all logs
 - [ ] Add metrics:
   - [ ] Request counts and latencies
   - [ ] Error rates by type
   - [ ] Active connections
   - [ ] Schema validation failures
+  - [ ] **[INCOMPLETE]** Create exportable metrics
+
+---
+
+This updated section provides a clearer view of what's done and what remains. Ready for the next step!
 
 Key implementation details:
 

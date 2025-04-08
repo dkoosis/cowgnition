@@ -4,10 +4,6 @@
 
 2025-04-07 _(Original: 2025-04-06)_
 
-## Status
-
-Accepted
-
 ## Context
 
 The CowGnition project is implementing a Model Context Protocol (MCP) server that integrates with Remember The Milk (RTM). For this implementation, we need a robust error handling strategy that provides:
