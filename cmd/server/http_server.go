@@ -35,38 +35,57 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	logging.SetupDefaultLogger(logLevel)
 	logger := logging.GetLogger("server_logic") // Changed logger name for clarity
 
-	logger.Info("Starting CowGnition server",
-		"transportType", transportType,
-		"debug", debug)
+	logger.Info("Starting server run sequence",
+		"transport", transportType,
+		"config_path", configPath,
+		"request_timeout", requestTimeout,
+		"shutdown_timeout", shutdownTimeout)
 
 	// --- Configuration Loading (unchanged) ---
 	var cfg *config.Config
 	var err error
 	if configPath != "" {
-		logger.Info("Loading configuration from file", "path", configPath)
+		logger.Info("Loading configuration", "config_path", configPath)
 		cfg, err = config.LoadFromFile(configPath)
 		if err != nil {
 			return errors.Wrap(err, "failed to load configuration from file")
 		}
+		logger.Info("Configuration loaded successfully", "config_path", configPath)
 	} else {
 		logger.Info("Using default configuration")
 		cfg = config.DefaultConfig()
 	}
-	if debug {
-		logger.Debug("Server configuration", "serverName", cfg.Server.Name, "port", cfg.Server.Port)
+	logger.Info("Configuration loaded successfully")
+
+	// --- *** UPDATED: Initialize Schema Validator with improved path finding *** ---
+	logger.Info("Initializing schema validator...")
+
+	// Try multiple paths to find the schema file
+	var schemaFilePath string
+	possiblePaths := []string{
+		filepath.Join("internal", "schema", "schema.json"),             // Relative from working dir
+		filepath.Join("..", "internal", "schema", "schema.json"),       // One level up
+		filepath.Join("..", "..", "internal", "schema", "schema.json"), // Two levels up
+		filepath.Join(".", "schema.json"),                              // Local dir
+		filepath.Join("internal", "schema", "min_schema.json"),         // Try min_schema as fallback
 	}
 
-	// --- *** NEW: Initialize Schema Validator *** ---
-	logger.Info("Initializing schema validator...")
-	// Define schema source (adjust path/URL as needed)
-	// Assuming schema.json is in internal/schema relative to execution
-	// This might need adjustment based on build/deployment structure
-	schemaFilePath := filepath.Join("internal", "schema", "schema.json")
-	schemaSource := schema.SchemaSource{
-		FilePath: schemaFilePath,
-		// Optionally add URL fallback:
-		// URL: "https://raw.githubusercontent.com/modelcontextprotocol/specification/main/releases/2024-11-05/schema.json",
+	// Check each path and use the first one that exists
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			schemaFilePath = path
+			logger.Info("Found schema file", "path", schemaFilePath)
+			break
+		}
 	}
+
+	// Configure schema source with file path (if found) and URL fallback
+	schemaSource := schema.SchemaSource{
+		FilePath: schemaFilePath, // May be empty if no file found
+		// Use the MCP repository URL as fallback
+		URL: "https://raw.githubusercontent.com/modelcontextprotocol/specification/main/schema/2025-03-26/schema.json",
+	}
+
 	validator := schema.NewSchemaValidator(schemaSource, logging.GetLogger("schema_validator"))
 	if err := validator.Initialize(ctx); err != nil {
 		return errors.Wrap(err, "failed to initialize schema validator")
