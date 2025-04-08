@@ -12,23 +12,25 @@ import (
 	// Import other necessary packages like your RTM client if handlers need it.
 )
 
-// MCPHandler holds dependencies for MCP method handlers.
-type MCPHandler struct {
+// Handler holds dependencies for MCP method handlers.
+// Renamed from MCPHandler.
+type Handler struct {
 	logger logging.Logger
 	config *config.Config
 	// Add other dependencies like RTM client instance here.
 }
 
-// NewMCPHandler creates a new MCPHandler.
-func NewMCPHandler(cfg *config.Config, logger logging.Logger) *MCPHandler {
-	return &MCPHandler{
+// NewHandler creates a new Handler.
+// Renamed from NewMCPHandler.
+func NewHandler(cfg *config.Config, logger logging.Logger) *Handler {
+	return &Handler{
 		logger: logger.WithField("component", "mcp_handler"),
 		config: cfg,
 	}
 }
 
 // handleInitialize handles the initialize request.
-func (h *MCPHandler) handleInitialize(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handleInitialize(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 	// Decode params.
 	var req InitializeRequest // Assumes type defined in types.go.
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -67,7 +69,7 @@ func (h *MCPHandler) handleInitialize(ctx context.Context, params json.RawMessag
 }
 
 // handlePing handles the ping request.
-func (h *MCPHandler) handlePing(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handlePing(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 	// Ping usually returns an empty JSON object result upon success.
 	h.logger.Debug("Handling ping request.")
 	// Return empty JSON object result.
@@ -80,7 +82,7 @@ func (h *MCPHandler) handlePing(ctx context.Context, params json.RawMessage) (js
 }
 
 // handleToolsList handles the tools/list request.
-func (h *MCPHandler) handleToolsList(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handleToolsList(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 	// 1. Define the input schema for the "echo" tool.
 	echoSchema := map[string]interface{}{
 		"type": "object",
@@ -127,7 +129,7 @@ func (h *MCPHandler) handleToolsList(ctx context.Context, params json.RawMessage
 }
 
 // handleToolCall handles the tools/call request.
-func (h *MCPHandler) handleToolCall(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handleToolCall(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 	// Decode the request parameters to find out which tool is being called.
 	var req CallToolRequest // Assumes 'CallToolRequest' type defined in types.go.
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -140,7 +142,7 @@ func (h *MCPHandler) handleToolCall(ctx context.Context, params json.RawMessage)
 	switch req.Name {
 	case "echo":
 		// Call the specific function to handle the echo tool.
-		return h.executeEchoTool(ctx, req.Arguments)
+		return h.executeEchoTool(ctx, req.Arguments) // Pass ctx even if unused below.
 	// Add cases for other tools here, e.g., RTM tools.
 	// case "rtmGetTasks":
 	//    return h.executeRTMGetTasks(ctx, req.Arguments)
@@ -165,7 +167,7 @@ func (h *MCPHandler) handleToolCall(ctx context.Context, params json.RawMessage)
 }
 
 // handleResourcesList handles the resources/list request.
-func (h *MCPHandler) handleResourcesList(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handleResourcesList(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 	// TODO: Implement actual resource listing, potentially based on RTM lists/tags.
 	h.logger.Info("Handling resources/list request (currently placeholder).")
 	result := ListResourcesResult{ // Assumes type defined in types.go.
@@ -182,7 +184,7 @@ func (h *MCPHandler) handleResourcesList(ctx context.Context, params json.RawMes
 }
 
 // handleResourcesRead handles the resources/read request.
-func (h *MCPHandler) handleResourcesRead(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handleResourcesRead(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 	// Decode request to get URI.
 	var req ReadResourceRequest // Assumes type defined in types.go.
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -199,7 +201,8 @@ func (h *MCPHandler) handleResourcesRead(ctx context.Context, params json.RawMes
 // --- Tool Execution Logic ---
 
 // executeEchoTool is the specific implementation for the "echo" tool.
-func (h *MCPHandler) executeEchoTool(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+// Renamed ctx to _ because it's unused.
+func (h *Handler) executeEchoTool(_ context.Context, args json.RawMessage) (json.RawMessage, error) {
 	// Decode the specific arguments for the echo tool.
 	var echoArgs struct {
 		Message string `json:"message"`
@@ -223,6 +226,7 @@ func (h *MCPHandler) executeEchoTool(ctx context.Context, args json.RawMessage) 
 		return resultBytes, nil // Return the marshaled CallToolResult containing the error.
 	}
 
+	// Use logger from handler 'h'. Use context '_' if logging func requires it but it's unused.
 	h.logger.Info("Executing echo tool.", "message", echoArgs.Message)
 
 	// Prepare the successful result, echoing the message.
