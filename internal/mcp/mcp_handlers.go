@@ -13,7 +13,6 @@ import (
 )
 
 // Handler holds dependencies for MCP method handlers.
-// Renamed from MCPHandler.
 type Handler struct {
 	logger logging.Logger
 	config *config.Config
@@ -21,7 +20,6 @@ type Handler struct {
 }
 
 // NewHandler creates a new Handler.
-// Renamed from NewMCPHandler.
 func NewHandler(cfg *config.Config, logger logging.Logger) *Handler {
 	return &Handler{
 		logger: logger.WithField("component", "mcp_handler"),

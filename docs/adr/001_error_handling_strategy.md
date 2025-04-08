@@ -1,8 +1,8 @@
-# Architecture Decision Record: Error Handling Strategy (ADR 001 - Revised)
+# Architecture Decision Record: Error Handling Strategy (ADR 001)
 
 ## Date
 
-2025-04-06 _(Original: 2025-04-06)_
+2025-04-07 _(Original: 2025-04-06)_
 
 ## Status
 
@@ -10,139 +10,92 @@ Accepted
 
 ## Context
 
-The CowGnition project is implementing a Model Context Protocol (MCP) server that integrates with Remember The Milk. For this implementation, we need a robust error handling strategy that provides:
+The CowGnition project is implementing a Model Context Protocol (MCP) server that integrates with Remember The Milk (RTM). For this implementation, we need a robust error handling strategy that provides:
 
 1.  **Structured Error Types**: Domain-specific error types for different categories.
-2.  **Context-Rich Errors**: Including relevant context data with all errors.
-3.  **Consistent Wrapping**: Preserving the error chain.
-4.  **Error Codes**: Consistent categorization, aligning with JSON-RPC 2.0 and application needs.
-5.  **Stack Trace Preservation**: Capturing origin points for debugging.
+2.  **Context-Rich Errors**: Including relevant context data with all errors using `cockroachdb/errors`.
+3.  **Consistent Wrapping**: Preserving the error chain for accurate stack traces.
+4.  **Standardized Error Codes**: Consistent categorization, aligning with JSON-RPC 2.0 and application needs.
+5.  **Stack Trace Preservation**: Capturing origin points for debugging (server-side only).
+6.  **Clear Logging**: Adherence to MCP logging specifications for observability.
 
 Additionally, we need to ensure compliance with:
 
-- JSON-RPC 2.0 error response format requirements (as used by MCP).
+- JSON-RPC 2.0 error response format requirements.
 - Model Context Protocol (MCP) best practices for error reporting (e.g., distinguishing tool execution errors).
-- MCP logging specification recommendations for detailed error reporting (`timestamp`, `level`, `message`, `service`, `request_id`, `connection_id`, `error_code`, `error_message`, `error_details`, `stack_trace`).
+- MCP logging specification recommendations.
 
 ## Decision
 
-1.  We will use the `github.com/cockroachdb/errors` package as our primary internal error handling library, combined with custom error types specific to our application domains (e.g., Transport, MCP, RTM Service).
-2.  Validation errors (JSON parsing, Schema validation) identified by the **Validation Middleware (ADR 002)** will be immediately mapped to standard JSON-RPC errors (`-32700`, `-32600`, `-32602`) and returned, preventing further processing.
-3.  Errors occurring _during the execution of MCP Tools_ (within `tools/call` handlers) will be handled differently: they will be caught within the handler and returned as part of a successful JSON-RPC response within the `CallToolResult` structure (e.g., setting `isError: true` and providing details in the `content`), allowing the LLM client to be aware of the tool's failure.
-4.  All other internal application errors (unhandled exceptions, service integration failures, etc.) caught by central error handling middleware will be logged in detail server-side and mapped to appropriate JSON-RPC error codes (`-32603` or custom `-320xx` codes) for the client response.
-5.  Structured logging (`slog` recommended) will be used, adhering to the MCP logging specification fields for errors.
+1.  We will use the `github.com/cockroachdb/errors` package for internal error handling, combined with custom error types for specific domains (Transport, MCP, RTM Service, etc.).
+2.  Validation errors identified by **Validation Middleware (ADR 002)** will be mapped immediately to standard JSON-RPC errors (`-32700`, `-32600`, `-32602`) and returned, preventing further processing.
+3.  Errors occurring _during the execution of MCP Tools_ (`tools/call` handlers) will be caught within the handler, logged internally with full detail, and reported to the client via a successful JSON-RPC response containing an `mcp.CallToolResult` with `isError: true` and sanitized error content.
+4.  All other internal application errors caught by central error handling middleware will be logged in detail server-side (following MCP specs) and mapped to appropriate JSON-RPC error responses (`-32603` or custom `-320xx` codes) with sanitized messages for the client.
+5.  Structured logging (`log/slog` recommended) adhering to the MCP logging specification fields will be used for all error logging.
 
-### Key implementation patterns:
+## Implementation Guidelines
 
-- **Domain-Specific Error Types**: Create custom error types embedding standard error interfaces.
-- **Context Attachment**: Use `errors.WithDetail()` to attach key-value pairs.
-- **Stack Capture**: Use `errors.WithStack()` or standard constructors (`errors.New`, `errors.Wrap`).
-- **Consistent Wrapping**: Always wrap errors when crossing domain boundaries or adding context.
-- **Central Error Processing**: Implement middleware (after routing, before response serialization) that transforms internal application errors (not validation or tool errors handled earlier) into detailed logs and sanitized JSON-RPC responses.
+Detailed implementation patterns, Go code examples, security checklists, guidance for developers and AI assistants, and notes on bovine humor are documented separately in:
 
-# Error Handling Architecture: Transport and MCP Error Relationship
+**[`001_ERROR_HANDLING_PROMPT.md`](001_ERROR_HANDLING_PROMPT.md)**
 
-## Overview
+Developers **must** consult this guide when implementing or reviewing error handling code. It covers specific usage of `cockroachdb/errors`, required logging fields, error mapping logic, `tools/call` error handling, security best practices, and our pun policy.
+
+## Error Handling Architecture: Transport and MCP Error Relationship
+
+### Overview
 
 This document elaborates on the relationship between error types defined in our two main error handling modules:
 
-1. Transport-level errors (`internal/transport/errors.go`)
-2. MCP-level errors (`internal/mcp/errors/errors.go`)
+1.  Transport-level errors (`internal/transport/errors.go`)
+2.  MCP-level errors (`internal/mcp/errors/errors.go`)
 
-## Error Domain Separation
+### Error Domain Separation
 
 Our architecture maintains a clear separation between errors that occur at different layers:
 
-### Transport Layer Errors
+**Transport Layer Errors**
 
 - **Domain**: Low-level communication issues
 - **Location**: `internal/transport/errors.go`
 - **Examples**: Message size limits, connection closures, timeouts, JSON parsing failures
 - **Primary Consumers**: Internal transport handling components
 
-### MCP Layer Errors
+**MCP Layer Errors**
 
 - **Domain**: Protocol and application-level issues
 - **Location**: `internal/mcp/errors/errors.go`
 - **Examples**: Authentication failures, RTM API failures, resource access issues
 - **Primary Consumers**: MCP handlers and client responses
 
-## Error Flow Through The System
+### Error Flow Through The System
 
 The error flow follows a consistent pattern:
 
-1. **Error Origin**: Errors are created at their respective layers:
+1.  **Error Origin**: Errors are created at their respective layers.
+2.  **Error Propagation**: Errors propagate up through middleware or handlers.
+3.  **Error Translation**: Middleware or handlers map errors to appropriate JSON-RPC responses or `CallToolResult` structures.
+4.  **Error Response**: Client receives standard JSON-RPC error or a successful response containing `CallToolResult`.
 
-   - Transport errors during reading/writing of messages
-   - MCP errors during protocol handling or external service integration
+### When To Use Which Error Type
 
-2. **Error Propagation**:
+- **Use Transport Errors When:** Handling raw IO, message framing, initial JSON parsing, connection lifecycle.
+- **Use MCP Errors When:** Processing MCP requests, handling auth, interacting with external services (RTM), dealing with application resources/state.
 
-   - Transport errors propagate up to middleware
-   - Middleware decides how to map transport errors to MCP responses
-   - MCP errors propagate to response handlers
+### Error Mapping Guidelines
 
-3. **Error Translation**:
+Transport errors typically map to JSON-RPC `-32700` (Parse Error) or `-32600` (Invalid Request). Other internal application errors map to `-32603` (Internal Error) or custom `-320xx` codes, unless they are Tool execution errors (see Decision #3).
 
-   - Transport errors are mapped to appropriate JSON-RPC error codes in the central error handler
-   - MCP tool execution errors are caught and returned in `CallToolResult` for visibility to the LLM
+### Error Context Guidelines
 
-4. **Error Response**:
-   - All errors are eventually mapped to standard JSON-RPC error responses
-   - Appropriate error codes and details are included
+1.  **Transport Errors**: Include technical details (message size, timeouts, connection IDs).
+2.  **MCP Errors**: Include application context (resource IDs, request params, auth details - _never_ credentials).
 
-## When To Use Which Error Type
+### Future Considerations
 
-### Use Transport Errors When:
-
-- Handling raw IO operations (read/write failures)
-- Dealing with message framing issues
-- Encountering JSON parsing or validation failures
-- Managing connection lifecycle events
-
-### Use MCP Errors When:
-
-- Processing MCP protocol-specific requests (method not found, invalid params)
-- Handling authentication or authorization failures
-- Interacting with external services (RTM API)
-- Dealing with resource access or state issues
-
-## Error Mapping Guidelines
-
-Transport errors are mapped to JSON-RPC error codes as follows:
-
-| Transport Error    | JSON-RPC Error Code | JSON-RPC Message               |
-| ------------------ | ------------------- | ------------------------------ |
-| ErrJSONParseFailed | -32700              | Parse Error                    |
-| ErrInvalidMessage  | -32600              | Invalid Request                |
-| ErrMessageTooLarge | -32600              | Invalid Request                |
-| Others             | -32603 or custom    | Internal Error or Custom Error |
-
-MCP errors are mapped to either:
-
-- Tool execution errors (in successful JSON-RPC responses with `isError: true`)
-- Appropriate JSON-RPC error responses with custom error codes in the server-defined range (-32000 to -32099)
-
-## Error Context Guidelines
-
-1. **Transport Errors**: Include technical details like:
-
-   - Message size/limits
-   - Timeout durations
-   - Connection IDs
-
-2. **MCP Errors**: Include application context like:
-   - Resource identifiers
-   - Request parameters
-   - Authentication details (tokens, not credentials)
-
-## Future Considerations
-
-1. **Error Telemetry**: We plan to enhance error tracking across layers.
-2. **Error Recovery Strategies**: Add specific recovery paths for transient errors.
-3. **Client-Friendly Error Details**: Improve error messages for LLM consumption.
-
-This document will be updated as our error handling evolves.
+1.  **Error Telemetry**: Enhance tracking across layers.
+2.  **Error Recovery**: Add specific recovery paths.
+3.  **Client-Friendly Details**: Improve error messages (potentially with puns).
 
 ## JSON-RPC & MCP Error Codes
 
@@ -163,140 +116,22 @@ The following standard JSON-RPC 2.0 error codes (referenced by MCP) will be used
 
 ### Positive
 
-- Rich debugging information with stack traces and structured context.
-- Consistent pattern for error context across the codebase.
-- Clear mapping between internal errors and appropriate JSON-RPC error responses or `CallToolResult` errors.
-- Compliance with MCP logging specifications for enhanced observability.
-- Better developer experience when troubleshooting issues.
-- Correctly handles tool execution errors as per MCP best practices (visible to LLM).
+- Rich debugging information with stack traces and structured context (server-side).
+- Consistent pattern for error creation, propagation, and handling.
+- Clear mapping between internal errors and client responses (JSON-RPC or `CallToolResult`).
+- Compliance with MCP logging specifications.
+- Correctly handles tool execution errors as per MCP best practices.
+- Potentially amusing error messages.
 
 ### Negative
 
-- Learning curve for team members not familiar with `cockroachdb/errors`.
-- Need for discipline in consistently applying the error handling patterns (especially distinguishing tool errors).
-- Slightly increased dependency footprint (`cockroachdb/errors`).
-- Requires careful mapping logic in central error handler and validation middleware.
-
-## Implementation Guidelines
-
-### Error Creation (Internal Application Errors)
-
-Use `cockroachdb/errors` for detailed internal errors originating from handlers or services.
-
-```go
-// For new errors at source
-func accessRTM() error {
-    // ... rtm logic fails ...
-    rtmErr := errors.New("RTM API request failed") // Original error
-    appErr := &RTMError{ // Custom type for categorization/codes
-        Code:    ErrRTMUnavailable,
-        Message: "Could not connect to Remember The Milk",
-    }
-    // Add specific context and wrap
-    errWithContext := errors.WithDetail(appErr, "rtm_endpoint", "https://api.rememberthemilk.com/services/rest/")
-    return errors.Wrap(rtmErr, errWithContext.Error()) // Wrap maintains stack trace from rtmErr if needed
-}
-
-// For wrapping existing errors
-if err != nil {
-    // Add context specific to this layer
-    return errors.Wrap(err, "failed during resource processing")
-}
-```
-
-### Error Logging (Central Handler / Middleware)
-
-Use structured logging (`slog` recommended). All handled application errors logged server-side must include:
-
-- **Core Fields:** `timestamp`, `level` (e.g., "error"), `message` (human-readable summary).
-- **MCP Context:** `service` (e.g., "mcp-server"), `request_id` (if available), `connection_id` (if available).
-- **MCP Error Details:**
-  - `error_code`: Internal application error code (e.g., `ErrRTMUnavailable`).
-  * `error_message`: Internal error message (`err.Error()`).
-  * `error_details`: Structured context captured via `errors.GetAllDetails(err)`.
-  * `stack_trace`: Full stack trace obtained via `fmt.Sprintf("%+v", err)`.
-
-_Logging for stdio transport should go to `stderr`._
-
-### JSON-RPC Error Mapping (Central Handler / Middleware)
-
-Internal _application_ errors (caught after handler execution) should be mapped to JSON-RPC 2.0 error responses sent to the client:
-
-```go
-func mapAppErrorToRPCError(err error) *RPCError {
-    // Default
-    rpcCode := -32603 // Internal Error
-    userMsg := "An internal server error occurred."
-    var data interface{} // Keep data nil unless safe context can be added
-
-    // Example: Check for specific internal error types/codes
-    var rtmErr *RTMError
-    if errors.As(err, &rtmErr) {
-        rpcCode = -32001 // Custom server error code for RTM issues
-        userMsg = "Failed to communicate with RTM service."
-        // Maybe add non-sensitive context?
-        // data = map[string]string{"details": "RTM API unavailable"}
-    }
-    // ... other specific error mappings ...
-
-    return &RPCError{
-        Code:    rpcCode,
-        Message: userMsg,
-        Data:    data, // IMPORTANT: Sanitize data, do NOT leak internal details or stack traces!
-    }
-}
-
-// In central handler:
-rpcErr := mapAppErrorToRPCError(appErr)
-errorRespBytes, _ := createJSONRPCErrorResponseBytes(reqID, rpcErr)
-// Send errorRespBytes...
-```
-
-_Validation errors from middleware will generate `-32700`, `-32600`, `-32602` directly._
-
-### Tool Error Handling (`tools/call` Handler)
-
-Errors _during the execution_ of a tool must be caught within the handler and returned in the `CallToolResult`.
-
-```go
-func handleCalculateSum(ctx context.Context, params json.RawMessage) (*mcp.CallToolResult, error) {
-    // ... decode params ...
-    result, err := performCalculation(a, b)
-    if err != nil {
-        // Log the internal error server-side (using detailed logging strategy)
-        log.ErrorContext(ctx, "Calculation tool failed", "error", err, "params", params)
-
-        // Return error details within the CallToolResult for the LLM
-        return &mcp.CallToolResult{
-            IsError: true,
-            Content: []mcp.Content{
-                mcp.TextContent{Type: "text", Text: fmt.Sprintf("Calculation Error: %s", err.Error())},
-                 // Optionally add structured error details if useful for the model
-                // mcp.TextContent{Type: "text", Text: fmt.Sprintf("Details: Input was a=%v, b=%v", a, b)},
-            },
-        }, nil // Return nil error for the JSON-RPC layer itself
-    }
-
-    // Success case
-    return &mcp.CallToolResult{
-        IsError: false,
-        Content: []mcp.Content{
-             mcp.TextContent{Type: "text", Text: fmt.Sprintf("%v", result)},
-        },
-    }, nil
-}
-
-```
-
-### Security Considerations
-
-- Do not include sensitive information (keys, PII, internal paths) in any error details.
-- Stack traces are strictly for server-side logs, never included in JSON-RPC error responses.
-- Carefully sanitize any context included in the optional `data` field of JSON-RPC errors. Assume the client (and potentially the LLM via the client) might see it.
+- Learning curve for `cockroachdb/errors`.
+- Need for discipline in applying patterns (especially distinguishing tool vs. other errors).
+- Slightly increased dependency footprint.
+- Requires careful mapping/sanitization logic.
+- Risk of unfunny or inappropriate puns if not applied judiciously.
 
 ## Related Specifications
-
-This decision aligns with:
 
 1.  JSON-RPC 2.0 Specification
 2.  MCP Specification (e.g., 2024-11-05 version for concepts)
@@ -304,18 +139,7 @@ This decision aligns with:
 
 ## References
 
-1.  [`cockroachdb/errors` Documentation](<[https://pkg.go.dev/github.com/cockroachdb/errors](https://pkg.go.dev/github.com/cockroachdb/errors)>)
+1.  [`cockroachdb/errors` Documentation](https://pkg.go.dev/github.com/cockroachdb/errors)
 2.  [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
-3.  [MCP Specification - Concepts](https://www.google.com/search?q=https://modelcontextprotocol.io/docs/concepts/) (covers Tools error handling)
+3.  [MCP Specification - Concepts](https://www.google.com/search?q=https://modelcontextprotocol.io/docs/concepts/)
 4.  [MCP Specification - Logging](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/utilities/logging/)
-
----
-
-### Document TODO: Assess following suggestions
-
-Minor Points for Consideration:
-
-Internal Error Codes: You mention custom -320xx codes and internal codes like ErrRTMUnavailable. It might be helpful to briefly state where these internal Go error codes/constants will be defined (e.g., in a dedicated ierr or domainerrors package) for consistency.
-mapAppErrorToRPCError Complexity: As the application grows, the mapAppErrorToRPCError function could become complex with many if errors.As(err, ...) checks. Consider if a more structured approach (e.g., having custom error types implement an interface that provides their specific RPC mapping details) might be beneficial down the line, although the current approach is perfectly fine initially.
-errors.Wrap Example Clarification: The accessRTM example demonstrates wrapping, but the line errors.Wrap(rtmErr, errWithContext.Error()) might be slightly less common than letting Wrap manage the message combination. Often, you'd wrap the underlying error with a new context message (errors.Wrap(rtmErr, "failed to access RTM API")) or use constructors like errors.WrapWithDetails if available/suitable in cockroachdb/errors. The current example works, but just double-check it produces the desired combined error message and stack trace elegantly. The core idea of wrapping is correctly captured.
-Tool Error Logging Consistency: The example correctly logs the tool error server-side before constructing the CallToolResult. Ensure this pattern is consistently applied across all tools/call implementations.

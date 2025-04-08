@@ -43,8 +43,7 @@ type Server struct {
 	options ServerOptions
 
 	// The handler for MCP methods (defined in mcp_handlers.go).
-	// NOTE: This type name 'MCPHandler' will be changed based on the fix for mcp_handlers.go.
-	handler *MCPHandler
+	handler *Handler
 
 	// Method map for routing requests.
 	methods map[string]MethodHandler
@@ -63,8 +62,7 @@ func NewServer(cfg *config.Config, opts ServerOptions, logger logging.Logger) (*
 	}
 
 	// Create the MCP method handler (constructor defined in mcp_handlers.go).
-	// NOTE: This function name 'NewMCPHandler' will be changed based on the fix for mcp_handlers.go.
-	handler := NewMCPHandler(cfg, logger)
+	handler := NewHandler(cfg, logger)
 
 	// Create the server instance.
 	server := &Server{
