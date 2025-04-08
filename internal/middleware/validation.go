@@ -118,43 +118,42 @@ func (m *ValidationMiddleware) SetNext(next transport.MessageHandler) {
 // HandleMessage implements the MessageHandler interface.
 // It validates the message if validation is enabled, then passes it to the next handler.
 // The behavior is controlled by the options provided during initialization.
+// HandleMessage implements the MessageHandler interface.
 func (m *ValidationMiddleware) HandleMessage(ctx context.Context, message []byte) ([]byte, error) {
 	// Fast path: If validation is disabled, skip directly to the next handler.
-	// This provides a zero-overhead option for high-performance environments.
 	if !m.options.Enabled {
 		return m.next(ctx, message)
 	}
 
 	// Start measuring performance if enabled.
-	// This allows precise tracking of validation costs per message.
 	var startTime time.Time
 	if m.options.MeasurePerformance {
 		startTime = time.Now()
 	}
 
+	// Basic JSON syntax validation
+	if !json.Valid(message) {
+		m.logger.Error("Invalid JSON syntax", "message", string(message[:min(len(message), 100)]))
+		return createParseErrorResponse(nil, errors.New("invalid JSON syntax")), nil
+	}
+
 	// Identify the message type and extract the request ID.
-	// This is a lightweight operation that examines just enough of the message structure.
 	msgType, reqID, err := m.identifyMessage(message)
 	if err != nil {
-		// For parse errors, we can't proceed with normal processing.
-		// JSON-RPC parse errors (-32700) are fundamental issues that prevent further handling.
-		m.logger.Error("Failed to parse message", "error", err)
-		return createParseErrorResponse(reqID, err)
+		m.logger.Error("Failed to identify message type", "error", err)
+		return createParseErrorResponse(reqID, err), nil
 	}
 
 	// Skip validation for exempted message types.
-	// This allows high-frequency or time-sensitive messages to bypass validation.
 	if m.options.SkipTypes[msgType] {
 		m.logger.Debug("Skipping validation for message type", "type", msgType)
 		return m.next(ctx, message)
 	}
 
 	// Perform the validation against the schema.
-	// This is the core functionality that ensures protocol compliance.
-	err = m.validator.Validate(ctx, msgType, message)
+	err = m.validator.Validate(ctx, "JSONRPCRequest", message) // Use a generic type for now
 
 	// Log performance metrics if enabled.
-	// This provides visibility into validation costs for optimization.
 	if m.options.MeasurePerformance {
 		elapsed := time.Since(startTime)
 		m.logger.Debug("Message validation performance",
@@ -165,16 +164,13 @@ func (m *ValidationMiddleware) HandleMessage(ctx context.Context, message []byte
 	if err != nil {
 		// Handle validation errors according to strict mode setting.
 		if m.options.StrictMode {
-			// In strict mode, validation errors result in immediate rejection.
-			// This enforces protocol correctness but may impact availability.
 			m.logger.Warn("Message validation failed (strict mode, rejecting)",
 				"messageType", msgType,
 				"error", err)
-			return createValidationErrorResponse(reqID, err)
+			return createValidationErrorResponse(reqID, err), nil
 		}
 
 		// In non-strict mode, log the error but allow processing to continue.
-		// This prioritizes availability over strict correctness.
 		m.logger.Warn("Validation error (passing through in non-strict mode)",
 			"messageType", msgType,
 			"error", err)

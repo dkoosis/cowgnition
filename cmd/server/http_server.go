@@ -4,7 +4,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,21 +11,12 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config"
+	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/mcp"
 )
 
 // RunServer starts the MCP server with the specified transport type.
 // It handles setup, startup, and graceful shutdown of the server.
-//
-// transportType string: The type of transport to use ("http" or "stdio").
-// configPath string: Path to the configuration file.
-// requestTimeout time.Duration: Timeout for request processing.
-// shutdownTimeout time.Duration: Timeout for graceful shutdown.
-// debug bool: Enable debug mode for verbose logging.
-//
-// Returns:
-//
-//	error: An error if the server fails to start or encounters a fatal error.
 func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout time.Duration, debug bool) error {
 	// Create a context that can be canceled
 	ctx, cancel := context.WithCancel(context.Background())
@@ -36,23 +26,39 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	// Set up logging
+	logLevel := "info"
+	if debug {
+		logLevel = "debug"
+	}
+	logging.SetupDefaultLogger(logLevel)
+	logger := logging.GetLogger("server")
+
+	logger.Info("Starting CowGnition server",
+		"transportType", transportType,
+		"debug", debug)
+
 	// Load configuration
 	var cfg *config.Config
 	var err error
 
 	if configPath != "" {
 		// Load from specified path
+		logger.Info("Loading configuration from file", "path", configPath)
 		cfg, err = config.LoadFromFile(configPath)
 		if err != nil {
 			return errors.Wrap(err, "failed to load configuration from file")
 		}
 	} else {
 		// Use default configuration
+		logger.Info("Using default configuration")
 		cfg = config.DefaultConfig()
 	}
 
 	if debug {
-		log.Printf("Server configuration: %+v", cfg)
+		logger.Debug("Server configuration",
+			"serverName", cfg.Server.Name,
+			"port", cfg.Server.Port)
 	}
 
 	// Create MCP server options
@@ -63,7 +69,7 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	}
 
 	// Create MCP server instance
-	server, err := mcp.NewServer(cfg, opts)
+	server, err := mcp.NewServer(cfg, opts, logger)
 	if err != nil {
 		return errors.Wrap(err, "failed to create MCP server")
 	}
@@ -71,24 +77,20 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	// Start the server based on transport type
 	switch transportType {
 	case "stdio":
-		if debug {
-			log.Println("Starting server with stdio transport")
-		}
+		logger.Info("Starting server with stdio transport")
 		go func() {
 			if err := server.ServeSTDIO(ctx); err != nil {
-				log.Printf("Server error: %v", err)
+				logger.Error("Server error", "error", err)
 				cancel() // Cancel context to trigger shutdown
 			}
 		}()
 
 	case "http":
 		addr := fmt.Sprintf(":%d", cfg.Server.Port)
-		if debug {
-			log.Printf("Starting server with HTTP transport on %s", addr)
-		}
+		logger.Info("Starting server with HTTP transport", "address", addr)
 		go func() {
 			if err := server.ServeHTTP(ctx, addr); err != nil {
-				log.Printf("Server error: %v", err)
+				logger.Error("Server error", "error", err)
 				cancel() // Cancel context to trigger shutdown
 			}
 		}()
@@ -100,13 +102,13 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	// Wait for signal or context cancellation
 	select {
 	case sig := <-sigChan:
-		log.Printf("Received signal: %v", sig)
+		logger.Info("Received signal", "signal", sig)
 	case <-ctx.Done():
-		log.Println("Context cancelled")
+		logger.Info("Context cancelled")
 	}
 
 	// Initiate graceful shutdown
-	log.Println("Shutting down server...")
+	logger.Info("Shutting down server...")
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
 
@@ -114,6 +116,6 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		return errors.Wrap(err, "server shutdown error")
 	}
 
-	log.Println("Server shutdown complete")
+	logger.Info("Server shutdown complete")
 	return nil
 }
