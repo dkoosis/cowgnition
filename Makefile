@@ -24,7 +24,7 @@ LABEL_FMT := "   %-15s" # Indent 3, Pad label to 15 chars, left-aligned
 
 # Variables
 BINARY_NAME := cowgnition
-MAIN_PACKAGE := ./cmd/server
+MAIN_PACKAGE := ./cmd
 # Find Go files, excluding vendor and test directories (adjust if needed)
 GO_FILES := $(shell find . -name "*.go" -not -path "./vendor/*" -not -path "./test/*")
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -46,9 +46,12 @@ all: tree check deps fmt golangci-lint check-line-length test build
 build:
 	@printf "$(ICON_START) $(BOLD)$(BLUE)Building $(BINARY_NAME)...$(NC)\n"
 	@go build $(LDFLAGS) -o $(BINARY_NAME) $(MAIN_PACKAGE) && \
-		printf "   $(ICON_OK) $(GREEN)Build successful$(NC)\n" || \
-		(printf "   $(ICON_FAIL) $(RED)Build failed$(NC)\n" && exit 1)
+	    printf "   $(ICON_OK) Setting execute permissions...\n" && \
+	    chmod +x $(BINARY_NAME) && \
+	    printf "   $(ICON_OK) $(GREEN)Build successful$(NC)\n" || \
+	    (printf "   $(ICON_FAIL) $(RED)Build failed$(NC)\n" && exit 1)
 	@printf "\n" # Add spacing
+
 
 # Clean build artifacts
 clean:
