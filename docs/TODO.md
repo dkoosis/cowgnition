@@ -1,82 +1,5 @@
 # CowGnition MCP Implementation Roadmap: Clean Architecture Approach
 
-## Critically Assess Suggestions
-
-File & Directory Naming Assessment Report
-Project Context Summary
-The CowGnition project is an MCP server that connects Remember The Milk tasks with Claude Desktop and other MCP clients, using JSON-RPC 2.0 and NDJSON over stdio or TCP [cite: cowgnition.zip/readme.md]. It focuses on integrating task management with AI assistants [cite: cowgnition.zip/readme.md].
-
-Analysis Scope
-Target Language: Go
-Included: All files and directories in the provided folder.
-Excluded: None explicitly specified.
-Overall Summary Metrics
-Total Items Analyzed (Files/Dirs): 35
-Items Flagged for Improvement: 10
-Generic: 4
-Unclear/Ambiguous: 1
-Inconsistent: 5
-Misleading: 0
-Items with Potential Name Clashes Identified
-Files: errors.go, errors.go, transport.go
-Directories: errors
-Detailed Findings & Suggestions
-Item: internal/mcp/errors/errors.go (Type: File)
-Assessment: Acceptable
-Justification: While clear within its directory, errors.go is a common name and could clash if the mcp directory were nested.
-Suggestions:
-Rename to: mcp_errors.go - Rationale: Adds mcp prefix to avoid potential clashes and increase specificity.
-Item: internal/transport/errors.go (Type: File)
-Assessment: Acceptable
-Justification: Similar to the above, errors.go is generic and could clash if transport is nested.
-Suggestions:
-Rename to: transport_errors.go - Rationale: Adds transport prefix for clarity.
-Item: internal/rtm/auth.txt (Type: File)
-Assessment: Needs Improvement - Inconsistent
-Justification: Inconsistent file naming. Go files use .go extension, not .txt . auth suggests content but lacks specificity.
-Suggestions:
-Rename to: auth.go - Rationale: Corrects file extension to .go to follow Go conventions.
-Rename to: rtm_auth.go - Rationale: More specific, clarifies it's RTM auth logic.
-Item: internal/rtm/client.txt (Type: File)
-Assessment: Needs Improvement - Inconsistent
-Justification: Same as above. Inconsistent file extension and lacks specificity.
-Suggestions:
-Rename to: client.go - Rationale: Corrects file extension to .go .
-Rename to: rtm_client.go - Rationale: More specific, clarifies it's RTM client logic.
-Item: internal/rtm/provider.txt (Type: File)
-Assessment: Needs Improvement - Inconsistent
-Justification: Same as above.
-Suggestions:
-Rename to: provider.go - Rationale: Corrects file extension to .go .
-Rename to: rtm_provider.go - Rationale: More specific.
-Item: internal/rtm/token.txt (Type: File)
-Assessment: Needs Improvement - Inconsistent
-Justification: Same as above.
-Suggestions:
-Rename to: token.go - Rationale: Corrects file extension to .go .
-Rename to: rtm_token.go - Rationale: More specific.
-Item: internal/transport/transport.go (Type: File)
-Assessment: Acceptable
-Justification: Generally clear, but could be more specific if other transport-related files exist.
-Suggestions:
-Rename to: ndjson_transport.go - Rationale: Clarifies the transport mechanism.
-Item: scripts/check_file_length.sh (Type: File)
-Assessment: Acceptable
-Justification: Clear on its own.
-Suggestions:
-Rename to: check-file-length.sh - Rationale: Hyphens are preferred for CLI scripts.
-Item: scripts/pkgdep.sh (Type: File)
-Assessment: Needs Improvement - Generic
-Justification: pkgdep is ambiguous.
-Suggestions:
-Rename to: list_internal_deps.sh - Rationale: More descriptive.
-Item: cmd/main.go (Type: File)
-Assessment: Needs Improvement - Generic
-Justification: main.go is standard but not descriptive.
-Suggestions:
-Rename to: cowgnition.go - Rationale: More specific to the application.
-// FileDirNamingAssessment:2025-04-07
-
 ## Project Philosophy
 
 This implementation will prioritize:
@@ -87,9 +10,72 @@ This implementation will prioritize:
 - Testability built into the design from the start
 - Simple but maintainable architecture with clear separation of concerns
 
-## Implementation Plan
+### Phase 0: HIGHEST PRIORITY IMMEDIATE FOCUS
 
-### Phase 1: Core Transport (HIGHEST PRIORITY)
+# MCP Implementation Strategy Prompt
+
+When reviewing this CowGnition codebase, please consider the following architectural components and their relationships:
+
+## File Structure Understanding
+
+The codebase has several key files that may seem redundant but serve different purposes:
+
+1. **MCP Server Implementation**:
+
+   - `internal/mcp/mcp_server.go` is the primary server implementation
+   - `internal/mcp/server.go` is an alternative or older implementation
+   - Review both to determine which is currently active and should be enhanced
+
+2. **Handler Structure**:
+
+   - Check if `internal/mcp/mcp_handlers.go` exists
+   - Determine if handlers are implemented directly within the server file
+   - Look for any standalone handlers in separate files
+
+3. **Error Handling**:
+   - `internal/mcp/errors/errors.go` defines domain-specific error types
+   - Any new implementation should use these error types rather than creating new ones
+
+## MCP Protocol Requirements
+
+To achieve a working MCP conversation with Claude Desktop, focus on:
+
+1. **Essential MCP Methods**:
+
+   - `initialize` - Required for handshake
+   - `ping` - For heartbeat
+   - `tools/list` - For exposing capabilities
+   - `tools/call` - For handling tool invocations
+   - `resources/list` - For exposing available resources
+   - `resources/read` - For reading resource content
+
+2. **JSON-RPC Compliance**:
+   - Ensure proper handling of JSON-RPC 2.0 message format
+   - Maintain proper error codes and responses
+
+## Integration Strategy
+
+When enhancing the codebase:
+
+1. **Build on existing validation and error handling**:
+
+   - Use the existing middleware for validation
+   - Leverage existing error types from `internal/mcp/errors/errors.go`
+   - Maintain consistent logging patterns
+
+2. **Complete missing functionality**:
+
+   - Identify which MCP methods are not fully implemented
+   - Implement only what's missing to avoid redundancy
+   - Ensure proper registration of method handlers
+
+3. **Defer RTM integration**:
+   - Focus solely on MCP protocol compliance
+   - Use mock data for resources and tools where needed
+
+Remember, we're optimizing for a working "hello world" MCP conversation between CowGnition and Claude Desktop as the immediate goal, not a full-featured implementation.
+
+### Phase 1: Core Transport
 
 - [ ] Create NDJSON transport layer:
   - [ ] Implement message reading with bounded buffer size
