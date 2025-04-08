@@ -26,7 +26,10 @@
 │   ├── mcp/
 │   │   ├── mcp_errors/
 │   │   │   └── errors.go
-│   │   └── mcp_server.go
+│   │   ├── mc_handlers.go
+│   │   ├── mcp_server.go
+│   │   ├── server.go
+│   │   └── types.go
 │   ├── middleware/
 │   │   ├── chain.go
 │   │   └── validation.go
@@ -47,7 +50,8 @@
 ├── Makefile
 ├── README.md
 ├── coverage.out
+├── cowgnition*
 ├── go.mod
 └── go.sum
 
-19 directories, 32 files
+19 directories, 36 files
