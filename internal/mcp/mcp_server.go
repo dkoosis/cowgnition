@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/errors" // Ensure cockroachdb/errors is imported.
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/logging"
-	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/errors"
+	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors"
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
 )

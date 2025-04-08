@@ -5,10 +5,11 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors" // Using cockroachdb/errors for wrapping.
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/logging"
-	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors"
+	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors" // Corrected import path.
+	// Import other necessary packages like your RTM client if handlers need it.
 )
 
 // MCPHandler holds dependencies for MCP method handlers.
@@ -27,28 +28,28 @@ func NewMCPHandler(cfg *config.Config, logger logging.Logger) *MCPHandler {
 }
 
 // handleInitialize handles the initialize request.
-// Renamed from HandleInitialize.
 func (h *MCPHandler) handleInitialize(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
-	// Decode params - example using a placeholder struct.
+	// Decode params.
 	var req InitializeRequest // Assumes type defined in types.go.
 	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, mcperrors.NewError(mcperrors.ErrProtocolInvalid, "Invalid params for initialize", errors.WithStack(err))
+		// Return a wrapped error. createErrorResponse will map it.
+		return nil, errors.Wrap(err, "invalid params for initialize")
 	}
 
 	h.logger.Info("Handling initialize request.", "clientVersion", req.ProtocolVersion, "clientName", req.ClientInfo.Name)
 
-	// Define server capabilities - enable tools and potentially others.
+	// Define server capabilities - enable tools.
 	caps := ServerCapabilities{ // Assumes type defined in types.go.
 		Tools: &ToolsCapability{ListChanged: false}, // Indicate tool support.
-		// Example: Enable resources if implemented.
-		// Resources: &ResourcesCapability{ListChanged: false, Subscribe: false},
-		// Example: Enable logging capability.
-		// Logging: map[string]interface{}{},
+		// Resources: &ResourcesCapability{ListChanged: false, Subscribe: false}, // Example.
+		// Logging: map[string]interface{}{}, // Example.
 	}
 
-	// Prepare result.
-	serverInfo := Implementation{Name: h.config.Server.Name, Version: Version} // Assumes Version is defined globally or passed in.
-	res := InitializeResult{                                                   // Assumes type defined in types.go.
+	// Prepare result. Use placeholder version for now.
+	// TODO: Pass actual version via config or handler struct.
+	appVersion := "0.1.0-dev"
+	serverInfo := Implementation{Name: h.config.Server.Name, Version: appVersion} // Assumes type defined in types.go.
+	res := InitializeResult{                                                      // Assumes type defined in types.go.
 		ServerInfo:      serverInfo,
 		ProtocolVersion: "2024-11-05", // The MCP version this server implements.
 		Capabilities:    caps,
@@ -59,22 +60,26 @@ func (h *MCPHandler) handleInitialize(ctx context.Context, params json.RawMessag
 	resultBytes, err := json.Marshal(res)
 	if err != nil {
 		h.logger.Error("Failed to marshal InitializeResult.", "error", err)
-		return nil, mcperrors.NewError(mcperrors.ErrProtocolInvalid, "Failed to marshal InitializeResult", errors.WithStack(err))
+		// Return a wrapped error. createErrorResponse will map it.
+		return nil, errors.Wrap(err, "failed to marshal InitializeResult")
 	}
 	return resultBytes, nil
 }
 
 // handlePing handles the ping request.
-// Renamed from HandlePing.
 func (h *MCPHandler) handlePing(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
-	// Ping usually returns an empty JSON object or null result upon success.
-	h.logger.Debug("Handling ping request.") // Use Debug for frequent messages.
+	// Ping usually returns an empty JSON object result upon success.
+	h.logger.Debug("Handling ping request.")
 	// Return empty JSON object result.
-	return json.Marshal(map[string]interface{}{})
+	resultBytes, err := json.Marshal(map[string]interface{}{})
+	if err != nil { // Should ideally not happen for an empty map.
+		h.logger.Error("Failed to marshal empty ping result.", "error", err)
+		return nil, errors.Wrap(err, "failed to marshal ping response")
+	}
+	return resultBytes, nil
 }
 
 // handleToolsList handles the tools/list request.
-// Renamed from HandleToolsList and implemented to return the echo tool.
 func (h *MCPHandler) handleToolsList(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 	// 1. Define the input schema for the "echo" tool.
 	echoSchema := map[string]interface{}{
@@ -91,12 +96,8 @@ func (h *MCPHandler) handleToolsList(ctx context.Context, params json.RawMessage
 	if err != nil {
 		// Log the error internally.
 		h.logger.Error("Failed to marshal echo tool schema.", "error", err)
-		// Return an internal error response.
-		return nil, mcperrors.NewError(
-			mcperrors.ErrProtocolInvalid, // Or a specific internal code.
-			"Internal server error: failed to create tool schema",
-			errors.WithStack(err),
-		)
+		// Return a wrapped error.
+		return nil, errors.Wrap(err, "internal server error: failed to create tool schema")
 	}
 
 	// 2. Create the "echo" tool definition.
@@ -117,12 +118,8 @@ func (h *MCPHandler) handleToolsList(ctx context.Context, params json.RawMessage
 	resultBytes, err := json.Marshal(result)
 	if err != nil {
 		h.logger.Error("Failed to marshal ListToolsResult.", "error", err)
-		// Use the custom error type.
-		return nil, mcperrors.NewError(
-			mcperrors.ErrProtocolInvalid, // Or a more specific internal error code.
-			"Failed to marshal ListToolsResult",
-			errors.WithStack(err),
-		)
+		// Return a wrapped error.
+		return nil, errors.Wrap(err, "failed to marshal ListToolsResult")
 	}
 
 	h.logger.Info("Handled tools/list request.", "toolsCount", len(result.Tools))
@@ -130,12 +127,11 @@ func (h *MCPHandler) handleToolsList(ctx context.Context, params json.RawMessage
 }
 
 // handleToolCall handles the tools/call request.
-// Renamed from HandleToolCall.
 func (h *MCPHandler) handleToolCall(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 	// Decode the request parameters to find out which tool is being called.
 	var req CallToolRequest // Assumes 'CallToolRequest' type defined in types.go.
 	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, mcperrors.NewError(mcperrors.ErrProtocolInvalid, "Invalid params for tools/call", errors.WithStack(err))
+		return nil, errors.Wrap(err, "invalid params for tools/call") // Wrapped error.
 	}
 
 	h.logger.Info("Handling tool/call request.", "toolName", req.Name)
@@ -162,14 +158,13 @@ func (h *MCPHandler) handleToolCall(ctx context.Context, params json.RawMessage)
 		if marshalErr != nil {
 			// This is an internal server error during error reporting.
 			h.logger.Error("Failed to marshal tool not found error result.", "error", marshalErr)
-			return nil, mcperrors.NewError(mcperrors.ErrProtocolInvalid, "Internal error: Failed to marshal error response", errors.WithStack(marshalErr))
+			return nil, errors.Wrap(marshalErr, "internal error: Failed to marshal error response") // Wrapped error.
 		}
-		return resultBytes, nil
+		return resultBytes, nil // Return success at JSON-RPC level (contains error details).
 	}
 }
 
 // handleResourcesList handles the resources/list request.
-// Renamed from HandleResourcesList.
 func (h *MCPHandler) handleResourcesList(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 	// TODO: Implement actual resource listing, potentially based on RTM lists/tags.
 	h.logger.Info("Handling resources/list request (currently placeholder).")
@@ -181,25 +176,24 @@ func (h *MCPHandler) handleResourcesList(ctx context.Context, params json.RawMes
 	resultBytes, err := json.Marshal(result)
 	if err != nil {
 		h.logger.Error("Failed to marshal ListResourcesResult.", "error", err)
-		return nil, mcperrors.NewError(mcperrors.ErrProtocolInvalid, "Failed to marshal ListResourcesResult", errors.WithStack(err))
+		return nil, errors.Wrap(err, "failed to marshal ListResourcesResult") // Wrapped error.
 	}
 	return resultBytes, nil
 }
 
 // handleResourcesRead handles the resources/read request.
-// Renamed from HandleResourcesRead.
 func (h *MCPHandler) handleResourcesRead(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 	// Decode request to get URI.
 	var req ReadResourceRequest // Assumes type defined in types.go.
 	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, mcperrors.NewError(mcperrors.ErrProtocolInvalid, "Invalid params for resources/read", errors.WithStack(err))
+		return nil, errors.Wrap(err, "invalid params for resources/read") // Wrapped error.
 	}
 
 	h.logger.Info("Handling resources/read request (currently placeholder).", "uri", req.URI)
 	// TODO: Implement actual resource reading based on URI.
 
-	// For now, return resource not found error.
-	return nil, mcperrors.NewError(mcperrors.ErrResourceNotFound, "Resource not found: "+req.URI, nil) // This maps to JSON-RPC error.
+	// For now, return resource not found error using specific mcperrors type.
+	return nil, mcperrors.NewResourceError("Resource not found: "+req.URI, nil, map[string]interface{}{"uri": req.URI})
 }
 
 // --- Tool Execution Logic ---
@@ -223,7 +217,8 @@ func (h *MCPHandler) executeEchoTool(ctx context.Context, args json.RawMessage) 
 		resultBytes, marshalErr := json.Marshal(errResult)
 		if marshalErr != nil {
 			h.logger.Error("Failed to marshal echo tool argument error result.", "error", marshalErr)
-			return nil, mcperrors.NewError(mcperrors.ErrProtocolInvalid, "Internal error: Failed to marshal error response", errors.WithStack(marshalErr))
+			// Return wrapped internal error.
+			return nil, errors.Wrap(marshalErr, "internal error: Failed to marshal error response")
 		}
 		return resultBytes, nil // Return the marshaled CallToolResult containing the error.
 	}
@@ -242,65 +237,10 @@ func (h *MCPHandler) executeEchoTool(ctx context.Context, args json.RawMessage) 
 	resultBytes, err := json.Marshal(result)
 	if err != nil {
 		h.logger.Error("Failed to marshal echo tool success result.", "error", err)
-		return nil, mcperrors.NewError(mcperrors.ErrProtocolInvalid, "Internal error: Failed to marshal success response", errors.WithStack(err))
+		// Return wrapped internal error.
+		return nil, errors.Wrap(err, "internal error: Failed to marshal success response")
 	}
 	return resultBytes, nil
 }
 
 // Add other tool execution functions here (e.g., executeRTMGetTasks).
-
-// --- Need types from types.go ---
-// Ensure these types are defined correctly in internal/mcp/types.go
-
-// InitializeRequest represents the request sent by a client to initialize the connection.
-type InitializeRequest struct {
-	ClientInfo      Implementation     `json:"clientInfo"`
-	ProtocolVersion string             `json:"protocolVersion"`
-	Capabilities    ClientCapabilities `json:"capabilities"`
-}
-
-// ClientCapabilities defines the capabilities that a client may support.
-type ClientCapabilities struct {
-	Sampling     *struct{}                  `json:"sampling,omitempty"`
-	Roots        *struct{}                  `json:"roots,omitempty"`
-	Experimental map[string]json.RawMessage `json:"experimental,omitempty"`
-}
-
-// InitializeResult represents the server's response to an initialize request.
-type InitializeResult struct {
-	ServerInfo      Implementation     `json:"serverInfo"`
-	ProtocolVersion string             `json:"protocolVersion"`
-	Capabilities    ServerCapabilities `json:"capabilities"`
-	Instructions    string             `json:"instructions,omitempty"`
-}
-
-// ListToolsResult represents the result of a tools/list request.
-type ListToolsResult struct {
-	Tools      []Tool `json:"tools"`
-	NextCursor string `json:"nextCursor,omitempty"`
-}
-
-// CallToolRequest represents a request to call a tool.
-type CallToolRequest struct {
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
-}
-
-// CallToolResult represents the result of a tool call.
-type CallToolResult struct {
-	Content []Content `json:"content"`
-	IsError bool      `json:"isError,omitempty"`
-}
-
-// ListResourcesResult represents the result of a resources/list request.
-type ListResourcesResult struct {
-	Resources  []Resource `json:"resources"`
-	NextCursor string     `json:"nextCursor,omitempty"`
-}
-
-// ReadResourceRequest represents a request to read a resource.
-type ReadResourceRequest struct {
-	URI string `json:"uri"`
-}
-
-// Assuming Content, TextContent, Tool, Resource are defined correctly in types.go.

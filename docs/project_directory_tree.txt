@@ -28,7 +28,6 @@
 │   │   │   └── errors.go
 │   │   ├── mcp_handlers.go
 │   │   ├── mcp_server.go
-│   │   ├── server.go
 │   │   └── types.go
 │   ├── middleware/
 │   │   ├── chain.go
@@ -54,4 +53,4 @@
 ├── go.mod
 └── go.sum
 
-19 directories, 36 files
+19 directories, 35 files
