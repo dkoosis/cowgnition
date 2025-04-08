@@ -43,6 +43,7 @@ type Server struct {
 	options ServerOptions
 
 	// The handler for MCP methods (defined in mcp_handlers.go).
+	// NOTE: This type name 'MCPHandler' will be changed based on the fix for mcp_handlers.go.
 	handler *MCPHandler
 
 	// Method map for routing requests.
@@ -62,6 +63,7 @@ func NewServer(cfg *config.Config, opts ServerOptions, logger logging.Logger) (*
 	}
 
 	// Create the MCP method handler (constructor defined in mcp_handlers.go).
+	// NOTE: This function name 'NewMCPHandler' will be changed based on the fix for mcp_handlers.go.
 	handler := NewMCPHandler(cfg, logger)
 
 	// Create the server instance.
@@ -217,15 +219,14 @@ func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, er
 
 	// Basic JSON-RPC 2.0 check. Middleware should ideally handle this.
 	if request.JSONRPC != "2.0" {
-		// Replace undefined mcperrors.NewError with standard error wrapping.
+		// Return standard error.
 		return nil, errors.New("invalid JSON-RPC version, expected 2.0")
 	}
 
 	// Find the registered handler for the method.
 	handler, ok := s.methods[request.Method]
 	if !ok {
-		// Replace undefined mcperrors.NewError with standard error wrapping.
-		// Return an error that createErrorResponse can map to JSONRPCMethodNotFound.
+		// Return standard error.
 		return nil, errors.New("method not found: " + request.Method)
 	}
 
@@ -241,7 +242,6 @@ func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, er
 	}
 
 	// Check if it was a notification (ID is null or absent).
-	// Note: RawMessage treats absent ID as nil.
 	if request.ID == nil || string(request.ID) == "null" {
 		// It's a notification, no response is sent according to JSON-RPC spec.
 		s.logger.Debug("Processed notification.", "method", request.Method)
@@ -263,130 +263,42 @@ func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, er
 	respBytes, err := json.Marshal(responseObj)
 	if err != nil {
 		// This is a critical internal error if we can't marshal our own response.
-		// Replace undefined mcperrors.NewError with standard error wrapping.
 		return nil, errors.Wrap(err, "internal error: failed to marshal success response")
 	}
 
 	return respBytes, nil
 }
 
-// createErrorResponse creates a JSON-RPC error response based on the provided error.
-// It attempts to map internal errors (mcperrors, transport errors) to appropriate
-// JSON-RPC error codes and logs detailed error information server-side.
+// Refactored createErrorResponse to reduce cyclomatic complexity.
 func (s *Server) createErrorResponse(msgBytes []byte, err error) ([]byte, error) {
-	// Extract the request ID if possible, default to null if parsing fails.
-	var requestID json.RawMessage = json.RawMessage("null") // Default to null ID.
-	var request struct {
-		ID json.RawMessage `json:"id"`
-	}
-	// Use the original message bytes to attempt ID extraction.
-	if jsonErr := json.Unmarshal(msgBytes, &request); jsonErr == nil && request.ID != nil {
-		requestID = request.ID
-	} // Ignore jsonErr here, ID remains null if parsing failed.
+	// Extract request ID, defaulting to null.
+	requestID := extractRequestID(msgBytes)
 
-	// Default JSON-RPC error code and message.
-	code := transport.JSONRPCInternalError // -32603.
-	message := "Internal server error."
-	var data interface{} // Optional structured data (keep nil unless safe).
+	// Determine the JSON-RPC error code, message, and data based on the error type.
+	code, message, data := s.mapErrorToJSONRPCComponents(err)
 
-	// Check for specific error types to map codes and messages.
-	var mcpErr *mcperrors.BaseError
-	var transportErr *transport.Error
-	var validationErr *schema.ValidationError // Check for schema validation errors.
-
-	if errors.As(err, &validationErr) {
-		// Map schema validation errors (typically Invalid Request or Invalid Params).
-		if validationErr.Code == schema.ErrInvalidJSONFormat {
-			code = transport.JSONRPCParseError // -32700.
-			message = "Parse error."
-		} else if validationErr.InstancePath != "" && (strings.Contains(validationErr.InstancePath, "/params") || strings.Contains(validationErr.InstancePath, "params")) {
-			code = transport.JSONRPCInvalidParams // -32602.
-			message = "Invalid params."
-			// data = validationErr.Context // Include sanitized validation context if available.
-		} else {
-			code = transport.JSONRPCInvalidRequest // -32600.
-			message = "Invalid request."
-			// data = validationErr.Context // Include sanitized validation context if available.
-		}
-	} else if errors.As(err, &mcpErr) {
-		// Map custom MCP application errors.
-		message = mcpErr.Message // Use the message from the custom error.
-		code = mcpErr.Code       // Use the code from the custom error.
-
-		// Map specific internal codes to JSON-RPC standard codes if appropriate.
-		switch mcpErr.Code {
-		case mcperrors.ErrProtocolInvalid:
-			if strings.Contains(mcpErr.Message, "Method not found") {
-				code = transport.JSONRPCMethodNotFound // -32601.
-			} else {
-				code = transport.JSONRPCInvalidRequest // -32600.
-			}
-		case mcperrors.ErrResourceNotFound:
-			code = -32001 // Example implementation-defined code.
-		case mcperrors.ErrAuthFailure:
-			code = -32002 // Example implementation-defined code.
-		// Add more mappings for other custom codes.
-		default:
-			// If it's an MCP error but not specifically mapped, use a generic server error code.
-			if code < -32099 || code > -32000 { // Check if it's outside the valid custom range.
-				code = -32000 // Generic implementation-defined server error.
-			}
-		}
-		// Optionally include sanitized context from mcpErr.Context in 'data'.
-		// data = mcpErr.Context // Be cautious about leaking info.
-	} else if errors.As(err, &transportErr) {
-		// Map transport errors (already handles common cases like ParseError).
-		code, message, data = transport.MapErrorToJSONRPC(transportErr)
-	} else {
-		// Fallback for generic Go errors (use default internal error).
-		// Check the error message for common cases that should map to standard JSON-RPC errors.
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "Parse error") {
-			code = transport.JSONRPCParseError
-			message = "Parse error."
-		} else if strings.Contains(errMsg, "invalid JSON-RPC version") {
-			code = transport.JSONRPCInvalidRequest
-			message = "Invalid request."
-		} else if strings.Contains(errMsg, "Method not found") {
-			code = transport.JSONRPCMethodNotFound
-			message = "Method not found."
-		} else if strings.Contains(errMsg, "invalid params") {
-			code = transport.JSONRPCInvalidParams
-			message = "Invalid params."
-		} else {
-			// Keep default Internal Error for other unknown Go errors.
-			message = "An unexpected internal error occurred." // Avoid leaking raw error string.
-		}
-	}
-
-	// Log the detailed error server-side, including stack trace (aligns with ADR 001).
-	// TODO: Add request_id, connection_id from context if available via middleware.
-	s.logger.Error("Generating JSON-RPC error response.",
-		"requestCode", code,
-		"requestMessage", message,
-		"originalError", fmt.Sprintf("%+v", err), // Log full details including stack trace.
-		"responseData", data, // Log any data being sent back.
-		"requestID", string(requestID))
+	// Log the detailed error server-side.
+	s.logErrorDetails(code, message, requestID, data, err)
 
 	// Construct the JSON-RPC error payload.
 	errorPayload := struct {
 		Code    int         `json:"code"`
 		Message string      `json:"message"`
-		Data    interface{} `json:"data,omitempty"` // Use interface{} for flexibility.
+		Data    interface{} `json:"data,omitempty"`
 	}{
 		Code:    code,
-		Message: message, // Use the mapped message.
-		Data:    data,    // Assign mapped, sanitized data (can be nil).
+		Message: message,
+		Data:    data,
 	}
 
 	// Construct the full JSON-RPC error response object.
 	errorResponse := struct {
 		JSONRPC string          `json:"jsonrpc"`
-		ID      json.RawMessage `json:"id"` // Use null for notifications or parse errors.
+		ID      json.RawMessage `json:"id"`
 		Error   interface{}     `json:"error"`
 	}{
 		JSONRPC: "2.0",
-		ID:      requestID, // Use extracted or null ID.
+		ID:      requestID,
 		Error:   errorPayload,
 	}
 
@@ -394,12 +306,162 @@ func (s *Server) createErrorResponse(msgBytes []byte, err error) ([]byte, error)
 	responseBytes, marshalErr := json.Marshal(errorResponse)
 	if marshalErr != nil {
 		// This is a critical internal failure if we cannot marshal the error response.
-		// Log it, but we probably can't send anything back to the client.
 		s.logger.Error("CRITICAL: Failed to marshal final error response.", "marshalError", marshalErr)
 		return nil, errors.Wrap(marshalErr, "failed to marshal error response object")
 	}
 
 	return responseBytes, nil
+}
+
+// extractRequestID attempts to get the ID from raw message bytes. Returns null if error/absent.
+func extractRequestID(msgBytes []byte) json.RawMessage {
+	var request struct {
+		ID json.RawMessage `json:"id"`
+	}
+	// Use the original message bytes to attempt ID extraction.
+	if jsonErr := json.Unmarshal(msgBytes, &request); jsonErr == nil && request.ID != nil {
+		return request.ID
+	}
+	// Default to null ID if parsing fails or ID is absent/null.
+	return json.RawMessage("null")
+}
+
+// mapErrorToJSONRPCComponents maps Go errors to JSON-RPC code, message, and data.
+func (s *Server) mapErrorToJSONRPCComponents(err error) (code int, message string, data interface{}) {
+	// Default values.
+	code = transport.JSONRPCInternalError // -32603.
+	message = "Internal server error."    // Default message.
+	data = nil                            // Keep data nil unless safe.
+
+	var mcpErr *mcperrors.BaseError
+	var transportErr *transport.Error
+	var validationErr *schema.ValidationError
+
+	// Check error types in order of specificity.
+	switch {
+	case errors.As(err, &validationErr):
+		message = "Validation error." // More specific default for validation.
+		code, message, data = mapValidationError(validationErr)
+	case errors.As(err, &mcpErr):
+		code, message, data = mapMCPError(mcpErr)
+	case errors.As(err, &transportErr):
+		code, message, data = transport.MapErrorToJSONRPC(transportErr)
+	default:
+		code, message = mapGenericGoError(err)
+	}
+
+	return code, message, data
+}
+
+// mapValidationError maps schema.ValidationError to JSON-RPC components.
+func mapValidationError(validationErr *schema.ValidationError) (code int, message string, data interface{}) {
+	if validationErr.Code == schema.ErrInvalidJSONFormat {
+		code = transport.JSONRPCParseError // -32700.
+		message = "Parse error."
+	} else if validationErr.InstancePath != "" && (strings.Contains(validationErr.InstancePath, "/params") || strings.Contains(validationErr.InstancePath, "params")) {
+		code = transport.JSONRPCInvalidParams // -32602.
+		message = "Invalid params."
+	} else {
+		code = transport.JSONRPCInvalidRequest // -32600.
+		message = "Invalid request."
+	}
+	// Include sanitized validation context or formatted error string in data.
+	data = map[string]interface{}{
+		"validationPath":  validationErr.InstancePath,
+		"validationError": validationErr.Message, // Use the message from the validation error.
+	}
+	return code, message, data
+}
+
+// mapMCPError maps mcperrors.BaseError to JSON-RPC components.
+func mapMCPError(mcpErr *mcperrors.BaseError) (code int, message string, data interface{}) {
+	message = mcpErr.Message // Use the message from the custom error.
+	code = mcpErr.Code       // Use the code from the custom error.
+
+	// Map specific internal codes to JSON-RPC standard codes if appropriate.
+	switch mcpErr.Code {
+	case mcperrors.ErrProtocolInvalid:
+		if strings.Contains(mcpErr.Message, "Method not found") {
+			code = transport.JSONRPCMethodNotFound // -32601.
+		} else {
+			code = transport.JSONRPCInvalidRequest // -32600.
+		}
+	case mcperrors.ErrResourceNotFound:
+		code = -32001 // Example implementation-defined code.
+	case mcperrors.ErrAuthFailure:
+		code = -32002 // Example implementation-defined code.
+	// Add more mappings for other custom codes.
+	default:
+		// If it's an MCP error but not specifically mapped, use a generic server error code.
+		if code < -32099 || code > -32000 { // Check if it's outside the valid custom range.
+			code = -32000 // Generic implementation-defined server error.
+		}
+	}
+	// data = mcpErr.Context // Optionally include sanitized context. Be cautious.
+	return code, message, data
+}
+
+// mapGenericGoError maps generic Go errors to JSON-RPC components.
+func mapGenericGoError(err error) (code int, message string) {
+	code = transport.JSONRPCInternalError // Default -32603.
+	errMsg := err.Error()
+
+	// Attempt to map common error strings to standard JSON-RPC codes.
+	if strings.Contains(errMsg, "Parse error") || strings.Contains(errMsg, "invalid character") || strings.Contains(errMsg, "unexpected EOF") {
+		code = transport.JSONRPCParseError
+		message = "Parse error."
+	} else if strings.Contains(errMsg, "invalid JSON-RPC version") {
+		code = transport.JSONRPCInvalidRequest
+		message = "Invalid request."
+	} else if strings.Contains(errMsg, "Method not found") {
+		code = transport.JSONRPCMethodNotFound
+		message = "Method not found."
+	} else if strings.Contains(errMsg, "invalid params") {
+		code = transport.JSONRPCInvalidParams
+		message = "Invalid params."
+	} else {
+		// Keep default Internal Error for other unknown Go errors.
+		message = "An unexpected internal error occurred." // Avoid leaking raw error string.
+	}
+	return code, message
+}
+
+// logErrorDetails logs detailed error information according to ADR 001 principles.
+func (s *Server) logErrorDetails(code int, message string, requestID json.RawMessage, data interface{}, err error) {
+	// TODO: Add request_id, connection_id from context if available via middleware.
+	logArgs := []interface{}{
+		"requestCode", code,
+		"requestMessage", message,
+		"originalError", fmt.Sprintf("%+v", err), // Log full details including stack trace.
+		"responseData", data, // Log any data being sent back.
+		"requestID", string(requestID),
+	}
+
+	// Extract additional details if it's a structured error.
+	var mcpErr *mcperrors.BaseError
+	var transportErr *transport.Error
+	var validationErr *schema.ValidationError
+
+	if errors.As(err, &mcpErr) {
+		logArgs = append(logArgs, "internalErrorCode", mcpErr.Code)
+		if len(mcpErr.Context) > 0 {
+			logArgs = append(logArgs, "internalErrorContext", mcpErr.Context)
+		}
+	} else if errors.As(err, &transportErr) {
+		logArgs = append(logArgs, "transportErrorCode", transportErr.Code)
+		if len(transportErr.Context) > 0 {
+			logArgs = append(logArgs, "transportErrorContext", transportErr.Context)
+		}
+	} else if errors.As(err, &validationErr) {
+		logArgs = append(logArgs, "validationErrorCode", validationErr.Code)
+		if len(validationErr.Context) > 0 {
+			logArgs = append(logArgs, "validationErrorContext", validationErr.Context)
+		}
+		logArgs = append(logArgs, "validationInstancePath", validationErr.InstancePath)
+		logArgs = append(logArgs, "validationSchemaPath", validationErr.SchemaPath)
+	}
+
+	s.logger.Error("Generating JSON-RPC error response.", logArgs...)
 }
 
 // ServeHTTP starts the server with an HTTP transport listening on the given address.
