@@ -9,6 +9,7 @@ import (
 
 // MiddlewareWithNext is an interface for middleware components that need to maintain
 // their own state and be linked to the next handler.
+// nolint:revive
 type MiddlewareWithNext interface {
 	// SetNext sets the next handler in the chain.
 	SetNext(next transport.MessageHandler)

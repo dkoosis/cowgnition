@@ -18,8 +18,9 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-// Source defines where to load the schema from.
-type Source struct {
+// SchemaSource defines where to load the schema from.
+// nolint:revive // Keep semantic naming consistent with package, will refactor in future.
+type SchemaSource struct {
 	// URL is the remote location of the schema, if applicable.
 	URL string
 	// FilePath is the local file path of the schema, if applicable.
@@ -28,11 +29,12 @@ type Source struct {
 	Embedded []byte
 }
 
-// Validator handles loading, compiling, and validating against JSON schemas.
+// SchemaValidator handles loading, compiling, and validating against JSON schemas.
 // It is designed to validate JSON-RPC messages against the MCP schema specification.
-type Validator struct {
+// nolint:revive // Keep semantic naming consistent with package, will refactor in future.
+type SchemaValidator struct {
 	// source contains the configuration for where to load the schema from.
-	source Source
+	source SchemaSource
 	// compiler is the JSONSchema compiler used to process schemas.
 	compiler *jsonschema.Compiler
 	// schemas maps message types to their compiled schema.
@@ -116,8 +118,8 @@ func NewValidationError(code ErrorCode, message string, cause error) *Validation
 	}
 }
 
-// NewValidator creates a new Validator with the given schema source.
-func NewValidator(source Source, logger logging.Logger) *Validator {
+// NewSchemaValidator creates a new SchemaValidator with the given schema source.
+func NewSchemaValidator(source SchemaSource, logger logging.Logger) *SchemaValidator {
 	if logger == nil {
 		logger = logging.GetNoopLogger()
 	}
@@ -131,7 +133,7 @@ func NewValidator(source Source, logger logging.Logger) *Validator {
 	compiler.AssertFormat = true
 	compiler.AssertContent = true
 
-	return &Validator{
+	return &SchemaValidator{
 		source:     source,
 		compiler:   compiler,
 		schemas:    make(map[string]*jsonschema.Schema),
@@ -142,7 +144,7 @@ func NewValidator(source Source, logger logging.Logger) *Validator {
 
 // Initialize loads and compiles the MCP schema definitions.
 // This should be called during application startup before any validation occurs.
-func (v *Validator) Initialize(ctx context.Context) error {
+func (v *SchemaValidator) Initialize(ctx context.Context) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -191,7 +193,7 @@ func (v *Validator) Initialize(ctx context.Context) error {
 
 // Shutdown performs any cleanup needed for the schema validator.
 // Should be called during application shutdown.
-func (v *Validator) Shutdown() error {
+func (v *SchemaValidator) Shutdown() error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -214,7 +216,7 @@ func (v *Validator) Shutdown() error {
 }
 
 // IsInitialized returns whether the validator has been initialized.
-func (v *Validator) IsInitialized() bool {
+func (v *SchemaValidator) IsInitialized() bool {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 	return v.initialized
@@ -222,7 +224,7 @@ func (v *Validator) IsInitialized() bool {
 
 // compileSubSchema compiles a sub-schema from the base schema.
 // nolint:unused // Reserved for future schema compilation features
-func (v *Validator) compileSubSchema(name, pointer string) error {
+func (v *SchemaValidator) compileSubSchema(name, pointer string) error {
 	// In the santhosh-tekuri/jsonschema/v5 library, we use Compile with a pointer
 	// instead of CompileWithID which doesn't exist
 	subSchema, err := v.compiler.Compile(pointer)
@@ -239,7 +241,7 @@ func (v *Validator) compileSubSchema(name, pointer string) error {
 }
 
 // loadSchemaData loads the schema data from the configured source.
-func (v *Validator) loadSchemaData(ctx context.Context) ([]byte, error) {
+func (v *SchemaValidator) loadSchemaData(ctx context.Context) ([]byte, error) {
 	// Try to load from each source in order of preference
 
 	// 1. Try embedded schema if provided
@@ -325,7 +327,7 @@ func (v *Validator) loadSchemaData(ctx context.Context) ([]byte, error) {
 
 // Validate validates the given JSON data against the schema for the specified message type.
 // The messageType parameter should identify which schema to use (e.g., "ClientRequest").
-func (v *Validator) Validate(ctx context.Context, messageType string, data []byte) error {
+func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data []byte) error {
 	// Check if initialized
 	if !v.IsInitialized() {
 		return NewValidationError(

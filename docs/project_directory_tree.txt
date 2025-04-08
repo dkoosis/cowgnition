@@ -15,6 +15,7 @@
 │   ├── TODO.md
 │   ├── contributing.md
 │   ├── llm.md
+│   ├── mcp-server-cowgnition.log
 │   └── project_directory_tree.txt
 ├── internal/
 │   ├── config/
@@ -46,7 +47,6 @@
 ├── Makefile
 ├── README.md
 ├── coverage.out
-├── cowgnition*
 ├── go.mod
 └── go.sum
 

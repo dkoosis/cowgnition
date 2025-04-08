@@ -54,6 +54,7 @@ func DefaultErrorHandler(ctx context.Context, err error) {
 // ValidateMessage performs thorough validation on a JSON-RPC message according to
 // the JSON-RPC 2.0 specification (https://www.jsonrpc.org/specification).
 // It ensures the message has all required fields and follows the correct format.
+// nolint:gocyclo
 func ValidateMessage(message []byte) error {
 	// First check if it's valid JSON
 	var msg map[string]interface{}
@@ -320,6 +321,7 @@ func ValidateMessage(message []byte) error {
 }
 
 // min returns the smaller of x or y.
+// nolint:unparam
 func min(x, y int) int {
 	if x < y {
 		return x

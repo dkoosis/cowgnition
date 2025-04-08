@@ -1,4 +1,4 @@
-// file: internal/transport/errors.go
+// file: internal/transport/transport_errors.go
 package transport
 
 import (
@@ -107,7 +107,7 @@ func NewMessageSizeError(size, maxSize int, fragment []byte) *Error {
 	err.Fragment = fragment
 
 	if len(fragment) > 0 {
-		err.Context["messagePreview"] = string(fragment)
+		err = err.WithContext("messagePreview", string(fragment))
 	}
 
 	return err
@@ -126,8 +126,9 @@ func NewParseError(message []byte, cause error) *Error {
 		cause,
 	)
 	err.Type = ErrorTypeParse
-	err.WithContext("messagePreview", string(preview))
-	err.WithContext("messageLength", len(message))
+	// Store the return values
+	err = err.WithContext("messagePreview", string(preview))
+	err = err.WithContext("messageLength", len(message))
 
 	return err
 }
