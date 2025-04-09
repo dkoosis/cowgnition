@@ -82,6 +82,7 @@ func NewServer(cfg *config.Config, opts ServerOptions, validator *schema.SchemaV
 		logger:    logger.WithField("component", "mcp_server"),
 		methods:   make(map[string]MethodHandler),
 		validator: validator, // Store the validator.
+		connectionState * ConnectionState,
 	}
 
 	// Register method handlers.

@@ -30,6 +30,7 @@
 │   ├── mcp/
 │   │   ├── mcp_errors/
 │   │   │   └── errors.go
+│   │   ├── connection_state.go
 │   │   ├── handler.go
 │   │   ├── handlers_core.go
 │   │   ├── handlers_notifications.go
@@ -65,4 +66,4 @@
 ├── go.mod
 └── go.sum
 
-19 directories, 47 files
+19 directories, 48 files
