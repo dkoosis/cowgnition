@@ -18,9 +18,9 @@ func (h *Handler) handleToolsList(ctx context.Context, params json.RawMessage) (
 
 	// Define RTM tools.
 	tools := []Tool{
-		// Tool: rtm/getTasks.
+		// Tool: getTasks.
 		{
-			Name:        "rtm/getTasks",
+			Name:        "getTasks",
 			Description: "Retrieves tasks from Remember The Milk based on a specified filter.",
 			InputSchema: mustMarshalJSON(map[string]interface{}{
 				"type": "object",
@@ -38,9 +38,9 @@ func (h *Handler) handleToolsList(ctx context.Context, params json.RawMessage) (
 				ReadOnlyHint: true, // This tool doesn't modify any data.
 			},
 		},
-		// Tool: rtm/createTask.
+		// Tool: createTask.
 		{
-			Name:        "rtm/createTask",
+			Name:        "createTask",
 			Description: "Creates a new task in Remember The Milk.",
 			InputSchema: mustMarshalJSON(map[string]interface{}{
 				"type": "object",
@@ -63,9 +63,9 @@ func (h *Handler) handleToolsList(ctx context.Context, params json.RawMessage) (
 				IdempotentHint:  false, // Multiple calls with same args will create multiple tasks.
 			},
 		},
-		// Tool: rtm/completeTask.
+		// Tool: completeTask.
 		{
-			Name:        "rtm/completeTask",
+			Name:        "completeTask",
 			Description: "Marks a task as complete in Remember The Milk.",
 			InputSchema: mustMarshalJSON(map[string]interface{}{
 				"type": "object",
@@ -121,13 +121,13 @@ func (h *Handler) handleToolCall(ctx context.Context, params json.RawMessage) (j
 
 	// Route the call to the specific tool implementation placeholder.
 	switch req.Name {
-	case "rtm/getTasks":
+	case "getTasks":
 		// Corrected: Assign single return value.
 		callResult = h.executeRTMGetTasksPlaceholder(ctx, req.Arguments)
-	case "rtm/createTask":
+	case "createTask":
 		// Corrected: Assign single return value.
 		callResult = h.executeRTMCreateTaskPlaceholder(ctx, req.Arguments)
-	case "rtm/completeTask":
+	case "completeTask":
 		callResult = h.executeRTMCompleteTaskPlaceholder(ctx, req.Arguments)
 	default:
 		// Tool name sent by client is not recognized by the server.
@@ -167,20 +167,20 @@ func (h *Handler) handleToolListChanged(_ context.Context, params json.RawMessag
 
 // ------ TOOL EXECUTION LOGIC PLACEHOLDERS ------
 
-// executeRTMGetTasksPlaceholder handles the rtm/getTasks tool call (enhanced placeholder).
+// executeRTMGetTasksPlaceholder handles the getTasks tool call (enhanced placeholder).
 func (h *Handler) executeRTMGetTasksPlaceholder(_ context.Context, args json.RawMessage) CallToolResult {
 	var toolArgs struct {
 		Filter string `json:"filter"`
 	}
 	if err := json.Unmarshal(args, &toolArgs); err != nil {
-		h.logger.Warn("Invalid arguments received for rtm/getTasks tool.", "error", err, "args", string(args))
+		h.logger.Warn("Invalid arguments received for getTasks tool.", "error", err, "args", string(args))
 		return CallToolResult{
 			IsError: true,
-			Content: []Content{TextContent{Type: "text", Text: "Error calling rtm/getTasks: Invalid arguments: " + err.Error()}},
+			Content: []Content{TextContent{Type: "text", Text: "Error calling getTasks: Invalid arguments: " + err.Error()}},
 		}
 	}
 
-	h.logger.Info("Executing rtm/getTasks tool with enhanced placeholder response.", "filter", toolArgs.Filter)
+	h.logger.Info("Executing getTasks tool with enhanced placeholder response.", "filter", toolArgs.Filter)
 
 	// TODO: Replace with actual RTM API call using h.rtmClient.
 	// Return a more realistic mock response with fake tasks that match the filter.
@@ -193,17 +193,17 @@ func (h *Handler) executeRTMGetTasksPlaceholder(_ context.Context, args json.Raw
 	}
 }
 
-// executeRTMCreateTaskPlaceholder handles the rtm/createTask tool call (enhanced placeholder).
+// executeRTMCreateTaskPlaceholder handles the createTask tool call (enhanced placeholder).
 func (h *Handler) executeRTMCreateTaskPlaceholder(_ context.Context, args json.RawMessage) CallToolResult {
 	var toolArgs struct {
 		Name string `json:"name"`
 		List string `json:"list,omitempty"`
 	}
 	if err := json.Unmarshal(args, &toolArgs); err != nil {
-		h.logger.Warn("Invalid arguments received for rtm/createTask tool.", "error", err, "args", string(args))
+		h.logger.Warn("Invalid arguments received for createTask tool.", "error", err, "args", string(args))
 		return CallToolResult{
 			IsError: true,
-			Content: []Content{TextContent{Type: "text", Text: "Error calling rtm/createTask: Invalid arguments: " + err.Error()}},
+			Content: []Content{TextContent{Type: "text", Text: "Error calling createTask: Invalid arguments: " + err.Error()}},
 		}
 	}
 
@@ -212,7 +212,7 @@ func (h *Handler) executeRTMCreateTaskPlaceholder(_ context.Context, args json.R
 		list = "Inbox" // Default list.
 	}
 
-	h.logger.Info("Executing rtm/createTask tool with enhanced placeholder response.", "name", toolArgs.Name, "list", list)
+	h.logger.Info("Executing createTask tool with enhanced placeholder response.", "name", toolArgs.Name, "list", list)
 
 	// TODO: Replace with actual RTM API call using h.rtmClient.
 	// Return a more realistic mock response pretending the task was created.
@@ -225,20 +225,20 @@ func (h *Handler) executeRTMCreateTaskPlaceholder(_ context.Context, args json.R
 	}
 }
 
-// executeRTMCompleteTaskPlaceholder handles the rtm/completeTask tool call.
+// executeRTMCompleteTaskPlaceholder handles the completeTask tool call.
 func (h *Handler) executeRTMCompleteTaskPlaceholder(_ context.Context, args json.RawMessage) CallToolResult {
 	var toolArgs struct {
 		TaskID string `json:"taskId"`
 	}
 	if err := json.Unmarshal(args, &toolArgs); err != nil {
-		h.logger.Warn("Invalid arguments received for rtm/completeTask tool.", "error", err, "args", string(args))
+		h.logger.Warn("Invalid arguments received for completeTask tool.", "error", err, "args", string(args))
 		return CallToolResult{
 			IsError: true,
-			Content: []Content{TextContent{Type: "text", Text: "Error calling rtm/completeTask: Invalid arguments: " + err.Error()}},
+			Content: []Content{TextContent{Type: "text", Text: "Error calling completeTask: Invalid arguments: " + err.Error()}},
 		}
 	}
 
-	h.logger.Info("Executing rtm/completeTask tool with placeholder response.", "taskId", toolArgs.TaskID)
+	h.logger.Info("Executing completeTask tool with placeholder response.", "taskId", toolArgs.TaskID)
 
 	// TODO: Replace with actual RTM API call.
 	// Return a mock response for completing the task.
