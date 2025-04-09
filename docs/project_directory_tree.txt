@@ -11,7 +11,8 @@
 │   │   ├── 001P_error_handling.md
 │   │   ├── 001_error_handling_strategy.md
 │   │   ├── 002_schema_validation_strategy.md
-│   │   └── 003_state_machine.md
+│   │   ├── 003_state_machine.md
+│   │   └── 004_in_memory_transport.md
 │   ├── assets/
 │   │   └── cowgnition_logo.png
 │   ├── 002_code_report.md
@@ -49,6 +50,7 @@
 │   │   └── transport/
 │   ├── schema/
 │   │   ├── min_schema.json
+│   │   ├── name_rules.go
 │   │   ├── schema.json
 │   │   └── validator.go
 │   ├── server/
@@ -66,4 +68,4 @@
 ├── go.mod
 └── go.sum
 
-19 directories, 48 files
+19 directories, 50 files
