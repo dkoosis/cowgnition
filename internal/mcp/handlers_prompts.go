@@ -75,7 +75,9 @@ func (h *Handler) handlePromptsGet(ctx context.Context, params json.RawMessage) 
 // Official definition: An optional notification from the server to the client, informing it
 // that the list of prompts it offers has changed. This may be issued by servers without
 // any previous subscription from the client.
-func (h *Handler) handlePromptsListChanged(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+//
+//nolint:unused,unparam
+func (h *Handler) handlePromptsListChanged(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Sending prompts list changed notification to client.")
 
 	// This would typically be sent from the server to the client, not handled by the server.

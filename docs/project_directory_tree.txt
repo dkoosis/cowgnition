@@ -16,7 +16,6 @@
 │   ├── TODO.md
 │   ├── contributing.md
 │   ├── llm.md
-│   ├── mcp-server-cowgnition.log
 │   └── project_directory_tree.txt
 ├── internal/
 │   ├── config/
@@ -30,12 +29,12 @@
 │   │   ├── handler.go
 │   │   ├── handlers_core.go
 │   │   ├── handlers_notifications.go
+│   │   ├── handlers_prompts.go
 │   │   ├── handlers_resources.go
 │   │   ├── handlers_roots.go
 │   │   ├── handlers_sampling.go
 │   │   ├── handlers_tools.go
 │   │   ├── helpers.go
-│   │   ├── mcp_handlers.bak
 │   │   ├── mcp_server.go
 │   │   └── types.go
 │   ├── middleware/
@@ -62,4 +61,4 @@
 ├── go.mod
 └── go.sum
 
-19 directories, 44 files
+19 directories, 43 files
