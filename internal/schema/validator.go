@@ -459,6 +459,16 @@ func getSchemaKeys(schemas map[string]*jsonschema.Schema) []string {
 	return keys
 }
 
+// HasSchema checks if a schema with the given name exists.
+// This is useful for determining if specific method schemas are available
+// before attempting validation.
+func (v *SchemaValidator) HasSchema(name string) bool {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	_, ok := v.schemas[name]
+	return ok
+}
+
 // min returns the smaller of two integers.
 // nolint:unparam // Kept generic for clarity and potential future use
 func min(a, b int) int {
