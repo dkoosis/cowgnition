@@ -3,16 +3,20 @@
 │   ├── schema_test/
 │   │   └── main.go
 │   ├── server/
-│   │   └── http_server.go
-│   ├── main.go
-│   └── setup.go
+│   │   └── server_runner.go
+│   ├── claude_desktop_setup.go
+│   └── main.go
 ├── docs/
 │   ├── adr/
 │   │   ├── 001P_error_handling.md
 │   │   ├── 001_error_handling_strategy.md
-│   │   └── 002_schema_validation_strategy.md
+│   │   ├── 002_schema_validation_strategy.md
+│   │   └── 003_state_machine.md
 │   ├── assets/
 │   │   └── cowgnition_logo.png
+│   ├── 002_code_report.md
+│   ├── Q01_code_report.md
+│   ├── Q03_code_report.md
 │   ├── TODO.md
 │   ├── contributing.md
 │   ├── llm.md
@@ -61,4 +65,4 @@
 ├── go.mod
 └── go.sum
 
-19 directories, 43 files
+19 directories, 47 files
