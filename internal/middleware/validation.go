@@ -84,10 +84,12 @@ func (m *ValidationMiddleware) SetNext(next transport.MessageHandler) {
 }
 
 // calculatePreview generates a string preview of a byte slice, limited to a max length.
-func calculatePreview(data []byte, maxLength int) string {
+// maxLength parameter was removed as it was always 100.
+func calculatePreview(data []byte) string {
+	const maxPreviewLen = 100 // Use a constant for the max length.
 	previewLen := len(data)
-	if previewLen > maxLength {
-		previewLen = maxLength
+	if previewLen > maxPreviewLen {
+		previewLen = maxPreviewLen
 	}
 	return string(data[:previewLen])
 }
@@ -97,7 +99,7 @@ func calculatePreview(data []byte, maxLength int) string {
 func (m *ValidationMiddleware) handleIncomingValidation(ctx context.Context, message []byte, startTime time.Time) ([]byte, error) {
 	// Basic JSON syntax validation first.
 	if !json.Valid(message) {
-		preview := calculatePreview(message, 100)
+		preview := calculatePreview(message) // Updated call.
 		m.logger.Warn("Invalid JSON syntax received.", "messagePreview", preview)
 		responseBytes, creationErr := createParseErrorResponse(nil, errors.New("invalid JSON syntax"))
 		if creationErr != nil {
@@ -109,7 +111,7 @@ func (m *ValidationMiddleware) handleIncomingValidation(ctx context.Context, mes
 	// Identify the message type and extract the request ID.
 	msgType, reqID, identifyErr := m.identifyMessage(message)
 	if identifyErr != nil {
-		preview := calculatePreview(message, 100)
+		preview := calculatePreview(message) // Updated call.
 		m.logger.Warn("Failed to identify message type.", "error", identifyErr, "messagePreview", preview)
 		responseBytes, creationErr := createInvalidRequestErrorResponse(reqID, identifyErr)
 		if creationErr != nil {
@@ -177,7 +179,7 @@ func (m *ValidationMiddleware) handleOutgoingValidation(ctx context.Context, res
 
 	outMsgType, _, outIdentifyErr := m.identifyMessage(responseBytes)
 	if outIdentifyErr != nil {
-		preview := calculatePreview(responseBytes, 100)
+		preview := calculatePreview(responseBytes) // Updated call.
 		m.logger.Warn("Failed to identify outgoing message type for validation.",
 			"error", outIdentifyErr,
 			"messagePreview", preview)
@@ -189,7 +191,7 @@ func (m *ValidationMiddleware) handleOutgoingValidation(ctx context.Context, res
 
 	outValidationErr := m.validator.Validate(ctx, outSchemaType, responseBytes)
 	if outValidationErr != nil {
-		preview := calculatePreview(responseBytes, 100)
+		preview := calculatePreview(responseBytes) // Updated call.
 		m.logger.Error("Outgoing message validation failed!",
 			"messageType", outMsgType,
 			"schemaType", outSchemaType,
@@ -429,7 +431,3 @@ func createValidationErrorResponse(id interface{}, validationErr error) ([]byte,
 	}
 	return json.Marshal(response) // Returns ([]byte, error).
 }
-
-// REMOVED: func min(x, y int) int
-// This function was removed as it was only used with y=100.
-// The logic is now handled by calculatePreview or inline code.
