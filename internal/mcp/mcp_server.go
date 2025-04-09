@@ -90,11 +90,16 @@ func NewServer(cfg *config.Config, opts ServerOptions, validator *schema.SchemaV
 	return server, nil
 }
 
+// file: internal/mcp/mcp_server.go (partial update to registerMethods function)
+
 // registerMethods registers all supported MCP methods using lowercase handler names.
 func (s *Server) registerMethods() {
 	// Core MCP methods.
 	s.methods["initialize"] = s.handler.handleInitialize
 	s.methods["ping"] = s.handler.handlePing
+
+	// Notifications methods (important for protocol handshake).
+	s.methods["notifications/initialized"] = s.handler.handleNotificationsInitialized
 
 	// Tools methods.
 	s.methods["tools/list"] = s.handler.handleToolsList
@@ -103,6 +108,10 @@ func (s *Server) registerMethods() {
 	// Resources methods.
 	s.methods["resources/list"] = s.handler.handleResourcesList
 	s.methods["resources/read"] = s.handler.handleResourcesRead
+
+	// Prompts methods (required for complete MCP dialog).
+	s.methods["prompts/list"] = s.handler.handlePromptsList
+	s.methods["prompts/get"] = s.handler.handlePromptsGet
 
 	s.logger.Info("Registered MCP methods.",
 		"count", len(s.methods),
