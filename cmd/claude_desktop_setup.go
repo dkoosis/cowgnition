@@ -1,4 +1,4 @@
-// cmd/server/setup.go
+// cmd/server/claude_desktop_setup.go
 package main
 
 import (

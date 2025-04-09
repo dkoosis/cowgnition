@@ -1,4 +1,4 @@
-// file: cmd/server/http_server.go
+// file: cmd/server/server_runner.go
 package server
 
 import (
