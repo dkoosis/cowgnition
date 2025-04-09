@@ -57,6 +57,9 @@ type Server struct {
 
 	// validator is the schema validator instance.
 	validator *schema.SchemaValidator
+
+	// connectionState tracks the protocol state of the MCP connection.
+	connectionState *ConnectionState
 }
 
 // NewServer creates a new MCP server with the given configuration and options.
@@ -76,13 +79,13 @@ func NewServer(cfg *config.Config, opts ServerOptions, validator *schema.SchemaV
 
 	// Create the server instance.
 	server := &Server{
-		config:    cfg,
-		options:   opts,
-		handler:   handler,
-		logger:    logger.WithField("component", "mcp_server"),
-		methods:   make(map[string]MethodHandler),
-		validator: validator, // Store the validator.
-		connectionState * ConnectionState,
+		config:          cfg,
+		options:         opts,
+		handler:         handler,
+		logger:          logger.WithField("component", "mcp_server"),
+		methods:         make(map[string]MethodHandler),
+		validator:       validator, // Store the validator.
+		connectionState: NewConnectionState(),
 	}
 
 	// Register method handlers.
@@ -160,10 +163,10 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 
 // file: internal/mcp/mcp_server.go
 
-// contextKey is a type for context keys to avoid collisions
+// contextKey is a type for context keys to avoid collisions.
 type contextKey string
 
-// connectionStateKey is the context key for accessing the connection state
+// connectionStateKey is the context key for accessing the connection state.
 const connectionStateKey contextKey = "connectionState"
 
 // serve handles the main server loop, processing requests using the configured transport.
@@ -288,10 +291,21 @@ func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, er
 		return nil, errors.Wrap(err, "internal error: failed to parse validated message in handleMessage")
 	}
 
+	// Validate method against connection state
+	if err := s.connectionState.ValidateMethodSequence(request.Method); err != nil {
+		return nil, &mcperrors.BaseError{
+			Code:    mcperrors.ErrProtocolInvalid,
+			Message: err.Error(),
+			Context: map[string]interface{}{
+				"method":       request.Method,
+				"currentState": s.connectionState.CurrentState(),
+			},
+		}
+	}
+
 	// Find the registered handler for the method.
 	handler, ok := s.methods[request.Method]
 	if !ok {
-		// *** CORRECTED ERROR CREATION ***
 		// Directly create a BaseError using the ErrProtocolInvalid code.
 		err := &mcperrors.BaseError{
 			Code:    mcperrors.ErrProtocolInvalid,
