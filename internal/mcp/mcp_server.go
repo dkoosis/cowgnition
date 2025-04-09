@@ -158,8 +158,17 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 	return s.serve(ctx, serveHandler)
 }
 
+// file: internal/mcp/mcp_server.go
+
+// contextKey is a type for context keys to avoid collisions
+type contextKey string
+
+// connectionStateKey is the context key for accessing the connection state
+const connectionStateKey contextKey = "connectionState"
+
 // serve handles the main server loop, processing requests using the configured transport.
-// It now accepts the handler function representing the full middleware chain.
+// It now accepts the handler function representing the full middleware chain and
+// injects connection state into the context.
 func (s *Server) serve(ctx context.Context, handlerFunc transport.MessageHandler) error {
 	s.logger.Info("Server processing loop started.")
 
@@ -194,34 +203,66 @@ func (s *Server) serve(ctx context.Context, handlerFunc transport.MessageHandler
 				continue
 			}
 
-			// Process the message using the provided handlerFunc (middleware chain).
-			respBytes, handleErr := handlerFunc(ctx, msgBytes)
+			// Add connection state to context for middleware and handlers to access
+			ctxWithState := context.WithValue(ctx, connectionStateKey, s.connectionState)
+
+			// Process the message using the provided handlerFunc (middleware chain),
+			// with state available in context.
+			respBytes, handleErr := handlerFunc(ctxWithState, msgBytes)
+
+			// Try to identify the message type and ID for better error logging
+			method, id := "", "unknown"
+			var parsedReq struct {
+				Method string          `json:"method"`
+				ID     json.RawMessage `json:"id"`
+			}
+			if err := json.Unmarshal(msgBytes, &parsedReq); err == nil {
+				method = parsedReq.Method
+				id = string(parsedReq.ID)
+			}
 
 			if handleErr != nil {
 				// Errors from the handler chain (including validation or method execution).
-				s.logger.Warn("Error processing message via handler.", "error", fmt.Sprintf("%+v", handleErr))
+				s.logger.Warn("Error processing message via handler.",
+					"method", method,
+					"requestID", id,
+					"error", fmt.Sprintf("%+v", handleErr))
 
 				// Create and send JSON-RPC error response based on the handler error.
 				errRespBytes, creationErr := s.createErrorResponse(msgBytes, handleErr)
 				if creationErr != nil {
-					s.logger.Error("CRITICAL: Failed to create error response.", "creationError", fmt.Sprintf("%+v", creationErr), "originalError", fmt.Sprintf("%+v", handleErr))
+					s.logger.Error("CRITICAL: Failed to create error response.",
+						"creationError", fmt.Sprintf("%+v", creationErr),
+						"originalError", fmt.Sprintf("%+v", handleErr))
 					// Exit on critical marshal error as we can't inform the client.
 					return errors.Wrap(creationErr, "failed to marshal error response")
 				}
 
 				// Attempt to write the error response.
 				if writeErr := s.transport.WriteMessage(ctx, errRespBytes); writeErr != nil {
-					s.logger.Error("Failed to write error response.", "error", fmt.Sprintf("%+v", writeErr))
+					s.logger.Error("Failed to write error response.",
+						"method", method,
+						"requestID", id,
+						"error", fmt.Sprintf("%+v", writeErr))
 					// Depending on the error, may want to continue or return writeErr.
 					// Failure to write might indicate a broken connection.
 				}
 				continue // Continue processing next message after handling error.
 			}
 
+			// If the message was 'initialize' and successful, update connection state
+			if method == "initialize" && respBytes != nil {
+				s.logger.Info("Initialize request successful, marking connection as initialized")
+				s.connectionState.SetInitialized()
+			}
+
 			// If handlerFunc returns non-nil response bytes (i.e., not a notification), send them.
 			if respBytes != nil {
 				if writeErr := s.transport.WriteMessage(ctx, respBytes); writeErr != nil {
-					s.logger.Error("Failed to write success response.", "error", fmt.Sprintf("%+v", writeErr))
+					s.logger.Error("Failed to write success response.",
+						"method", method,
+						"requestID", id,
+						"error", fmt.Sprintf("%+v", writeErr))
 					// Failure to write might indicate a broken connection.
 				}
 			}
