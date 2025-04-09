@@ -144,3 +144,44 @@ type TextResourceContents struct {
 type ReadResourceResult struct {
 	Contents []interface{} `json:"contents"`
 }
+
+// Prompt represents a prompt or prompt template that the server offers.
+type Prompt struct {
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	Arguments   []PromptArgument `json:"arguments,omitempty"`
+}
+
+// PromptArgument describes an argument that a prompt can accept.
+type PromptArgument struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+}
+
+// ListPromptsResult represents the result of a prompts/list request.
+type ListPromptsResult struct {
+	Prompts    []Prompt `json:"prompts"`
+	NextCursor string   `json:"nextCursor,omitempty"`
+}
+
+// GetPromptResult represents the result of a prompts/get request.
+type GetPromptResult struct {
+	Description string          `json:"description,omitempty"`
+	Messages    []PromptMessage `json:"messages"`
+}
+
+// PromptMessage describes a message returned as part of a prompt.
+type PromptMessage struct {
+	Role    string  `json:"role"`
+	Content Content `json:"content"`
+}
+
+// CompleteResult represents the result of a completion/complete request.
+type CompleteResult struct {
+	Completion struct {
+		Values  []string `json:"values"`
+		Total   int      `json:"total,omitempty"`
+		HasMore bool     `json:"hasMore,omitempty"`
+	} `json:"completion"`
+}

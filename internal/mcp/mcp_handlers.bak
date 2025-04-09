@@ -1,0 +1,1119 @@
+// file: internal/mcp/mcp_handlers.go
+
+package mcp
+
+import (
+	"context"
+	"encoding/json"
+	"fmt" // Import fmt for formatting.
+	"strings"
+
+	"github.com/cockroachdb/errors" // Using cockroachdb/errors for wrapping.
+	"github.com/dkoosis/cowgnition/internal/config"
+	"github.com/dkoosis/cowgnition/internal/logging"
+	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors"
+	// Import RTM client package here when created.
+	// "github.com/dkoosis/cowgnition/internal/rtm".
+)
+
+// Handler holds dependencies for MCP method handlers.
+type Handler struct {
+	logger logging.Logger
+	config *config.Config
+	// Add RTM client instance here when available:
+	// rtmClient *rtm.Client.
+}
+
+// NewHandler creates a new Handler.
+func NewHandler(cfg *config.Config, logger logging.Logger) *Handler {
+	// TODO: Initialize RTM client here when implemented, passing cfg.RTM.APIKey etc.
+	return &Handler{
+		logger: logger.WithField("component", "mcp_handler"),
+		config: cfg,
+		// rtmClient: rtm.NewClient(cfg.RTM.APIKey, cfg.RTM.SharedSecret, logger), // Example.
+	}
+}
+
+// ------ CORE PROTOCOL METHODS ------
+
+// handleInitialize handles the initialize request.
+// Official definition: This request is sent from the client to the server when it first connects,
+// asking it to begin initialization. The server responds with information about its capabilities,
+// supported protocol version, and other metadata.
+func (h *Handler) handleInitialize(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	var req InitializeRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, errors.Wrap(err, "invalid params for initialize")
+	}
+	h.logger.Info("Handling initialize request.", "clientVersion", req.ProtocolVersion, "clientName", req.ClientInfo.Name)
+
+	// Enable capabilities based on what we support
+	caps := ServerCapabilities{
+		// Tools capability
+		Tools: &ToolsCapability{ListChanged: false},
+
+		// Resources capability
+		Resources: &ResourcesCapability{ListChanged: false, Subscribe: false},
+
+		// Prompts capability
+		Prompts: &PromptsCapability{ListChanged: false},
+
+		// Logging capability - enables the client to receive structured logs
+		Logging: map[string]interface{}{},
+
+		// Experimental capabilities can be added here
+		// Experimental: map[string]json.RawMessage{},
+	}
+
+	appVersion := "0.1.0-dev" // TODO: Get from build flags.
+	serverInfo := Implementation{Name: h.config.Server.Name, Version: appVersion}
+	res := InitializeResult{
+		ServerInfo:      serverInfo,
+		ProtocolVersion: "2024-11-05",
+		Capabilities:    caps,
+		Instructions:    "You can use CowGnition to manage your Remember The Milk tasks. Use RTM tools to create, view, and complete tasks.",
+	}
+
+	resultBytes, err := json.Marshal(res)
+	if err != nil {
+		h.logger.Error("Failed to marshal InitializeResult.", "error", err)
+		return nil, errors.Wrap(err, "failed to marshal InitializeResult")
+	}
+	return resultBytes, nil
+}
+
+// handlePing handles the ping request.
+// Official definition: A ping, issued by either the server or the client, to check that
+// the other party is still alive. The receiver must promptly respond, or else may be disconnected.
+func (h *Handler) handlePing(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	h.logger.Debug("Handling ping request.")
+	resultBytes, err := json.Marshal(map[string]interface{}{})
+	if err != nil {
+		h.logger.Error("Failed to marshal empty ping result.", "error", err)
+		return nil, errors.Wrap(err, "failed to marshal ping response")
+	}
+	return resultBytes, nil
+}
+
+// ------ NOTIFICATION HANDLERS ------
+
+// handleNotificationsInitialized handles the notifications/initialized notification.
+// Official definition: This notification is sent from the client to the server after
+// initialization has finished. It signals that the client has successfully processed
+// the server's initialization response and is ready for further communication.
+func (h *Handler) handleNotificationsInitialized(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	h.logger.Info("Received 'notifications/initialized' from client.")
+
+	// Extract client capabilities if available
+	var notifParams struct {
+		ClientCapabilities *ClientCapabilities `json:"clientCapabilities,omitempty"`
+	}
+	if err := json.Unmarshal(params, &notifParams); err != nil {
+		// It's okay if we can't unmarshal, the params might be empty
+		h.logger.Debug("Could not parse notifications/initialized params (might be empty)", "error", err)
+	}
+
+	if notifParams.ClientCapabilities != nil {
+		h.logger.Debug("Client capabilities confirmed during initialized",
+			"capabilities", fmt.Sprintf("%+v", notifParams.ClientCapabilities))
+	}
+
+	// This is a notification (no response needed)
+	return nil, nil
+}
+
+// handleNotificationsCancelled handles the notifications/cancelled notification.
+// Official definition: This notification can be sent by either side to indicate that it is
+// cancelling a previously-issued request. The request SHOULD still be in-flight, but due to
+// communication latency, it is always possible that this notification MAY arrive after
+// the request has already finished.
+func (h *Handler) handleNotificationsCancelled(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	var cancelParams struct {
+		RequestID interface{} `json:"requestId"`
+		Reason    string      `json:"reason,omitempty"`
+	}
+
+	if err := json.Unmarshal(params, &cancelParams); err != nil {
+		h.logger.Warn("Could not parse notifications/cancelled params", "error", err)
+		// Continue even if we can't parse the params
+	}
+
+	h.logger.Info("Received request cancellation notification",
+		"requestID", cancelParams.RequestID,
+		"reason", cancelParams.Reason)
+
+	// TODO: Implement actual cancellation logic for long-running operations
+
+	// Notifications don't require a response
+	return nil, nil
+}
+
+// handleNotificationsProgress handles the notifications/progress notification.
+// Official definition: An out-of-band notification used to inform the receiver of a
+// progress update for a long-running request.
+func (h *Handler) handleNotificationsProgress(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	var progressParams struct {
+		ProgressToken interface{} `json:"progressToken"`
+		Progress      float64     `json:"progress"`
+		Total         float64     `json:"total,omitempty"`
+		Message       string      `json:"message,omitempty"`
+	}
+
+	if err := json.Unmarshal(params, &progressParams); err != nil {
+		h.logger.Warn("Could not parse notifications/progress params", "error", err)
+	}
+
+	h.logger.Info("Received progress notification",
+		"progressToken", progressParams.ProgressToken,
+		"progress", progressParams.Progress,
+		"total", progressParams.Total,
+		"message", progressParams.Message)
+
+	// This could be used to update UI elements or trigger other actions
+
+	// Notifications don't require a response
+	return nil, nil
+}
+
+// handleRootsListChanged handles the notifications/roots/list_changed notification.
+// Official definition: A notification from the client to the server, informing it that
+// the list of roots has changed. This notification should be sent whenever the client adds,
+// removes, or modifies any root. The server should then request an updated list of roots
+// using the ListRootsRequest.
+func (h *Handler) handleRootsListChanged(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	h.logger.Info("Received roots/list_changed notification.")
+
+	// This would typically trigger a roots/list request from the server to get updated roots
+	// For now, we just log the notification
+
+	// Notifications don't require a response
+	return nil, nil
+}
+
+// handleResourcesUpdated handles the notifications/resources/updated notification.
+// Official definition: A notification from the server to the client, informing it that
+// a resource has changed and may need to be read again. This should only be sent if
+// the client previously sent a resources/subscribe request.
+func (h *Handler) handleResourcesUpdated(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	var updateParams struct {
+		URI string `json:"uri"`
+	}
+	if err := json.Unmarshal(params, &updateParams); err != nil {
+		h.logger.Warn("Invalid parameters for resources/updated notification", "error", err)
+		// Still return nil as this is a notification
+		return nil, nil
+	}
+
+	h.logger.Info("Resource updated notification received", "uri", updateParams.URI)
+	// No response needed for notifications
+	return nil, nil
+}
+
+// handleResourceListChanged handles the notifications/resources/list_changed notification.
+// Official definition: An optional notification from the server to the client, informing
+// it that the list of resources it can read from has changed. This may be issued by
+// servers without any previous subscription from the client.
+func (h *Handler) handleResourceListChanged(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	h.logger.Info("Sending resource list changed notification to client")
+	// NOTE: This would typically be sent from the server to the client, not handled by the server
+	// Included here for completeness of the protocol implementation
+	return nil, nil
+}
+
+// handlePromptListChanged handles the notifications/prompts/list_changed notification.
+// Official definition: An optional notification from the server to the client, informing
+// it that the list of prompts it offers has changed. This may be issued by servers
+// without any previous subscription from the client.
+func (h *Handler) handlePromptListChanged(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	h.logger.Info("Sending prompt list changed notification to client")
+	// NOTE: This would typically be sent from the server to the client, not handled by the server
+	// Included here for completeness of the protocol implementation
+	return nil, nil
+}
+
+// handleToolListChanged handles the notifications/tools/list_changed notification.
+// Official definition: An optional notification from the server to the client, informing
+// it that the list of tools it offers has changed. This may be issued by servers
+// without any previous subscription from the client.
+func (h *Handler) handleToolListChanged(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	h.logger.Info("Sending tool list changed notification to client")
+	// NOTE: This would typically be sent from the server to the client, not handled by the server
+	// Included here for completeness of the protocol implementation
+	return nil, nil
+}
+
+// handleLoggingMessage handles the notifications/message logging notification.
+// Official definition: Notification of a log message passed from server to client.
+// If no logging/setLevel request has been sent from the client, the server MAY decide
+// which messages to send automatically.
+func (h *Handler) handleLoggingMessage(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	h.logger.Info("Sending logging message notification to client")
+	// NOTE: This would typically be sent from the server to the client, not handled by the server
+	// Included here for completeness of the protocol implementation
+	return nil, nil
+}
+
+// ------ TOOL METHODS ------
+
+// handleToolsList handles the tools/list request.
+// Official definition: Used by the client to request a list of tools the server has.
+// The server should respond with a list of Tool objects that describe the available tools.
+func (h *Handler) handleToolsList(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	h.logger.Info("Handling tools/list request.")
+
+	// Define RTM tools.
+	tools := []Tool{
+		// Tool: rtm/getTasks
+		{
+			Name:        "rtm/getTasks",
+			Description: "Retrieves tasks from Remember The Milk based on a specified filter.",
+			InputSchema: mustMarshalJSON(map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"filter": map[string]interface{}{
+						"type":        "string",
+						"description": "RTM filter expression (e.g., 'list:Inbox status:incomplete dueBefore:tomorrow'). See RTM documentation for filter syntax.",
+					},
+				},
+				"required": []string{"filter"},
+			}),
+			// Optional annotations to provide additional information to clients
+			Annotations: &ToolAnnotations{
+				Title:        "Get RTM Tasks",
+				ReadOnlyHint: true, // This tool doesn't modify any data
+			},
+		},
+		// Tool: rtm/createTask
+		{
+			Name:        "rtm/createTask",
+			Description: "Creates a new task in Remember The Milk.",
+			InputSchema: mustMarshalJSON(map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "The name of the task, including any smart syntax (e.g., 'Buy milk ^tomorrow #groceries !1').",
+					},
+					"list": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional. The name or ID of the list to add the task to. Defaults to Inbox if not specified.",
+					},
+				},
+				"required": []string{"name"},
+			}),
+			Annotations: &ToolAnnotations{
+				Title:           "Create RTM Task",
+				ReadOnlyHint:    false, // This tool modifies data
+				DestructiveHint: false, // It's not destructive, just additive
+				IdempotentHint:  false, // Multiple calls with same args will create multiple tasks
+			},
+		},
+		// Tool: rtm/completeTask
+		{
+			Name:        "rtm/completeTask",
+			Description: "Marks a task as complete in Remember The Milk.",
+			InputSchema: mustMarshalJSON(map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"taskId": map[string]interface{}{
+						"type":        "string",
+						"description": "The ID of the task to mark as complete.",
+					},
+				},
+				"required": []string{"taskId"},
+			}),
+			Annotations: &ToolAnnotations{
+				Title:           "Complete RTM Task",
+				ReadOnlyHint:    false, // This tool modifies data
+				DestructiveHint: true,  // It changes the state of a task
+				IdempotentHint:  true,  // Multiple calls with same taskId will have same effect
+			},
+		},
+	}
+
+	// Create the result containing the tool list.
+	result := ListToolsResult{
+		Tools: tools,
+		// NextCursor can be added here for pagination if needed.
+	}
+
+	// Marshal the result.
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		h.logger.Error("Failed to marshal ListToolsResult.", "error", err)
+		return nil, errors.Wrap(err, "failed to marshal ListToolsResult") // Internal error.
+	}
+
+	h.logger.Info("Handled tools/list request.", "toolsCount", len(result.Tools))
+	return resultBytes, nil
+}
+
+// handleToolCall handles the tools/call request.
+// Official definition: Used by the client to invoke a tool provided by the server.
+// The server executes the requested tool with the provided arguments and returns
+// the result. If a tool execution fails, it should be reflected in the isError field
+// of the result, not as a protocol-level error.
+func (h *Handler) handleToolCall(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	var req CallToolRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		// Error parsing the request itself (should have been caught by validation).
+		return nil, errors.Wrap(err, "invalid params structure for tools/call")
+	}
+
+	h.logger.Info("Handling tool/call request.", "toolName", req.Name)
+
+	var callResult CallToolResult // Only need one variable now.
+
+	// Route the call to the specific tool implementation placeholder.
+	switch req.Name {
+	case "rtm/getTasks":
+		// Corrected: Assign single return value.
+		callResult = h.executeRTMGetTasksPlaceholder(ctx, req.Arguments)
+	case "rtm/createTask":
+		// Corrected: Assign single return value.
+		callResult = h.executeRTMCreateTaskPlaceholder(ctx, req.Arguments)
+	case "rtm/completeTask":
+		callResult = h.executeRTMCompleteTaskPlaceholder(ctx, req.Arguments)
+	default:
+		// Tool name sent by client is not recognized by the server.
+		h.logger.Warn("Tool not found during tool/call.", "toolName", req.Name)
+		callResult = CallToolResult{
+			IsError: true,
+			Content: []Content{
+				TextContent{Type: "text", Text: "Error: Tool not found: " + req.Name},
+			},
+		}
+	}
+
+	// Marshal the CallToolResult (which might contain an error or placeholder success).
+	resultBytes, marshalErr := json.Marshal(callResult)
+	if marshalErr != nil {
+		// This is an internal server error during result marshaling.
+		h.logger.Error("Failed to marshal CallToolResult.", "toolName", req.Name, "error", marshalErr)
+		// Return a wrapped internal error to be handled by createErrorResponse.
+		return nil, errors.Wrap(marshalErr, "internal error: Failed to marshal CallToolResult")
+	}
+
+	// Return success at JSON-RPC level (resultBytes contains tool success/error details).
+	return resultBytes, nil
+}
+
+// ------ RESOURCE METHODS ------
+
+// handleResourcesList handles the resources/list request.
+// Official definition: Sent from the client to request a list of resources the server has.
+// The server should respond with information about resources that the client can access.
+func (h *Handler) handleResourcesList(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	h.logger.Info("Handling resources/list request.")
+
+	// Parse pagination cursor if provided
+	var listParams struct {
+		Cursor string `json:"cursor,omitempty"`
+	}
+	if err := json.Unmarshal(params, &listParams); err != nil {
+		// If we can't parse params, just ignore cursor and return first page
+		h.logger.Debug("Could not parse resources/list params", "error", err)
+	}
+
+	// Create resources that represent RTM data
+	// These could come from a database, API, etc. in a real implementation
+	resources := []Resource{
+		{
+			Name:        "RTM Authentication Status",
+			URI:         "auth://rtm",
+			Description: "Provides the current authentication status with Remember The Milk (RTM).",
+			MimeType:    "application/json",
+		},
+		{
+			Name:        "RTM Lists",
+			URI:         "rtm://lists",
+			Description: "Lists available in your Remember The Milk account.",
+			MimeType:    "application/json",
+		},
+		{
+			Name:        "RTM Tags",
+			URI:         "rtm://tags",
+			Description: "Tags used in your Remember The Milk account.",
+			MimeType:    "application/json",
+		},
+	}
+
+	// Handle pagination
+	// This is a simplified example - real implementation would need to handle cursor-based pagination
+	var nextCursor string
+	if listParams.Cursor != "" {
+		// For now, we don't have pagination, so return empty nextCursor
+		nextCursor = ""
+	}
+
+	result := ListResourcesResult{
+		Resources:  resources,
+		NextCursor: nextCursor,
+	}
+
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		h.logger.Error("Failed to marshal ListResourcesResult.", "error", err)
+		return nil, errors.Wrap(err, "failed to marshal ListResourcesResult")
+	}
+	return resultBytes, nil
+}
+
+// handleResourcesRead handles the resources/read request.
+// Official definition: Sent from the client to the server, to read a specific resource URI.
+// The server responds with the contents of the resource.
+func (h *Handler) handleResourcesRead(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	var req ReadResourceRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, errors.Wrap(err, "invalid params for resources/read")
+	}
+	h.logger.Info("Handling resources/read request.", "uri", req.URI)
+
+	// Handle different resource types based on URI
+	var contents []interface{}
+
+	switch req.URI {
+	case "auth://rtm":
+		// Authentication status resource
+		authStatus := map[string]interface{}{
+			"isAuthenticated": true, // Placeholder, replace with actual auth check
+			"username":        "example_user",
+			"accountType":     "Pro",
+		}
+
+		contents = append(contents, TextResourceContents{
+			ResourceContents: ResourceContents{
+				URI:      req.URI,
+				MimeType: "application/json",
+			},
+			Text: mustMarshalJSONToString(authStatus),
+		})
+
+	case "rtm://lists":
+		// Lists resource
+		lists := []map[string]interface{}{
+			{"id": "1", "name": "Inbox", "taskCount": 5},
+			{"id": "2", "name": "Work", "taskCount": 12},
+			{"id": "3", "name": "Personal", "taskCount": 8},
+		}
+
+		contents = append(contents, TextResourceContents{
+			ResourceContents: ResourceContents{
+				URI:      req.URI,
+				MimeType: "application/json",
+			},
+			Text: mustMarshalJSONToString(lists),
+		})
+
+	case "rtm://tags":
+		// Tags resource
+		tags := []map[string]interface{}{
+			{"name": "urgent", "taskCount": 3},
+			{"name": "shopping", "taskCount": 2},
+			{"name": "work", "taskCount": 7},
+		}
+
+		contents = append(contents, TextResourceContents{
+			ResourceContents: ResourceContents{
+				URI:      req.URI,
+				MimeType: "application/json",
+			},
+			Text: mustMarshalJSONToString(tags),
+		})
+
+	default:
+		// Resource not found
+		return nil, mcperrors.NewResourceError("Resource not found: "+req.URI, nil, map[string]interface{}{"uri": req.URI})
+	}
+
+	result := ReadResourceResult{
+		Contents: contents,
+	}
+
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		h.logger.Error("Failed to marshal ReadResourceResult.", "error", err)
+		return nil, errors.Wrap(err, "failed to marshal ReadResourceResult")
+	}
+
+	return resultBytes, nil
+}
+
+// handleResourcesSubscribe handles the resources/subscribe request.
+// Official definition: Sent from the client to request resources/updated notifications
+// from the server whenever a particular resource changes.
+func (h *Handler) handleResourcesSubscribe(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	var req struct {
+		URI string `json:"uri"`
+	}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, errors.Wrap(err, "invalid params for resources/subscribe")
+	}
+
+	h.logger.Info("Handling resources/subscribe request", "uri", req.URI)
+
+	// In a real implementation, would store this subscription for later notifications
+	// TODO: Implement subscription storage mechanism
+
+	// Return empty result for success
+	result := map[string]interface{}{}
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal resources/subscribe result")
+	}
+
+	return resultBytes, nil
+}
+
+// handleResourcesUnsubscribe handles the resources/unsubscribe request.
+// Official definition: Sent from the client to request cancellation of resources/updated
+// notifications from the server. This should follow a previous resources/subscribe request.
+func (h *Handler) handleResourcesUnsubscribe(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	var req struct {
+		URI string `json:"uri"`
+	}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, errors.Wrap(err, "invalid params for resources/unsubscribe")
+	}
+
+	h.logger.Info("Handling resources/unsubscribe request", "uri", req.URI)
+
+	// In a real implementation, would remove this subscription
+	// TODO: Implement subscription removal
+
+	// Return empty result for success
+	result := map[string]interface{}{}
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal resources/unsubscribe result")
+	}
+
+	return resultBytes, nil
+}
+
+// ------ PROMPT METHODS ------
+
+// handlePromptsList handles the prompts/list request.
+// Official definition: Sent from the client to request a list of prompts and
+// prompt templates the server has.
+func (h *Handler) handlePromptsList(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	h.logger.Info("Handling prompts/list request.")
+
+	// Parse pagination cursor if provided
+	var listParams struct {
+		Cursor string `json:"cursor,omitempty"`
+	}
+	if err := json.Unmarshal(params, &listParams); err != nil {
+		// If we can't parse params, just ignore cursor and return first page
+		h.logger.Debug("Could not parse prompts/list params", "error", err)
+	}
+
+	// Define prompts that this service offers
+	// These are examples that could help an LLM interact with RTM effectively
+	prompts := []Prompt{
+		{
+			Name:        "task_creation_template",
+			Description: "Template for creating new tasks with smart add syntax",
+			Arguments: []PromptArgument{
+				{
+					Name:        "task_name",
+					Description: "The basic name/description of the task",
+					Required:    true,
+				},
+				{
+					Name:        "due_date",
+					Description: "When the task is due (e.g., 'tomorrow', 'next week')",
+					Required:    false,
+				},
+				{
+					Name:        "list",
+					Description: "Which list to add the task to",
+					Required:    false,
+				},
+				{
+					Name:        "tags",
+					Description: "Comma-separated tags to associate with the task",
+					Required:    false,
+				},
+				{
+					Name:        "priority",
+					Description: "Task priority (1=highest, 4=lowest)",
+					Required:    false,
+				},
+			},
+		},
+		{
+			Name:        "task_search_template",
+			Description: "Template for creating RTM search filters",
+			Arguments: []PromptArgument{
+				{
+					Name:        "text",
+					Description: "Text to search for in task names",
+					Required:    false,
+				},
+				{
+					Name:        "status",
+					Description: "Task status ('complete' or 'incomplete')",
+					Required:    false,
+				},
+				{
+					Name:        "due",
+					Description: "Due date filter (e.g., 'due:today', 'dueBefore:tomorrow')",
+					Required:    false,
+				},
+				{
+					Name:        "priority",
+					Description: "Priority filter (e.g., 'priority:1')",
+					Required:    false,
+				},
+			},
+		},
+	}
+
+	// Handle pagination (simplified example)
+	var nextCursor string
+	if listParams.Cursor != "" {
+		// For now, we don't have pagination, so return empty nextCursor
+		nextCursor = ""
+	}
+
+	result := ListPromptsResult{
+		Prompts:    prompts,
+		NextCursor: nextCursor,
+	}
+
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		h.logger.Error("Failed to marshal ListPromptsResult.", "error", err)
+		return nil, errors.Wrap(err, "failed to marshal ListPromptsResult")
+	}
+
+	return resultBytes, nil
+}
+
+// handlePromptsGet handles the prompts/get request.
+// Official definition: Used by the client to get a prompt provided by the server.
+// The server responds with the requested prompt, potentially with template arguments filled in.
+func (h *Handler) handlePromptsGet(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	var req struct {
+		Name      string            `json:"name"`
+		Arguments map[string]string `json:"arguments,omitempty"`
+	}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, errors.Wrap(err, "invalid params for prompts/get")
+	}
+
+	h.logger.Info("Handling prompts/get request.", "name", req.Name, "argCount", len(req.Arguments))
+
+	// Handle specific prompt templates
+	var promptResult GetPromptResult
+
+	switch req.Name {
+	case "task_creation_template":
+		// Build messages for task creation template
+		taskName := req.Arguments["task_name"]
+		if taskName == "" {
+			taskName = "[Task Description]"
+		}
+
+		// Start building smart syntax
+		smartSyntax := taskName
+
+		// Add due date if provided
+		if dueDate := req.Arguments["due_date"]; dueDate != "" {
+			smartSyntax += " ^" + dueDate
+		}
+
+		// Add list if provided
+		if list := req.Arguments["list"]; list != "" {
+			smartSyntax += " #" + list
+		}
+
+		// Add tags if provided
+		if tags := req.Arguments["tags"]; tags != "" {
+			for _, tag := range strings.Split(tags, ",") {
+				smartSyntax += " #" + strings.TrimSpace(tag)
+			}
+		}
+
+		// Add priority if provided
+		if priority := req.Arguments["priority"]; priority != "" {
+			smartSyntax += " !" + priority
+		}
+
+		promptResult = GetPromptResult{
+			Description: "Template for creating tasks with RTM's smart add syntax",
+			Messages: []PromptMessage{
+				{
+					Role: "user",
+					Content: TextContent{
+						Type: "text",
+						Text: "I need to create a new task: " + taskName,
+					},
+				},
+				{
+					Role: "assistant",
+					Content: TextContent{
+						Type: "text",
+						Text: "I'll help you create that task. Here's the syntax I'll use with the RTM API: `" + smartSyntax + "`\n\nWould you like me to create this task for you now?",
+					},
+				},
+			},
+		}
+
+	case "task_search_template":
+		// Build messages for task search template
+		// Start building filter
+		filter := ""
+
+		// Add text search if provided
+		if text := req.Arguments["text"]; text != "" {
+			filter += text + " "
+		}
+
+		// Add status if provided
+		if status := req.Arguments["status"]; status != "" {
+			filter += "status:" + status + " "
+		}
+
+		// Add due date filter if provided
+		if due := req.Arguments["due"]; due != "" {
+			filter += due + " "
+		}
+
+		// Add priority filter if provided
+		if priority := req.Arguments["priority"]; priority != "" {
+			filter += "priority:" + priority + " "
+		}
+
+		filter = strings.TrimSpace(filter)
+		if filter == "" {
+			filter = "[Add your search criteria here]"
+		}
+
+		promptResult = GetPromptResult{
+			Description: "Template for creating RTM search filters",
+			Messages: []PromptMessage{
+				{
+					Role: "user",
+					Content: TextContent{
+						Type: "text",
+						Text: "I need to find my tasks. " + (func() string {
+							parts := []string{}
+							if text := req.Arguments["text"]; text != "" {
+								parts = append(parts, "They should contain the text '"+text+"'")
+							}
+							if status := req.Arguments["status"]; status != "" {
+								parts = append(parts, "They should be "+status)
+							}
+							if due := req.Arguments["due"]; due != "" {
+								parts = append(parts, "with "+due)
+							}
+							if priority := req.Arguments["priority"]; priority != "" {
+								parts = append(parts, "priority "+priority)
+							}
+
+							if len(parts) > 0 {
+								return strings.Join(parts, " and ")
+							}
+							return "I want to search for some specific tasks."
+						})(),
+					},
+				},
+				{
+					Role: "assistant",
+					Content: TextContent{
+						Type: "text",
+						Text: "I'll search for your tasks using the following filter: `" + filter + "`\n\nWould you like me to search for these tasks now?",
+					},
+				},
+			},
+		}
+
+	default:
+		return nil, mcperrors.NewResourceError("Prompt not found: "+req.Name, nil, map[string]interface{}{"name": req.Name})
+	}
+
+	resultBytes, err := json.Marshal(promptResult)
+	if err != nil {
+		h.logger.Error("Failed to marshal GetPromptResult.", "error", err)
+		return nil, errors.Wrap(err, "failed to marshal GetPromptResult")
+	}
+
+	return resultBytes, nil
+}
+
+// ------ COMPLETION METHODS ------
+
+// handleCompletionComplete handles the completion/complete request.
+// Official definition: A request from the client to the server, to ask for completion options.
+// This is used for providing autocompletion suggestions for arguments.
+func (h *Handler) handleCompletionComplete(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	var req struct {
+		Argument struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"argument"`
+		Ref map[string]interface{} `json:"ref"`
+	}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, errors.Wrap(err, "invalid params for completion/complete")
+	}
+
+	h.logger.Info("Handling completion/complete request",
+		"argumentName", req.Argument.Name,
+		"argumentValue", req.Argument.Value,
+		"ref", fmt.Sprintf("%+v", req.Ref))
+
+	// Let's provide some completions based on the argument name and current value
+	var values []string
+	var total int
+	hasMore := false
+
+	// Figure out what kind of argument we're completing
+	switch req.Argument.Name {
+	case "list":
+		// Complete list names
+		prefix := strings.ToLower(req.Argument.Value)
+		lists := []string{"Inbox", "Work", "Personal", "Shopping", "Errands", "Home", "Projects"}
+
+		for _, list := range lists {
+			if prefix == "" || strings.HasPrefix(strings.ToLower(list), prefix) {
+				if len(values) < 100 { // MCP limit
+					values = append(values, list)
+				} else {
+					hasMore = true
+				}
+			}
+		}
+		total = len(values)
+		if hasMore {
+			total++ // There's at least one more
+		}
+
+	case "status":
+		// Complete status values
+		prefix := strings.ToLower(req.Argument.Value)
+		statuses := []string{"complete", "incomplete"}
+
+		for _, status := range statuses {
+			if prefix == "" || strings.HasPrefix(status, prefix) {
+				values = append(values, status)
+			}
+		}
+		total = len(values)
+
+	case "priority":
+		// Complete priority values
+		prefix := req.Argument.Value
+		priorities := []string{"1", "2", "3", "4"}
+
+		for _, priority := range priorities {
+			if prefix == "" || strings.HasPrefix(priority, prefix) {
+				values = append(values, priority)
+			}
+		}
+		total = len(values)
+
+	case "due_date":
+		// Complete due date possibilities
+		prefix := strings.ToLower(req.Argument.Value)
+		dueDates := []string{"today", "tomorrow", "next week", "next month"}
+
+		for _, date := range dueDates {
+			if prefix == "" || strings.HasPrefix(date, prefix) {
+				if len(values) < 100 { // MCP limit
+					values = append(values, date)
+				} else {
+					hasMore = true
+				}
+			}
+		}
+		total = len(values)
+		if hasMore {
+			total++ // There's at least one more
+		}
+
+	default:
+		// For unknown argument types, return empty list
+		values = []string{}
+		total = 0
+	}
+
+	// Create the completion result
+	result := CompleteResult{
+		Completion: struct {
+			Values  []string `json:"values"`
+			Total   int      `json:"total,omitempty"`
+			HasMore bool     `json:"hasMore,omitempty"`
+		}{
+			Values:  values,
+			Total:   total,
+			HasMore: hasMore,
+		},
+	}
+
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		h.logger.Error("Failed to marshal CompleteResult.", "error", err)
+		return nil, errors.Wrap(err, "failed to marshal CompleteResult")
+	}
+
+	return resultBytes, nil
+}
+
+// ------ SAMPLING METHODS ------
+
+// handleSamplingCreateMessage would handle a sampling/createMessage request from server to client.
+// Official definition: A request from the server to sample an LLM via the client.
+// NOTE: This is typically a server-to-client request, but included here as a stub for completeness.
+// When implementing a complete MCP client, this would be relevant.
+func (h *Handler) handleSamplingCreateMessage(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	h.logger.Warn("Received sampling/createMessage, which is a server-to-client request")
+	// This would typically be implemented by the client, not the server
+	return nil, errors.New("sampling/createMessage is a server-to-client request, not implemented by the server")
+}
+
+// ------ ROOTS METHODS ------
+
+// handleRootsList would handle a roots/list request from server to client.
+// Official definition: Sent from the server to request a list of root URIs from the client.
+// NOTE: This is typically a server-to-client request, but included here as a stub for completeness.
+func (h *Handler) handleRootsList(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	h.logger.Warn("Received roots/list, which is a server-to-client request")
+	// This would typically be implemented by the client, not the server
+	return nil, errors.New("roots/list is a server-to-client request, not implemented by the server")
+}
+
+// ------ LOGGING METHODS ------
+
+// handleLoggingSetLevel handles the logging/setLevel request.
+// Official definition: A request from the client to the server, to enable or adjust logging.
+func (h *Handler) handleLoggingSetLevel(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	var req struct {
+		Level string `json:"level"`
+	}
+
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, errors.Wrap(err, "invalid params for logging/setLevel")
+	}
+
+	h.logger.Info("Handling logging/setLevel request", "level", req.Level)
+
+	// TODO: Implement actual logging level adjustment
+	// This would depend on your logging implementation
+
+	// Return empty result for success
+	result := map[string]interface{}{}
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal logging/setLevel result")
+	}
+
+	return resultBytes, nil
+}
+
+// ------ TOOL EXECUTION LOGIC PLACEHOLDERS ------
+
+// executeRTMGetTasksPlaceholder handles the rtm/getTasks tool call (enhanced placeholder).
+func (h *Handler) executeRTMGetTasksPlaceholder(_ context.Context, args json.RawMessage) CallToolResult {
+	var toolArgs struct {
+		Filter string `json:"filter"`
+	}
+	if err := json.Unmarshal(args, &toolArgs); err != nil {
+		h.logger.Warn("Invalid arguments received for rtm/getTasks tool.", "error", err, "args", string(args))
+		return CallToolResult{
+			IsError: true,
+			Content: []Content{TextContent{Type: "text", Text: "Error calling rtm/getTasks: Invalid arguments: " + err.Error()}},
+		}
+	}
+
+	h.logger.Info("Executing rtm/getTasks tool with enhanced placeholder response.", "filter", toolArgs.Filter)
+
+	// Return a more realistic mock response with fake tasks that match the filter
+	return CallToolResult{
+		IsError: false,
+		Content: []Content{
+			TextContent{Type: "text", Text: fmt.Sprintf("Successfully retrieved tasks matching filter: '%s'", toolArgs.Filter)},
+			TextContent{Type: "text", Text: "Tasks:\n1. Write documentation for CowGnition (due: tomorrow, priority: 1)\n2. Test MCP integration (due: today, priority: 1)\n3. Implement RTM API client (due: next week, priority: 2)"},
+		},
+	}
+}
+
+// executeRTMCreateTaskPlaceholder handles the rtm/createTask tool call (enhanced placeholder).
+func (h *Handler) executeRTMCreateTaskPlaceholder(_ context.Context, args json.RawMessage) CallToolResult {
+	var toolArgs struct {
+		Name string `json:"name"`
+		List string `json:"list,omitempty"`
+	}
+	if err := json.Unmarshal(args, &toolArgs); err != nil {
+		h.logger.Warn("Invalid arguments received for rtm/createTask tool.", "error", err, "args", string(args))
+		return CallToolResult{
+			IsError: true,
+			Content: []Content{TextContent{Type: "text", Text: "Error calling rtm/createTask: Invalid arguments: " + err.Error()}},
+		}
+	}
+
+	list := toolArgs.List
+	if list == "" {
+		list = "Inbox"
+	}
+
+	h.logger.Info("Executing rtm/createTask tool with enhanced placeholder response.", "name", toolArgs.Name, "list", list)
+
+	// Return a more realistic mock response pretending the task was created
+	return CallToolResult{
+		IsError: false,
+		Content: []Content{
+			TextContent{Type: "text", Text: fmt.Sprintf("Successfully created task: '%s' in list '%s'", toolArgs.Name, list)},
+			TextContent{Type: "text", Text: "Task Details:\nID: task_12345\nAdded: Just now\nURL: https://www.rememberthemilk.com/app/#list/inbox/task_12345"},
+		},
+	}
+}
+
+// executeRTMCompleteTaskPlaceholder handles the rtm/completeTask tool call.
+func (h *Handler) executeRTMCompleteTaskPlaceholder(_ context.Context, args json.RawMessage) CallToolResult {
+	var toolArgs struct {
+		TaskID string `json:"taskId"`
+	}
+	if err := json.Unmarshal(args, &toolArgs); err != nil {
+		h.logger.Warn("Invalid arguments received for rtm/completeTask tool.", "error", err, "args", string(args))
+		return CallToolResult{
+			IsError: true,
+			Content: []Content{TextContent{Type: "text", Text: "Error calling rtm/completeTask: Invalid arguments: " + err.Error()}},
+		}
+	}
+
+	h.logger.Info("Executing rtm/completeTask tool with placeholder response.", "taskId", toolArgs.TaskID)
+
+	// Return a mock response for completing the task
+	return CallToolResult{
+		IsError: false,
+		Content: []Content{
+			TextContent{Type: "text", Text: fmt.Sprintf("Successfully completed task with ID: %s", toolArgs.TaskID)},
+		},
+	}
+}
+
+// ------ HELPER FUNCTIONS ------
+
+// mustMarshalJSON marshals v to JSON and panics on error. Used for static schemas.
+func mustMarshalJSON(v interface{}) json.RawMessage {
+	bytes, err := json.Marshal(v)
+	if err != nil {
+		// Panic is acceptable here because it indicates a programming error.
+		// (invalid static schema definition) during initialization.
+		panic(fmt.Sprintf("failed to marshal static JSON schema: %v", err))
+	}
+	return json.RawMessage(bytes)
+}
+
+// mustMarshalJSONToString marshals v to a JSON string and panics on error.
+// Used for returning JSON resource contents.
+func mustMarshalJSONToString(v interface{}) string {
+	bytes, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal JSON to string: %v", err))
+	}
+	return string(bytes)
+}

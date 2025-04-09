@@ -27,7 +27,15 @@
 │   ├── mcp/
 │   │   ├── mcp_errors/
 │   │   │   └── errors.go
-│   │   ├── mcp_handlers.go
+│   │   ├── handler.go
+│   │   ├── handlers_core.go
+│   │   ├── handlers_notifications.go
+│   │   ├── handlers_resources.go
+│   │   ├── handlers_roots.go
+│   │   ├── handlers_sampling.go
+│   │   ├── handlers_tools.go
+│   │   ├── helpers.go
+│   │   ├── mcp_handlers.bak
 │   │   ├── mcp_server.go
 │   │   └── types.go
 │   ├── middleware/
@@ -54,4 +62,4 @@
 ├── go.mod
 └── go.sum
 
-19 directories, 36 files
+19 directories, 44 files

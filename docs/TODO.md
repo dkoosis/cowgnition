@@ -16,73 +16,45 @@ This implementation will prioritize:
 
 ---
 
+# CowGnition MCP Implementation Roadmap: Clean Architecture Approach
+
+**Status:** Active Development
+
 ## Phase 0: HIGHEST PRIORITY IMMEDIATE FOCUS
 
 **Goal:** Achieve a basic "hello world" MCP conversation between CowGnition and Claude Desktop.
 
 **Key Actions:**
 
-1.  **[PENDING]** Integrate Validation Middleware Chain (`internal/middleware/chain.go`, `internal/middleware/validation.go`) into the main server loop (`internal/mcp/mcp_server.go`).
-2.  **[PENDING]** Implement actual RTM Tool logic for `tools/list` and `tools/call`.
-3.  **[PENDING]** Implement actual RTM Resource logic for `resources/list` and `resources/read`.
-4.  **[PENDING]** Enhance logging to include connection/request IDs.
+1. **[PARTIALLY COMPLETE]** Implement actual RTM Tool logic for `tools/list` and `tools/call`.
 
----
+   - Basic structure is in place in `mcp_handlers.go` with enhanced placeholder implementations.
+   - Need to implement actual RTM API client integration.
 
-## Phase 1: Core Transport
+2. **[PENDING]** Implement actual RTM Resource logic for `resources/list` and `resources/read`.
 
-**Status:** [COMPLETE]
+   - Structure is in place but currently returns placeholders.
+   - Need to implement actual RTM API client integration.
 
-- [x] Create NDJSON transport layer (`internal/transport/transport.go`)
-- [x] Implement message reading with bounded buffer size (`MaxMessageSize`)
-- [x] Add strict validation of JSON-RPC 2.0 message format (`ValidateMessage` in `transport.go`)
-- [x] Support graceful error handling for malformed messages (`transport_errors.go`, middleware error responses)
-- [x] Implement robust connection lifecycle management (`Close` method, EOF handling)
-- [x] Create clean separation between transport and message handling (Separate packages)
+3. **[PENDING]** Enhance logging to include connection/request IDs.
 
----
+   - Basic logging framework is in place.
+   - Need to add connection ID and request ID context to all logs.
 
-## Phase 2: Schema Validation
+4. **[NEW]** Implement RTM API client for API interaction (`internal/rtm/client.go`).
 
-**Status:** [PARTIALLY COMPLETE]
+   - This is a prerequisite for completing items 1 and 2 above.
+   - Should handle auth, task operations, and resource retrieval.
 
-- [x] Create schema validator (`internal/schema/validator.go`)
-- [x] Implement schema loading from multiple sources
-- [x] Create validation middleware (`internal/middleware/validation.go`)
-- [x] Generate detailed validation errors with context (`schema.ValidationError`)
-- [x] Pre-compile schemas for performance (`Initialize` method)
-- [ ] **[INCOMPLETE]** Integrate Validation Middleware into the server's main processing loop (`internal/mcp/mcp_server.go`)
-
----
-
-## Phase 3: Request Router & Handler Framework
-
-**Status:** [PARTIALLY COMPLETE]
-
-- [x] Implement request router (map-based in `mcp_server.go`)
-- [x] Create method registration framework (`registerMethods` in `mcp_server.go`)
-- [x] Implement middleware support (`internal/middleware/chain.go`)
-- [x] Add context propagation throughout handlers
-- [x] Ensure proper error mapping to JSON-RPC format (`createErrorResponse` in `mcp_server.go`)
-- [ ] **[INCOMPLETE]** Integrate Middleware Chain (including Validation) into the server's main processing loop (`internal/mcp/mcp_server.go`)
-
----
+5. **[NEW]** Create configuration flow for RTM API authentication.
+   - Implement OAuth flow for RTM API.
+   - Add secure token storage.
 
 ## Phase 4: Core MCP Method Implementations
 
 **Status:** [PARTIALLY COMPLETE]
 
-- [x] Implement protocol methods:
-  - [x] `initialize`
-  - [ ] `resources/list` - **[INCOMPLETE - Placeholder]** (Needs RTM logic)
-  - [ ] `resources/read` - **[INCOMPLETE - Placeholder]** (Needs RTM logic)
-  - [x] `tools/list` - **[PARTIALLY COMPLETE - Placeholder]** (Needs RTM tools)
-  - [x] `tools/call` - **[PARTIALLY COMPLETE - Placeholder]** (Needs RTM tool logic)
-  - [x] `ping`
-  - [x] `shutdown`
-- [ ] **[INCOMPLETE]** Implement RTM-specific resource/tool handlers.
-
----
+- [ ] **[PENDING]** Implement RTM-specific resource/tool handlers with actual API integration.
 
 ## Phase 5: Testing Framework
 
@@ -95,28 +67,77 @@ This implementation will prioritize:
   - [ ] Fuzzing tests for robustness
   - [ ] Benchmark tests for performance
 
----
-
 ## Phase 6: Observability
 
 **Status:** [PARTIALLY COMPLETE]
+
+- [ ] **[PENDING]** Include connection ID and request ID in all logs
+- [ ] Add metrics:
+  - [ ] Request counts and latencies
+  - [ ] Error rates by type
+  - [ ] Active connections
+  - [ ] Schema validation failures
+  - [ ] Create exportable metrics
+
+## Phase 7: Security & Robustness
+
+**Status:** [NEW PHASE]
+
+- [ ] Add comprehensive input validation beyond schema validation
+- [ ] Implement rate limiting for API calls
+- [ ] Add secure token storage for RTM API credentials
+- [ ] Implement proper error sanitization to avoid leaking sensitive information
+- [ ] Add telemetry for security events
+
+---
+
+## Completed Work
+
+### Core Transport - [COMPLETE]
+
+- [x] Create NDJSON transport layer (`internal/transport/transport.go`)
+- [x] Implement message reading with bounded buffer size (`MaxMessageSize`)
+- [x] Add strict validation of JSON-RPC 2.0 message format (`ValidateMessage` in `transport.go`)
+- [x] Support graceful error handling for malformed messages (`transport_errors.go`, middleware error responses)
+- [x] Implement robust connection lifecycle management (`Close` method, EOF handling)
+- [x] Create clean separation between transport and message handling (Separate packages)
+
+### Schema Validation - [COMPLETE]
+
+- [x] Create schema validator (`internal/schema/validator.go`)
+- [x] Implement schema loading from multiple sources
+- [x] Create validation middleware (`internal/middleware/validation.go`)
+- [x] Generate detailed validation errors with context (`schema.ValidationError`)
+- [x] Pre-compile schemas for performance (`Initialize` method)
+- [x] Integrate Validation Middleware into the server's main processing loop (`internal/mcp/mcp_server.go`)
+
+### Request Router & Handler Framework - [COMPLETE]
+
+- [x] Implement request router (map-based in `mcp_server.go`)
+- [x] Create method registration framework (`registerMethods` in `mcp_server.go`)
+- [x] Implement middleware support (`internal/middleware/chain.go`)
+- [x] Add context propagation throughout handlers
+- [x] Ensure proper error mapping to JSON-RPC format (`createErrorResponse` in `mcp_server.go`)
+- [x] Integrate Middleware Chain (including Validation) into the server's main processing loop
+
+### Core MCP Method Implementations - [PARTIALLY COMPLETE]
+
+- [x] Implement protocol methods:
+  - [x] `initialize`
+  - [x] `resources/list` (Structure in place, needs actual RTM integration)
+  - [x] `resources/read` (Structure in place, needs actual RTM integration)
+  - [x] `tools/list` (Structure in place with enhanced placeholders)
+  - [x] `tools/call` (Structure in place with enhanced placeholders)
+  - [x] `ping`
+  - [x] `shutdown`
+
+### Observability - [PARTIALLY COMPLETE]
 
 - [x] Add structured logging (`internal/logging/`):
   - [x] Connection lifecycle events
   - [x] Request/response details
   - [x] Validation failures
   - [x] Error handling
-  - [ ] **[INCOMPLETE]** Include connection ID and request ID in all logs
-- [ ] Add metrics:
-  - [ ] Request counts and latencies
-  - [ ] Error rates by type
-  - [ ] Active connections
-  - [ ] Schema validation failures
-  - [ ] **[INCOMPLETE]** Create exportable metrics
-
----
-
-This updated section provides a clearer view of what's done and what remains. Ready for the next step!
 
 Key implementation details:
 
