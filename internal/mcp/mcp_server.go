@@ -170,8 +170,6 @@ type contextKey string
 const connectionStateKey contextKey = "connectionState"
 
 // serve handles the main server loop, processing requests using the configured transport.
-// It now accepts the handler function representing the full middleware chain and
-// injects connection state into the context.
 func (s *Server) serve(ctx context.Context, handlerFunc transport.MessageHandler) error {
 	s.logger.Info("Server processing loop started.")
 
@@ -186,92 +184,123 @@ func (s *Server) serve(ctx context.Context, handlerFunc transport.MessageHandler
 			s.logger.Info("Context canceled, stopping server loop.")
 			return ctx.Err() // Return context error.
 		default:
-			// Read a message from the transport.
-			msgBytes, readErr := s.transport.ReadMessage(ctx)
-			if readErr != nil {
-				// Check for expected closure errors.
-				var transportErr *transport.Error
-				isEOF := errors.Is(readErr, io.EOF)
-				isClosedErr := errors.As(readErr, &transportErr) && transportErr.Code == transport.ErrTransportClosed
-				isContextDone := errors.Is(readErr, context.Canceled) || errors.Is(readErr, context.DeadlineExceeded)
-
-				if isEOF || isClosedErr || isContextDone {
-					s.logger.Info("Connection closed or context done, exiting serve loop.", "reason", readErr)
-					return nil // Clean exit for expected closures or context cancellation.
+			if err := s.processNextMessage(ctx, handlerFunc); err != nil {
+				if s.isTerminalError(err) {
+					return err
 				}
-
-				// Log other transport read errors. Use %+v for stack trace if available.
-				s.logger.Error("Failed to read message, continuing loop.", "error", fmt.Sprintf("%+v", readErr))
-				// Continue processing other messages if possible after a read error.
-				continue
+				// Log and continue for non-terminal errors
+				s.logger.Error("Error processing message", "error", fmt.Sprintf("%+v", err))
 			}
-
-			// Add connection state to context for middleware and handlers to access
-			ctxWithState := context.WithValue(ctx, connectionStateKey, s.connectionState)
-
-			// Process the message using the provided handlerFunc (middleware chain),
-			// with state available in context.
-			respBytes, handleErr := handlerFunc(ctxWithState, msgBytes)
-
-			// Try to identify the message type and ID for better error logging
-			method, id := "", "unknown"
-			var parsedReq struct {
-				Method string          `json:"method"`
-				ID     json.RawMessage `json:"id"`
-			}
-			if err := json.Unmarshal(msgBytes, &parsedReq); err == nil {
-				method = parsedReq.Method
-				id = string(parsedReq.ID)
-			}
-
-			if handleErr != nil {
-				// Errors from the handler chain (including validation or method execution).
-				s.logger.Warn("Error processing message via handler.",
-					"method", method,
-					"requestID", id,
-					"error", fmt.Sprintf("%+v", handleErr))
-
-				// Create and send JSON-RPC error response based on the handler error.
-				errRespBytes, creationErr := s.createErrorResponse(msgBytes, handleErr)
-				if creationErr != nil {
-					s.logger.Error("CRITICAL: Failed to create error response.",
-						"creationError", fmt.Sprintf("%+v", creationErr),
-						"originalError", fmt.Sprintf("%+v", handleErr))
-					// Exit on critical marshal error as we can't inform the client.
-					return errors.Wrap(creationErr, "failed to marshal error response")
-				}
-
-				// Attempt to write the error response.
-				if writeErr := s.transport.WriteMessage(ctx, errRespBytes); writeErr != nil {
-					s.logger.Error("Failed to write error response.",
-						"method", method,
-						"requestID", id,
-						"error", fmt.Sprintf("%+v", writeErr))
-					// Depending on the error, may want to continue or return writeErr.
-					// Failure to write might indicate a broken connection.
-				}
-				continue // Continue processing next message after handling error.
-			}
-
-			// If the message was 'initialize' and successful, update connection state
-			if method == "initialize" && respBytes != nil {
-				s.logger.Info("Initialize request successful, marking connection as initialized")
-				s.connectionState.SetInitialized()
-			}
-
-			// If handlerFunc returns non-nil response bytes (i.e., not a notification), send them.
-			if respBytes != nil {
-				if writeErr := s.transport.WriteMessage(ctx, respBytes); writeErr != nil {
-					s.logger.Error("Failed to write success response.",
-						"method", method,
-						"requestID", id,
-						"error", fmt.Sprintf("%+v", writeErr))
-					// Failure to write might indicate a broken connection.
-				}
-			}
-			// If respBytes is nil (e.g., for notifications), do nothing and continue.
 		}
 	}
+}
+
+// processNextMessage handles reading and processing a single message.
+func (s *Server) processNextMessage(ctx context.Context, handlerFunc transport.MessageHandler) error {
+	// Read a message from the transport.
+	msgBytes, readErr := s.transport.ReadMessage(ctx)
+	if readErr != nil {
+		return s.handleTransportReadError(readErr)
+	}
+
+	// Add connection state to context for middleware and handlers to access
+	ctxWithState := context.WithValue(ctx, connectionStateKey, s.connectionState)
+
+	// Extract method and id for logging
+	method, id := s.extractMessageInfo(msgBytes)
+
+	// Process the message using the provided handlerFunc (middleware chain)
+	respBytes, handleErr := handlerFunc(ctxWithState, msgBytes)
+	if handleErr != nil {
+		return s.handleProcessingError(ctx, msgBytes, method, id, handleErr)
+	}
+
+	// If initialize was successful, update connection state
+	if method == "initialize" && respBytes != nil {
+		s.logger.Info("Initialize request successful, marking connection as initialized")
+		s.connectionState.SetInitialized()
+	}
+
+	// Send response if any
+	if respBytes != nil {
+		if err := s.writeResponse(ctx, respBytes, method, id); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// extractMessageInfo gets method name and ID from a message for logging.
+func (s *Server) extractMessageInfo(msgBytes []byte) (method, id string) {
+	method, id = "", "unknown"
+	var parsedReq struct {
+		Method string          `json:"method"`
+		ID     json.RawMessage `json:"id"`
+	}
+	if err := json.Unmarshal(msgBytes, &parsedReq); err == nil {
+		method = parsedReq.Method
+		id = string(parsedReq.ID)
+	}
+	return method, id
+}
+
+// handleTransportReadError processes errors from transport.ReadMessage.
+func (s *Server) handleTransportReadError(readErr error) error {
+	// Check for expected closure errors.
+	var transportErr *transport.Error
+	isEOF := errors.Is(readErr, io.EOF)
+	isClosedErr := errors.As(readErr, &transportErr) && transportErr.Code == transport.ErrTransportClosed
+	isContextDone := errors.Is(readErr, context.Canceled) || errors.Is(readErr, context.DeadlineExceeded)
+
+	if isEOF || isClosedErr || isContextDone {
+		s.logger.Info("Connection closed or context done, exiting serve loop.", "reason", readErr)
+		return readErr // Terminal error - return to stop the loop
+	}
+
+	// Log other transport read errors
+	s.logger.Error("Failed to read message, continuing loop.", "error", fmt.Sprintf("%+v", readErr))
+	return nil // Non-terminal error - keep the loop going
+}
+
+// handleProcessingError handles errors that occur during message processing.
+func (s *Server) handleProcessingError(ctx context.Context, msgBytes []byte, method, id string, handleErr error) error {
+	s.logger.Warn("Error processing message via handler.",
+		"method", method,
+		"requestID", id,
+		"error", fmt.Sprintf("%+v", handleErr))
+
+	// Create and send JSON-RPC error response based on the handler error.
+	errRespBytes, creationErr := s.createErrorResponse(msgBytes, handleErr)
+	if creationErr != nil {
+		s.logger.Error("CRITICAL: Failed to create error response.",
+			"creationError", fmt.Sprintf("%+v", creationErr),
+			"originalError", fmt.Sprintf("%+v", handleErr))
+		// Exit on critical marshal error as we can't inform the client.
+		return errors.Wrap(creationErr, "failed to marshal error response")
+	}
+
+	// Write the error response.
+	return s.writeResponse(ctx, errRespBytes, method, id)
+}
+
+// writeResponse sends a response through the transport.
+func (s *Server) writeResponse(ctx context.Context, respBytes []byte, method, id string) error {
+	if writeErr := s.transport.WriteMessage(ctx, respBytes); writeErr != nil {
+		s.logger.Error("Failed to write response.",
+			"method", method,
+			"requestID", id,
+			"error", fmt.Sprintf("%+v", writeErr))
+		return writeErr
+	}
+	return nil
+}
+
+// isTerminalError checks if an error should terminate the server loop.
+func (s *Server) isTerminalError(err error) bool {
+	return errors.Is(err, io.EOF) ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded)
 }
 
 // handleMessage processes a single *validated* JSON-RPC message.
@@ -291,7 +320,7 @@ func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, er
 		return nil, errors.Wrap(err, "internal error: failed to parse validated message in handleMessage")
 	}
 
-	// Validate method against connection state
+	// Validate method against connection state.
 	if err := s.connectionState.ValidateMethodSequence(request.Method); err != nil {
 		return nil, &mcperrors.BaseError{
 			Code:    mcperrors.ErrProtocolInvalid,
