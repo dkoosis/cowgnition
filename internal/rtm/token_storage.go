@@ -87,41 +87,6 @@ func (s *TokenStorage) LoadToken() (string, error) {
 
 	// Check if file exists
 	if _, err := os.Stat(s.path); os.IsNotExist(err) {
-		// If file doesn't exist, just save a new one
-		return s.SaveToken(token, userID, username)
-	}
-
-	// Load existing data
-	tokenData, err := s.GetTokenData()
-	if err != nil {
-		return errors.Wrap(err, "failed to get existing token data")
-	}
-
-	// Update the token data
-	tokenData.Token = token
-	if userID != "" {
-		tokenData.UserID = userID
-	}
-	if username != "" {
-		tokenData.Username = username
-	}
-	tokenData.UpdatedAt = time.Now().UTC()
-
-	// Convert to JSON
-	jsonData, err := json.MarshalIndent(tokenData, "", "  ")
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal token data")
-	}
-
-	// Write to file with secure permissions
-	err = os.WriteFile(s.path, jsonData, 0600)
-	if err != nil {
-		return errors.Wrap(err, "failed to write token file")
-	}
-
-	return nil
-} exists
-	if _, err := os.Stat(s.path); os.IsNotExist(err) {
 		s.logger.Debug("Token file does not exist")
 		return "", nil
 	}
@@ -195,4 +160,39 @@ func (s *TokenStorage) UpdateToken(token string, userID, username string) error 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	// Check if file
+	// Check if file exists
+	if _, err := os.Stat(s.path); os.IsNotExist(err) {
+		// If file doesn't exist, just save a new one
+		return s.SaveToken(token, userID, username)
+	}
+
+	// Load existing data
+	tokenData, err := s.GetTokenData()
+	if err != nil {
+		return errors.Wrap(err, "failed to get existing token data")
+	}
+
+	// Update the token data
+	tokenData.Token = token
+	if userID != "" {
+		tokenData.UserID = userID
+	}
+	if username != "" {
+		tokenData.Username = username
+	}
+	tokenData.UpdatedAt = time.Now().UTC()
+
+	// Convert to JSON
+	jsonData, err := json.MarshalIndent(tokenData, "", "  ")
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal token data")
+	}
+
+	// Write to file with secure permissions
+	err = os.WriteFile(s.path, jsonData, 0600)
+	if err != nil {
+		return errors.Wrap(err, "failed to write token file")
+	}
+
+	return nil
+}

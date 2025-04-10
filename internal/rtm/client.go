@@ -3,7 +3,7 @@ package rtm
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec // Required by RTM API for request signing.
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -16,28 +16,29 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/logging"
+	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors" // Import MCP errors.
 )
 
 const (
-	// API endpoints
+	// API endpoints.
 	defaultAPIEndpoint = "https://api.rememberthemilk.com/services/rest/"
 	authEndpoint       = "https://www.rememberthemilk.com/services/auth/"
 
-	// API response format
+	// API response format.
 	responseFormat = "json"
 
-	// API methods
+	// API methods.
 	methodGetFrob      = "rtm.auth.getFrob"
-	methodGetToken     = "rtm.auth.getToken"
-	methodCheckToken   = "rtm.auth.checkToken"
+	methodGetToken     = "rtm.auth.getToken"   // nolint:gosec
+	methodCheckToken   = "rtm.auth.checkToken" //nolint:gosec
 	methodGetLists     = "rtm.lists.getList"
 	methodGetTasks     = "rtm.tasks.getList"
 	methodAddTask      = "rtm.tasks.add"
 	methodCompleteTask = "rtm.tasks.complete"
 	methodGetTags      = "rtm.tags.getList"
 
-	// Auth permission level
-	permDelete = "delete" // Allows adding, editing and deleting tasks
+	// Auth permission level.
+	permDelete = "delete" // Allows adding, editing and deleting tasks.
 )
 
 // Config holds RTM client configuration.
@@ -66,19 +67,19 @@ type Client struct {
 
 // NewClient creates a new RTM client with the given configuration.
 func NewClient(config Config, logger logging.Logger) *Client {
-	// Use default API endpoint if not specified
+	// Use default API endpoint if not specified.
 	if config.APIEndpoint == "" {
 		config.APIEndpoint = defaultAPIEndpoint
 	}
 
-	// Use default HTTP client if not specified
+	// Use default HTTP client if not specified.
 	if config.HTTPClient == nil {
 		config.HTTPClient = &http.Client{
 			Timeout: 30 * time.Second,
 		}
 	}
 
-	// Use no-op logger if not provided
+	// Use no-op logger if not provided.
 	if logger == nil {
 		logger = logging.GetNoopLogger()
 	}
@@ -100,25 +101,32 @@ type AuthState struct {
 
 // GetAuthState returns the current authentication state.
 func (c *Client) GetAuthState(ctx context.Context) (*AuthState, error) {
-	// If we don't have a token, we're not authenticated
+	// If we don't have a token, we're not authenticated.
 	if c.config.AuthToken == "" {
 		return &AuthState{
 			IsAuthenticated: false,
 		}, nil
 	}
 
-	// Check if the token is valid
+	// Check if the token is valid.
 	params := map[string]string{}
 	resp, err := c.callMethod(ctx, methodCheckToken, params)
-	if err != nil {
-		// If there's an error, the token might be invalid
-		c.logger.Warn("Failed to check auth token", "error", err)
+	// Check for specific RTM API errors indicating invalid token.
+	var rtmErr *mcperrors.RTMError
+	if err != nil && errors.As(err, &rtmErr) && rtmErr.Code == 98 { // RTM Error code 98: Invalid auth token.
+		c.logger.Info("Auth token is invalid according to RTM API.", "rtmErrorCode", rtmErr.Code, "rtmErrorMessage", rtmErr.Message)
+		return &AuthState{
+			IsAuthenticated: false,
+		}, nil
+	} else if err != nil {
+		// Log other errors but still treat as potentially unauthenticated.
+		c.logger.Warn("Failed to check auth token validity, assuming invalid.", "error", err)
 		return &AuthState{
 			IsAuthenticated: false,
 		}, nil
 	}
 
-	// Extract user information from the response
+	// Extract user information from the response.
 	var auth struct {
 		Auth struct {
 			User struct {
@@ -130,6 +138,7 @@ func (c *Client) GetAuthState(ctx context.Context) (*AuthState, error) {
 		} `json:"auth"`
 	}
 
+	// Use errors.Wrap for context preservation.
 	if err := json.Unmarshal(resp, &auth); err != nil {
 		return nil, errors.Wrap(err, "failed to parse auth check response")
 	}
@@ -139,51 +148,54 @@ func (c *Client) GetAuthState(ctx context.Context) (*AuthState, error) {
 		Username:        auth.Auth.User.Username,
 		FullName:        auth.Auth.User.Fullname,
 		UserID:          auth.Auth.User.ID,
-		// Token expiration is not provided by the API, so we don't set it
+		// Token expiration is not provided by the API, so we don't set it.
 	}, nil
 }
 
 // StartAuthFlow begins the RTM authentication flow.
 // It returns a URL that the user needs to visit to authorize the application.
 func (c *Client) StartAuthFlow(ctx context.Context) (string, error) {
-	// Get a frob from RTM
+	// Get a frob from RTM.
 	params := map[string]string{}
 	resp, err := c.callMethod(ctx, methodGetFrob, params)
 	if err != nil {
+		// Wrap the original error.
 		return "", errors.Wrap(err, "failed to get authentication frob")
 	}
 
-	// Extract the frob from the response
+	// Extract the frob from the response.
 	var frobResp struct {
 		Frob string `json:"frob"`
 	}
 
+	// Use errors.Wrap for context preservation.
 	if err := json.Unmarshal(resp, &frobResp); err != nil {
 		return "", errors.Wrap(err, "failed to parse frob response")
 	}
 
 	frob := frobResp.Frob
 	if frob == "" {
-		return "", errors.New("empty frob received from API")
+		// Use a more specific RTM error if available, or wrap a standard error.
+		return "", mcperrors.NewRTMError(mcperrors.ErrRTMInvalidResponse, "empty frob received from API", nil, nil)
 	}
 
-	c.logger.Info("Got authentication frob", "frob", frob)
+	c.logger.Info("Got authentication frob.", "frob", frob)
 
-	// Generate the authentication URL
+	// Generate the authentication URL.
 	authParams := map[string]string{
 		"api_key": c.config.APIKey,
 		"perms":   permDelete,
 		"frob":    frob,
 	}
 
-	// Sort the parameters alphabetically by key
+	// Sort the parameters alphabetically by key.
 	var keys []string
 	for k := range authParams {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
-	// Build the signature base string
+	// Build the signature base string.
 	var sb strings.Builder
 	sb.WriteString(c.config.SharedSecret)
 	for _, k := range keys {
@@ -191,14 +203,16 @@ func (c *Client) StartAuthFlow(ctx context.Context) (string, error) {
 		sb.WriteString(authParams[k])
 	}
 
-	// Calculate the signature
-	h := md5.New()
-	io.WriteString(h, sb.String())
+	// Calculate the signature.
+	h := md5.New() //nolint:gosec // Required by RTM API for request signing.
+	// Error handling for io.WriteString is generally omitted for strings on md5.Hash.
+	_, _ = io.WriteString(h, sb.String())
 	sig := hex.EncodeToString(h.Sum(nil))
 
-	// Build the authentication URL
+	// Build the authentication URL.
 	authURL, err := url.Parse(authEndpoint)
 	if err != nil {
+		// Use errors.Wrap for context preservation.
 		return "", errors.Wrap(err, "failed to parse auth endpoint URL")
 	}
 
@@ -209,29 +223,31 @@ func (c *Client) StartAuthFlow(ctx context.Context) (string, error) {
 	q.Set("api_sig", sig)
 	authURL.RawQuery = q.Encode()
 
-	// Store the frob somewhere for CompleteAuthFlow
-	// In a real implementation, we'd store this in a secure place
-	// For simplicity, we're just returning it as part of the URL for now
+	// Store the frob somewhere for CompleteAuthFlow.
+	// In a real implementation, we'd store this in a secure place.
+	// For simplicity, we're just returning it as part of the URL for now.
 	return authURL.String() + "&frob=" + frob, nil
 }
 
 // CompleteAuthFlow completes the authentication flow by exchanging the frob for a token.
 func (c *Client) CompleteAuthFlow(ctx context.Context, frob string) error {
 	if frob == "" {
-		return errors.New("frob is required")
+		// Use a specific error.
+		return mcperrors.NewRTMError(mcperrors.ErrAuthMissing, "frob is required to complete auth flow", nil, nil)
 	}
 
-	// Exchange the frob for a token
+	// Exchange the frob for a token.
 	params := map[string]string{
 		"frob": frob,
 	}
 
 	resp, err := c.callMethod(ctx, methodGetToken, params)
 	if err != nil {
+		// Wrap the original error.
 		return errors.Wrap(err, "failed to get auth token")
 	}
 
-	// Extract the token from the response
+	// Extract the token from the response.
 	var tokenResp struct {
 		Auth struct {
 			Token string `json:"token"`
@@ -243,19 +259,21 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, frob string) error {
 		} `json:"auth"`
 	}
 
+	// Use errors.Wrap for context preservation.
 	if err := json.Unmarshal(resp, &tokenResp); err != nil {
 		return errors.Wrap(err, "failed to parse token response")
 	}
 
 	token := tokenResp.Auth.Token
 	if token == "" {
-		return errors.New("empty token received from API")
+		// Use a specific error.
+		return mcperrors.NewRTMError(mcperrors.ErrRTMInvalidResponse, "empty token received from API", nil, nil)
 	}
 
-	// Store the token in the client
+	// Store the token in the client.
 	c.config.AuthToken = token
 
-	c.logger.Info("Successfully authenticated with RTM",
+	c.logger.Info("Successfully authenticated with RTM.",
 		"userId", tokenResp.Auth.User.ID,
 		"username", tokenResp.Auth.User.Username)
 
@@ -276,70 +294,83 @@ func (c *Client) GetAuthToken() string {
 
 // callMethod makes a call to the RTM API.
 func (c *Client) callMethod(ctx context.Context, method string, params map[string]string) (json.RawMessage, error) {
-	// Create a copy of the parameters
+	// Create a copy of the parameters.
 	fullParams := make(map[string]string)
 	for k, v := range params {
 		fullParams[k] = v
 	}
 
-	// Add standard parameters
+	// Add standard parameters.
 	fullParams["method"] = method
 	fullParams["api_key"] = c.config.APIKey
 	fullParams["format"] = responseFormat
 
-	// Add auth token if available
-	if c.config.AuthToken != "" && method != methodGetFrob {
+	// Add auth token if available and method requires it.
+	if c.config.AuthToken != "" && method != methodGetFrob && method != methodGetToken {
 		fullParams["auth_token"] = c.config.AuthToken
 	}
 
-	// Generate API signature
+	// Generate API signature.
 	sig := c.generateSignature(fullParams)
 	fullParams["api_sig"] = sig
 
-	// Build request URL
+	// Build request URL.
 	apiURL, err := url.Parse(c.config.APIEndpoint)
 	if err != nil {
+		// Use errors.Wrap for context preservation.
 		return nil, errors.Wrap(err, "failed to parse API endpoint URL")
 	}
 
-	// Encode parameters as query string
+	// Encode parameters as query string.
 	q := apiURL.Query()
 	for k, v := range fullParams {
 		q.Set(k, v)
 	}
 	apiURL.RawQuery = q.Encode()
 
-	// Create HTTP request
+	// Create HTTP request.
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL.String(), nil)
 	if err != nil {
+		// Use errors.Wrap for context preservation.
 		return nil, errors.Wrap(err, "failed to create HTTP request")
 	}
 
-	// Add headers
+	// Add headers.
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("User-Agent", "CowGnition/0.1.0")
 
-	// Execute request
-	c.logger.Debug("Making RTM API call", "method", method, "url", apiURL.String())
+	// Execute request.
+	c.logger.Debug("Making RTM API call.", "method", method, "url", apiURL.String())
 	resp, err := c.config.HTTPClient.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(err, "HTTP request failed")
+		// Use errors.Wrap for context preservation with all context details in a single call.
+		return nil, errors.Wrapf(err, "RTM HTTP request failed (method: %s, url: %s)", method, apiURL.String())
 	}
 	defer resp.Body.Close()
 
-	// Read response body
+	// Read response body.
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read response body")
+		// Use errors.Wrap for context preservation.
+		return nil, errors.Wrap(err, "failed to read RTM response body")
 	}
 
-	// Check HTTP status
+	// Check HTTP status.
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.Newf("API returned non-200 status: %d %s, body: %s",
-			resp.StatusCode, resp.Status, string(body))
+		// Return a more specific RTM error.
+		errCtx := map[string]interface{}{
+			"statusCode": resp.StatusCode,
+			"status":     resp.Status,
+			"body":       string(body),
+			"rtm_method": method,
+		}
+		return nil, mcperrors.NewRTMError(mcperrors.ErrRTMAPIFailure,
+			fmt.Sprintf("API returned non-200 status: %d", resp.StatusCode),
+			nil, // No underlying Go error here, it's an API status issue.
+			errCtx)
 	}
 
-	// Parse the JSON response
+	// Parse the JSON response structure to check for RTM API errors.
 	var result struct {
 		Rsp struct {
 			Stat string `json:"stat"`
@@ -347,36 +378,70 @@ func (c *Client) callMethod(ctx context.Context, method string, params map[strin
 				Code string `json:"code"`
 				Msg  string `json:"msg"`
 			} `json:"err,omitempty"`
-			*json.RawMessage
+			// Capture the rest of the response within Rsp if needed, but we need RawMessage.
 		} `json:"rsp"`
 	}
 
+	// We need the raw body later, so unmarshal into a temporary structure first.
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, errors.Wrap(err, "failed to parse API response")
+		// Use errors.Wrap for context preservation.
+		return nil, errors.Wrap(err, "failed to parse RTM API response structure")
 	}
 
-	// Check for API error
+	// Check for API error status.
 	if result.Rsp.Stat != "ok" {
 		if result.Rsp.Err != nil {
-			return nil, errors.Newf("API error: %s - %s", result.Rsp.Err.Code, result.Rsp.Err.Msg)
+			// Return a specific RTM error with code and message.
+			rtmErrCode := 0                                       // Default to generic RTM failure.
+			_, err := fmt.Sscan(result.Rsp.Err.Code, &rtmErrCode) // Use blank identifier if count isn't needed
+			if err != nil {
+				// Handle the error appropriately - log it, return an error, etc.
+				// Example:
+				return nil, mcperrors.NewRTMError(mcperrors.ErrRTMInvalidResponse,
+					fmt.Sprintf("RTM API Error: %s (failed to parse error code '%s')", result.Rsp.Err.Msg, result.Rsp.Err.Code),
+					err, // Include the Sscan error
+					errCtx)
+			}
+			errCtx := map[string]interface{}{
+				"rtmErrorCode":    result.Rsp.Err.Code,
+				"rtmErrorMessage": result.Rsp.Err.Msg,
+				"rtm_method":      method,
+			}
+			// Use mcperrors.ErrRTMAPIFailure unless a more specific code exists.
+			// Example: Map RTM error code 98 (Invalid auth token) to our internal AuthError.
+			if rtmErrCode == 98 {
+				return nil, mcperrors.NewAuthError(
+					fmt.Sprintf("RTM API Error: %s", result.Rsp.Err.Msg),
+					nil,
+					errCtx,
+				)
+			}
+			return nil, mcperrors.NewRTMError(mcperrors.ErrRTMAPIFailure,
+				fmt.Sprintf("RTM API Error: %s", result.Rsp.Err.Msg),
+				nil, // No underlying Go error here, it's an RTM API level error.
+				errCtx)
 		}
-		return nil, errors.Newf("API returned non-ok status: %s", result.Rsp.Stat)
+		// Use a specific RTM error if stat is not "ok" but no err block exists.
+		return nil, mcperrors.NewRTMError(mcperrors.ErrRTMInvalidResponse,
+			fmt.Sprintf("RTM API returned non-ok status '%s' without error details", result.Rsp.Stat),
+			nil,
+			map[string]interface{}{"rtm_method": method})
 	}
 
-	// Return the raw response for further parsing
+	// Return the original raw response body, as it contains the actual data needed by callers.
 	return body, nil
 }
 
 // generateSignature generates an API signature for the given parameters.
 func (c *Client) generateSignature(params map[string]string) string {
-	// Sort the parameters alphabetically by key
+	// Sort the parameters alphabetically by key.
 	var keys []string
 	for k := range params {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
-	// Build the signature base string
+	// Build the signature base string.
 	var sb strings.Builder
 	sb.WriteString(c.config.SharedSecret)
 	for _, k := range keys {
@@ -384,9 +449,10 @@ func (c *Client) generateSignature(params map[string]string) string {
 		sb.WriteString(params[k])
 	}
 
-	// Calculate the signature
-	h := md5.New()
-	io.WriteString(h, sb.String())
+	// Calculate the signature.
+	h := md5.New() //nolint:gosec // Required by RTM API for request signing.
+	// Error handling for io.WriteString is generally omitted for strings on md5.Hash.
+	_, _ = io.WriteString(h, sb.String())
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -398,7 +464,7 @@ type Task struct {
 	DueDate       time.Time `json:"dueDate,omitempty"`
 	StartDate     time.Time `json:"startDate,omitempty"`
 	CompletedDate time.Time `json:"completedDate,omitempty"`
-	Priority      int       `json:"priority,omitempty"` // 1 (highest) to 4 (no priority)
+	Priority      int       `json:"priority,omitempty"` // 1 (highest) to 4 (no priority).
 	Postponed     int       `json:"postponed,omitempty"`
 	Estimate      string    `json:"estimate,omitempty"`
 	LocationID    string    `json:"locationId,omitempty"`
@@ -426,13 +492,13 @@ type TaskList struct {
 	Archived   bool   `json:"archived"`
 	Position   int    `json:"position"`
 	SmartList  bool   `json:"smartList"`
-	TasksCount int    `json:"tasksCount,omitempty"` // Not provided by the API, but useful for our pipeline architecture
+	TasksCount int    `json:"tasksCount,omitempty"` // Not provided by the API, but useful for our pipeline architecture.
 }
 
 // Tag represents a Remember The Milk tag.
 type Tag struct {
 	Name       string `json:"name"`
-	TasksCount int    `json:"tasksCount,omitempty"` // Not provided by the API, but useful for our pipeline architecture
+	TasksCount int    `json:"tasksCount,omitempty"` // Not provided by the API, but useful for our pipeline architecture.
 }
 
 // GetLists retrieves all the task lists for the user.
@@ -440,10 +506,11 @@ func (c *Client) GetLists(ctx context.Context) ([]TaskList, error) {
 	params := map[string]string{}
 	resp, err := c.callMethod(ctx, methodGetLists, params)
 	if err != nil {
+		// Use errors.Wrap for context preservation.
 		return nil, errors.Wrap(err, "failed to get task lists")
 	}
 
-	// Parse the response
+	// Parse the response.
 	var listsResp struct {
 		Rsp struct {
 			Lists struct {
@@ -460,11 +527,12 @@ func (c *Client) GetLists(ctx context.Context) ([]TaskList, error) {
 		} `json:"rsp"`
 	}
 
+	// Use errors.Wrap for context preservation.
 	if err := json.Unmarshal(resp, &listsResp); err != nil {
 		return nil, errors.Wrap(err, "failed to parse lists response")
 	}
 
-	// Convert to our TaskList type
+	// Convert to our TaskList type.
 	var lists []TaskList
 	for _, l := range listsResp.Rsp.Lists.List {
 		list := TaskList{
@@ -476,9 +544,10 @@ func (c *Client) GetLists(ctx context.Context) ([]TaskList, error) {
 			SmartList: l.Smart == "1",
 		}
 
-		// Parse position
+		// Parse position.
 		if l.Position != "" {
-			fmt.Sscanf(l.Position, "%d", &list.Position)
+			// Error handling for Sscanf can be added if needed.
+			_, _ = fmt.Sscanf(l.Position, "%d", &list.Position)
 		}
 
 		lists = append(lists, list)
@@ -496,17 +565,18 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 
 	resp, err := c.callMethod(ctx, methodGetTasks, params)
 	if err != nil {
+		// Use errors.Wrap for context preservation.
 		return nil, errors.Wrap(err, "failed to get tasks")
 	}
 
-	// The RTM API response for tasks is quite complex, with nested structures
-	// This is a simplified parsing example
+	// The RTM API response for tasks is quite complex, with nested structures.
+	// This is a simplified parsing example.
 	var tasksResp struct {
 		Rsp struct {
 			Tasks struct {
 				List []struct {
 					ID         string `json:"id"`
-					Name       string `json:"name,omitempty"`
+					Name       string `json:"name,omitempty"` // List name might be omitted if filtering by list.
 					Taskseries []struct {
 						ID   string `json:"id"`
 						Name string `json:"name"`
@@ -518,7 +588,7 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 							Note []struct {
 								ID      string `json:"id"`
 								Title   string `json:"title"`
-								Body    string `json:"$t"` // Special field name for the note text
+								Body    string `json:"$t"` // Special field name for the note text.
 								Created string `json:"created"`
 							} `json:"note,omitempty"`
 						} `json:"notes"`
@@ -533,42 +603,46 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 							Estimate  string `json:"estimate,omitempty"`
 						} `json:"task"`
 						LocationID   string `json:"location_id,omitempty"`
-						LocationName string `json:"location,omitempty"`
+						LocationName string `json:"location,omitempty"` // RTM seems to use 'location' for name in some contexts.
 					} `json:"taskseries"`
 				} `json:"list"`
 			} `json:"tasks"`
 		} `json:"rsp"`
 	}
 
+	// Use errors.Wrap for context preservation.
 	if err := json.Unmarshal(resp, &tasksResp); err != nil {
 		return nil, errors.Wrap(err, "failed to parse tasks response")
 	}
 
-	// Convert to our Task type
+	// Convert to our Task type.
 	var tasks []Task
 	for _, list := range tasksResp.Rsp.Tasks.List {
 		for _, series := range list.Taskseries {
 			for _, t := range series.Task {
-				// Skip deleted tasks
+				// Skip deleted tasks.
 				if t.Deleted != "" {
 					continue
 				}
 
 				task := Task{
-					ID:           series.ID + "_" + t.ID, // Combine taskseries_id and task_id
+					ID:           fmt.Sprintf("%s_%s", series.ID, t.ID), // Combine taskseries_id and task_id consistently.
 					Name:         series.Name,
 					URL:          series.URL,
 					LocationID:   series.LocationID,
 					LocationName: series.LocationName,
 					ListID:       list.ID,
-					ListName:     list.Name,
+					ListName:     list.Name, // Use list name from outer loop if available.
 				}
 
-				// Parse date fields
+				// Parse date fields.
 				if t.Due != "" {
+					// Add robust error handling for time parsing.
 					dueTime, err := time.Parse("2006-01-02T15:04:05Z", t.Due)
 					if err == nil {
 						task.DueDate = dueTime
+					} else {
+						c.logger.Warn("Failed to parse task due date.", "rawDate", t.Due, "taskId", task.ID, "error", err)
 					}
 				}
 
@@ -576,6 +650,8 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 					startTime, err := time.Parse("2006-01-02T15:04:05Z", t.Added)
 					if err == nil {
 						task.StartDate = startTime
+					} else {
+						c.logger.Warn("Failed to parse task added date.", "rawDate", t.Added, "taskId", task.ID, "error", err)
 					}
 				}
 
@@ -583,27 +659,37 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 					completedTime, err := time.Parse("2006-01-02T15:04:05Z", t.Completed)
 					if err == nil {
 						task.CompletedDate = completedTime
+					} else {
+						c.logger.Warn("Failed to parse task completed date.", "rawDate", t.Completed, "taskId", task.ID, "error", err)
 					}
 				}
 
-				// Parse priority
-				if t.Priority != "" {
-					fmt.Sscanf(t.Priority, "%d", &task.Priority)
+				// Parse priority.
+				if t.Priority != "" && t.Priority != "N" { // "N" means no priority.
+					// Add robust error handling for Sscanf.
+					_, err := fmt.Sscan(t.Priority, &task.Priority)
+					if err != nil {
+						c.logger.Warn("Failed to parse task priority.", "rawPriority", t.Priority, "taskId", task.ID, "error", err)
+					}
 				}
 
-				// Parse postponed count
+				// Parse postponed count.
 				if t.Postponed != "" {
-					fmt.Sscanf(t.Postponed, "%d", &task.Postponed)
+					// Add robust error handling for Sscanf.
+					_, err := fmt.Sscan(t.Postponed, &task.Postponed)
+					if err != nil {
+						c.logger.Warn("Failed to parse task postponed count.", "rawPostponed", t.Postponed, "taskId", task.ID, "error", err)
+					}
 				}
 
 				task.Estimate = t.Estimate
 
-				// Parse tags
+				// Parse tags.
 				if len(series.Tags.Tag) > 0 {
 					task.Tags = series.Tags.Tag
 				}
 
-				// Parse notes
+				// Parse notes.
 				if len(series.Notes.Note) > 0 {
 					for _, n := range series.Notes.Note {
 						note := Note{
@@ -616,6 +702,8 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 							createdTime, err := time.Parse("2006-01-02T15:04:05Z", n.Created)
 							if err == nil {
 								note.CreatedAt = createdTime
+							} else {
+								c.logger.Warn("Failed to parse note created date.", "rawDate", n.Created, "noteId", n.ID, "taskId", task.ID, "error", err)
 							}
 						}
 
@@ -635,19 +723,29 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 func (c *Client) CreateTask(ctx context.Context, name string, listID string) (*Task, error) {
 	params := map[string]string{
 		"name": name,
+		// RTM's 'parse' parameter might be useful here if smart syntax needs enabling, defaults to off via API? Check docs.
+		// "parse": "1", // If smart add syntax is desired.
 	}
 
-	// Add list_id if provided
+	// Add list_id if provided.
 	if listID != "" {
 		params["list_id"] = listID
 	}
 
+	// RTM API requires a timeline for adding tasks.
+	timeline, err := c.createTimeline(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create timeline for adding task")
+	}
+	params["timeline"] = timeline
+
 	resp, err := c.callMethod(ctx, methodAddTask, params)
 	if err != nil {
+		// Use errors.Wrap for context preservation.
 		return nil, errors.Wrap(err, "failed to create task")
 	}
 
-	// Parse the response to get the created task
+	// Parse the response to get the created task.
 	var createResp struct {
 		Rsp struct {
 			List struct {
@@ -658,36 +756,42 @@ func (c *Client) CreateTask(ctx context.Context, name string, listID string) (*T
 					Task struct {
 						ID    string `json:"id"`
 						Added string `json:"added"`
-						Due   string `json:"due"`
+						Due   string `json:"due,omitempty"` // Due might be empty.
 					} `json:"task"`
 				} `json:"taskseries"`
 			} `json:"list"`
 		} `json:"rsp"`
 	}
 
+	// Use errors.Wrap for context preservation.
 	if err := json.Unmarshal(resp, &createResp); err != nil {
 		return nil, errors.Wrap(err, "failed to parse create task response")
 	}
 
-	// Create a task object from the response
+	// Create a task object from the response.
 	task := &Task{
-		ID:     createResp.Rsp.List.Taskseries.ID + "_" + createResp.Rsp.List.Taskseries.Task.ID,
+		ID:     fmt.Sprintf("%s_%s", createResp.Rsp.List.Taskseries.ID, createResp.Rsp.List.Taskseries.Task.ID),
 		Name:   createResp.Rsp.List.Taskseries.Name,
 		ListID: createResp.Rsp.List.ID,
 	}
 
-	// Parse date fields
+	// Parse date fields.
 	if createResp.Rsp.List.Taskseries.Task.Added != "" {
 		startTime, err := time.Parse("2006-01-02T15:04:05Z", createResp.Rsp.List.Taskseries.Task.Added)
 		if err == nil {
 			task.StartDate = startTime
+		} else {
+			c.logger.Warn("Failed to parse created task added date.", "rawDate", createResp.Rsp.List.Taskseries.Task.Added, "taskId", task.ID, "error", err)
 		}
 	}
 
+	// Due date might not be set if smart syntax wasn't used or didn't include a date.
 	if createResp.Rsp.List.Taskseries.Task.Due != "" {
 		dueTime, err := time.Parse("2006-01-02T15:04:05Z", createResp.Rsp.List.Taskseries.Task.Due)
 		if err == nil {
 			task.DueDate = dueTime
+		} else {
+			c.logger.Warn("Failed to parse created task due date.", "rawDate", createResp.Rsp.List.Taskseries.Task.Due, "taskId", task.ID, "error", err)
 		}
 	}
 
@@ -695,27 +799,44 @@ func (c *Client) CreateTask(ctx context.Context, name string, listID string) (*T
 }
 
 // CompleteTask marks a task as completed.
-func (c *Client) CompleteTask(ctx context.Context, taskID string) error {
-	// RTM API requires task ID in the format of "taskseries_id,task_id"
-	// Our task ID is in the format "taskseries_id_task_id", so we need to split it
+// NOTE: This function requires the listID associated with the task, which is not part of the taskID string.
+// Consider passing listID as an argument or fetching the task first to get it.
+func (c *Client) CompleteTask(ctx context.Context, listID, taskID string) error {
+	// RTM API requires task ID in the format of "taskseries_id,task_id".
+	// Our task ID is in the format "taskseries_id_task_id", so we need to split it.
 	parts := strings.Split(taskID, "_")
 	if len(parts) != 2 {
-		return errors.Newf("invalid task ID format: %s", taskID)
+		// Use a more specific error type if available, e.g., InvalidArgumentError.
+		return mcperrors.NewResourceError(
+			fmt.Sprintf("invalid task ID format: %s, expected seriesID_taskID", taskID),
+			nil, // No underlying Go error.
+			map[string]interface{}{"taskID": taskID})
 	}
 
-	// taskSeriesID := parts[0]
-	// taskID := parts[1]
-
-	taskIDForAPI := strings.Join(parts, ",")
-
-	// Set up the parameters
-	params := map[string]string{
-		"task_id": taskIDForAPI,
+	if listID == "" {
+		return mcperrors.NewResourceError(
+			"listID is required to complete a task",
+			nil,
+			map[string]interface{}{"taskID": taskID})
 	}
 
-	// Make the API call
-	_, err := c.callMethod(ctx, methodCompleteTask, params)
+	// RTM API requires a timeline for completing tasks.
+	timeline, err := c.createTimeline(ctx)
 	if err != nil {
+		return errors.Wrap(err, "failed to create timeline for completing task")
+	}
+
+	params := map[string]string{
+		"list_id":       listID,
+		"taskseries_id": parts[0],
+		"task_id":       parts[1],
+		"timeline":      timeline,
+	}
+
+	// Make the API call.
+	_, err = c.callMethod(ctx, methodCompleteTask, params)
+	if err != nil {
+		// Use errors.Wrap for context preservation.
 		return errors.Wrap(err, "failed to complete task")
 	}
 
@@ -727,10 +848,11 @@ func (c *Client) GetTags(ctx context.Context) ([]Tag, error) {
 	params := map[string]string{}
 	resp, err := c.callMethod(ctx, methodGetTags, params)
 	if err != nil {
+		// Use errors.Wrap for context preservation.
 		return nil, errors.Wrap(err, "failed to get tags")
 	}
 
-	// Parse the response
+	// Parse the response.
 	var tagsResp struct {
 		Rsp struct {
 			Tags struct {
@@ -741,11 +863,12 @@ func (c *Client) GetTags(ctx context.Context) ([]Tag, error) {
 		} `json:"rsp"`
 	}
 
+	// Use errors.Wrap for context preservation.
 	if err := json.Unmarshal(resp, &tagsResp); err != nil {
 		return nil, errors.Wrap(err, "failed to parse tags response")
 	}
 
-	// Convert to our Tag type
+	// Convert to our Tag type.
 	var tags []Tag
 	for _, t := range tagsResp.Rsp.Tags.Tag {
 		tag := Tag{
@@ -755,4 +878,29 @@ func (c *Client) GetTags(ctx context.Context) ([]Tag, error) {
 	}
 
 	return tags, nil
+}
+
+// createTimeline creates a new RTM timeline.
+func (c *Client) createTimeline(ctx context.Context) (string, error) {
+	params := map[string]string{}
+	resp, err := c.callMethod(ctx, "rtm.timelines.create", params) // Using literal string as method wasn't in constants.
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create timeline")
+	}
+
+	var timelineResp struct {
+		Rsp struct {
+			Timeline string `json:"timeline"`
+		} `json:"rsp"`
+	}
+
+	if err := json.Unmarshal(resp, &timelineResp); err != nil {
+		return "", errors.Wrap(err, "failed to parse timeline response")
+	}
+
+	if timelineResp.Rsp.Timeline == "" {
+		return "", mcperrors.NewRTMError(mcperrors.ErrRTMInvalidResponse, "empty timeline received from API", nil, nil)
+	}
+
+	return timelineResp.Rsp.Timeline, nil
 }
