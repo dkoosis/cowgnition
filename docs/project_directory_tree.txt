@@ -12,7 +12,10 @@
 │   │   ├── 001_error_handling_strategy.md
 │   │   ├── 002_schema_validation_strategy.md
 │   │   ├── 003_state_machine.md
-│   │   └── 004_in_memory_transport.md
+│   │   ├── 004_in_memory_transport.md
+│   │   ├── 005_secret_management.md
+│   │   ├── 006_modular_multi_service_support.md
+│   │   └── 007_unix_style_pipelining.md
 │   ├── assets/
 │   │   └── cowgnition_logo.png
 │   ├── 002_code_report.md
@@ -48,7 +51,11 @@
 │   │   ├── chain.go
 │   │   └── validation.go
 │   ├── rtm/
-│   │   └── transport/
+│   │   ├── transport/
+│   │   ├── client.go
+│   │   ├── factory.go
+│   │   ├── service.go
+│   │   └── token_storage.go
 │   ├── schema/
 │   │   ├── min_schema.json
 │   │   ├── name_rules.go
@@ -71,4 +78,4 @@
 ├── go.mod
 └── go.sum
 
-19 directories, 53 files
+19 directories, 60 files
