@@ -42,6 +42,7 @@
 │   │   ├── handlers_tools.go
 │   │   ├── helpers.go
 │   │   ├── mcp_server.go
+│   │   ├── mcp_server_test.go
 │   │   └── types.go
 │   ├── middleware/
 │   │   ├── chain.go
@@ -51,14 +52,14 @@
 │   ├── schema/
 │   │   ├── min_schema.json
 │   │   ├── name_rules.go
+│   │   ├── name_rules_test.go
 │   │   ├── schema.json
 │   │   └── validator.go
 │   ├── server/
-│   ├── transport/
-│   │   ├── in_memory_transport.go
-│   │   ├── transport.go
-│   │   └── transport_errors.go
-│   └── mcp_server_test.go
+│   └── transport/
+│       ├── in_memory_transport.go
+│       ├── transport.go
+│       └── transport_errors.go
 ├── scripts/
 │   ├── check_file_length.sh*
 │   ├── graph.d2
@@ -70,4 +71,4 @@
 ├── go.mod
 └── go.sum
 
-19 directories, 52 files
+19 directories, 53 files

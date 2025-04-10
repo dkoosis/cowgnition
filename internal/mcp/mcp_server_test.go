@@ -214,7 +214,7 @@ func TestMCPInitializationProtocol(t *testing.T) {
 	}
 }
 
-// Helper function to check if a string contains any of the given substrings
+// Helper function to check if a string contains any of the given substrings.
 func containsAny(s string, substrings []string) bool {
 	for _, sub := range substrings {
 		if strings.Contains(strings.ToLower(s), strings.ToLower(sub)) {
