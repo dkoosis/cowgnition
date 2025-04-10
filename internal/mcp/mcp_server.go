@@ -132,32 +132,40 @@ func getMethods(methods map[string]MethodHandler) []string {
 }
 
 // ServeSTDIO starts the server using standard input/output as the transport.
-// This version integrates the validation middleware.
+// This handles the MCP protocol over stdio using middleware for validation.
 func (s *Server) ServeSTDIO(ctx context.Context) error {
 	s.logger.Info("Starting server with stdio transport.")
 	// Use Stdin as closer for stdio transport.
 	s.transport = transport.NewNDJSONTransport(os.Stdin, os.Stdout, os.Stdin)
 
 	// --- Create Middleware Chain ---
-	// Configure validation middleware options (can be customized).
+	// Configure validation middleware options
 	validationOpts := middleware.DefaultValidationOptions()
-	// Ensure strict mode is enabled for protocol compliance.
-	validationOpts.StrictMode = true
+	validationOpts.StrictMode = true       // Reject invalid incoming messages
+	validationOpts.ValidateOutgoing = true // Validate outgoing messages
+
+	// In debug mode, be stricter with validation
+	if s.options.Debug {
+		validationOpts.StrictOutgoing = true     // Fail on invalid outgoing messages
+		validationOpts.MeasurePerformance = true // Log performance metrics
+		s.logger.Info("Debug mode enabled: using strict validation for incoming and outgoing messages")
+	}
+
 	validationMiddleware := middleware.NewValidationMiddleware(
 		s.validator,
 		validationOpts,
-		s.logger.WithField("subcomponent", "validation_mw"), // Give middleware its own logger context.
+		s.logger.WithField("subcomponent", "validation_mw"),
 	)
 
-	// Create the chain with handleMessage as the final handler.
+	// Create the chain with handleMessage as the final handler
 	chain := middleware.NewChain(s.handleMessage)
-	// Add validation middleware first in the chain.
+	// Add validation middleware
 	chain.Use(validationMiddleware)
-	// Add other middleware here if needed (e.g., logging, auth).
-	serveHandler := chain.Handler() // Get the composed handler.
-	// --- End Middleware Chain ---
+	// Add other middleware here if needed (e.g., logging, auth)
 
-	// Pass the chained handler to the main serve loop.
+	serveHandler := chain.Handler() // Get the composed handler
+
+	// Pass the chained handler to the main serve loop
 	return s.serve(ctx, serveHandler)
 }
 

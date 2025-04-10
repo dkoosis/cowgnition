@@ -1,4 +1,4 @@
-// file: internal/mcp/schema/name_rules.go
+// file: internal/schema/name_rules.go
 
 package schema
 

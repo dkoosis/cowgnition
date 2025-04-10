@@ -10,6 +10,11 @@ import (
 	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors"
 )
 
+// Import schema
+
+// handleResourcesList handles the resources/list request.
+// Official definition: Sent from the client to request a list of resources the server has.
+// The server should respond with information about resources that the client can access.
 // handleResourcesList handles the resources/list request.
 // Official definition: Sent from the client to request a list of resources the server has.
 // The server should respond with information about resources that the client can access.
@@ -25,8 +30,7 @@ func (h *Handler) handleResourcesList(ctx context.Context, params json.RawMessag
 		h.logger.Debug("Could not parse resources/list params.", "error", err)
 	}
 
-	// Create resources that represent RTM data.
-	// These could come from a database, API, etc. in a real implementation.
+	// Create resources that represent RTM data AND server health.
 	resources := []Resource{
 		{
 			Name:        "RTM Authentication Status",
@@ -46,13 +50,19 @@ func (h *Handler) handleResourcesList(ctx context.Context, params json.RawMessag
 			Description: "Tags used in your Remember The Milk account.",
 			MimeType:    "application/json",
 		},
+		// *** ADDED HEALTH RESOURCE ***
+		{
+			Name:        "Server Health Metrics",
+			URI:         "cowgnition://health",
+			Description: "Provides internal health and performance metrics for the CowGnition server.",
+			MimeType:    "application/json",
+		},
+		// *** END ADDED HEALTH RESOURCE ***
 	}
 
 	// Handle pagination.
-	// This is a simplified example - real implementation would need to handle cursor-based pagination.
 	var nextCursor string
 	if listParams.Cursor != "" {
-		// For now, we don't have pagination, so return empty nextCursor.
 		nextCursor = ""
 		// TODO: Implement actual cursor logic if needed.
 	}
