@@ -214,6 +214,16 @@ func TestMCPInitializationProtocol(t *testing.T) {
 	}
 }
 
+// Helper function to check if a string contains any of the given substrings
+func containsAny(s string, substrings []string) bool {
+	for _, sub := range substrings {
+		if strings.Contains(strings.ToLower(s), strings.ToLower(sub)) {
+			return true
+		}
+	}
+	return false
+}
+
 // TestInvalidMethodSequence tests that the server correctly enforces
 // MCP protocol sequence (e.g., initialize must happen before other methods).
 func TestInvalidMethodSequence(t *testing.T) {
@@ -338,16 +348,6 @@ func TestInvalidMethodSequence(t *testing.T) {
 	if err := transportPair.ServerTransport.Close(); err != nil {
 		t.Errorf("Failed to close server transport: %v", err)
 	}
-}
-
-// Helper function to check if a string contains any of the given substrings
-func containsAny(s string, substrings []string) bool {
-	for _, sub := range substrings {
-		if strings.Contains(strings.ToLower(s), strings.ToLower(sub)) {
-			return true
-		}
-	}
-	return false
 }
 
 // TestMCPMethodNotFound tests that the server correctly handles

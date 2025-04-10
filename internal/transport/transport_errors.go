@@ -218,3 +218,12 @@ func MapErrorToJSONRPC(err error) (int, string, map[string]interface{}) {
 
 	return code, message, data
 }
+
+// IsClosedError checks if an error is related to a closed transport
+func IsClosedError(err error) bool {
+	var transportErr *Error
+	if errors.As(err, &transportErr) {
+		return transportErr.Type == ErrorTypeClosed
+	}
+	return false
+}
