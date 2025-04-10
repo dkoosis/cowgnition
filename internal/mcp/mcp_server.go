@@ -19,6 +19,12 @@ import (
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
 
+// contextKey is a type for context keys to avoid collisions.
+type contextKey string
+
+// connectionStateKey is the context key for accessing the connection state.
+const connectionStateKey contextKey = "connectionState"
+
 // ServerOptions contains configurable options for the MCP server.
 type ServerOptions struct {
 	// RequestTimeout specifies the maximum duration for processing a request.
@@ -55,6 +61,8 @@ type Server struct {
 	// Logger for server events.
 	logger logging.Logger
 
+	startTime time.Time
+
 	// validator is the schema validator instance.
 	validator *schema.SchemaValidator
 
@@ -63,8 +71,8 @@ type Server struct {
 }
 
 // NewServer creates a new MCP server with the given configuration and options.
-// It now requires an initialized schema validator.
-func NewServer(cfg *config.Config, opts ServerOptions, validator *schema.SchemaValidator, logger logging.Logger) (*Server, error) {
+// It now requires an initialized schema validator and the server start time.
+func NewServer(cfg *config.Config, opts ServerOptions, validator *schema.SchemaValidator, startTime time.Time, logger logging.Logger) (*Server, error) {
 	// Ensure logger is initialized.
 	if logger == nil {
 		logger = logging.GetNoopLogger()
@@ -74,8 +82,12 @@ func NewServer(cfg *config.Config, opts ServerOptions, validator *schema.SchemaV
 		return nil, errors.New("schema validator is required but was not provided to NewServer")
 	}
 
-	// Create the MCP method handler.
-	handler := NewHandler(cfg, logger)
+	// *** Create ConnectionState here ***
+	connState := NewConnectionState()
+
+	// *** Pass connState to NewHandler ***
+	// (Ensure NewHandler definition in handler.go also accepts startTime and connState)
+	handler := NewHandler(cfg, validator, startTime, connState, logger)
 
 	// Create the server instance.
 	server := &Server{
@@ -84,8 +96,9 @@ func NewServer(cfg *config.Config, opts ServerOptions, validator *schema.SchemaV
 		handler:         handler,
 		logger:          logger.WithField("component", "mcp_server"),
 		methods:         make(map[string]MethodHandler),
-		validator:       validator, // Store the validator.
-		connectionState: NewConnectionState(),
+		validator:       validator,
+		startTime:       startTime,
+		connectionState: connState,
 	}
 
 	// Register method handlers.
@@ -93,8 +106,6 @@ func NewServer(cfg *config.Config, opts ServerOptions, validator *schema.SchemaV
 
 	return server, nil
 }
-
-// file: internal/mcp/mcp_server.go (partial update to registerMethods function)
 
 // registerMethods registers all supported MCP methods using lowercase handler names.
 func (s *Server) registerMethods() {
@@ -168,14 +179,6 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 	// Pass the chained handler to the main serve loop
 	return s.serve(ctx, serveHandler)
 }
-
-// file: internal/mcp/mcp_server.go
-
-// contextKey is a type for context keys to avoid collisions.
-type contextKey string
-
-// connectionStateKey is the context key for accessing the connection state.
-const connectionStateKey contextKey = "connectionState"
 
 // serve handles the main server loop, processing requests using the configured transport.
 func (s *Server) serve(ctx context.Context, handlerFunc transport.MessageHandler) error {

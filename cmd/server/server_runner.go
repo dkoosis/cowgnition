@@ -21,6 +21,8 @@ import (
 // It handles setup, startup, and graceful shutdown of the server.
 // nolint:gocyclo
 func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout time.Duration, debug bool) error {
+	startTime := time.Now() // *** CAPTURE START TIME ***
+
 	// --- Context and Signal Handling (unchanged) ---
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -101,8 +103,8 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	}
 
 	// --- Create MCP Server Instance ---
-	// *** MODIFIED: Pass the initialized validator to NewServer ***
-	server, err := mcp.NewServer(cfg, opts, validator, logger) // Pass validator
+	// *** MODIFIED: Pass startTime and validator ***
+	server, err := mcp.NewServer(cfg, opts, validator, startTime, logger) // Pass validator and startTime
 	if err != nil {
 		return errors.Wrap(err, "failed to create MCP server")
 	}
