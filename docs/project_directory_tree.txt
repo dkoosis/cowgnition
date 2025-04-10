@@ -52,10 +52,17 @@
 │   │   └── validation.go
 │   ├── rtm/
 │   │   ├── transport/
+│   │   ├── auth.go
 │   │   ├── client.go
+│   │   ├── constants.go
 │   │   ├── factory.go
+│   │   ├── helpers.go
+│   │   ├── mcp_resources.go
+│   │   ├── mcp_tools.go
+│   │   ├── methods.go
 │   │   ├── service.go
-│   │   └── token_storage.go
+│   │   ├── token_storage.go
+│   │   └── types.go
 │   ├── schema/
 │   │   ├── min_schema.json
 │   │   ├── name_rules.go
@@ -78,4 +85,4 @@
 ├── go.mod
 └── go.sum
 
-19 directories, 60 files
+19 directories, 67 files
