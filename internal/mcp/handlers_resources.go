@@ -5,6 +5,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors"
@@ -90,61 +91,100 @@ func (h *Handler) handleResourcesRead(ctx context.Context, params json.RawMessag
 	}
 	h.logger.Info("Handling resources/read request.", "uri", req.URI)
 
-	// Handle different resource types based on URI.
-	var contents []interface{} // Using interface{} as per original type def.
+	var contents []interface{}
 
-	// TODO: Replace placeholder data with actual API calls or data retrieval.
 	switch req.URI {
 	case "auth://rtm":
-		// Authentication status resource.
 		authStatus := map[string]interface{}{
-			"isAuthenticated": true, // Placeholder, replace with actual auth check.
+			"isAuthenticated": true, // Placeholder
 			"username":        "example_user",
 			"accountType":     "Pro",
 		}
+		// *** FIX: Use standard marshal and handle error ***
+		authBytes, marshalErr := json.MarshalIndent(authStatus, "", "  ")
+		if marshalErr != nil {
+			h.logger.Error("Failed to marshal auth status.", "error", marshalErr)
+			return nil, errors.Wrap(marshalErr, "failed to marshal auth status")
+		}
+		authString := string(authBytes) // Convert bytes to string
 
 		contents = append(contents, TextResourceContents{
-			ResourceContents: ResourceContents{
-				URI:      req.URI,
-				MimeType: "application/json",
-			},
-			Text: mustMarshalJSONToString(authStatus),
+			ResourceContents: ResourceContents{URI: req.URI, MimeType: "application/json"},
+			Text:             authString, // *** FIX: Use the marshalled string ***
 		})
 
 	case "rtm://lists":
-		// Lists resource.
 		lists := []map[string]interface{}{
 			{"id": "1", "name": "Inbox", "taskCount": 5},
 			{"id": "2", "name": "Work", "taskCount": 12},
 			{"id": "3", "name": "Personal", "taskCount": 8},
 		}
+		// *** FIX: Use standard marshal and handle error ***
+		listsBytes, marshalErr := json.MarshalIndent(lists, "", "  ")
+		if marshalErr != nil {
+			h.logger.Error("Failed to marshal RTM lists.", "error", marshalErr)
+			return nil, errors.Wrap(marshalErr, "failed to marshal RTM lists")
+		}
+		listsString := string(listsBytes) // Convert bytes to string
 
 		contents = append(contents, TextResourceContents{
-			ResourceContents: ResourceContents{
-				URI:      req.URI,
-				MimeType: "application/json",
-			},
-			Text: mustMarshalJSONToString(lists),
+			ResourceContents: ResourceContents{URI: req.URI, MimeType: "application/json"},
+			Text:             listsString, // *** FIX: Use the marshalled string ***
 		})
 
 	case "rtm://tags":
-		// Tags resource.
 		tags := []map[string]interface{}{
 			{"name": "urgent", "taskCount": 3},
 			{"name": "shopping", "taskCount": 2},
 			{"name": "work", "taskCount": 7},
 		}
+		// *** FIX: Use standard marshal and handle error ***
+		tagsBytes, marshalErr := json.MarshalIndent(tags, "", "  ")
+		if marshalErr != nil {
+			h.logger.Error("Failed to marshal RTM tags.", "error", marshalErr)
+			return nil, errors.Wrap(marshalErr, "failed to marshal RTM tags")
+		}
+		tagsString := string(tagsBytes) // Convert bytes to string
+
+		contents = append(contents, TextResourceContents{
+			ResourceContents: ResourceContents{URI: req.URI, MimeType: "application/json"},
+			Text:             tagsString, // *** FIX: Use the marshalled string ***
+		})
+
+	case "cowgnition://health":
+		h.logger.Debug("Reading health metrics.")
+		uptime := time.Since(h.startTime).Round(time.Second).String()
+		schemaInitialized := h.validator.IsInitialized()
+		schemaLoadDuration := h.validator.GetLoadDuration().String()
+		schemaCompileDuration := h.validator.GetCompileDuration().String()
+		currentState := h.connectionState.CurrentState()
+
+		metrics := map[string]interface{}{
+			"serverUptime":          uptime,
+			"schemaInitialized":     schemaInitialized,
+			"schemaLoadDuration":    schemaLoadDuration,
+			"schemaCompileDuration": schemaCompileDuration,
+			"connectionState":       currentState,
+		}
+
+		metricsBytes, marshalErr := json.MarshalIndent(metrics, "", "  ")
+		if marshalErr != nil {
+			h.logger.Error("Failed to marshal health metrics.", "error", marshalErr)
+			return nil, errors.Wrap(marshalErr, "failed to marshal health metrics")
+		}
+		metricsString := string(metricsBytes) // Define metricsString
 
 		contents = append(contents, TextResourceContents{
 			ResourceContents: ResourceContents{
 				URI:      req.URI,
 				MimeType: "application/json",
 			},
-			Text: mustMarshalJSONToString(tags),
+			Text: metricsString, // *** FIX: Use metricsString here ***
 		})
 
 	default:
 		// Resource not found.
+		h.logger.Warn("Resource URI not found.", "uri", req.URI)
 		return nil, mcperrors.NewResourceError("Resource not found: "+req.URI, nil, map[string]interface{}{"uri": req.URI})
 	}
 
@@ -154,7 +194,7 @@ func (h *Handler) handleResourcesRead(ctx context.Context, params json.RawMessag
 
 	resultBytes, err := json.Marshal(result)
 	if err != nil {
-		h.logger.Error("Failed to marshal ReadResourceResult.", "error", err)
+		h.logger.Error("Failed to marshal ReadResourceResult.", "uri", req.URI, "error", err)
 		return nil, errors.Wrap(err, "failed to marshal ReadResourceResult")
 	}
 

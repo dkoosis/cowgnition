@@ -17,14 +17,3 @@ func mustMarshalJSON(v interface{}) json.RawMessage {
 	}
 	return json.RawMessage(bytes)
 }
-
-// mustMarshalJSONToString marshals v to a JSON string (indented) and panics on error.
-// Used for returning JSON resource contents as text.
-func mustMarshalJSONToString(v interface{}) string {
-	bytes, err := json.MarshalIndent(v, "", "  ") // Use indent for readability.
-	if err != nil {
-		// Panic is acceptable here if the input v is expected to be always marshalable.
-		panic(fmt.Sprintf("failed to marshal JSON to string: %v", err))
-	}
-	return string(bytes)
-}
