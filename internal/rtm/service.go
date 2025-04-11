@@ -18,7 +18,7 @@ type Service struct {
 	logger       logging.Logger
 	authState    *AuthState // Assumes AuthState is defined in types.go
 	authMutex    sync.RWMutex
-	tokenStorage *TokenStorage // Assumes TokenStorage is defined in token_storage.go
+	tokenStorage TokenStorageInterface // Changed from *TokenStorage
 	initialized  bool
 }
 

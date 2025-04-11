@@ -4,7 +4,7 @@
 │   │   └── main.go
 │   ├── server/
 │   │   └── server_runner.go
-│   ├── claude_desktop_setup.go
+│   ├── claude_desktop_registration.go
 │   └── main.go
 ├── docs/
 │   ├── adr/
@@ -60,6 +60,7 @@
 │   │   ├── mcp_resources.go
 │   │   ├── mcp_tools.go
 │   │   ├── methods.go
+│   │   ├── secure_token_storage.go
 │   │   ├── service.go
 │   │   ├── token_storage.go
 │   │   └── types.go
@@ -69,7 +70,6 @@
 │   │   ├── name_rules_test.go
 │   │   ├── schema.json
 │   │   └── validator.go
-│   ├── server/
 │   └── transport/
 │       ├── in_memory_transport.go
 │       ├── transport.go
@@ -85,4 +85,4 @@
 ├── go.mod
 └── go.sum
 
-19 directories, 67 files
+18 directories, 68 files

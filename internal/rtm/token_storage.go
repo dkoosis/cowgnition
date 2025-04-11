@@ -12,10 +12,10 @@ import (
 	"github.com/dkoosis/cowgnition/internal/logging"
 )
 
-// TokenStorage handles the secure storage of authentication tokens.
-// This is a simple file-based implementation for now, but could be replaced
-// with a more secure OS-specific keychain implementation in the future.
-type TokenStorage struct {
+// FileTokenStorage handles the storage of authentication tokens in a file.
+// This is a simple file-based implementation used as a fallback when
+// secure OS-specific storage is not available.
+type FileTokenStorage struct {
 	path   string
 	logger logging.Logger
 	mutex  sync.RWMutex
@@ -30,8 +30,8 @@ type TokenData struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-// NewTokenStorage creates a new token storage instance.
-func NewTokenStorage(path string, logger logging.Logger) (*TokenStorage, error) {
+// NewFileTokenStorage creates a new token storage instance.
+func NewFileTokenStorage(path string, logger logging.Logger) (*FileTokenStorage, error) {
 	// Use no-op logger if not provided
 	if logger == nil {
 		logger = logging.GetNoopLogger()
@@ -43,18 +43,18 @@ func NewTokenStorage(path string, logger logging.Logger) (*TokenStorage, error) 
 		return nil, errors.Wrap(err, "failed to create token directory")
 	}
 
-	return &TokenStorage{
+	return &FileTokenStorage{
 		path:   path,
-		logger: logger.WithField("component", "token_storage"),
+		logger: logger.WithField("component", "file_token_storage"),
 	}, nil
 }
 
 // SaveToken saves an authentication token.
-func (s *TokenStorage) SaveToken(token string, userID, username string) error {
+func (s *FileTokenStorage) SaveToken(token string, userID, username string) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	s.logger.Debug("Saving auth token", "username", username)
+	s.logger.Debug("Saving auth token to file", "username", username)
 
 	// Create token data
 	data := TokenData{
@@ -81,7 +81,7 @@ func (s *TokenStorage) SaveToken(token string, userID, username string) error {
 }
 
 // LoadToken loads the authentication token if available.
-func (s *TokenStorage) LoadToken() (string, error) {
+func (s *FileTokenStorage) LoadToken() (string, error) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
@@ -103,13 +103,13 @@ func (s *TokenStorage) LoadToken() (string, error) {
 		return "", errors.Wrap(err, "failed to parse token data")
 	}
 
-	s.logger.Debug("Loaded auth token", "username", tokenData.Username)
+	s.logger.Debug("Loaded auth token from file", "username", tokenData.Username)
 
 	return tokenData.Token, nil
 }
 
 // DeleteToken removes the stored token.
-func (s *TokenStorage) DeleteToken() error {
+func (s *FileTokenStorage) DeleteToken() error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -119,7 +119,7 @@ func (s *TokenStorage) DeleteToken() error {
 		return nil
 	}
 
-	s.logger.Debug("Deleting auth token")
+	s.logger.Debug("Deleting auth token file")
 
 	// Remove the file
 	if err := os.Remove(s.path); err != nil {
@@ -130,7 +130,7 @@ func (s *TokenStorage) DeleteToken() error {
 }
 
 // GetTokenData loads the full token data if available.
-func (s *TokenStorage) GetTokenData() (*TokenData, error) {
+func (s *FileTokenStorage) GetTokenData() (*TokenData, error) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
@@ -156,7 +156,7 @@ func (s *TokenStorage) GetTokenData() (*TokenData, error) {
 }
 
 // UpdateToken updates an existing token with new metadata.
-func (s *TokenStorage) UpdateToken(token string, userID, username string) error {
+func (s *FileTokenStorage) UpdateToken(token string, userID, username string) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
