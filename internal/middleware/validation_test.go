@@ -14,10 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// --- Interface Definition REMOVED ---
-// The SchemaValidatorInterface should now be defined in validation.go.
-// type SchemaValidatorInterface interface { ... } // REMOVED.
-
 // --- Mock Components. ---
 
 // Mock SchemaValidator for testing - Implements SchemaValidatorInterface (defined in validation.go).
@@ -39,15 +35,17 @@ func (m *mockSchemaValidator) Initialize(ctx context.Context) error {
 	// Simulate some common schemas based on current usage.
 	m.schemas = map[string]bool{
 		"base":                true,
+		"JSONRPCRequest":      true, // Added common base type
+		"JSONRPCNotification": true, // Added common base type
 		"ping":                true,
-		"ping_notification":   true, // Added based on identifyMessage.
+		"ping_notification":   true,
 		"tools/list":          true,
-		"tools/list_response": true,
-		"someMethod":          true, // For generic tests.
-		"request":             true, // Generic fallback.
-		"success_response":    true, // Generic fallback.
-		"error_response":      true, // Generic fallback.
-		"notification":        true, // Generic fallback.
+		"tools/list_response": true, // Keep for OutgoingValidation test.
+		"someMethod":          true,
+		"request":             true, // Generic fallback
+		"success_response":    true, // Generic fallback
+		"error_response":      true, // Generic fallback
+		"notification":        true, // Generic fallback
 	}
 	m.outgoingCallCount = 0 // Reset counter on init.
 	return nil
@@ -63,7 +61,7 @@ func (m *mockSchemaValidator) Validate(ctx context.Context, messageType string, 
 	m.outgoingCallCount++ // Increment call count.
 
 	shouldCurrentCallFail := m.shouldFail
-	// If failOnlyOutgoing is set, only fail after the first call.
+	// If failOnlyOutgoing is set, only fail after the second call (first is incoming).
 	if m.failOnlyOutgoing && m.outgoingCallCount <= 1 {
 		shouldCurrentCallFail = false
 	}
@@ -80,6 +78,9 @@ func (m *mockSchemaValidator) Validate(ctx context.Context, messageType string, 
 	return nil
 }
 func (m *mockSchemaValidator) HasSchema(name string) bool {
+	if !m.initialized || m.schemas == nil {
+		return false
+	}
 	_, ok := m.schemas[name]
 	return ok
 }
@@ -107,23 +108,19 @@ func (m *mockNextHandler) HandleMessage(ctx context.Context, message []byte) ([]
 // --- Test Cases. ---
 
 // Helper to create a ValidationMiddleware with a mock validator and handler.
-// Assumes NewValidationMiddleware now accepts SchemaValidatorInterface (defined in validation.go).
 func createTestMiddleware(t *testing.T, validator SchemaValidatorInterface, next *mockNextHandler, opts ValidationOptions) *ValidationMiddleware {
 	t.Helper()
-	// Initialize mock if needed.
-	if mockVal, ok := validator.(*mockSchemaValidator); ok && !mockVal.initialized {
-		err := mockVal.Initialize(context.Background())
-		require.NoError(t, err)
+	if !validator.IsInitialized() {
+		err := validator.Initialize(context.Background())
+		require.NoError(t, err, "Mock validator initialization failed in helper.")
 	}
+
 	if next == nil {
 		next = &mockNextHandler{}
 	}
 	logger := logging.GetNoopLogger()
 
-	// Pass the interface directly, assuming NewValidationMiddleware accepts it now.
 	mw := NewValidationMiddleware(validator, opts, logger)
-
-	// Pass the method reference for the next handler.
 	mw.SetNext(next.HandleMessage)
 
 	return mw
@@ -131,7 +128,7 @@ func createTestMiddleware(t *testing.T, validator SchemaValidatorInterface, next
 
 // Test ValidationMiddleware HandleMessage - Validation Disabled.
 func TestValidationMiddleware_HandleMessage_Disabled(t *testing.T) {
-	mockValidator := &mockSchemaValidator{} // Create mock.
+	mockValidator := &mockSchemaValidator{}
 	mockNext := &mockNextHandler{}
 	opts := DefaultValidationOptions()
 	opts.Enabled = false
@@ -147,10 +144,10 @@ func TestValidationMiddleware_HandleMessage_Disabled(t *testing.T) {
 
 // Test ValidationMiddleware HandleMessage - Validation Success.
 func TestValidationMiddleware_HandleMessage_ValidationSuccess(t *testing.T) {
-	mockValidator := &mockSchemaValidator{} // Use the mock.
+	mockValidator := &mockSchemaValidator{}
 	mockNext := &mockNextHandler{}
 	opts := DefaultValidationOptions()
-	mw := createTestMiddleware(t, mockValidator, mockNext, opts) // Assumes helper uses interface.
+	mw := createTestMiddleware(t, mockValidator, mockNext, opts)
 
 	testMsg := []byte(`{"jsonrpc":"2.0","method":"ping","id":1}`) // Request requires ID.
 	_, err := mw.HandleMessage(context.Background(), testMsg)
@@ -159,8 +156,8 @@ func TestValidationMiddleware_HandleMessage_ValidationSuccess(t *testing.T) {
 	assert.True(t, mockNext.called, "Next handler should be called on successful validation.")
 	assert.Equal(t, testMsg, mockNext.receivedMsg, "Next handler should receive the message.")
 
-	// Check validation was skipped or performed correctly based on options.
 	if !opts.SkipTypes["ping"] {
+		// Check validation was attempted with the correct schema type derived from the method
 		assert.Equal(t, "ping", mockValidator.lastValidatedType, "Correct schema type should be used for validation.")
 	} else {
 		assert.NotEqual(t, "ping", mockValidator.lastValidatedType, "Validator should not have been called with 'ping' if skipped.")
@@ -169,10 +166,10 @@ func TestValidationMiddleware_HandleMessage_ValidationSuccess(t *testing.T) {
 
 // Test ValidationMiddleware HandleMessage - Skip Type.
 func TestValidationMiddleware_HandleMessage_SkipType(t *testing.T) {
-	mockValidator := &mockSchemaValidator{shouldFail: true} // Would fail validation if not skipped.
+	mockValidator := &mockSchemaValidator{shouldFail: true}
 	mockNext := &mockNextHandler{}
 	opts := DefaultValidationOptions()
-	opts.SkipTypes = map[string]bool{"ping": true} // Skip ping (which is default, but explicit here).
+	opts.SkipTypes = map[string]bool{"ping": true}
 	mw := createTestMiddleware(t, mockValidator, mockNext, opts)
 
 	testMsg := []byte(`{"jsonrpc":"2.0","method":"ping", "id":1}`)
@@ -180,7 +177,6 @@ func TestValidationMiddleware_HandleMessage_SkipType(t *testing.T) {
 
 	assert.NoError(t, err, "HandleMessage should not error when type is skipped.")
 	assert.True(t, mockNext.called, "Next handler should be called when type is skipped.")
-	// Validation should not have happened for 'ping'.
 	assert.NotEqual(t, "ping", mockValidator.lastValidatedType, "Validator Validate method should not have been called with 'ping'.")
 }
 
@@ -189,7 +185,7 @@ func TestValidationMiddleware_HandleMessage_ValidationFailure_Strict(t *testing.
 	mockValidator := &mockSchemaValidator{shouldFail: true}
 	mockNext := &mockNextHandler{}
 	opts := DefaultValidationOptions()
-	opts.StrictMode = true // Default.
+	opts.StrictMode = true
 	mw := createTestMiddleware(t, mockValidator, mockNext, opts)
 
 	testMsg := []byte(`{"jsonrpc":"2.0","method":"someMethod","id":1}`)
@@ -202,12 +198,15 @@ func TestValidationMiddleware_HandleMessage_ValidationFailure_Strict(t *testing.
 	var errorResp map[string]interface{}
 	errUnmarshal := json.Unmarshal(respBytes, &errorResp)
 	require.NoError(t, errUnmarshal, "Failed to unmarshal error response.")
-	_, hasError := errorResp["error"]
+	errorField, hasError := errorResp["error"]
 	assert.True(t, hasError, "Response should contain an 'error' field.")
-	// Check code (-32600 Invalid Request or -32602 Invalid Params expected).
-	errMap := errorResp["error"].(map[string]interface{})
-	code := errMap["code"].(float64)
-	assert.True(t, code == float64(transport.JSONRPCInvalidRequest) || code == float64(transport.JSONRPCInvalidParams), "Error code should be Invalid Request or Invalid Params.")
+
+	errMap, ok := errorField.(map[string]interface{})
+	require.True(t, ok, "Error field should be a map.")
+	codeFloat, ok := errMap["code"].(float64)
+	require.True(t, ok, "Error code should be a number.")
+	code := int(codeFloat)
+	assert.True(t, code == transport.JSONRPCInvalidRequest || code == transport.JSONRPCInvalidParams, "Error code should be Invalid Request (-32600) or Invalid Params (-32602). Got %d", code)
 }
 
 // Test ValidationMiddleware HandleMessage - Validation Failure (Non-Strict Mode).
@@ -215,7 +214,7 @@ func TestValidationMiddleware_HandleMessage_ValidationFailure_NonStrict(t *testi
 	mockValidator := &mockSchemaValidator{shouldFail: true}
 	mockNext := &mockNextHandler{}
 	opts := DefaultValidationOptions()
-	opts.StrictMode = false // Non-strict.
+	opts.StrictMode = false
 	mw := createTestMiddleware(t, mockValidator, mockNext, opts)
 
 	testMsg := []byte(`{"jsonrpc":"2.0","method":"someMethod","id":1}`)
@@ -228,7 +227,7 @@ func TestValidationMiddleware_HandleMessage_ValidationFailure_NonStrict(t *testi
 
 // Test ValidationMiddleware HandleMessage - Invalid JSON Syntax.
 func TestValidationMiddleware_HandleMessage_InvalidJSON(t *testing.T) {
-	mockValidator := &mockSchemaValidator{} // Not used by helper if using interface approach.
+	mockValidator := &mockSchemaValidator{}
 	mockNext := &mockNextHandler{}
 	opts := DefaultValidationOptions()
 	mw := createTestMiddleware(t, mockValidator, mockNext, opts)
@@ -240,15 +239,23 @@ func TestValidationMiddleware_HandleMessage_InvalidJSON(t *testing.T) {
 	assert.False(t, mockNext.called, "Next handler should not be called for invalid JSON.")
 	assert.NotNil(t, respBytes, "An error response should be returned for invalid JSON.")
 
-	var errorResp map[string]map[string]interface{}
+	var errorResp struct {
+		Jsonrpc string      `json:"jsonrpc"`
+		ID      interface{} `json:"id"`
+		Error   struct {
+			Code    int         `json:"code"`
+			Message string      `json:"message"`
+			Data    interface{} `json:"data,omitempty"`
+		} `json:"error"`
+	}
 	errUnmarshal := json.Unmarshal(respBytes, &errorResp)
-	require.NoError(t, errUnmarshal)
-	assert.Equal(t, float64(transport.JSONRPCParseError), errorResp["error"]["code"], "Error code should be Parse Error (-32700).")
+	require.NoError(t, errUnmarshal, "Failed to unmarshal the JSON-RPC error response structure.")
+	assert.Equal(t, transport.JSONRPCParseError, errorResp.Error.Code, "Error code should be Parse Error (-32700).")
 }
 
 // Test identifyMessage function (Doesn't depend on validator).
 func TestIdentifyMessage(t *testing.T) {
-	mw := ValidationMiddleware{} // Need an instance to call the method.
+	mw := ValidationMiddleware{}
 
 	tests := []struct {
 		name          string
@@ -262,14 +269,14 @@ func TestIdentifyMessage(t *testing.T) {
 		{"Valid Request String ID", []byte(`{"jsonrpc":"2.0","method":"test","id":"abc"}`), "test", "abc", false, ""},
 		{"Valid Notification No ID", []byte(`{"jsonrpc":"2.0","method":"notify"}`), "notify_notification", nil, false, ""},
 		{"Valid Notification Null ID", []byte(`{"jsonrpc":"2.0","method":"notify","id":null}`), "notify_notification", nil, false, ""},
-		{"Valid Standard Notification", []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`), "notifications/initialized", nil, false, ""},
+		{"Valid Standard Notification", []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`), "notifications/initialized_notification", nil, false, ""},
 		{"Valid Success Response", []byte(`{"jsonrpc":"2.0","result":{"ok":true},"id":2}`), "success_response", float64(2), false, ""},
 		{"Valid Error Response", []byte(`{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid"},"id":3}`), "error_response", float64(3), false, ""},
-		{"Valid Error Response Null ID", []byte(`{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid"},"id":null}`), "error_response", nil, false, ""}, // Error responses *should* have ID matching request.
+		{"Valid Error Response Null ID", []byte(`{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid"},"id":null}`), "error_response", nil, false, ""},
 		{"Invalid JSON", []byte(`{invalid`), "", nil, true, "failed to parse message"},
 		{"Missing Method/Result/Error", []byte(`{"jsonrpc":"2.0","id":4}`), "", float64(4), true, "unable to identify message type"},
 		{"Invalid Method Type", []byte(`{"jsonrpc":"2.0","method":123,"id":5}`), "", float64(5), true, "failed to parse method"},
-		{"Invalid ID Type", []byte(`{"jsonrpc":"2.0","method":"test","id":{}}`), "test", nil, true, "failed to parse id"},
+		{"Invalid ID Type", []byte(`{"jsonrpc":"2.0","method":"test","id":{}}`), "test", map[string]interface{}{}, true, "invalid type for id"},
 	}
 
 	for _, tc := range tests {
@@ -284,7 +291,11 @@ func TestIdentifyMessage(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expectedType, msgType)
-				require.Equal(t, tc.expectedID, reqID) // Use require.Equal for type flexibility.
+				if _, ok := tc.expectedID.(map[string]interface{}); ok {
+					assert.Equal(t, tc.expectedID, reqID)
+				} else {
+					require.Equal(t, tc.expectedID, reqID)
+				}
 			}
 		})
 	}
@@ -293,8 +304,11 @@ func TestIdentifyMessage(t *testing.T) {
 // Test Outgoing Validation - Success.
 func TestValidationMiddleware_HandleMessage_OutgoingValidation_Success(t *testing.T) {
 	mockValidator := &mockSchemaValidator{}
+	errInit := mockValidator.Initialize(context.Background())
+	require.NoError(t, errInit)
+
 	mockNext := &mockNextHandler{
-		// Provide a response that's valid according to your *full* schema.
+		// Provide a response that's valid according to your *full* schema definition for tools/list_response
 		responseToReturn: []byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"getTasks","inputSchema":{"type":"object"}}]}}`),
 	}
 	opts := DefaultValidationOptions()
@@ -302,7 +316,7 @@ func TestValidationMiddleware_HandleMessage_OutgoingValidation_Success(t *testin
 	opts.StrictOutgoing = true
 	mw := createTestMiddleware(t, mockValidator, mockNext, opts)
 
-	// Incoming message needs to be valid.
+	// Incoming message needs to be valid. Assume "tools/list" schema exists in mock.
 	testMsg := []byte(`{"jsonrpc":"2.0","method":"tools/list","id":1}`)
 	respBytes, err := mw.HandleMessage(context.Background(), testMsg)
 
@@ -319,15 +333,13 @@ func TestValidationMiddleware_HandleMessage_OutgoingValidation_Failure_Strict(t 
 		shouldFail:       true, // Set underlying failure flag.
 	}
 	mockNext := &mockNextHandler{
-		// Provide a response that's INVALID according to your full schema.
-		responseToReturn: []byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"description":"a tool"}]}}`),
+		responseToReturn: []byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"description":"a tool"}]}}`), // Invalid response structure
 	}
 	opts := DefaultValidationOptions()
 	opts.ValidateOutgoing = true
 	opts.StrictOutgoing = true // Fail on outgoing validation errors.
 	mw := createTestMiddleware(t, mockValidator, mockNext, opts)
 
-	// Incoming message needs to be valid.
 	testMsg := []byte(`{"jsonrpc":"2.0","method":"tools/list","id":1}`)
 	respBytes, err := mw.HandleMessage(context.Background(), testMsg)
 
@@ -340,19 +352,17 @@ func TestValidationMiddleware_HandleMessage_OutgoingValidation_Failure_Strict(t 
 // Test Outgoing Validation - Failure (Non-Strict).
 func TestValidationMiddleware_HandleMessage_OutgoingValidation_Failure_NonStrict(t *testing.T) {
 	mockValidator := &mockSchemaValidator{
-		failOnlyOutgoing: true, // Use flag to fail only on the outgoing call.
-		shouldFail:       true, // Set underlying failure flag.
+		failOnlyOutgoing: true,
+		shouldFail:       true,
 	}
 	mockNext := &mockNextHandler{
-		// Provide an INVALID response.
-		responseToReturn: []byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"description":"a tool"}]}}`),
+		responseToReturn: []byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"description":"a tool"}]}}`), // Invalid response
 	}
 	opts := DefaultValidationOptions()
 	opts.ValidateOutgoing = true
 	opts.StrictOutgoing = false // Do NOT fail on outgoing validation errors.
 	mw := createTestMiddleware(t, mockValidator, mockNext, opts)
 
-	// Incoming message needs to be valid.
 	testMsg := []byte(`{"jsonrpc":"2.0","method":"tools/list","id":1}`)
 	respBytes, err := mw.HandleMessage(context.Background(), testMsg)
 
@@ -363,7 +373,7 @@ func TestValidationMiddleware_HandleMessage_OutgoingValidation_Failure_NonStrict
 
 // Test Outgoing Validation - Skips Error Responses.
 func TestValidationMiddleware_HandleMessage_OutgoingValidation_SkipsErrors(t *testing.T) {
-	mockValidator := &mockSchemaValidator{shouldFail: true} // Configure mock to fail if called.
+	mockValidator := &mockSchemaValidator{shouldFail: true} // Configure mock to fail if outgoing validation were attempted
 	mockNext := &mockNextHandler{
 		responseToReturn: []byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Internal"}}`),
 	}
@@ -372,16 +382,17 @@ func TestValidationMiddleware_HandleMessage_OutgoingValidation_SkipsErrors(t *te
 	opts.StrictOutgoing = true
 	mw := createTestMiddleware(t, mockValidator, mockNext, opts)
 
-	// Ensure incoming validation passes.
+	// Ensure incoming validation passes by temporarily setting shouldFail to false for the first call
 	mockValidator.shouldFail = false
 
-	// Incoming message needs to be valid.
 	testMsg := []byte(`{"jsonrpc":"2.0","method":"someMethod","id":1}`)
 	respBytes, err := mw.HandleMessage(context.Background(), testMsg)
 
+	// Reset shouldFail for other tests if needed, though not strictly necessary here
+	mockValidator.shouldFail = true // Reset just in case
+
 	assert.NoError(t, err, "HandleMessage should not error when returning an error response.")
 	assert.Equal(t, mockNext.responseToReturn, respBytes, "Error response should be returned.")
-	// Check that validator.Validate was only called once (for incoming).
 	assert.Equal(t, 1, mockValidator.outgoingCallCount, "Validator should only have been called once (incoming).")
 	assert.NotEqual(t, "error_response", mockValidator.lastValidatedType, "Validator should not be called for error responses.")
 }

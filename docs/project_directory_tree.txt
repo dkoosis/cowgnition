@@ -64,7 +64,6 @@
 │   │   ├── token_storage_interface.go
 │   │   └── types.go
 │   ├── schema/
-│   │   ├── min_schema.json
 │   │   ├── name_rules.go
 │   │   ├── name_rules_test.go
 │   │   ├── schema.json
@@ -85,4 +84,4 @@
 ├── go.mod
 └── go.sum
 
-18 directories, 68 files
+18 directories, 67 files

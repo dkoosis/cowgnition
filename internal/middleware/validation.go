@@ -4,6 +4,7 @@ package middleware
 import (
 	"context"
 	"encoding/json"
+	"fmt" // Imported fmt for error formatting.
 	"strings"
 	"time"
 
@@ -15,12 +16,13 @@ import (
 
 // --- Interface Definition ---
 // This interface defines the contract needed by ValidationMiddleware.
-// It allows for mocking the validator in tests.
+// It allows for mocking the validator in tests. It should be defined ONLY here.
 type SchemaValidatorInterface interface {
 	Validate(ctx context.Context, messageType string, data []byte) error
 	HasSchema(name string) bool
 	IsInitialized() bool
-	// Add Initialize, Shutdown, GetLoadDuration etc. if needed by this middleware.
+	Initialize(ctx context.Context) error // *** Ensure Initialize is included ***.
+	// Add other methods if needed by this middleware (e.g., Shutdown, GetLoadDuration).
 }
 
 // ValidationOptions contains configuration options for the validation middleware.
@@ -129,6 +131,7 @@ func (m *ValidationMiddleware) handleIncomingValidation(ctx context.Context, mes
 	if identifyErr != nil {
 		preview := calculatePreview(message) // Updated call.
 		m.logger.Warn("Failed to identify message type.", "error", identifyErr, "messagePreview", preview)
+		// Use the extracted reqID (even if partial) when creating the error response.
 		responseBytes, creationErr := createInvalidRequestErrorResponse(reqID, identifyErr)
 		if creationErr != nil {
 			return nil, creationErr
@@ -284,8 +287,6 @@ func (m *ValidationMiddleware) HandleMessage(ctx context.Context, message []byte
 // determineSchemaType selects the appropriate schema name for validation based on the message type.
 // It handles both incoming requests and outgoing responses.
 func (m *ValidationMiddleware) determineSchemaType(msgType string, isResponse bool) string {
-	// REMOVED: schemaType := "base". This initial assignment was unused.
-
 	var schemaType string // Declare variable.
 
 	if isResponse {
@@ -312,10 +313,19 @@ func (m *ValidationMiddleware) determineSchemaType(msgType string, isResponse bo
 		if m.validator.HasSchema(msgType) {
 			schemaType = msgType
 		} else if strings.HasSuffix(msgType, "_notification") {
-			schemaType = "notification" // Generic notification schema.
+			// Check for generic notification if specific one doesn't exist.
+			if m.validator.HasSchema("notification") {
+				schemaType = "notification" // Generic notification schema.
+			} else {
+				schemaType = msgType // Keep original if generic doesn't exist either.
+			}
 		} else {
-			// Fallback for unknown request/notification types.
-			schemaType = "request" // Generic request schema.
+			// Fallback for unknown request types.
+			if m.validator.HasSchema("request") {
+				schemaType = "request" // Generic request schema.
+			} else {
+				schemaType = msgType // Keep original if generic doesn't exist.
+			}
 		}
 	}
 
@@ -343,15 +353,33 @@ func (m *ValidationMiddleware) identifyMessage(message []byte) (string, interfac
 		return "", nil, errors.Wrap(err, "failed to parse message for identification")
 	}
 
-	// Extract ID if present.
-	var id interface{}
-	if idRaw, ok := parsed["id"]; ok {
+	// Extract ID if present and VALIDATE ITS TYPE.
+	var id interface{} // Will store the actual string, number, or nil.
+	// var idTypeValid bool = true // This variable is no longer needed with the check inside.
+	idRaw, idExists := parsed["id"]
+	if idExists && string(idRaw) != "null" { // Check presence and non-null before unmarshalling.
 		// Unmarshal preserves null, string, or number types for ID.
 		if err := json.Unmarshal(idRaw, &id); err != nil {
-			// If ID exists but is invalid type (e.g., object), treat as error.
-			return "", nil, errors.Wrap(err, "failed to parse id")
+			// If ID exists but is invalid format (e.g., malformed string).
+			// Pass the raw ID back in the error context if possible.
+			return "", string(idRaw), errors.Wrap(err, "failed to parse id")
 		}
-	} // If ID is absent, id remains nil (correct for notifications).
+		// *** TYPE CHECK ***.
+		switch id.(type) {
+		case string, float64, json.Number:
+			// Valid types.
+		default:
+			// Invalid type (e.g., object, array).
+			// Return error immediately if type is invalid.
+			return "", id, errors.New(fmt.Sprintf("invalid type for id: expected string, number, or null, got %T", id))
+		}
+	} else if idExists && string(idRaw) == "null" {
+		// Explicit null ID is treated as null.
+		id = nil
+	} else {
+		// ID is absent (valid for notifications).
+		id = nil
+	}
 
 	// Check if it's a request/notification (has 'method') or response (has 'result' or 'error').
 	if methodRaw, ok := parsed["method"]; ok {
@@ -362,7 +390,7 @@ func (m *ValidationMiddleware) identifyMessage(message []byte) (string, interfac
 		}
 		// Distinguish request (has ID) from notification (no ID or null ID).
 		if id == nil {
-			return method + "_notification", nil, nil // No ID for notification responses.
+			return method + "_notification", nil, nil // Return nil ID for notifications.
 		}
 		return method, id, nil // Method name and ID for request.
 	}
@@ -475,7 +503,7 @@ func (m *ValidationMiddleware) performToolNameValidation(responseBytes []byte) {
 	}
 
 	if err := json.Unmarshal(responseBytes, &toolsResp); err != nil {
-		m.logger.Debug("Could not parse tools response for validation", "error", err)
+		m.logger.Debug("Could not parse tools response for validation.", "error", err)
 		return
 	}
 

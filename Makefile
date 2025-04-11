@@ -94,7 +94,7 @@ test:
 	@# gotestsum runs 'go test' underneath and summarizes the output.
 	@# We pass arguments to 'go test' after the '--'.
 	@# It will exit with a non-zero status if tests fail.
-	@gotestsum --format standard-verbose -- -coverprofile=coverage.out ./... && \
+	@gotestsum --format pkgname -- -coverprofile=coverage.out ./... && \
 		printf "   $(ICON_OK) $(GREEN)Tests passed$(NC)\n" || \
 		(printf "   $(ICON_FAIL) $(RED)Tests failed$(NC)\n" && exit 1)
 	@printf "\n" # Add spacing
