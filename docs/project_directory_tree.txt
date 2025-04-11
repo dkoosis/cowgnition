@@ -18,9 +18,6 @@
 │   │   └── 007_unix_style_pipelining.md
 │   ├── assets/
 │   │   └── cowgnition_logo.png
-│   ├── 002_code_report.md
-│   ├── Q01_code_report.md
-│   ├── Q03_code_report.md
 │   ├── TODO.md
 │   ├── contributing.md
 │   ├── llm.md
@@ -49,7 +46,8 @@
 │   │   └── types.go
 │   ├── middleware/
 │   │   ├── chain.go
-│   │   └── validation.go
+│   │   ├── validation.go
+│   │   └── validation_test.go
 │   ├── rtm/
 │   │   ├── transport/
 │   │   ├── auth.go
@@ -70,7 +68,8 @@
 │   │   ├── name_rules.go
 │   │   ├── name_rules_test.go
 │   │   ├── schema.json
-│   │   └── validator.go
+│   │   ├── validator.go
+│   │   └── validator_test.go
 │   └── transport/
 │       ├── in_memory_transport.go
 │       ├── transport.go
@@ -86,4 +85,4 @@
 ├── go.mod
 └── go.sum
 
-18 directories, 69 files
+18 directories, 68 files

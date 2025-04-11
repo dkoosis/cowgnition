@@ -86,6 +86,8 @@ deps:
 
 # --- Quality & Testing ---
 
+# --- Quality & Testing ---
+
 # Run tests
 test:
 	@printf "$(ICON_START) $(BOLD)$(BLUE)Running tests with gotestsum...$(NC)\n"
