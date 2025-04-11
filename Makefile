@@ -88,9 +88,11 @@ deps:
 
 # Run tests
 test:
-	@printf "$(ICON_START) $(BOLD)$(BLUE)Running tests...$(NC)\n"
-	@# The 'go test' command itself will print details, including '? [no test files]'
-	@go test ./... && \
+	@printf "$(ICON_START) $(BOLD)$(BLUE)Running tests with gotestsum...$(NC)\n"
+	@# gotestsum runs 'go test' underneath and summarizes the output.
+	@# We pass arguments to 'go test' after the '--'.
+	@# It will exit with a non-zero status if tests fail.
+	@gotestsum --format standard-verbose -- -coverprofile=coverage.out ./... && \
 		printf "   $(ICON_OK) $(GREEN)Tests passed$(NC)\n" || \
 		(printf "   $(ICON_FAIL) $(RED)Tests failed$(NC)\n" && exit 1)
 	@printf "\n" # Add spacing

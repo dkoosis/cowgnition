@@ -1,4 +1,4 @@
-// cmd/server/claude_desktop_setup.go
+// cmd/server/claude_desktop_registration.go
 package main
 
 import (
