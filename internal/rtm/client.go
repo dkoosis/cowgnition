@@ -204,22 +204,25 @@ func (c *Client) handleRTMError(rsp baseRsp, method string) error {
 }
 
 // generateSignature generates an API signature using MD5.
+// generateSignature generates an API signature using MD5.
+// Ensures keys are sorted alphabetically before concatenation.
 func (c *Client) generateSignature(params map[string]string) string {
-	var keys []string
+	keys := make([]string, 0, len(params))
 	for k := range params {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	sort.Strings(keys) // Sort keys alphabetically.
 
 	var sb strings.Builder
-	sb.WriteString(c.config.SharedSecret)
+	sb.WriteString(c.config.SharedSecret) // Start with the secret.
 	for _, k := range keys {
-		sb.WriteString(k)
-		sb.WriteString(params[k])
+		sb.WriteString(k)         // Append the key.
+		sb.WriteString(params[k]) // Append the value.
 	}
 
-	h := md5.New()                        //nolint:gosec // RTM requires MD5
-	_, _ = io.WriteString(h, sb.String()) // Error is practically impossible for strings.Builder
+	// Calculate MD5 hash.
+	h := md5.New()                        //nolint:gosec // RTM requires MD5.
+	_, _ = io.WriteString(h, sb.String()) // Error is practically impossible for strings.Builder.
 	return hex.EncodeToString(h.Sum(nil))
 }
 

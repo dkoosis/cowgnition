@@ -281,20 +281,25 @@ func TestIdentifyMessage(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			msgType, reqID, err := mw.identifyMessage(tc.input)
+			// t.Parallel() // Can re-enable later if tests are confirmed independent
+
+			msgType, reqID, err := mw.identifyMessage(tc.input) // Assuming mw is defined in the test setup
 
 			if tc.expectError {
+				// Assert that an error *was* returned
 				assert.Error(t, err)
-				if tc.errorContains != "" {
+				// Only check contents if an error was actually returned
+				if err != nil && tc.errorContains != "" {
 					assert.Contains(t, err.Error(), tc.errorContains)
 				}
 			} else {
+				// Assert that *no* error was returned
 				assert.NoError(t, err)
-				assert.Equal(t, tc.expectedType, msgType)
-				if _, ok := tc.expectedID.(map[string]interface{}); ok {
+				// Only check type and ID if no error occurred
+				if err == nil {
+					assert.Equal(t, tc.expectedType, msgType)
+					// Handle potential map comparison if needed, though float64/string/nil should be fine
 					assert.Equal(t, tc.expectedID, reqID)
-				} else {
-					require.Equal(t, tc.expectedID, reqID)
 				}
 			}
 		})

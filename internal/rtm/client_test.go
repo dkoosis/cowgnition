@@ -3,6 +3,7 @@ package rtm
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -143,6 +144,7 @@ func TestClient_PrepareParameters(t *testing.T) {
 
 func TestClient_CallMethod(t *testing.T) {
 	// Create a test server
+	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request
 		err := r.ParseForm()
@@ -155,16 +157,25 @@ func TestClient_CallMethod(t *testing.T) {
 		// Check the method and respond accordingly
 		switch r.Form.Get("method") {
 		case "rtm.test.echo":
-			// Echo test parameters back
-			w.Header().Set("Content-Type", "application/json")
+			// Construct the response JSON including *all* parameters
+			responseMap := map[string]interface{}{
+				"rsp": map[string]interface{}{
+					"stat": "ok",
+				},
+			}
+			// Add all form parameters to the response under rsp
 			for k, v := range r.Form {
 				if len(v) > 0 {
-					w.Write([]byte(`{"rsp":{"stat":"ok","` + k + `":"` + v[0] + `"}}`))
-					return
+					// Ensure we don't overwrite the stat field
+					if k != "stat" {
+						responseMap["rsp"].(map[string]interface{})[k] = v[0]
+					}
 				}
 			}
-			// Fallback if no parameters found
-			w.Write([]byte(`{"rsp":{"stat":"ok"}}`))
+			w.Header().Set("Content-Type", "application/json")
+			jsonBytes, marshalErr := json.Marshal(responseMap)
+			require.NoError(t, marshalErr, "Failed to marshal echo response")
+			w.Write(jsonBytes)
 
 		case "rtm.test.error":
 			// Return an error response
@@ -211,7 +222,7 @@ func TestClient_CallMethod(t *testing.T) {
 	// Test cases
 	t.Run("Success - Echo", func(t *testing.T) {
 		ctx := context.Background()
-		params := map[string]string{"test_param": "test_value"}
+		params := map[string]string{"test_param": "test_value", "another_param": "value2"} // Add more params
 
 		// Call the method
 		result, err := client.CallMethod(ctx, "rtm.test.echo", params)
@@ -219,10 +230,12 @@ func TestClient_CallMethod(t *testing.T) {
 		// Verify
 		require.NoError(t, err, "CallMethod should not return error on success")
 		require.NotNil(t, result, "Result should not be nil")
-		assert.Contains(t, string(result), "test_param", "Result should contain echoed parameter")
-		assert.Contains(t, string(result), "test_value", "Result should contain echoed parameter value")
+		// Check specifically for the echoed params within the "rsp" object
+		assert.Contains(t, string(result), `"test_param":"test_value"`, "Result should contain echoed parameter")
+		assert.Contains(t, string(result), `"another_param":"value2"`, "Result should contain another echoed parameter")
+		// Ensure other standard params are also present if needed for assertion
+		assert.Contains(t, string(result), `"method":"rtm.test.echo"`, "Result should contain method")
 	})
-
 	t.Run("Error - API Error", func(t *testing.T) {
 		ctx := context.Background()
 		params := map[string]string{}

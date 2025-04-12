@@ -3,9 +3,7 @@ package schema
 
 import (
 	"bytes"
-	"context"
-	"crypto/sha256" // Import for checksum calculation (for future use).
-	"encoding/hex"  // Import for checksum encoding (for future use).
+	"context" // Import for checksum calculation (for future use).
 	"encoding/json"
 	"fmt"
 	"io"
@@ -149,18 +147,15 @@ func NewSchemaValidator(source SchemaSource, logger logging.Logger) *SchemaValid
 }
 
 // Initialize loads and compiles the MCP schema definitions.
-// This should be called during application startup before any validation occurs.
 func (v *SchemaValidator) Initialize(ctx context.Context) error {
 	initStart := time.Now() // Start timing the whole initialization.
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	// Check if already initialized.
 	if v.initialized {
 		v.logger.Warn("Schema validator already initialized, skipping.")
 		return nil
 	}
-
 	v.logger.Info("Initializing schema validator...")
 
 	// --- Load Schema Data ---
@@ -168,19 +163,16 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 	schemaData, err := v.loadSchemaData(ctx)
 	v.lastLoadDuration = time.Since(loadStart) // Store load duration.
 	if err != nil {
-		// Log load duration even on failure.
 		v.logger.Error("Schema loading failed.", "duration", v.lastLoadDuration, "error", err)
 		return errors.Wrap(err, "failed to load schema data")
 	}
 	v.logger.Info("Schema loaded.", "duration", v.lastLoadDuration, "sizeBytes", len(schemaData))
-	// TODO: Implement checksum verification here in the future.
-	_ = sha256.Sum256(schemaData)    // Placeholder for checksum calculation.
-	_ = hex.EncodeToString([]byte{}) // Placeholder for encoding.
 
 	// --- Add Schema Resource ---
 	addStart := time.Now()
 	schemaReader := bytes.NewReader(schemaData)
-	resourceID := "mcp-schema.json" // Or derive dynamically if needed.
+	// Use a base URI that can be referenced internally, like "mcp://"
+	resourceID := "mcp://schema.json"
 	if err := v.compiler.AddResource(resourceID, schemaReader); err != nil {
 		addDuration := time.Since(addStart)
 		v.logger.Error("Failed to add schema resource to compiler.", "duration", addDuration, "resourceID", resourceID, "error", err)
@@ -192,33 +184,64 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 	}
 	v.logger.Info("Schema resource added.", "duration", time.Since(addStart), "resourceID", resourceID)
 
-	// --- Compile Base Schema ---
+	// --- Compile Base Schema and Key Definitions ---
 	compileStart := time.Now()
-	// Assuming the main schema entry point is the resourceID added above.
-	baseSchema, err := v.compiler.Compile(resourceID)
-	v.lastCompileDuration = time.Since(compileStart) // Store compile duration.
-	if err != nil {
-		// Log compile duration even on failure.
-		v.logger.Error("Failed to compile base schema.", "duration", v.lastCompileDuration, "resourceID", resourceID, "error", err)
-		return NewValidationError(
-			ErrSchemaCompileFailed,
-			"Failed to compile base schema",
-			errors.Wrap(err, "compiler.Compile failed"),
-		)
+	schemasToCompile := map[string]string{
+		"base":                resourceID, // Compile the root.
+		"JSONRPCRequest":      resourceID + "#/definitions/JSONRPCRequest",
+		"JSONRPCNotification": resourceID + "#/definitions/JSONRPCNotification",
+		"JSONRPCResponse":     resourceID + "#/definitions/JSONRPCResponse",
+		"JSONRPCError":        resourceID + "#/definitions/JSONRPCError",
+		"InitializeRequest":   resourceID + "#/definitions/InitializeRequest",
+		"InitializeResult":    resourceID + "#/definitions/InitializeResult",
+		"ListToolsRequest":    resourceID + "#/definitions/ListToolsRequest",
+		"ListToolsResult":     resourceID + "#/definitions/ListToolsResult",
+		"CallToolRequest":     resourceID + "#/definitions/CallToolRequest",
+		"CallToolResult":      resourceID + "#/definitions/CallToolResult",
+		"ping":                resourceID + "#/definitions/PingRequest", // Assuming PingRequest definition exists
+		"ping_notification":   resourceID + "#/definitions/PingRequest", // Reuse if notification has same params
+		// Add other common/required definitions...
+		"success_response": resourceID + "#/definitions/JSONRPCResponse", // Map generic to base JSON-RPC
+		"error_response":   resourceID + "#/definitions/JSONRPCError",    // Map generic to base JSON-RPC
 	}
-	v.logger.Info("Base schema compiled.", "duration", v.lastCompileDuration, "resourceID", resourceID)
 
-	// Store the schema.
-	v.schemas["base"] = baseSchema // Assuming "base" is the key for the main schema.
-	// TODO: Compile specific sub-schemas (Tool, Resource, etc.) if needed for validation.
+	compiledSchemas := make(map[string]*jsonschema.Schema)
+	var firstCompileError error
+
+	for name, pointer := range schemasToCompile {
+		schema, err := v.compiler.Compile(pointer)
+		if err != nil {
+			v.logger.Warn("Failed to compile schema definition.", "name", name, "pointer", pointer, "error", err)
+			// Store the first error encountered, but try to compile others.
+			if firstCompileError == nil {
+				firstCompileError = NewValidationError(
+					ErrSchemaCompileFailed,
+					fmt.Sprintf("Failed to compile schema definition '%s'", name),
+					errors.Wrap(err, "compiler.Compile failed"),
+				).WithContext("pointer", pointer)
+			}
+		} else {
+			compiledSchemas[name] = schema
+			v.logger.Debug("Compiled schema definition.", "name", name)
+		}
+	}
+
+	v.lastCompileDuration = time.Since(compileStart) // Store total compile duration.
+
+	if firstCompileError != nil {
+		v.logger.Error("Schema compilation finished with errors.", "duration", v.lastCompileDuration, "firstError", firstCompileError)
+		return firstCompileError // Return the first critical error encountered.
+	}
+
+	v.schemas = compiledSchemas // Assign successfully compiled schemas.
 	v.initialized = true
-	initDuration := time.Since(initStart) // Total initialization time.
+	initDuration := time.Since(initStart)
 
 	v.logger.Info("Schema validator initialized successfully.",
 		"totalDuration", initDuration,
 		"loadDuration", v.lastLoadDuration,
 		"compileDuration", v.lastCompileDuration,
-		"schemas", getSchemaKeys(v.schemas))
+		"schemasCompiled", getSchemaKeys(v.schemas))
 
 	return nil
 }
@@ -375,7 +398,6 @@ func (v *SchemaValidator) loadSchemaData(ctx context.Context) ([]byte, error) {
 }
 
 // Validate validates the given JSON data against the schema for the specified message type.
-// The messageType parameter should identify which schema to use (e.g., "ClientRequest").
 func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data []byte) error {
 	// Check if initialized.
 	if !v.IsInitialized() {
@@ -388,7 +410,6 @@ func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data
 
 	// First, ensure the data is valid JSON.
 	var instance interface{}
-	// Use json.Unmarshal into interface{} for validation as required by the library.
 	if err := json.Unmarshal(data, &instance); err != nil {
 		return NewValidationError(
 			ErrInvalidJSONFormat,
@@ -398,26 +419,40 @@ func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data
 			WithContext("dataPreview", calculatePreview(data)) // Use helper here.
 	}
 
-	// Get the schema for the message type.
+	// Get the specific schema for the message type.
 	v.mu.RLock()
-	// Use "base" schema for now, until specific type compilation is added.
-	// TODO: Select schema based on messageType if sub-schemas are compiled.
-	schema, ok := v.schemas["base"]
+	schema, ok := v.schemas[messageType]
+	// If specific type not found, try falling back to base JSON-RPC types.
+	if !ok {
+		if strings.HasSuffix(messageType, "_notification") {
+			schema, ok = v.schemas["JSONRPCNotification"]
+		} else if strings.HasSuffix(messageType, "_response") { // crude check for response
+			schema, ok = v.schemas["JSONRPCResponse"] // Check against generic response first
+			if !ok {
+				schema, ok = v.schemas["JSONRPCError"] // Then generic error
+			}
+		} else { // Assume request if not notification/response
+			schema, ok = v.schemas["JSONRPCRequest"]
+		}
+	}
+	// Final fallback to the root schema ("base").
+	if !ok {
+		schema, ok = v.schemas["base"]
+	}
 	v.mu.RUnlock()
 
 	if !ok {
-		// If we don't have a specific schema for this message type, use the base schema.
-		// This case should not happen if Initialize succeeded for "base".
+		// If we still don't have a schema (not even base), initialization likely failed partially.
 		return NewValidationError(
 			ErrSchemaNotFound,
-			fmt.Sprintf("Base schema not found, though validator reported initialized. Type attempted: %s", messageType),
+			fmt.Sprintf("Schema definition not found for message type '%s' or fallbacks.", messageType),
 			nil,
 		).WithContext("messageType", messageType).
 			WithContext("availableSchemas", getSchemaKeys(v.schemas))
 	}
 
 	// Validate the instance against the schema.
-	validationStart := time.Now() // Time individual validation call.
+	validationStart := time.Now()
 	err := schema.Validate(instance)
 	validationDuration := time.Since(validationStart)
 
@@ -425,8 +460,7 @@ func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data
 		// Convert jsonschema validation error to our custom error type.
 		var valErr *jsonschema.ValidationError
 		if errors.As(err, &valErr) {
-			// Log validation duration on error.
-			v.logger.Debug("Schema validation failed.", "duration", validationDuration, "messageType", messageType)
+			v.logger.Debug("Schema validation failed.", "duration", validationDuration, "messageType", messageType, "schemaUsed", messageType) // Log which schema was used
 			return convertValidationError(valErr, messageType, data)
 		}
 
@@ -437,10 +471,9 @@ func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data
 			"Schema validation failed with unexpected error",
 			errors.Wrap(err, "schema.Validate failed unexpectedly"),
 		).WithContext("messageType", messageType).
-			WithContext("dataPreview", calculatePreview(data)) // Use helper here.
+			WithContext("dataPreview", calculatePreview(data))
 	}
-	// Log validation duration on success too, if needed for performance analysis.
-	// v.logger.Debug("Schema validation successful.", "duration", validationDuration, "messageType", messageType)
+	v.logger.Debug("Schema validation successful.", "duration", validationDuration, "messageType", messageType)
 
 	return nil
 }

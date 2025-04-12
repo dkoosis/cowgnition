@@ -388,6 +388,33 @@ func (m *ValidationMiddleware) performToolNameValidation(responseBytes []byte) {
 }
 
 // --- Helper: Identify Message --- Refactored for lower complexity. ---
+
+// parseAndValidateID extracts and validates the ID field from a parsed message.
+// Returns the parsed ID, raw ID bytes (only if parsing fails), and error if invalid.
+// Note: The isValid flag is removed as error presence indicates invalidity.
+func (m *ValidationMiddleware) parseAndValidateID(parsed map[string]json.RawMessage) (parsedID interface{}, rawID json.RawMessage, err error) {
+	idRaw, idExists := parsed["id"]
+	if !idExists || string(idRaw) == "null" {
+		return nil, nil, nil // No ID or null ID is valid.
+	}
+
+	// Unmarshal the ID.
+	if err := json.Unmarshal(idRaw, &parsedID); err != nil {
+		// Malformed ID JSON.
+		// Return raw bytes as parsedID is likely garbage.
+		return string(idRaw), idRaw, errors.Wrap(err, "identifyMessage: failed to parse id")
+	}
+
+	// Check the Go type after unmarshalling.
+	switch parsedID.(type) {
+	case string, float64, json.Number:
+		return parsedID, idRaw, nil // Valid type.
+	default:
+		// Invalid type (e.g., object, array). Return the parsed value along with the error.
+		return parsedID, idRaw, errors.New(fmt.Sprintf("identifyMessage: invalid type for id: expected string, number, or null, got %T", parsedID))
+	}
+}
+
 // identifyMessage extracts the message type and request ID from a JSON-RPC message.
 // Returns message type (method name or response type), request ID (if present), and error.
 func (m *ValidationMiddleware) identifyMessage(message []byte) (string, interface{}, error) {
@@ -397,11 +424,12 @@ func (m *ValidationMiddleware) identifyMessage(message []byte) (string, interfac
 	}
 
 	// Parse and validate the ID first.
-	id, idRaw, idTypeValid, idErr := m.parseAndValidateID(parsed)
+	id, _, idErr := m.parseAndValidateID(parsed) // Use the new helper.
 	if idErr != nil {
 		// Return the specific ID parsing/validation error.
-		return "", idRaw, idErr // Return raw ID bytes if parsing failed, or parsed ID if type was invalid.
+		return "", id, idErr // Return parsed ID (even if invalid type) for context in error response.
 	}
+	// If idErr is nil, the ID is considered valid (null, string, or number).
 
 	// Check for method (Request or Notification).
 	if methodRaw, ok := parsed["method"]; ok {
@@ -409,7 +437,7 @@ func (m *ValidationMiddleware) identifyMessage(message []byte) (string, interfac
 		if err := json.Unmarshal(methodRaw, &method); err != nil {
 			return "", id, errors.Wrap(err, "identifyMessage: failed to parse method")
 		}
-		if id == nil { // Note: idTypeValid was checked in parseAndValidateID.
+		if id == nil {
 			return method + "_notification", nil, nil
 		}
 		return method, id, nil
@@ -417,52 +445,19 @@ func (m *ValidationMiddleware) identifyMessage(message []byte) (string, interfac
 
 	// Check for result (Success Response).
 	if _, ok := parsed["result"]; ok {
-		if idTypeValid { // ID must be valid for responses.
-			return "success_response", id, nil
-		}
-		// If ID is invalid, fall through to return ID error.
+		// ID must have existed and been valid for a response.
+		// idErr check handles invalid types, absence handled by logic flow.
+		return "success_response", id, nil
 	}
 
 	// Check for error (Error Response).
 	if _, ok := parsed["error"]; ok {
-		if idTypeValid { // ID must be valid for responses.
-			return "error_response", id, nil
-		}
-		// If ID is invalid, fall through to return ID error.
+		// ID must have existed and been valid for a response.
+		return "error_response", id, nil
 	}
 
-	// Handle remaining error cases.
-	if !idTypeValid {
-		// If we reached here, it means we had an invalid ID type, but didn't identify the message as Req/Resp/Notif.
-		return "", id, errors.New(fmt.Sprintf("identifyMessage: invalid type for id: expected string, number, or null, got %T", id))
-	}
-
-	// If ID was valid but no method/result/error found.
+	// If no method/result/error found.
 	return "", id, errors.New("identifyMessage: unable to identify message type (not request, notification, or response)")
-}
-
-// parseAndValidateID extracts and validates the ID field from a parsed message.
-// Returns the parsed ID, raw ID bytes (only if parsing fails), validity flag, and error.
-func (m *ValidationMiddleware) parseAndValidateID(parsed map[string]json.RawMessage) (parsedID interface{}, rawID json.RawMessage, isValid bool, err error) {
-	idRaw, idExists := parsed["id"]
-	if !idExists || string(idRaw) == "null" {
-		return nil, nil, true, nil // No ID or null ID is valid for notifications, treat as valid type.
-	}
-
-	// Unmarshal the ID.
-	if err := json.Unmarshal(idRaw, &parsedID); err != nil {
-		// Malformed ID JSON.
-		return string(idRaw), idRaw, false, errors.Wrap(err, "identifyMessage: failed to parse id")
-	}
-
-	// Check the Go type after unmarshalling.
-	switch parsedID.(type) {
-	case string, float64, json.Number:
-		return parsedID, idRaw, true, nil // Valid type.
-	default:
-		// Invalid type (e.g., object, array).
-		return parsedID, idRaw, false, nil // Return parsed ID but mark as invalid type. Error will be generated by caller.
-	}
 }
 
 // --- Helper: Check Response Types ---.
@@ -492,14 +487,20 @@ func createParseErrorResponse(id interface{}, parseErr error) ([]byte, error) {
 	return createGenericErrorResponse(id, transport.JSONRPCParseError, "Parse error.", parseErr)
 }
 
+// createInvalidRequestErrorResponse adjusts data based on error content.
 func createInvalidRequestErrorResponse(id interface{}, requestErr error) ([]byte, error) {
-	// Check if the error message indicates invalid ID type specifically.
 	errMsg := requestErr.Error()
 	data := map[string]interface{}{"details": errMsg} // Default data.
 	if strings.Contains(errMsg, "invalid type for id") {
-		// Could potentially add more specific info if needed.
 		data["reason"] = "Invalid JSON-RPC ID type"
+		// Potentially include the problematic ID value if safe
+		// data["receivedId"] = id
+	} else if strings.Contains(errMsg, "failed to parse id") {
+		data["reason"] = "Malformed JSON in ID field"
+	} else if strings.Contains(errMsg, "unable to identify message type") {
+		data["reason"] = "Message structure doesn't match request, notification, or response"
 	}
+	// Add more specific reasons based on identifyMessage errors if needed.
 	return createGenericErrorResponseWithData(id, transport.JSONRPCInvalidRequest, "Invalid Request.", data)
 }
 
