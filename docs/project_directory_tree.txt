@@ -55,6 +55,7 @@
 │   │   ├── transport/
 │   │   ├── auth.go
 │   │   ├── client.go
+│   │   ├── client_test.go
 │   │   ├── constants.go
 │   │   ├── factory.go
 │   │   ├── helpers.go
@@ -64,6 +65,7 @@
 │   │   ├── methods.go
 │   │   ├── secure_token_storage.go
 │   │   ├── service.go
+│   │   ├── service_mock_test.bak
 │   │   ├── token_storage.go
 │   │   ├── token_storage_interface.go
 │   │   └── types.go
@@ -88,4 +90,4 @@
 ├── go.mod
 └── go.sum
 
-20 directories, 69 files
+20 directories, 71 files

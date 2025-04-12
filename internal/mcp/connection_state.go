@@ -126,18 +126,34 @@ func (s *ConnectionState) SetInitialized() {
 
 // ValidateMethodSequence validates if a method is allowed in the current state.
 // Returns an error if the method is not allowed.
+// file: internal/mcp/connection_state.go
+
+// ValidateMethodSequence validates if a method is allowed in the current state.
+// Returns an error if the method is not allowed, with detailed context about why and what to do next.
 func (s *ConnectionState) ValidateMethodSequence(method string) error {
 	if !s.IsMethodAllowed(method) {
+		s.mu.RLock()
+		currentState := s.currentState
+		// Create a list of currently allowed methods for better error messages
+		allowedMethodsList := make([]string, 0, len(s.allowedMethods))
+		for m := range s.allowedMethods {
+			allowedMethodsList = append(allowedMethodsList, m)
+		}
+		s.mu.RUnlock()
+
 		if method == "initialize" && s.IsInitialized() {
-			return fmt.Errorf("initialize method can only be called once, connection already initialized")
+			return fmt.Errorf("protocol sequence error: Method '%s' can only be called once. The connection is already in '%s' state. Use 'ping' to check connection status.",
+				method, currentState)
 		}
 
 		if !s.IsInitialized() && method != "initialize" && method != "ping" &&
 			!isNotification(method) {
-			return fmt.Errorf("connection not initialized: method '%s' requires prior successful initialize call", method)
+			return fmt.Errorf("protocol sequence error: Method '%s' cannot be called in '%s' state. You must first call 'initialize' to establish the connection. Allowed methods in current state: %v",
+				method, currentState, allowedMethodsList)
 		}
 
-		return fmt.Errorf("method '%s' not allowed in current state '%s'", method, s.CurrentState())
+		return fmt.Errorf("protocol sequence error: Method '%s' is not allowed in current state '%s'. Allowed methods: %v",
+			method, currentState, allowedMethodsList)
 	}
 
 	return nil

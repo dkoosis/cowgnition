@@ -408,11 +408,14 @@ func (s *Server) mapErrorToJSONRPCComponents(err error) (code int, message strin
 	var transportErr *transport.Error
 	var validationErr *schema.ValidationError
 
+	// Use errors.Cause to get the root error before checking its string representation
+	// This makes the check robust even if the error gets wrapped.
+	rootErr := errors.Cause(err)
+	errStr := rootErr.Error() // Get the string of the root cause
+
 	// Check for specific error strings first for method not found/sequence errors
-	errStr := err.Error()
 	if strings.Contains(errStr, "Method not found:") {
 		code = transport.JSONRPCMethodNotFound // -32601
-		message = "Method not found."
 		// Try to extract method name for data field
 		methodName := strings.TrimPrefix(errStr, "Method not found: ")
 		if methodName != errStr { // Check if prefix was actually removed
