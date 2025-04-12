@@ -222,3 +222,10 @@ func (c *Client) generateSignature(params map[string]string) string {
 	_, _ = io.WriteString(h, sb.String()) // Error is practically impossible for strings.Builder
 	return hex.EncodeToString(h.Sum(nil))
 }
+
+// CallMethod makes a direct call to the RTM API.
+// This is a public wrapper around the internal callMethod implementation.
+// It handles parameter preparation, signing, HTTP request execution, and basic response checking.
+func (c *Client) CallMethod(ctx context.Context, method string, params map[string]string) (json.RawMessage, error) {
+	return c.callMethod(ctx, method, params)
+}

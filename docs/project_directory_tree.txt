@@ -1,5 +1,7 @@
 ./
 ├── cmd/
+│   ├── rtm_connection_test/
+│   │   └── main.go
 │   ├── schema_test/
 │   │   └── main.go
 │   ├── server/
@@ -8,7 +10,6 @@
 │   └── main.go
 ├── docs/
 │   ├── adr/
-│   │   ├── 001P_error_handling.md
 │   │   ├── 001_error_handling_strategy.md
 │   │   ├── 002_schema_validation_strategy.md
 │   │   ├── 003_state_machine.md
@@ -18,6 +19,8 @@
 │   │   └── 007_unix_style_pipelining.md
 │   ├── assets/
 │   │   └── cowgnition_logo.png
+│   ├── prompts/
+│   │   └── 001P_error_handling.md
 │   ├── TODO.md
 │   ├── contributing.md
 │   ├── llm.md
@@ -55,6 +58,7 @@
 │   │   ├── constants.go
 │   │   ├── factory.go
 │   │   ├── helpers.go
+│   │   ├── mcp_integration_test.go
 │   │   ├── mcp_resources.go
 │   │   ├── mcp_tools.go
 │   │   ├── methods.go
@@ -84,4 +88,4 @@
 ├── go.mod
 └── go.sum
 
-18 directories, 67 files
+20 directories, 69 files
