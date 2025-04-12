@@ -2,175 +2,205 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"fmt" // Imported fmt for error formatting.
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/logging"
-	"github.com/dkoosis/cowgnition/internal/schema" // Keep this import for error types.
+	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
 
-// --- Interface Definition ---
-// This interface defines the contract needed by ValidationMiddleware.
-// It allows for mocking the validator in tests. It should be defined ONLY here.
+// --- Interface Definition ---.
 type SchemaValidatorInterface interface {
 	Validate(ctx context.Context, messageType string, data []byte) error
 	HasSchema(name string) bool
 	IsInitialized() bool
-	Initialize(ctx context.Context) error // *** Ensure Initialize is included ***.
-	// Add other methods if needed by this middleware (e.g., Shutdown, GetLoadDuration).
+	Initialize(ctx context.Context) error
+	GetLoadDuration() time.Duration    // Keep if needed by logging.
+	GetCompileDuration() time.Duration // Keep if needed by logging.
+	Shutdown() error                   // Added Shutdown for completeness.
 }
 
-// ValidationOptions contains configuration options for the validation middleware.
+// --- Options ---.
 type ValidationOptions struct {
-	// Enabled determines if validation is active. If false, validation is skipped entirely.
-	Enabled bool
-
-	// SkipTypes is a map of message types to skip validation for.
-	// Key is the message type (e.g., "ping"), value is a boolean (always true).
-	SkipTypes map[string]bool
-
-	// StrictMode determines if validation errors result in rejection.
-	// If true (default), validation failures cause messages to be rejected.
-	// If false, validation errors are logged but messages still pass through.
-	StrictMode bool
-
-	// MeasurePerformance enables logging of validation performance metrics.
+	Enabled            bool
+	SkipTypes          map[string]bool
+	StrictMode         bool
 	MeasurePerformance bool
-
-	// ValidateOutgoing determines if outgoing messages should be validated.
-	// If true, responses will be validated against appropriate schemas before being sent.
-	ValidateOutgoing bool
-
-	// StrictOutgoing determines if outgoing validation failures should prevent responses.
-	// If true, validation failures for outgoing messages will cause the request to fail.
-	// If false (default), outgoing validation errors are logged but messages are still sent.
-	StrictOutgoing bool
+	ValidateOutgoing   bool
+	StrictOutgoing     bool
 }
 
-// Define a context key for passing request method through the middleware chain.
+// --- Context Key ---.
 type contextKey string
 
-// Constants related to validation.
 const (
-	// SchemaRelationshipPattern documents how request and response schemas are related.
-	// Request method names like "tools/list" should validate responses against "tools/list_response".
-	// This naming convention is critical for correct validation and must be maintained.
-	SchemaRelationshipPattern = "%s_response"
-
-	// contextKeyRequestMethod is used to track the original request method through the middleware chain
-	// to ensure proper schema validation of the corresponding response.
 	contextKeyRequestMethod contextKey = "requestMethod"
 )
 
-// DefaultValidationOptions returns the default validation options.
-// These defaults prioritize correctness and security over performance.
+// --- Defaults ---.
 func DefaultValidationOptions() ValidationOptions {
 	return ValidationOptions{
 		Enabled:            true,
-		SkipTypes:          map[string]bool{"ping": true}, // Skip ping by default.
+		SkipTypes:          map[string]bool{"ping": true},
 		StrictMode:         true,
 		MeasurePerformance: false,
-		ValidateOutgoing:   true,  // Enable outgoing validation by default.
-		StrictOutgoing:     false, // But don't fail on outgoing validation by default.
+		ValidateOutgoing:   true,
+		StrictOutgoing:     false,
 	}
 }
 
-// ValidationMiddleware validates incoming messages against JSON schemas.
-// It serves as a guardian of protocol correctness.
+// --- Middleware Struct ---.
 type ValidationMiddleware struct {
-	// validator is the schema validator used to validate messages.
-	// *** USES THE INTERFACE TYPE NOW ***.
 	validator SchemaValidatorInterface
-
-	// options contains the configuration options for this middleware.
-	options ValidationOptions
-
-	// next is the next handler in the middleware chain.
-	next transport.MessageHandler
-
-	// logger for validation-related events.
-	logger logging.Logger
+	options   ValidationOptions
+	next      transport.MessageHandler
+	logger    logging.Logger
 }
 
-// NewValidationMiddleware creates a new validation middleware with the given options.
-// *** ACCEPTS THE INTERFACE TYPE NOW ***.
+// --- Constructor ---.
 func NewValidationMiddleware(validator SchemaValidatorInterface, options ValidationOptions, logger logging.Logger) *ValidationMiddleware {
-	// Use NoopLogger if no logger is provided.
 	if logger == nil {
 		logger = logging.GetNoopLogger()
 	}
-
 	return &ValidationMiddleware{
-		validator: validator, // Store the provided interface.
+		validator: validator,
 		options:   options,
 		logger:    logger.WithField("middleware", "validation"),
 	}
 }
 
-// SetNext sets the next handler in the middleware chain.
+// --- SetNext ---.
 func (m *ValidationMiddleware) SetNext(next transport.MessageHandler) {
 	m.next = next
 }
 
-// calculatePreview generates a string preview of a byte slice, limited to a max length.
-func calculatePreview(data []byte) string {
-	const maxPreviewLen = 100 // Use a constant for the max length.
-	previewLen := len(data)
-	if previewLen > maxPreviewLen {
-		previewLen = maxPreviewLen
+// --- Core HandleMessage ---.
+// HandleMessage orchestrates the validation and message handling flow.
+func (m *ValidationMiddleware) HandleMessage(ctx context.Context, message []byte) ([]byte, error) {
+	// Fast path: Validation disabled.
+	if !m.options.Enabled || !m.validator.IsInitialized() {
+		m.logger.Debug("Validation disabled or validator not initialized, skipping.")
+		if m.next == nil {
+			return nil, errors.New("validation middleware has no next handler configured")
+		}
+		return m.next(ctx, message)
 	}
-	return string(data[:previewLen])
+
+	var startTime time.Time
+	if m.options.MeasurePerformance {
+		startTime = time.Now()
+	}
+
+	// 1. Validate Incoming Message.
+	// errorResponseBytes will be non-nil if validation fails strictly.
+	// internalError indicates a problem during validation itself.
+	errorResponseBytes, msgType, reqID, internalError := m.validateIncomingMessage(ctx, message, startTime)
+	if internalError != nil {
+		// Log the internal error, but create a standard response for the client.
+		m.logger.Error("Internal error during incoming validation.", "error", internalError)
+		// Pass the original error to potentially include sanitized details if the helper function supports it.
+		respBytes, creationErr := createInternalErrorResponse(reqID /* removed internalErr */)
+		if creationErr != nil {
+			return nil, creationErr // Failed to even create the error response.
+		}
+		return respBytes, nil
+	}
+	if errorResponseBytes != nil {
+		return errorResponseBytes, nil // Return the pre-formatted JSON-RPC error.
+	}
+
+	// 2. Prepare context and call Next Handler.
+	// Store the identified request method type in context for potential outgoing validation.
+	ctxWithMsgType := context.WithValue(ctx, contextKeyRequestMethod, msgType)
+	if m.next == nil {
+		return nil, errors.New("validation middleware reached end of chain without a final handler")
+	}
+	responseBytes, nextErr := m.next(ctxWithMsgType, message)
+
+	// 3. Handle Error from Next Handler (if any).
+	if nextErr != nil {
+		// If the next handler errored, we generally don't validate the error response it *might* have generated.
+		// We just pass the error along (or potentially wrap it).
+		// The main server loop is responsible for creating the final JSON-RPC error response based on nextErr.
+		return nil, nextErr
+	}
+
+	// 4. Validate Outgoing Response (if enabled and next handler succeeded).
+	if responseBytes != nil && m.options.ValidateOutgoing {
+		// Retrieve the original request method from context for accurate schema selection.
+		requestMethod, _ := ctxWithMsgType.Value(contextKeyRequestMethod).(string) // Okay if not found, will fallback.
+
+		outgoingValidationErr := m.validateOutgoingResponse(ctx, requestMethod, responseBytes)
+		if outgoingValidationErr != nil {
+			// If strict outgoing mode is enabled, this validation error should fail the request.
+			// We return the error itself, and the main server loop will create the final JSON-RPC error response.
+			return nil, errors.Wrap(outgoingValidationErr, "outgoing response validation failed")
+		}
+		// If not strict or validation passed, continue to return the original responseBytes.
+	}
+
+	// 5. Return Successful Response.
+	return responseBytes, nil
 }
 
-// handleIncomingValidation performs validation steps for an incoming message.
-// It returns either an error response to send immediately, or nil if validation passes.
-func (m *ValidationMiddleware) handleIncomingValidation(ctx context.Context, message []byte, startTime time.Time) ([]byte, error) {
-	// Basic JSON syntax validation first.
+// --- Incoming Validation Logic ---.
+// validateIncomingMessage handles the validation steps for an incoming message.
+// Returns: (errorResponseBytes []byte, msgType string, reqID interface{}, internalError error).
+// - errorResponseBytes: Non-nil pre-formatted JSON-RPC error if validation fails strictly.
+// - msgType: The identified message type (method name or generic).
+// - reqID: The request ID (can be nil).
+// - internalError: An error encountered *during* the validation process itself.
+func (m *ValidationMiddleware) validateIncomingMessage(ctx context.Context, message []byte, startTime time.Time) ([]byte, string, interface{}, error) {
+	// Basic JSON syntax check.
 	if !json.Valid(message) {
-		preview := calculatePreview(message) // Updated call.
+		preview := calculatePreview(message)
 		m.logger.Warn("Invalid JSON syntax received.", "messagePreview", preview)
-		responseBytes, creationErr := createParseErrorResponse(nil, errors.New("invalid JSON syntax"))
+		// Attempt to create a standard parse error response.
+		respBytes, creationErr := createParseErrorResponse(nil, errors.New("invalid JSON syntax"))
 		if creationErr != nil {
-			return nil, creationErr // Internal error creating response.
+			// Return internal error if we can't even create the error response.
+			return nil, "", nil, errors.Wrap(creationErr, "failed to create parse error response")
 		}
-		return responseBytes, nil // Return error response.
+		// Return the formatted error response, no message type/ID applicable.
+		return respBytes, "", nil, nil
 	}
 
-	// Identify the message type and extract the request ID.
+	// Identify message type and ID.
 	msgType, reqID, identifyErr := m.identifyMessage(message)
 	if identifyErr != nil {
-		preview := calculatePreview(message) // Updated call.
+		preview := calculatePreview(message)
 		m.logger.Warn("Failed to identify message type.", "error", identifyErr, "messagePreview", preview)
-		// Use the extracted reqID (even if partial) when creating the error response.
-		responseBytes, creationErr := createInvalidRequestErrorResponse(reqID, identifyErr)
+		// Use the extracted reqID (even if partial/invalid type) when creating the error response.
+		respBytes, creationErr := createInvalidRequestErrorResponse(reqID, identifyErr)
 		if creationErr != nil {
-			return nil, creationErr
+			return nil, msgType, reqID, errors.Wrap(creationErr, "failed to create invalid request error response")
 		}
-		return responseBytes, nil // Return error response.
+		// Return the formatted error response, preserving identified type/ID for context.
+		return respBytes, msgType, reqID, nil
 	}
 
-	// Skip validation for exempted message types.
+	// Check if validation should be skipped for this type.
 	if m.options.SkipTypes[msgType] {
 		m.logger.Debug("Skipping validation for message type.", "type", msgType, "requestID", reqID)
-		return nil, nil // Validation skipped, proceed normally.
+		return nil, msgType, reqID, nil // Proceed without validation.
 	}
 
-	// Determine the schema to validate against based on message type.
-	schemaType := m.determineSchemaType(msgType, false) // false = incoming message.
+	// Determine the schema to use for validation.
+	schemaType := m.determineIncomingSchemaType(msgType)
 
-	// Perform the validation against the schema using the interface method.
+	// Perform validation.
 	validationErr := m.validator.Validate(ctx, schemaType, message)
 
-	// Log performance metrics if enabled.
+	// Log performance if enabled.
 	if m.options.MeasurePerformance {
 		elapsed := time.Since(startTime)
-		// Cannot get Load/Compile duration from interface unless added.
-		m.logger.Debug("Message validation performance.",
+		m.logger.Debug("Incoming message validation performance.",
 			"messageType", msgType,
 			"schemaType", schemaType,
 			"duration", elapsed,
@@ -178,381 +208,155 @@ func (m *ValidationMiddleware) handleIncomingValidation(ctx context.Context, mes
 			"isValid", validationErr == nil)
 	}
 
+	// Handle validation result.
 	if validationErr != nil {
-		// Handle validation errors according to strict mode setting.
 		if m.options.StrictMode {
-			m.logger.Warn("Message validation failed (strict mode, rejecting).",
-				"messageType", msgType,
-				"requestID", reqID,
-				"error", validationErr)
-			responseBytes, creationErr := createValidationErrorResponse(reqID, validationErr)
+			m.logger.Warn("Incoming message validation failed (strict mode, rejecting).",
+				"messageType", msgType, "requestID", reqID, "error", validationErr)
+			respBytes, creationErr := createValidationErrorResponse(reqID, validationErr)
 			if creationErr != nil {
-				return nil, creationErr
+				return nil, msgType, reqID, errors.Wrap(creationErr, "failed to create validation error response")
 			}
-			return responseBytes, nil // Return error response.
+			// Return the formatted error response.
+			return respBytes, msgType, reqID, nil
+		} else {
+			// Non-strict mode: Log the error but allow processing to continue.
+			m.logger.Warn("Incoming validation error ignored (non-strict mode).",
+				"messageType", msgType, "requestID", reqID, "error", validationErr)
+			// Proceed normally.
+			return nil, msgType, reqID, nil
 		}
-
-		// In non-strict mode, log the error but allow processing to continue.
-		m.logger.Warn("Validation error (passing through in non-strict mode).",
-			"messageType", msgType,
-			"requestID", reqID,
-			"error", validationErr)
 	}
 
-	// Validation passed or non-strict mode with error.
-	return nil, nil
+	// Validation passed.
+	m.logger.Debug("Incoming message passed validation.", "messageType", msgType, "requestID", reqID)
+	return nil, msgType, reqID, nil
 }
 
-// handleOutgoingValidation performs validation steps for an outgoing response.
-// It logs errors but does not prevent the response from being sent unless configured to do so.
-func (m *ValidationMiddleware) handleOutgoingValidation(ctx context.Context, responseBytes []byte) error {
-	// Don't validate error responses - they're generated by our framework.
-	// and should already be compliant.
+// --- Outgoing Validation Logic ---.
+// validateOutgoingResponse handles validation for an outgoing response message.
+// It returns an error only if StrictOutgoing is true and validation fails.
+func (m *ValidationMiddleware) validateOutgoingResponse(ctx context.Context, requestMethod string, responseBytes []byte) error {
+	// Don't validate JSON-RPC error responses we generated ourselves.
 	if isErrorResponse(responseBytes) {
+		m.logger.Debug("Skipping outgoing validation for JSON-RPC error response.")
 		return nil
 	}
 
-	outMsgType, _, outIdentifyErr := m.identifyMessage(responseBytes) // Remove reqID from here.
-	if outIdentifyErr != nil {
-		preview := calculatePreview(responseBytes)
-		m.logger.Warn("Failed to identify outgoing message type for validation.",
-			"error", outIdentifyErr,
-			"messagePreview", preview)
-		outMsgType = "unknown" // Use generic type for validation if specific type can't be determined.
-	}
-
-	// Determine appropriate schema for response validation.
-	outSchemaType := m.determineSchemaType(outMsgType, true) // true = outgoing response.
-
-	// Check for tools response for specialized validation.
-	isToolsResponse := strings.Contains(outMsgType, "tools") || strings.Contains(outMsgType, "tool")
-
-	outValidationErr := m.validator.Validate(ctx, outSchemaType, responseBytes)
-	if outValidationErr != nil {
-		preview := calculatePreview(responseBytes)
-		m.logger.Error("Outgoing message validation failed!",
-			"messageType", outMsgType,
-			"schemaType", outSchemaType,
-			"error", outValidationErr,
-			"messagePreview", preview)
-
-		// Perform additional checks for tools responses.
-		if isToolsResponse {
-			m.performToolNameValidation(responseBytes)
-		}
-
-		// In strict outgoing mode, return the error to prevent sending invalid responses.
+	// Determine the schema type for the response.
+	schemaType := m.determineOutgoingSchemaType(requestMethod, responseBytes)
+	if schemaType == "" {
+		// This indicates an issue determining the schema, log and potentially skip/error based on policy.
+		m.logger.Warn("Could not determine schema type for outgoing validation.", "requestMethod", requestMethod, "responsePreview", calculatePreview(responseBytes))
 		if m.options.StrictOutgoing {
-			return outValidationErr
+			return errors.New("could not determine schema type for outgoing validation")
 		}
-		// Otherwise, log but don't fail.
+		return nil // Skip validation if type determination fails in non-strict mode.
 	}
 
-	return nil
-}
+	// Perform validation.
+	validationErr := m.validator.Validate(ctx, schemaType, responseBytes)
 
-// HandleMessage implements the MessageHandler interface.
-// It validates the message if validation is enabled, then passes it to the next handler.
-// The returned response will also be validated if outgoing validation is enabled.
-// HandleMessage implements the MessageHandler interface.
-func (m *ValidationMiddleware) HandleMessage(ctx context.Context, message []byte) ([]byte, error) {
-	// Fast path: If validation is disabled, skip directly to the next handler.
-	if !m.options.Enabled {
-		m.logger.Debug("Validation disabled, skipping.")
-		// Ensure 'next' is not nil before calling.
-		if m.next == nil {
-			return nil, errors.New("validation middleware has no next handler configured")
-		}
-		return m.next(ctx, message)
-	}
-
-	// Start measuring performance if enabled.
-	var startTime time.Time
-	if m.options.MeasurePerformance {
-		startTime = time.Now()
-	}
-
-	// Extract the message method for tracking request/response relationship
-	msgType, _, err := m.identifyMessage(message)
-	if err != nil {
-		// Handle identification error
-		m.logger.Warn("Failed to identify message type.", "error", err)
-		// Continue with validation attempt anyway
-	}
-
-	// Perform incoming validation.
-	errorResponseBytes, validationErr := m.handleIncomingValidation(ctx, message, startTime)
 	if validationErr != nil {
-		// Internal error occurred during validation or response creation.
-		return nil, validationErr
-	}
-	if errorResponseBytes != nil {
-		// Validation failed and an error response was generated. Send it back.
-		return errorResponseBytes, nil
-	}
+		responseMsgType, responseReqID, _ := m.identifyMessage(responseBytes) // Get type/ID for logging context.
+		preview := calculatePreview(responseBytes)
+		m.logger.Error("Outgoing response validation failed!",
+			"requestMethod", requestMethod, // Method of the original request.
+			"responseMsgType", responseMsgType, // Type identified from the response itself.
+			"responseReqID", responseReqID, // ID from the response.
+			"schemaTypeUsed", schemaType,
+			"error", validationErr,
+			"responsePreview", preview)
 
-	// If validation passed or non-strict mode allowed it, continue to the next handler.
-	// Ensure 'next' is not nil before calling.
-	if m.next == nil {
-		return nil, errors.New("validation middleware reached end of chain without a final handler")
-	}
-
-	// Store message type in context for response validation
-	ctxWithMsgType := context.WithValue(ctx, contextKeyRequestMethod, msgType)
-	responseBytes, err := m.next(ctxWithMsgType, message)
-
-	// If we got a response and outgoing validation is enabled, validate the response.
-	if err == nil && responseBytes != nil && m.options.ValidateOutgoing {
-		// Extract the original request method from context
-		requestMethod, ok := ctxWithMsgType.Value(contextKeyRequestMethod).(string)
-		if !ok || requestMethod == "" {
-			requestMethod = msgType // Fallback to what we extracted earlier
+		// Perform specific checks if it looks like a tools response.
+		if strings.HasPrefix(schemaType, "tools/") && strings.HasSuffix(schemaType, "_response") {
+			m.performToolNameValidation(responseBytes) // Log errors internally if names are invalid.
 		}
 
-		// This is the key change - directly construct the expected response schema type
-		outSchemaType := ""
-
-		// For tools and other namespaced methods, preserve the namespace
-		if strings.Contains(requestMethod, "/") {
-			outSchemaType = requestMethod + "_response"
-		} else if requestMethod != "" && !strings.HasSuffix(requestMethod, "_notification") {
-			outSchemaType = requestMethod + "_response"
-		} else {
-			// For error responses or other types, call identifyMessage
-			outMsgType, _, outIdentifyErr := m.identifyMessage(responseBytes)
-			if outIdentifyErr == nil {
-				outSchemaType = outMsgType
-			} else {
-				// Fallback to generic schema types
-				if isErrorResponse(responseBytes) {
-					outSchemaType = "error_response"
-				} else {
-					outSchemaType = "success_response"
-				}
-			}
+		// If strict outgoing mode is enabled, return the error to fail the request.
+		if m.options.StrictOutgoing {
+			return validationErr // The caller (HandleMessage) will wrap this.
 		}
-
-		// Skip validation for error responses (generated by framework)
-		if !isErrorResponse(responseBytes) {
-			// Perform the actual validation with the determined schema type
-			if outgoingErr := m.validator.Validate(ctx, outSchemaType, responseBytes); outgoingErr != nil && m.options.StrictOutgoing {
-				return nil, errors.Wrap(outgoingErr, "failed outgoing message validation")
-			}
-		}
+		// Otherwise (non-strict), log the error but don't prevent the response.
+		m.logger.Warn("Outgoing validation error ignored (non-strict outgoing mode).")
+	} else {
+		m.logger.Debug("Outgoing response passed validation.", "schemaTypeUsed", schemaType)
 	}
 
-	return responseBytes, err
+	return nil // No error to return (either passed or non-strict failure).
 }
 
-// determineSchemaType selects the appropriate schema name for validation based on the message type.
-// It handles both incoming requests and outgoing responses.
-func (m *ValidationMiddleware) determineSchemaType(msgType string, isResponse bool) string {
-	var schemaType string // Declare variable.
-
-	if isResponse {
-		// For responses, use specific response schemas if available.
-		if strings.HasSuffix(msgType, "_response") {
-			// Already has _response suffix.
-			schemaType = msgType
-		} else {
-			// Add response suffix for method-specific response schemas.
-			schemaType = msgType + "_response"
-		}
-
-		// Check if this schema exists in the validator.
-		if !m.validator.HasSchema(schemaType) {
-			// Fall back to generic response schema.
-			if strings.Contains(msgType, "error") {
-				schemaType = "error_response"
-			} else {
-				schemaType = "success_response"
-			}
+// --- Helper: Determine Incoming Schema Type ---.
+func (m *ValidationMiddleware) determineIncomingSchemaType(msgType string) string {
+	// For requests/notifications, use method-specific schemas if available.
+	if m.validator.HasSchema(msgType) {
+		return msgType
+	} else if strings.HasSuffix(msgType, "_notification") {
+		// Fallback to generic notification schema.
+		if m.validator.HasSchema("notification") {
+			return "notification"
 		}
 	} else {
-		// For requests/notifications, use method-specific schemas if available.
-		if m.validator.HasSchema(msgType) {
-			schemaType = msgType
-		} else if strings.HasSuffix(msgType, "_notification") {
-			// Check for generic notification if specific one doesn't exist.
-			if m.validator.HasSchema("notification") {
-				schemaType = "notification" // Generic notification schema.
-			} else {
-				schemaType = msgType // Keep original if generic doesn't exist either.
-			}
-		} else {
-			// Fallback for unknown request types.
-			if m.validator.HasSchema("request") {
-				schemaType = "request" // Generic request schema.
-			} else {
-				schemaType = msgType // Keep original if generic doesn't exist.
-			}
+		// Fallback to generic request schema.
+		if m.validator.HasSchema("request") {
+			return "request"
 		}
 	}
 
-	// Fallback one more time if the determined type doesn't exist.
-	if !m.validator.HasSchema(schemaType) {
-		m.logger.Warn("Specific schema type not found, falling back to base schema.", "attemptedType", schemaType)
-		schemaType = "base" // Assuming "base" is always a valid fallback.
+	// Last resort: Use the base schema if no specific or generic schema found.
+	m.logger.Warn("Specific/generic schema not found for incoming message, using base schema.", "messageType", msgType)
+	if m.validator.HasSchema("base") {
+		return "base"
 	}
 
-	return schemaType
+	// Should not happen if base schema compiled correctly, but return original type as ultimate fallback.
+	return msgType
 }
 
-// isErrorResponse checks if the given JSON-RPC message is an error response.
-func isErrorResponse(message []byte) bool {
-	// Quick check without full parsing.
-	return strings.Contains(string(message), `"error":`)
-}
-
-// identifyMessage extracts the message type and request ID from a JSON-RPC message.
-// Returns message type (method name or response type), request ID (if present), and error.
-func (m *ValidationMiddleware) identifyMessage(message []byte) (string, interface{}, error) {
-	// Parse just enough of the message to identify type.
-	var parsed map[string]json.RawMessage
-	if err := json.Unmarshal(message, &parsed); err != nil {
-		return "", nil, errors.Wrap(err, "failed to parse message for identification")
+// --- Helper: Determine Outgoing Schema Type ---.
+func (m *ValidationMiddleware) determineOutgoingSchemaType(requestMethod string, responseBytes []byte) string {
+	// 1. Try deriving from the original request method (most reliable).
+	if requestMethod != "" && !strings.HasSuffix(requestMethod, "_notification") {
+		// Construct expected response schema name (e.g., "tools/list" -> "tools/list_response").
+		expectedResponseSchema := requestMethod + "_response"
+		if m.validator.HasSchema(expectedResponseSchema) {
+			return expectedResponseSchema
+		}
+		m.logger.Debug("Specific response schema derived from request method not found, trying fallback.",
+			"requestMethod", requestMethod, "derivedSchema", expectedResponseSchema)
 	}
 
-	// Extract ID if present and VALIDATE ITS TYPE.
-	var id interface{} // Will store the actual string, number, or nil.
-	// var idTypeValid bool = true // This variable is no longer needed with the check inside.
-	idRaw, idExists := parsed["id"]
-	if idExists && string(idRaw) != "null" { // Check presence and non-null before unmarshalling.
-		// Unmarshal preserves null, string, or number types for ID.
-		if err := json.Unmarshal(idRaw, &id); err != nil {
-			// If ID exists but is invalid format (e.g., malformed string).
-			// Pass the raw ID back in the error context if possible.
-			return "", string(idRaw), errors.Wrap(err, "failed to parse id")
+	// 2. Fallback: Identify type from the response content itself.
+	responseMsgType, _, identifyErr := m.identifyMessage(responseBytes)
+	if identifyErr == nil {
+		// Use the identified type if a schema exists for it (e.g., "success_response").
+		if m.validator.HasSchema(responseMsgType) {
+			return responseMsgType
 		}
-		// *** TYPE CHECK ***.
-		switch id.(type) {
-		case string, float64, json.Number:
-			// Valid types.
-		default:
-			// Invalid type (e.g., object, array).
-			// Return error immediately if type is invalid.
-			return "", id, errors.New(fmt.Sprintf("invalid type for id: expected string, number, or null, got %T", id))
-		}
-	} else if idExists && string(idRaw) == "null" {
-		// Explicit null ID is treated as null.
-		id = nil
+		m.logger.Debug("Schema for type identified from response not found, trying generic.",
+			"responseMsgType", responseMsgType)
 	} else {
-		// ID is absent (valid for notifications).
-		id = nil
+		m.logger.Warn("Failed to identify outgoing response type for schema determination fallback.", "error", identifyErr)
 	}
 
-	// Check if it's a request/notification (has 'method') or response (has 'result' or 'error').
-	if methodRaw, ok := parsed["method"]; ok {
-		// It's a request or notification, extract the method name.
-		var method string
-		if err := json.Unmarshal(methodRaw, &method); err != nil {
-			return "", id, errors.Wrap(err, "failed to parse method")
-		}
-		// Distinguish request (has ID) from notification (no ID or null ID).
-		if id == nil {
-			return method + "_notification", nil, nil // Return nil ID for notifications.
-		}
-		return method, id, nil // Method name and ID for request.
+	// 3. Generic Fallbacks (based on simple structure checks).
+	if isSuccessResponse(responseBytes) && m.validator.HasSchema("success_response") {
+		return "success_response"
+	}
+	// Note: isErrorResponse check happens earlier in validateOutgoingResponse.
+
+	// 4. Last Resort: Base schema.
+	m.logger.Warn("Specific/generic schema not found for outgoing response, using base schema.",
+		"requestMethod", requestMethod, "responsePreview", calculatePreview(responseBytes))
+	if m.validator.HasSchema("base") {
+		return "base"
 	}
 
-	// If it has 'result', it's a success response.
-	if _, hasResult := parsed["result"]; hasResult {
-		// Try to identify the original request method from context if possible,
-		// otherwise return generic success.
-		// This part is complex without passing the original method info down.
-		// For now, return a generic type.
-		return "success_response", id, nil
-	}
-
-	// If it has 'error', it's an error response.
-	if _, hasError := parsed["error"]; hasError {
-		return "error_response", id, nil
-	}
-
-	// If we can't identify the message type, return an error.
-	return "", id, errors.New("unable to identify message type (not request, notification, or response)")
+	// Indicate failure to determine type.
+	return ""
 }
 
-// --- Helper Functions to Create JSON-RPC Error Responses ---.
-// These functions now correctly return ([]byte, error).
-
-// createParseErrorResponse creates JSON bytes for a JSON-RPC parse error (-32700).
-func createParseErrorResponse(id interface{}, parseErr error) ([]byte, error) {
-	if id == nil { // ID is often unknown if parsing failed early.
-		id = json.RawMessage("null")
-	}
-	response := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      id,
-		"error": map[string]interface{}{
-			"code":    transport.JSONRPCParseError, // -32700.
-			"message": "Parse error.",
-			"data": map[string]interface{}{
-				"details": parseErr.Error(), // Provide underlying parse error detail.
-			},
-		},
-	}
-	return json.Marshal(response) // Returns ([]byte, error).
-}
-
-// createInvalidRequestErrorResponse creates JSON bytes for a JSON-RPC invalid request error (-32600).
-func createInvalidRequestErrorResponse(id interface{}, requestErr error) ([]byte, error) {
-	if id == nil {
-		id = json.RawMessage("null")
-	}
-	response := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      id,
-		"error": map[string]interface{}{
-			"code":    transport.JSONRPCInvalidRequest, // -32600.
-			"message": "Invalid Request.",
-			"data": map[string]interface{}{
-				"details": requestErr.Error(),
-			},
-		},
-	}
-	return json.Marshal(response) // Returns ([]byte, error).
-}
-
-// createValidationErrorResponse creates JSON bytes for a JSON-RPC validation error.
-// Maps schema validation errors to Invalid Request (-32600) or Invalid Params (-32602).
-func createValidationErrorResponse(id interface{}, validationErr error) ([]byte, error) {
-	if id == nil {
-		id = json.RawMessage("null")
-	}
-	code := transport.JSONRPCInvalidRequest // -32600 Default to Invalid Request.
-	message := "Invalid Request."
-	var errorData interface{} // Keep nil unless details are useful/safe.
-
-	// Check if it's a structured schema validation error.
-	var schemaValErr *schema.ValidationError
-	if errors.As(validationErr, &schemaValErr) {
-		// Check if the error path indicates it's a parameter issue.
-		if schemaValErr.InstancePath != "" && (strings.Contains(schemaValErr.InstancePath, "/params") || strings.Contains(schemaValErr.InstancePath, "params")) {
-			code = transport.JSONRPCInvalidParams // -32602.
-			message = "Invalid params."
-		}
-		// Optionally include sanitized validation context.
-		// errorData = schemaValErr.Context // Example, ensure sanitization.
-		errorData = map[string]interface{}{"details": schemaValErr.Error()} // Include formatted error.
-	} else {
-		// For generic validation errors.
-		errorData = map[string]interface{}{"details": validationErr.Error()}
-	}
-
-	response := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      id,
-		"error": map[string]interface{}{
-			"code":    code,
-			"message": message,
-			"data":    errorData, // Include structured details if available.
-		},
-	}
-	return json.Marshal(response) // Returns ([]byte, error).
-}
-
-// performToolNameValidation extracts and validates tool names from a tools response.
+// --- Helper: Perform Tool Name Validation ---.
 func (m *ValidationMiddleware) performToolNameValidation(responseBytes []byte) {
 	var toolsResp struct {
 		Result struct {
@@ -562,43 +366,203 @@ func (m *ValidationMiddleware) performToolNameValidation(responseBytes []byte) {
 		} `json:"result"`
 	}
 
+	// Attempt to parse; log debug message if parsing fails, don't halt validation.
 	if err := json.Unmarshal(responseBytes, &toolsResp); err != nil {
-		m.logger.Debug("Could not parse tools response for validation.", "error", err)
+		m.logger.Debug("Could not parse response as tool list for name validation.", "error", err, "responsePreview", calculatePreview(responseBytes))
 		return
 	}
 
+	// Validate names if parsing succeeded.
 	for i, tool := range toolsResp.Result.Tools {
 		if err := schema.ValidateName(schema.EntityTypeTool, tool.Name); err != nil {
-			m.logger.Error("Invalid tool name in response.",
+			// Log invalid names as errors, as this violates MCP constraints.
+			m.logger.Error("Invalid tool name found in outgoing response.",
 				"toolIndex", i,
-				"toolName", tool.Name,
-				"error", err,
-				"rules", schema.GetNamePatternDescription(schema.EntityTypeTool))
+				"invalidName", tool.Name,
+				"validationError", err,
+				"rulesHint", schema.GetNamePatternDescription(schema.EntityTypeTool))
+			// Note: We log but don't fail the request here unless StrictOutgoing is on.
+			// (which is handled by the main schema validation returning an error).
 		}
 	}
 }
 
-func (m *ValidationMiddleware) determineResponseSchemaType(requestMethod string, responseBytes []byte) string {
-	// If we have a request method, use it to derive the response schema type
-	if requestMethod != "" && !strings.HasSuffix(requestMethod, "_notification") {
-		responseSchema := fmt.Sprintf(SchemaRelationshipPattern, requestMethod)
-		// Check if this schema exists
-		if m.validator.HasSchema(responseSchema) {
-			return responseSchema
+// --- Helper: Identify Message --- Refactored for lower complexity. ---
+// identifyMessage extracts the message type and request ID from a JSON-RPC message.
+// Returns message type (method name or response type), request ID (if present), and error.
+func (m *ValidationMiddleware) identifyMessage(message []byte) (string, interface{}, error) {
+	var parsed map[string]json.RawMessage
+	if err := json.Unmarshal(message, &parsed); err != nil {
+		return "", nil, errors.Wrap(err, "identifyMessage: failed to parse message")
+	}
+
+	// Parse and validate the ID first.
+	id, idRaw, idTypeValid, idErr := m.parseAndValidateID(parsed)
+	if idErr != nil {
+		// Return the specific ID parsing/validation error.
+		return "", idRaw, idErr // Return raw ID bytes if parsing failed, or parsed ID if type was invalid.
+	}
+
+	// Check for method (Request or Notification).
+	if methodRaw, ok := parsed["method"]; ok {
+		var method string
+		if err := json.Unmarshal(methodRaw, &method); err != nil {
+			return "", id, errors.Wrap(err, "identifyMessage: failed to parse method")
+		}
+		if id == nil { // Note: idTypeValid was checked in parseAndValidateID.
+			return method + "_notification", nil, nil
+		}
+		return method, id, nil
+	}
+
+	// Check for result (Success Response).
+	if _, ok := parsed["result"]; ok {
+		if idTypeValid { // ID must be valid for responses.
+			return "success_response", id, nil
+		}
+		// If ID is invalid, fall through to return ID error.
+	}
+
+	// Check for error (Error Response).
+	if _, ok := parsed["error"]; ok {
+		if idTypeValid { // ID must be valid for responses.
+			return "error_response", id, nil
+		}
+		// If ID is invalid, fall through to return ID error.
+	}
+
+	// Handle remaining error cases.
+	if !idTypeValid {
+		// If we reached here, it means we had an invalid ID type, but didn't identify the message as Req/Resp/Notif.
+		return "", id, errors.New(fmt.Sprintf("identifyMessage: invalid type for id: expected string, number, or null, got %T", id))
+	}
+
+	// If ID was valid but no method/result/error found.
+	return "", id, errors.New("identifyMessage: unable to identify message type (not request, notification, or response)")
+}
+
+// parseAndValidateID extracts and validates the ID field from a parsed message.
+// Returns the parsed ID, raw ID bytes (only if parsing fails), validity flag, and error.
+func (m *ValidationMiddleware) parseAndValidateID(parsed map[string]json.RawMessage) (parsedID interface{}, rawID json.RawMessage, isValid bool, err error) {
+	idRaw, idExists := parsed["id"]
+	if !idExists || string(idRaw) == "null" {
+		return nil, nil, true, nil // No ID or null ID is valid for notifications, treat as valid type.
+	}
+
+	// Unmarshal the ID.
+	if err := json.Unmarshal(idRaw, &parsedID); err != nil {
+		// Malformed ID JSON.
+		return string(idRaw), idRaw, false, errors.Wrap(err, "identifyMessage: failed to parse id")
+	}
+
+	// Check the Go type after unmarshalling.
+	switch parsedID.(type) {
+	case string, float64, json.Number:
+		return parsedID, idRaw, true, nil // Valid type.
+	default:
+		// Invalid type (e.g., object, array).
+		return parsedID, idRaw, false, nil // Return parsed ID but mark as invalid type. Error will be generated by caller.
+	}
+}
+
+// --- Helper: Check Response Types ---.
+func isErrorResponse(message []byte) bool {
+	// Quick check without full parsing. Robustness depends on JSON structure.
+	// Assumes `"error": { ... }` structure for errors.
+	return bytes.Contains(message, []byte(`"error":`)) && !bytes.Contains(message, []byte(`"result":`))
+}
+
+func isSuccessResponse(message []byte) bool {
+	// Quick check without full parsing. Assumes `"result": ...` for success.
+	return bytes.Contains(message, []byte(`"result":`)) && !bytes.Contains(message, []byte(`"error":`))
+}
+
+// --- Helper: Calculate Preview ---.
+func calculatePreview(data []byte) string {
+	const maxPreviewLen = 100
+	if len(data) > maxPreviewLen {
+		return string(data[:maxPreviewLen]) + "..." // Indicate truncation.
+	}
+	return string(data)
+}
+
+// --- Helper Functions to Create JSON-RPC Error Responses ---.
+
+func createParseErrorResponse(id interface{}, parseErr error) ([]byte, error) {
+	return createGenericErrorResponse(id, transport.JSONRPCParseError, "Parse error.", parseErr)
+}
+
+func createInvalidRequestErrorResponse(id interface{}, requestErr error) ([]byte, error) {
+	// Check if the error message indicates invalid ID type specifically.
+	errMsg := requestErr.Error()
+	data := map[string]interface{}{"details": errMsg} // Default data.
+	if strings.Contains(errMsg, "invalid type for id") {
+		// Could potentially add more specific info if needed.
+		data["reason"] = "Invalid JSON-RPC ID type"
+	}
+	return createGenericErrorResponseWithData(id, transport.JSONRPCInvalidRequest, "Invalid Request.", data)
+}
+
+func createValidationErrorResponse(id interface{}, validationErr error) ([]byte, error) {
+	code := transport.JSONRPCInvalidRequest // Default code.
+	message := "Invalid Request."
+	var errorData interface{} = map[string]interface{}{"details": validationErr.Error()} // Default data.
+
+	var schemaValErr *schema.ValidationError
+	if errors.As(validationErr, &schemaValErr) {
+		// Add specific validation context.
+		errorData = map[string]interface{}{
+			"details":       schemaValErr.Message, // Use the core message.
+			"instancePath":  schemaValErr.InstancePath,
+			"schemaPath":    schemaValErr.SchemaPath,
+			"originalError": validationErr.Error(), // Include full formatted error string.
+		}
+		// Determine if it's an invalid params error based on path.
+		if schemaValErr.InstancePath != "" && (strings.Contains(schemaValErr.InstancePath, "/params") || strings.HasPrefix(schemaValErr.InstancePath, "params")) {
+			code = transport.JSONRPCInvalidParams // -32602.
+			message = "Invalid params."
 		}
 	}
 
-	// Fallback: determine schema type from the response itself
-	outMsgType, _, err := m.identifyMessage(responseBytes)
-	if err == nil {
-		if m.validator.HasSchema(outMsgType) {
-			return outMsgType
-		}
-	}
+	// Use the generic creator with potentially updated code/message/data.
+	return createGenericErrorResponseWithData(id, code, message, errorData)
+}
 
-	// Last resort: generic schema types
-	if isErrorResponse(responseBytes) {
-		return "error_response"
+// createInternalErrorResponse is used for errors during processing, *not* validation errors.
+// Removed unused internalErr parameter.
+func createInternalErrorResponse(id interface{} /* removed internalErr error */) ([]byte, error) {
+	// Avoid exposing internal error details by default.
+	data := map[string]interface{}{"details": "An internal server error occurred."}
+	// Log the actual internalErr server-side (done by the caller).
+	return createGenericErrorResponseWithData(id, transport.JSONRPCInternalError, "Internal error.", data)
+}
+
+// createGenericErrorResponse creates a standard JSON-RPC error response.
+func createGenericErrorResponse(id interface{}, code int, message string, cause error) ([]byte, error) {
+	var data interface{}
+	if cause != nil {
+		// Include basic cause in data, but be careful not to leak sensitive info.
+		data = map[string]interface{}{"details": cause.Error()}
 	}
-	return "success_response"
+	return createGenericErrorResponseWithData(id, code, message, data)
+}
+
+// createGenericErrorResponseWithData creates a standard JSON-RPC error response with provided data.
+func createGenericErrorResponseWithData(id interface{}, code int, message string, data interface{}) ([]byte, error) {
+	if id == nil {
+		id = json.RawMessage("null") // Ensure ID is json null if nil.
+	}
+	response := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"error": map[string]interface{}{
+			"code":    code,
+			"message": message,
+		},
+	}
+	// Only include data field if it's not nil.
+	if data != nil {
+		response["error"].(map[string]interface{})["data"] = data
+	}
+	return json.Marshal(response)
 }
