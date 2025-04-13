@@ -1,14 +1,12 @@
 ./
 ├── cmd/
 │   ├── rtm_connection_test/
-│   │   ├── main.go
-│   │   └── main.new
+│   │   └── main.go
 │   ├── schema_test/
 │   │   └── main.go
 │   ├── server/
 │   │   └── server_runner.go
 │   ├── claude_desktop_registration.go
-│   ├── claude_desktop_registration.new
 │   └── main.go
 ├── docs/
 │   ├── adr/
@@ -93,4 +91,4 @@
 ├── go.mod
 └── go.sum
 
-20 directories, 74 files
+20 directories, 72 files

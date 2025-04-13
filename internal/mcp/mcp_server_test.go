@@ -3,8 +3,7 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
-	"strings"
+	"encoding/json" // Removed unused strings import after removing containsAny.
 	"testing"
 	"time"
 
@@ -12,44 +11,42 @@ import (
 	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
+	"github.com/stretchr/testify/assert" // Use testify/assert.
+	"github.com/stretchr/testify/require"
 )
 
 // TestMCPInitializationProtocol tests the basic MCP protocol handshake
 // using the in-memory transport for testing.
 func TestMCPInitializationProtocol(t *testing.T) {
-	// Create an in-memory transport pair
+	// Create an in-memory transport pair.
 	transportPair := transport.NewInMemoryTransportPair()
 	defer transportPair.CloseChannels()
 
-	// Set up a test context with timeout
+	// Set up a test context with timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Create a minimal schema validator for testing
+	// Create a minimal schema validator for testing.
+	// Note: This uses a minimal schema, not the full schema.json used by the actual server.
 	schemaSource := schema.SchemaSource{
-		// Use a minimal embedded schema for testing
 		Embedded: []byte(`{
 			"$schema": "http://json-schema.org/draft-07/schema#",
 			"definitions": {
-				"JSONRPCRequest": {
-					"properties": {
-						"id": { "type": ["string", "integer"] },
-						"jsonrpc": { "const": "2.0", "type": "string" },
-						"method": { "type": "string" },
-						"params": { "type": "object" }
-					},
-					"required": ["id", "jsonrpc", "method"],
-					"type": "object"
-				}
+				"InitializeRequest": { "type": "object", "required": ["clientInfo", "protocolVersion", "capabilities"], "properties": {"clientInfo":{}, "protocolVersion":{}, "capabilities":{}}},
+				"InitializeResult": { "type": "object", "required": ["serverInfo", "protocolVersion", "capabilities"], "properties": {"serverInfo":{}, "protocolVersion":{}, "capabilities":{}}},
+				"InitializedNotification": { "type": "object", "required": ["params"], "properties": {"params":{}}},
+				"ListToolsRequest": { "type": "object", "properties": {"params":{}}},
+				"ListToolsResult": { "type": "object", "required": ["tools"], "properties": {"tools":{}}},
+				"JSONRPCRequest": { "type": "object", "required": ["jsonrpc", "method", "id"], "properties": {"jsonrpc":{}, "method":{}, "id":{}}},
+				"base": {"type": "object"}
 			}
 		}`),
 	}
 	validator := schema.NewSchemaValidator(schemaSource, logging.GetNoopLogger())
-	if err := validator.Initialize(ctx); err != nil {
-		t.Fatalf("Failed to initialize schema validator: %v", err)
-	}
+	err := validator.Initialize(ctx)
+	require.NoError(t, err, "Failed to initialize schema validator.")
 
-	// Set up the server with the in-memory transport
+	// Set up the server with the in-memory transport.
 	server, err := NewServer(
 		config.DefaultConfig(),
 		ServerOptions{
@@ -57,26 +54,25 @@ func TestMCPInitializationProtocol(t *testing.T) {
 			ShutdownTimeout: 1 * time.Second,
 			Debug:           true,
 		},
-		validator,
+		validator, // Use the minimal validator for this test.
 		time.Now(),
 		logging.GetNoopLogger(),
 	)
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+	require.NoError(t, err, "Failed to create server.")
 
-	// Assign the server transport
+	// Assign the server transport.
 	server.transport = transportPair.ServerTransport
 
-	// Start the server in a goroutine
+	// Start the server in a goroutine.
 	serverErrCh := make(chan error, 1)
 	go func() {
-		// Use context.Background() for the server to prevent premature shutdown
-		// The test will close the transports to stop the server
+		// Use context.Background() for the server to prevent premature shutdown.
+		// The test will close the transports to stop the server.
+		// Pass the actual handler function (s.handleMessage).
 		serverErrCh <- server.serve(context.Background(), server.handleMessage)
 	}()
 
-	// Client-side: Send an initialize request
+	// Client-side: Send an initialize request.
 	initializeReq := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      1,
@@ -94,172 +90,125 @@ func TestMCPInitializationProtocol(t *testing.T) {
 	}
 
 	initializeReqBytes, err := json.Marshal(initializeReq)
-	if err != nil {
-		t.Fatalf("Failed to marshal initialize request: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal initialize request.")
 
-	// Send initialize request
-	if err := transportPair.ClientTransport.WriteMessage(ctx, initializeReqBytes); err != nil {
-		t.Fatalf("Failed to send initialize request: %v", err)
-	}
+	// Send initialize request.
+	err = transportPair.ClientTransport.WriteMessage(ctx, initializeReqBytes)
+	require.NoError(t, err, "Failed to send initialize request.")
 
-	// Receive and parse the initialize response
+	// Receive and parse the initialize response.
 	initializeRespBytes, err := transportPair.ClientTransport.ReadMessage(ctx)
-	if err != nil {
-		t.Fatalf("Failed to receive initialize response: %v", err)
-	}
+	require.NoError(t, err, "Failed to receive initialize response.")
 
 	var initializeResp map[string]interface{}
-	if err := json.Unmarshal(initializeRespBytes, &initializeResp); err != nil {
-		t.Fatalf("Failed to unmarshal initialize response: %v", err)
-	}
+	err = json.Unmarshal(initializeRespBytes, &initializeResp)
+	require.NoError(t, err, "Failed to unmarshal initialize response.")
 
-	// Verify the response structure
+	// Verify the response structure.
+	// TODO: Consider validating initializeRespBytes against the full schema definition for InitializeResult for a more robust check.
 	result, ok := initializeResp["result"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected result object in response, got: %v", initializeResp)
-	}
+	require.True(t, ok, "Expected result object in response, got: %v", initializeResp)
 
-	// Verify required fields in the initialize result
+	// Verify required fields in the initialize result.
 	requiredFields := []string{"serverInfo", "protocolVersion", "capabilities"}
 	for _, field := range requiredFields {
-		if _, exists := result[field]; !exists {
-			t.Errorf("Missing required field in initialize response: %s", field)
-		}
+		assert.Contains(t, result, field, "Missing required field in initialize response: %s", field)
 	}
 
-	// Verify protocol version
+	// Verify protocol version.
 	protocolVersion, ok := result["protocolVersion"].(string)
-	if !ok || protocolVersion == "" {
-		t.Errorf("Invalid or missing protocol version: %v", result["protocolVersion"])
-	}
+	assert.True(t, ok && protocolVersion != "", "Invalid or missing protocol version: %v", result["protocolVersion"])
 
-	// Send notifications/initialized to complete handshake
+	// Send notifications/initialized to complete handshake.
 	initializedNotif := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "notifications/initialized",
-		"params":  map[string]interface{}{},
+		"params":  map[string]interface{}{}, // Params should be an empty object, not omitted.
 	}
 
 	initializedNotifBytes, err := json.Marshal(initializedNotif)
-	if err != nil {
-		t.Fatalf("Failed to marshal initialized notification: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal initialized notification.")
 
-	if err := transportPair.ClientTransport.WriteMessage(ctx, initializedNotifBytes); err != nil {
-		t.Fatalf("Failed to send initialized notification: %v", err)
-	}
+	err = transportPair.ClientTransport.WriteMessage(ctx, initializedNotifBytes)
+	require.NoError(t, err, "Failed to send initialized notification.")
 
-	// Verify connection state by sending a tools/list request
+	// Verify connection state by sending a tools/list request.
 	toolsListReq := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      2,
 		"method":  "tools/list",
-		"params":  map[string]interface{}{},
+		"params":  map[string]interface{}{}, // Params should be an empty object.
 	}
 
 	toolsListReqBytes, err := json.Marshal(toolsListReq)
-	if err != nil {
-		t.Fatalf("Failed to marshal tools/list request: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal tools/list request.")
 
-	if err := transportPair.ClientTransport.WriteMessage(ctx, toolsListReqBytes); err != nil {
-		t.Fatalf("Failed to send tools/list request: %v", err)
-	}
+	err = transportPair.ClientTransport.WriteMessage(ctx, toolsListReqBytes)
+	require.NoError(t, err, "Failed to send tools/list request.")
 
-	// Receive and parse the tools/list response
+	// Receive and parse the tools/list response.
 	toolsListRespBytes, err := transportPair.ClientTransport.ReadMessage(ctx)
-	if err != nil {
-		t.Fatalf("Failed to receive tools/list response: %v", err)
-	}
+	require.NoError(t, err, "Failed to receive tools/list response.")
 
 	var toolsListResp map[string]interface{}
-	if err := json.Unmarshal(toolsListRespBytes, &toolsListResp); err != nil {
-		t.Fatalf("Failed to unmarshal tools/list response: %v", err)
-	}
+	err = json.Unmarshal(toolsListRespBytes, &toolsListResp)
+	require.NoError(t, err, "Failed to unmarshal tools/list response.")
 
-	// Verify the tools response has a result with tools array
+	// Verify the tools response has a result with tools array.
 	toolsResult, ok := toolsListResp["result"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected result object in tools/list response, got: %v", toolsListResp)
-	}
+	require.True(t, ok, "Expected result object in tools/list response, got: %v", toolsListResp)
 
 	tools, ok := toolsResult["tools"].([]interface{})
-	if !ok {
-		t.Fatalf("Expected tools array in tools/list result, got: %v", toolsResult)
-	}
+	require.True(t, ok, "Expected tools array in tools/list result, got: %v", toolsResult)
 
-	// Verify we have at least one tool defined
-	if len(tools) == 0 {
-		t.Errorf("Expected at least one tool in tools/list response, got empty array")
-	}
+	// Verify we have at least one tool defined (adjust if your default server has none).
+	assert.NotEmpty(t, tools, "Expected at least one tool in tools/list response, got empty array.")
 
-	// Clean up by closing the transports
-	if err := transportPair.ClientTransport.Close(); err != nil {
-		t.Errorf("Failed to close client transport: %v", err)
-	}
+	// Clean up by closing the transports.
+	err = transportPair.ClientTransport.Close()
+	assert.NoError(t, err, "Failed to close client transport.")
 
-	if err := transportPair.ServerTransport.Close(); err != nil {
-		t.Errorf("Failed to close server transport: %v", err)
-	}
+	err = transportPair.ServerTransport.Close()
+	assert.NoError(t, err, "Failed to close server transport.")
 
-	// Check if the server reported any errors
+	// Check if the server reported any errors.
 	select {
 	case err := <-serverErrCh:
-		if err != nil && !transport.IsClosedError(err) {
-			t.Fatalf("Server reported unexpected error: %v", err)
+		if err != nil && !transport.IsClosedError(err) { // Use transport.IsClosedError.
+			t.Errorf("Server reported unexpected error: %v", err)
 		}
-	case <-time.After(time.Second):
-		// Server is probably still running, that's fine
+	case <-time.After(100 * time.Millisecond): // Shortened timeout.
+		// Server might still be running if close didn't propagate immediately, that's okay.
+		t.Log("Server did not immediately exit after transport close (may be expected).")
 	}
-}
-
-// Helper function to check if a string contains any of the given substrings.
-func containsAny(s string, substrings []string) bool {
-	for _, sub := range substrings {
-		if strings.Contains(strings.ToLower(s), strings.ToLower(sub)) {
-			return true
-		}
-	}
-	return false
 }
 
 // TestInvalidMethodSequence tests that the server correctly enforces
 // MCP protocol sequence (e.g., initialize must happen before other methods).
 func TestInvalidMethodSequence(t *testing.T) {
-	// Create an in-memory transport pair
+	// Create an in-memory transport pair.
 	transportPair := transport.NewInMemoryTransportPair()
 	defer transportPair.CloseChannels()
 
-	// Set up a test context with timeout
+	// Set up a test context with timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Create a minimal schema validator for testing
+	// Create a minimal schema validator for testing.
 	schemaSource := schema.SchemaSource{
-		// Use a minimal embedded schema for testing
 		Embedded: []byte(`{
 			"$schema": "http://json-schema.org/draft-07/schema#",
 			"definitions": {
-				"JSONRPCRequest": {
-					"properties": {
-						"id": { "type": ["string", "integer"] },
-						"jsonrpc": { "const": "2.0", "type": "string" },
-						"method": { "type": "string" },
-						"params": { "type": "object" }
-					},
-					"required": ["id", "jsonrpc", "method"],
-					"type": "object"
-				}
+				"ListToolsRequest": { "type": "object", "properties": {"params":{}}},
+				"JSONRPCRequest": { "type": "object", "required": ["jsonrpc", "method", "id"], "properties": {"jsonrpc":{}, "method":{}, "id":{}}}
 			}
 		}`),
 	}
 	validator := schema.NewSchemaValidator(schemaSource, logging.GetNoopLogger())
-	if err := validator.Initialize(ctx); err != nil {
-		t.Fatalf("Failed to initialize schema validator: %v", err)
-	}
+	err := validator.Initialize(ctx)
+	require.NoError(t, err, "Failed to initialize schema validator.")
 
-	// Set up the server with the in-memory transport
+	// Set up the server with the in-memory transport.
 	server, err := NewServer(
 		config.DefaultConfig(),
 		ServerOptions{
@@ -271,21 +220,19 @@ func TestInvalidMethodSequence(t *testing.T) {
 		time.Now(),
 		logging.GetNoopLogger(),
 	)
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+	require.NoError(t, err, "Failed to create server.")
 
-	// Assign the server transport
+	// Assign the server transport.
 	server.transport = transportPair.ServerTransport
 
-	// Start the server in a goroutine
+	// Start the server in a goroutine.
 	serverErrCh := make(chan error, 1)
 	go func() {
-		serverErrCh <- server.serve(context.Background(), server.handleMessage)
+		serverErrCh <- server.serve(context.Background(), server.handleMessage) // Pass actual handler.
 	}()
 
-	// Client-side: Skip initialization and send a tools/list request directly
-	// This should be rejected since initialize hasn't been called
+	// Client-side: Skip initialization and send a tools/list request directly.
+	// This should be rejected since initialize hasn't been called.
 	toolsListReq := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      1,
@@ -294,98 +241,82 @@ func TestInvalidMethodSequence(t *testing.T) {
 	}
 
 	toolsListReqBytes, err := json.Marshal(toolsListReq)
-	if err != nil {
-		t.Fatalf("Failed to marshal tools/list request: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal tools/list request.")
 
-	if err := transportPair.ClientTransport.WriteMessage(ctx, toolsListReqBytes); err != nil {
-		t.Fatalf("Failed to send tools/list request: %v", err)
-	}
+	err = transportPair.ClientTransport.WriteMessage(ctx, toolsListReqBytes)
+	require.NoError(t, err, "Failed to send tools/list request.")
 
-	// Receive and parse the error response
+	// Receive and parse the error response.
 	errorRespBytes, err := transportPair.ClientTransport.ReadMessage(ctx)
-	if err != nil {
-		t.Fatalf("Failed to receive error response: %v", err)
-	}
+	require.NoError(t, err, "Failed to receive error response.")
 
 	var errorResp map[string]interface{}
-	if err := json.Unmarshal(errorRespBytes, &errorResp); err != nil {
-		t.Fatalf("Failed to unmarshal error response: %v", err)
-	}
+	err = json.Unmarshal(errorRespBytes, &errorResp)
+	require.NoError(t, err, "Failed to unmarshal error response.")
 
-	// Verify this is an error response
+	// Verify this is an error response.
 	errorObj, ok := errorResp["error"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected error object in response, got: %v", errorResp)
-	}
+	require.True(t, ok, "Expected error object in response, got: %v", errorResp)
 
-	// Verify error has appropriate code and message
-	code, ok := errorObj["code"].(float64)
-	if !ok {
-		t.Fatalf("Expected numeric error code, got: %v", errorObj["code"])
-	}
+	// Verify error has the specific code for sequence errors (-32601 Method Not Found based on mapping).
+	code, ok := errorObj["code"].(float64) // JSON numbers unmarshal to float64.
+	require.True(t, ok, "Expected numeric error code, got: %v", errorObj["code"])
 
-	// The code should be an Invalid Request error or similar
-	if code > -32000 || code < -32700 {
-		t.Errorf("Expected standard JSON-RPC error code, got: %v", code)
-	}
+	// Corrected Assertion: Check for the specific error code mapped in mcp_server.go.
+	assert.Equal(t, float64(transport.JSONRPCMethodNotFound), code, "Expected Method Not Found error code (-32601) for sequence violation.")
 
+	// Optionally check the message or data for more context if needed, but code is primary.
 	message, ok := errorObj["message"].(string)
-	if !ok || message == "" {
-		t.Errorf("Expected error message, got: %v", errorObj["message"])
+	require.True(t, ok, "Expected string error message, got: %v", errorObj["message"])
+	// Message might be generic like "Method not found." or specific like "Connection initialization required.".
+	// Check the mapping logic in mcp_server.go's mapErrorToJSONRPCComponents.
+	assert.Equal(t, "Connection initialization required.", message, "Expected specific error message for sequence violation.")
+
+	errorData, hasData := errorObj["data"].(map[string]interface{})
+	if assert.True(t, hasData, "Expected data field in error response.") {
+		assert.Contains(t, errorData["detail"], "protocol sequence error", "Error data detail should mention sequence error.")
+		assert.Equal(t, "uninitialized", errorData["state"], "Error data should indicate the state was 'uninitialized'.")
 	}
 
-	// Verify the error message indicates something about initialization
-	if !containsAny(message, []string{"initialize", "not initialized", "connection"}) {
-		t.Errorf("Expected error message to mention initialization, got: %s", message)
-	}
+	// Clean up.
+	err = transportPair.ClientTransport.Close()
+	assert.NoError(t, err, "Failed to close client transport.")
 
-	// Clean up
-	if err := transportPair.ClientTransport.Close(); err != nil {
-		t.Errorf("Failed to close client transport: %v", err)
-	}
-
-	if err := transportPair.ServerTransport.Close(); err != nil {
-		t.Errorf("Failed to close server transport: %v", err)
-	}
+	err = transportPair.ServerTransport.Close()
+	assert.NoError(t, err, "Failed to close server transport.")
 }
 
 // TestMCPMethodNotFound tests that the server correctly handles
 // requests for non-existent methods.
 func TestMCPMethodNotFound(t *testing.T) {
-	// Create an in-memory transport pair
+	// Create an in-memory transport pair.
 	transportPair := transport.NewInMemoryTransportPair()
 	defer transportPair.CloseChannels()
 
-	// Set up a test context with timeout
+	// Set up a test context with timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Create a minimal schema validator for testing
+	// Create a minimal schema validator for testing.
+	// Include definitions needed for initialize and the error case.
 	schemaSource := schema.SchemaSource{
-		// Use a minimal embedded schema for testing
 		Embedded: []byte(`{
 			"$schema": "http://json-schema.org/draft-07/schema#",
 			"definitions": {
-				"JSONRPCRequest": {
-					"properties": {
-						"id": { "type": ["string", "integer"] },
-						"jsonrpc": { "const": "2.0", "type": "string" },
-						"method": { "type": "string" },
-						"params": { "type": "object" }
-					},
-					"required": ["id", "jsonrpc", "method"],
-					"type": "object"
-				}
+				"InitializeRequest": { "type": "object", "required": ["clientInfo", "protocolVersion", "capabilities"], "properties": {"clientInfo":{}, "protocolVersion":{}, "capabilities":{}}},
+				"InitializeResult": { "type": "object", "required": ["serverInfo", "protocolVersion", "capabilities"], "properties": {"serverInfo":{}, "protocolVersion":{}, "capabilities":{}}},
+				"InitializedNotification": { "type": "object", "required": ["params"], "properties": {"params":{}}},
+				"NonExistentRequest": { "type": "object", "properties": {"params":{}}}, // Schema for the request itself
+				"JSONRPCRequest": { "type": "object", "required": ["jsonrpc", "method", "id"], "properties": {"jsonrpc":{}, "method":{}, "id":{}}},
+				"base": {"type": "object"}
 			}
 		}`),
 	}
 	validator := schema.NewSchemaValidator(schemaSource, logging.GetNoopLogger())
-	if err := validator.Initialize(ctx); err != nil {
-		t.Fatalf("Failed to initialize schema validator: %v", err)
-	}
+	err := validator.Initialize(ctx)
+	require.NoError(t, err, "Failed to initialize schema validator.")
 
-	// Set up the server with the in-memory transport
+	// Set up the server with the in-memory transport.
 	server, err := NewServer(
 		config.DefaultConfig(),
 		ServerOptions{
@@ -397,20 +328,18 @@ func TestMCPMethodNotFound(t *testing.T) {
 		time.Now(),
 		logging.GetNoopLogger(),
 	)
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+	require.NoError(t, err, "Failed to create server.")
 
-	// Assign the server transport
+	// Assign the server transport.
 	server.transport = transportPair.ServerTransport
 
-	// Start the server in a goroutine
+	// Start the server in a goroutine.
 	serverErrCh := make(chan error, 1)
 	go func() {
-		serverErrCh <- server.serve(context.Background(), server.handleMessage)
+		serverErrCh <- server.serve(context.Background(), server.handleMessage) // Pass actual handler.
 	}()
 
-	// Initialize the connection properly first
+	// Initialize the connection properly first.
 	initializeReq := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      1,
@@ -426,21 +355,16 @@ func TestMCPMethodNotFound(t *testing.T) {
 	}
 
 	initializeReqBytes, err := json.Marshal(initializeReq)
-	if err != nil {
-		t.Fatalf("Failed to marshal initialize request: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal initialize request.")
 
-	if err := transportPair.ClientTransport.WriteMessage(ctx, initializeReqBytes); err != nil {
-		t.Fatalf("Failed to send initialize request: %v", err)
-	}
+	err = transportPair.ClientTransport.WriteMessage(ctx, initializeReqBytes)
+	require.NoError(t, err, "Failed to send initialize request.")
 
-	// Read and discard the initialize response
+	// Read and discard the initialize response.
 	_, err = transportPair.ClientTransport.ReadMessage(ctx)
-	if err != nil {
-		t.Fatalf("Failed to receive initialize response: %v", err)
-	}
+	require.NoError(t, err, "Failed to receive initialize response.")
 
-	// Send notifications/initialized to complete handshake
+	// Send notifications/initialized to complete handshake.
 	initializedNotif := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "notifications/initialized",
@@ -448,15 +372,12 @@ func TestMCPMethodNotFound(t *testing.T) {
 	}
 
 	initializedNotifBytes, err := json.Marshal(initializedNotif)
-	if err != nil {
-		t.Fatalf("Failed to marshal initialized notification: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal initialized notification.")
 
-	if err := transportPair.ClientTransport.WriteMessage(ctx, initializedNotifBytes); err != nil {
-		t.Fatalf("Failed to send initialized notification: %v", err)
-	}
+	err = transportPair.ClientTransport.WriteMessage(ctx, initializedNotifBytes)
+	require.NoError(t, err, "Failed to send initialized notification.")
 
-	// Now send a request for a non-existent method
+	// Now send a request for a non-existent method.
 	nonExistentReq := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      2,
@@ -465,48 +386,36 @@ func TestMCPMethodNotFound(t *testing.T) {
 	}
 
 	nonExistentReqBytes, err := json.Marshal(nonExistentReq)
-	if err != nil {
-		t.Fatalf("Failed to marshal non-existent method request: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal non-existent method request.")
 
-	if err := transportPair.ClientTransport.WriteMessage(ctx, nonExistentReqBytes); err != nil {
-		t.Fatalf("Failed to send non-existent method request: %v", err)
-	}
+	err = transportPair.ClientTransport.WriteMessage(ctx, nonExistentReqBytes)
+	require.NoError(t, err, "Failed to send non-existent method request.")
 
-	// Receive and parse the error response
+	// Receive and parse the error response.
 	errorRespBytes, err := transportPair.ClientTransport.ReadMessage(ctx)
-	if err != nil {
-		t.Fatalf("Failed to receive error response: %v", err)
-	}
+	require.NoError(t, err, "Failed to receive error response.")
 
 	var errorResp map[string]interface{}
-	if err := json.Unmarshal(errorRespBytes, &errorResp); err != nil {
-		t.Fatalf("Failed to unmarshal error response: %v", err)
-	}
+	err = json.Unmarshal(errorRespBytes, &errorResp)
+	require.NoError(t, err, "Failed to unmarshal error response.")
 
-	// Verify this is an error response
+	// Verify this is an error response.
 	errorObj, ok := errorResp["error"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected error object in response, got: %v", errorResp)
-	}
+	require.True(t, ok, "Expected error object in response, got: %v", errorResp)
 
-	// Verify error has appropriate code and message
-	code, ok := errorObj["code"].(float64)
-	if !ok {
-		t.Fatalf("Expected numeric error code, got: %v", errorObj["code"])
-	}
+	// Verify error has appropriate code and message.
+	code, ok := errorObj["code"].(float64) // JSON numbers unmarshal to float64.
+	require.True(t, ok, "Expected numeric error code, got: %v", errorObj["code"])
 
-	// The code should be Method Not Found (-32601)
-	if code != -32601 {
-		t.Errorf("Expected Method Not Found error code (-32601), got: %v", code)
-	}
+	// The code should be Method Not Found (-32601).
+	assert.Equal(t, float64(transport.JSONRPCMethodNotFound), code, "Expected Method Not Found error code (-32601).")
 
-	// Clean up
-	if err := transportPair.ClientTransport.Close(); err != nil {
-		t.Errorf("Failed to close client transport: %v", err)
-	}
+	// Clean up.
+	err = transportPair.ClientTransport.Close()
+	assert.NoError(t, err, "Failed to close client transport.")
 
-	if err := transportPair.ServerTransport.Close(); err != nil {
-		t.Errorf("Failed to close server transport: %v", err)
-	}
+	err = transportPair.ServerTransport.Close()
+	assert.NoError(t, err, "Failed to close server transport.")
 }
+
+// Removed helper function containsAny as it's no longer needed.
