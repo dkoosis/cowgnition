@@ -9,6 +9,9 @@ import (
 	"github.com/cockroachdb/errors" // Using cockroachdb/errors for wrapping.
 )
 
+// Use constant for the supported protocol version.
+const supportedMCPVersion = "2025-03-26" // Match the bundled schema version
+
 // handleInitialize handles the initialize request.
 // Official definition: This request is sent from the client to the server when it first connects,
 // asking it to begin initialization. The server responds with information about its capabilities,
@@ -40,13 +43,13 @@ func (h *Handler) handleInitialize(ctx context.Context, params json.RawMessage) 
 
 	appVersion := "0.1.0-dev" // TODO: Get from build flags.
 	serverInfo := Implementation{Name: h.config.Server.Name, Version: appVersion}
+	// In the InitializeResult creation:
 	res := InitializeResult{
 		ServerInfo:      serverInfo,
-		ProtocolVersion: "2024-11-05", // TODO: Consider making this dynamic or a constant.
+		ProtocolVersion: supportedMCPVersion, // Use the constant
 		Capabilities:    caps,
 		Instructions:    "You can use CowGnition to manage your Remember The Milk tasks. Use RTM tools to create, view, and complete tasks.",
 	}
-
 	resultBytes, err := json.Marshal(res)
 	if err != nil {
 		h.logger.Error("Failed to marshal InitializeResult.", "error", err)

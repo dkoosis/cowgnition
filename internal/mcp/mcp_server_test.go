@@ -3,7 +3,9 @@ package mcp
 
 import (
 	"context"
-	"encoding/json" // Removed unused strings import after removing containsAny.
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,9 +13,44 @@ import (
 	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
-	"github.com/stretchr/testify/assert" // Use testify/assert.
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// getFullSchemaPath returns the path to the schema file for testing.
+func getFullSchemaPath(t *testing.T) string {
+	t.Helper()
+
+	// Try multiple relative paths to find schema.json
+	possiblePaths := []string{
+		"../schema/schema.json",
+		"../../internal/schema/schema.json",
+		"../internal/schema/schema.json",
+		"schema.json", // Check in the current dir too
+	}
+
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			absPath, err := filepath.Abs(path)
+			require.NoError(t, err, "Failed to get absolute path for schema.json")
+			t.Logf("Using schema path: %s", absPath)
+			return absPath
+		}
+	}
+
+	// If we can't find the schema file, fail the test
+	t.Fatalf("Could not find schema.json in expected locations. Current directory: %s", getCurrentDir())
+	return "" // Unreachable, but needed for compilation
+}
+
+// getCurrentDir is a helper to get the current directory for error messages.
+func getCurrentDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "unknown"
+	}
+	return dir
+}
 
 // TestMCPInitializationProtocol tests the basic MCP protocol handshake
 // using the in-memory transport for testing.
@@ -26,25 +63,12 @@ func TestMCPInitializationProtocol(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Create a minimal schema validator for testing.
-	// Note: This uses a minimal schema, not the full schema.json used by the actual server.
-	schemaSource := schema.SchemaSource{
-		Embedded: []byte(`{
-			"$schema": "http://json-schema.org/draft-07/schema#",
-			"definitions": {
-				"InitializeRequest": { "type": "object", "required": ["clientInfo", "protocolVersion", "capabilities"], "properties": {"clientInfo":{}, "protocolVersion":{}, "capabilities":{}}},
-				"InitializeResult": { "type": "object", "required": ["serverInfo", "protocolVersion", "capabilities"], "properties": {"serverInfo":{}, "protocolVersion":{}, "capabilities":{}}},
-				"InitializedNotification": { "type": "object", "required": ["params"], "properties": {"params":{}}},
-				"ListToolsRequest": { "type": "object", "properties": {"params":{}}},
-				"ListToolsResult": { "type": "object", "required": ["tools"], "properties": {"tools":{}}},
-				"JSONRPCRequest": { "type": "object", "required": ["jsonrpc", "method", "id"], "properties": {"jsonrpc":{}, "method":{}, "id":{}}},
-				"base": {"type": "object"}
-			}
-		}`),
-	}
+	// Create a validator using the full bundled schema
+	schemaPath := getFullSchemaPath(t)
+	schemaSource := schema.SchemaSource{FilePath: schemaPath}
 	validator := schema.NewSchemaValidator(schemaSource, logging.GetNoopLogger())
 	err := validator.Initialize(ctx)
-	require.NoError(t, err, "Failed to initialize schema validator.")
+	require.NoError(t, err, "Failed to initialize schema validator with official schema file.")
 
 	// Set up the server with the in-memory transport.
 	server, err := NewServer(
@@ -54,7 +78,7 @@ func TestMCPInitializationProtocol(t *testing.T) {
 			ShutdownTimeout: 1 * time.Second,
 			Debug:           true,
 		},
-		validator, // Use the minimal validator for this test.
+		validator,
 		time.Now(),
 		logging.GetNoopLogger(),
 	)
@@ -82,7 +106,7 @@ func TestMCPInitializationProtocol(t *testing.T) {
 				"name":    "TestClient",
 				"version": "1.0.0",
 			},
-			"protocolVersion": "2024-11-05",
+			"protocolVersion": "2025-03-26",
 			"capabilities": map[string]interface{}{
 				"sampling": map[string]interface{}{},
 			},
@@ -105,7 +129,6 @@ func TestMCPInitializationProtocol(t *testing.T) {
 	require.NoError(t, err, "Failed to unmarshal initialize response.")
 
 	// Verify the response structure.
-	// TODO: Consider validating initializeRespBytes against the full schema definition for InitializeResult for a more robust check.
 	result, ok := initializeResp["result"].(map[string]interface{})
 	require.True(t, ok, "Expected result object in response, got: %v", initializeResp)
 
@@ -174,7 +197,7 @@ func TestMCPInitializationProtocol(t *testing.T) {
 	// Check if the server reported any errors.
 	select {
 	case err := <-serverErrCh:
-		if err != nil && !transport.IsClosedError(err) { // Use transport.IsClosedError.
+		if err != nil && !transport.IsClosedError(err) {
 			t.Errorf("Server reported unexpected error: %v", err)
 		}
 	case <-time.After(100 * time.Millisecond): // Shortened timeout.
@@ -194,19 +217,12 @@ func TestInvalidMethodSequence(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Create a minimal schema validator for testing.
-	schemaSource := schema.SchemaSource{
-		Embedded: []byte(`{
-			"$schema": "http://json-schema.org/draft-07/schema#",
-			"definitions": {
-				"ListToolsRequest": { "type": "object", "properties": {"params":{}}},
-				"JSONRPCRequest": { "type": "object", "required": ["jsonrpc", "method", "id"], "properties": {"jsonrpc":{}, "method":{}, "id":{}}}
-			}
-		}`),
-	}
+	// Create a validator using the full bundled schema
+	schemaPath := getFullSchemaPath(t)
+	schemaSource := schema.SchemaSource{FilePath: schemaPath}
 	validator := schema.NewSchemaValidator(schemaSource, logging.GetNoopLogger())
 	err := validator.Initialize(ctx)
-	require.NoError(t, err, "Failed to initialize schema validator.")
+	require.NoError(t, err, "Failed to initialize schema validator with official schema file.")
 
 	// Set up the server with the in-memory transport.
 	server, err := NewServer(
@@ -228,7 +244,7 @@ func TestInvalidMethodSequence(t *testing.T) {
 	// Start the server in a goroutine.
 	serverErrCh := make(chan error, 1)
 	go func() {
-		serverErrCh <- server.serve(context.Background(), server.handleMessage) // Pass actual handler.
+		serverErrCh <- server.serve(context.Background(), server.handleMessage)
 	}()
 
 	// Client-side: Skip initialization and send a tools/list request directly.
@@ -262,14 +278,10 @@ func TestInvalidMethodSequence(t *testing.T) {
 	code, ok := errorObj["code"].(float64) // JSON numbers unmarshal to float64.
 	require.True(t, ok, "Expected numeric error code, got: %v", errorObj["code"])
 
-	// Corrected Assertion: Check for the specific error code mapped in mcp_server.go.
 	assert.Equal(t, float64(transport.JSONRPCMethodNotFound), code, "Expected Method Not Found error code (-32601) for sequence violation.")
 
-	// Optionally check the message or data for more context if needed, but code is primary.
 	message, ok := errorObj["message"].(string)
 	require.True(t, ok, "Expected string error message, got: %v", errorObj["message"])
-	// Message might be generic like "Method not found." or specific like "Connection initialization required.".
-	// Check the mapping logic in mcp_server.go's mapErrorToJSONRPCComponents.
 	assert.Equal(t, "Connection initialization required.", message, "Expected specific error message for sequence violation.")
 
 	errorData, hasData := errorObj["data"].(map[string]interface{})
@@ -297,24 +309,12 @@ func TestMCPMethodNotFound(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Create a minimal schema validator for testing.
-	// Include definitions needed for initialize and the error case.
-	schemaSource := schema.SchemaSource{
-		Embedded: []byte(`{
-			"$schema": "http://json-schema.org/draft-07/schema#",
-			"definitions": {
-				"InitializeRequest": { "type": "object", "required": ["clientInfo", "protocolVersion", "capabilities"], "properties": {"clientInfo":{}, "protocolVersion":{}, "capabilities":{}}},
-				"InitializeResult": { "type": "object", "required": ["serverInfo", "protocolVersion", "capabilities"], "properties": {"serverInfo":{}, "protocolVersion":{}, "capabilities":{}}},
-				"InitializedNotification": { "type": "object", "required": ["params"], "properties": {"params":{}}},
-				"NonExistentRequest": { "type": "object", "properties": {"params":{}}}, // Schema for the request itself
-				"JSONRPCRequest": { "type": "object", "required": ["jsonrpc", "method", "id"], "properties": {"jsonrpc":{}, "method":{}, "id":{}}},
-				"base": {"type": "object"}
-			}
-		}`),
-	}
+	// Create a validator using the full bundled schema
+	schemaPath := getFullSchemaPath(t)
+	schemaSource := schema.SchemaSource{FilePath: schemaPath}
 	validator := schema.NewSchemaValidator(schemaSource, logging.GetNoopLogger())
 	err := validator.Initialize(ctx)
-	require.NoError(t, err, "Failed to initialize schema validator.")
+	require.NoError(t, err, "Failed to initialize schema validator with official schema file.")
 
 	// Set up the server with the in-memory transport.
 	server, err := NewServer(
@@ -336,7 +336,7 @@ func TestMCPMethodNotFound(t *testing.T) {
 	// Start the server in a goroutine.
 	serverErrCh := make(chan error, 1)
 	go func() {
-		serverErrCh <- server.serve(context.Background(), server.handleMessage) // Pass actual handler.
+		serverErrCh <- server.serve(context.Background(), server.handleMessage)
 	}()
 
 	// Initialize the connection properly first.
@@ -349,7 +349,7 @@ func TestMCPMethodNotFound(t *testing.T) {
 				"name":    "TestClient",
 				"version": "1.0.0",
 			},
-			"protocolVersion": "2024-11-05",
+			"protocolVersion": "2025-03-26",
 			"capabilities":    map[string]interface{}{},
 		},
 	}
@@ -417,5 +417,3 @@ func TestMCPMethodNotFound(t *testing.T) {
 	err = transportPair.ServerTransport.Close()
 	assert.NoError(t, err, "Failed to close server transport.")
 }
-
-// Removed helper function containsAny as it's no longer needed.

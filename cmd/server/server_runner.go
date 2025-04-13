@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath" // Needed for schema path
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -14,7 +14,7 @@ import (
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/mcp"
-	"github.com/dkoosis/cowgnition/internal/schema" // Import schema package
+	"github.com/dkoosis/cowgnition/internal/schema"
 )
 
 // RunServer starts the MCP server with the specified transport type.
@@ -23,19 +23,19 @@ import (
 func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout time.Duration, debug bool) error {
 	startTime := time.Now() // *** CAPTURE START TIME ***
 
-	// --- Context and Signal Handling (unchanged) ---
+	// --- Context and Signal Handling ---
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// --- Logging Setup (unchanged) ---
+	// --- Logging Setup ---
 	logLevel := "info"
 	if debug {
 		logLevel = "debug"
 	}
 	logging.SetupDefaultLogger(logLevel)
-	logger := logging.GetLogger("server_logic") // Changed logger name for clarity
+	logger := logging.GetLogger("server_runner")
 
 	logger.Info("Starting server run sequence",
 		"transport", transportType,
@@ -43,7 +43,7 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		"request_timeout", requestTimeout,
 		"shutdown_timeout", shutdownTimeout)
 
-	// --- Configuration Loading (unchanged) ---
+	// --- Configuration Loading ---
 	var cfg *config.Config
 	var err error
 	if configPath != "" {
@@ -59,32 +59,34 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	}
 	logger.Info("Configuration loaded successfully")
 
-	// --- *** UPDATED: Initialize Schema Validator with improved path finding *** ---
+	// --- *** UPDATED: Initialize Schema Validator with improved loading/caching *** ---
 	logger.Info("Initializing schema validator...")
 
-	// Try multiple paths to find the schema file
-	var schemaFilePath string
+	// Define primary schema location - ensure consistency across runs
+	schemaFilePath := filepath.Join("internal", "schema", "schema.json")
+
+	// Check if schema file exists in several possible locations
+	foundSchemaPath := ""
 	possiblePaths := []string{
-		filepath.Join("internal", "schema", "schema.json"),             // Relative from working dir
+		schemaFilePath,                    // Default path
+		filepath.Join(".", "schema.json"), // Current directory
 		filepath.Join("..", "internal", "schema", "schema.json"),       // One level up
 		filepath.Join("..", "..", "internal", "schema", "schema.json"), // Two levels up
-		filepath.Join(".", "schema.json"),                              // Local dir
-		filepath.Join("internal", "schema", "min_schema.json"),         // Try min_schema as fallback
 	}
 
-	// Check each path and use the first one that exists
 	for _, path := range possiblePaths {
 		if _, err := os.Stat(path); err == nil {
-			schemaFilePath = path
-			logger.Info("Found schema file", "path", schemaFilePath)
+			foundSchemaPath = path
+			logger.Info("Found schema file", "path", foundSchemaPath)
 			break
 		}
 	}
 
-	// Configure schema source with file path (if found) and URL fallback
+	// Configure schema source with found file path and URL fallback
+	// The URL is used for update checking with HTTP caching, not as primary source
 	schemaSource := schema.SchemaSource{
-		FilePath: schemaFilePath, // May be empty if no file found
-		// Use the MCP repository URL as fallback
+		FilePath: foundSchemaPath, // May be empty if no file found
+		// Use the MCP repository URL for update checking with HTTP caching
 		URL: "https://raw.githubusercontent.com/modelcontextprotocol/specification/main/schema/2025-03-26/schema.json",
 	}
 
@@ -92,10 +94,15 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	if err := validator.Initialize(ctx); err != nil {
 		return errors.Wrap(err, "failed to initialize schema validator")
 	}
-	logger.Info("Schema validator initialized successfully.")
+
+	schemaVersion := validator.GetSchemaVersion()
+	logger.Info("Schema validator initialized successfully.",
+		"version", schemaVersion,
+		"loadDuration", validator.GetLoadDuration(),
+		"compileDuration", validator.GetCompileDuration())
 	// --- *** End Schema Validator Init *** ---
 
-	// --- Create MCP Server Options (unchanged) ---
+	// --- Create MCP Server Options ---
 	opts := mcp.ServerOptions{
 		RequestTimeout:  requestTimeout,
 		ShutdownTimeout: shutdownTimeout,
@@ -109,7 +116,7 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		return errors.Wrap(err, "failed to create MCP server")
 	}
 
-	// --- Start Server (unchanged logic for selecting transport) ---
+	// --- Start Server (logic for selecting transport) ---
 	switch transportType {
 	case "stdio":
 		logger.Info("Starting server with stdio transport")
@@ -157,7 +164,7 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		return errors.Newf("unsupported transport type: %s", transportType)
 	}
 
-	// --- Wait for signal or context cancellation (unchanged) ---
+	// --- Wait for signal or context cancellation ---
 	select {
 	case sig := <-sigChan:
 		logger.Info("Received signal", "signal", sig)
@@ -173,7 +180,7 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	// *** ADDED: Shutdown validator ***
 	if err := validator.Shutdown(); err != nil {
 		logger.Error("Error shutting down schema validator", "error", err)
-		// Decide if this is fatal or just a warning
+		// We continue with server shutdown even if schema validator shutdown failed
 	}
 
 	if err := server.Shutdown(shutdownCtx); err != nil {

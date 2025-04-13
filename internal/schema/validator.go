@@ -3,18 +3,20 @@ package schema
 
 import (
 	"bytes"
-	"context" // Import for checksum calculation (for future use).
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/logging"
+	"github.com/dkoosis/cowgnition/internal/logging" // Assuming this path is correct
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
@@ -23,7 +25,7 @@ import (
 type SchemaSource struct {
 	// URL is the remote location of the schema, if applicable.
 	URL string
-	// FilePath is the local file path of the schema, if applicable.
+	// FilePath is the local file path of the schema, if applicable (also used for caching URL fetches).
 	FilePath string
 	// Embedded is the embedded schema content, if applicable.
 	Embedded []byte
@@ -39,7 +41,7 @@ type SchemaValidator struct {
 	compiler *jsonschema.Compiler
 	// schemas maps message types to their compiled schema.
 	schemas map[string]*jsonschema.Schema
-	// mu protects concurrent access to the schemas map.
+	// mu protects concurrent access to the schemas map and internal state like cache headers.
 	mu sync.RWMutex
 	// httpClient is used for remote schema fetching.
 	httpClient *http.Client
@@ -51,6 +53,12 @@ type SchemaValidator struct {
 	lastLoadDuration time.Duration
 	// lastCompileDuration stores the time taken for the last schema compile.
 	lastCompileDuration time.Duration
+	// schemaVersion stores the detected version of the loaded schema.
+	schemaVersion string
+	// schemaETag stores the ETag from the last successful HTTP response for caching.
+	schemaETag string
+	// schemaLastModified stores the Last-Modified time from the last successful HTTP response for caching.
+	schemaLastModified string
 }
 
 // ErrorCode defines validation error codes.
@@ -160,13 +168,35 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 
 	// --- Load Schema Data ---
 	loadStart := time.Now()
+	// Pass the lock-acquired context (ctx here is outer context)
 	schemaData, err := v.loadSchemaData(ctx)
 	v.lastLoadDuration = time.Since(loadStart) // Store load duration.
 	if err != nil {
+		// loadSchemaData returns wrapped ValidationError on failure
 		v.logger.Error("Schema loading failed.", "duration", v.lastLoadDuration, "error", err)
-		return errors.Wrap(err, "failed to load schema data")
+		return err // Return the wrapped error directly
+	}
+	// Check if loadSchemaData signaled "use existing compiled" (returned nil data, nil error)
+	// This happens on HTTP 304 when local file cache also failed.
+	if schemaData == nil {
+		// *** Fix for gosimple (S1009) ***
+		// Remove redundant nil check, len() is safe for nil maps.
+		if len(v.schemas) == 0 {
+			// This case should ideally not happen if 304 occurs, means initial load never happened.
+			err := NewValidationError(ErrSchemaLoadFailed, "Schema unchanged (304) but no schema was previously loaded", nil)
+			v.logger.Error("Schema loading failed.", "duration", v.lastLoadDuration, "error", err)
+			return err
+		}
+		// If data is nil and error is nil, it means use existing cache (HTTP 304 case).
+		// Mark as initialized if schemas exist.
+		v.initialized = true
+		v.logger.Info("Schema unchanged on source, re-using previously compiled schemas.", "loadDuration", v.lastLoadDuration)
+		return nil // Initialization technically successful (using cached)
 	}
 	v.logger.Info("Schema loaded.", "duration", v.lastLoadDuration, "sizeBytes", len(schemaData))
+
+	// Try to extract version information from the newly loaded data
+	v.extractSchemaVersion(schemaData)
 
 	// --- Add Schema Resource ---
 	addStart := time.Now()
@@ -186,6 +216,7 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 
 	// --- Compile Base Schema and Key Definitions ---
 	compileStart := time.Now()
+	// Define schemas relative to the added resource ID
 	schemasToCompile := map[string]string{
 		"base":                resourceID, // Compile the root.
 		"JSONRPCRequest":      resourceID + "#/definitions/JSONRPCRequest",
@@ -241,6 +272,7 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 		"totalDuration", initDuration,
 		"loadDuration", v.lastLoadDuration,
 		"compileDuration", v.lastCompileDuration,
+		"schemaVersion", v.schemaVersion, // Log detected version
 		"schemasCompiled", getSchemaKeys(v.schemas))
 
 	return nil
@@ -272,9 +304,15 @@ func (v *SchemaValidator) Shutdown() error {
 
 	v.logger.Info("Shutting down schema validator...")
 
-	// Close HTTP client if needed.
+	// Close HTTP client idle connections.
 	if transport, ok := v.httpClient.Transport.(*http.Transport); ok {
 		transport.CloseIdleConnections()
+	} else {
+		// If using default transport, create one to close connections
+		// This might not be strictly necessary but ensures cleanup attempt
+		if dt, ok := http.DefaultTransport.(*http.Transport); ok {
+			dt.CloseIdleConnections()
+		}
 	}
 
 	// Clear cached schemas to free memory.
@@ -293,10 +331,22 @@ func (v *SchemaValidator) IsInitialized() bool {
 }
 
 // compileSubSchema compiles a sub-schema from the base schema.
-// nolint:unused // Reserved for future schema compilation features.
+// nolint:unused // Reserved for future dynamic schema compilation features.
 func (v *SchemaValidator) compileSubSchema(name, pointer string) error {
-	// In the santhosh-tekuri/jsonschema/v5 library, we use Compile with a pointer.
-	// instead of CompileWithID which doesn't exist.
+	// This method requires the main lock because it modifies v.schemas
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	// Check if already compiled
+	if _, exists := v.schemas[name]; exists {
+		return nil // Already exists
+	}
+
+	// Ensure the compiler is ready (should be if initialized)
+	if v.compiler == nil {
+		return NewValidationError(ErrSchemaCompileFailed, "Compiler not available", nil)
+	}
+
 	subSchema, err := v.compiler.Compile(pointer)
 	if err != nil {
 		return NewValidationError(
@@ -306,98 +356,255 @@ func (v *SchemaValidator) compileSubSchema(name, pointer string) error {
 		).WithContext("schemaPointer", pointer)
 	}
 
+	// Add to the map
+	if v.schemas == nil {
+		v.schemas = make(map[string]*jsonschema.Schema)
+	}
 	v.schemas[name] = subSchema
+	v.logger.Info("Dynamically compiled and added sub-schema.", "name", name, "pointer", pointer)
 	return nil
 }
 
-// loadSchemaData loads the schema data from the configured source.
+// loadSchemaData orchestrates loading schema data from the configured source.
+// It requires the main lock (`v.mu`) to be held by the caller (e.g., Initialize)
+// because it modifies cache headers (`v.schemaETag`, `v.schemaLastModified`).
 func (v *SchemaValidator) loadSchemaData(ctx context.Context) ([]byte, error) {
-	// Try to load from each source in order of preference.
-
-	// 1. Try embedded schema if provided.
-	if len(v.source.Embedded) > 0 {
-		v.logger.Debug("Loading schema from embedded data.")
-		return v.source.Embedded, nil
-	}
-
-	// 2. Try local file if path is provided.
-	if v.source.FilePath != "" {
-		v.logger.Debug("Attempting to load schema from file.", "path", v.source.FilePath)
-		data, err := os.ReadFile(v.source.FilePath)
-		if err == nil {
-			v.logger.Debug("Successfully loaded schema from file.",
-				"path", v.source.FilePath,
-				"size", len(data))
-			return data, nil
-		}
-		v.logger.Warn("Failed to load schema from file, will try URL next.",
-			"path", v.source.FilePath,
-			"error", err)
-		// If file read failed, log and continue to next source.
-		// We don't return error yet, we'll try URL next.
-	}
-
-	// 3. Try URL if provided.
-	if v.source.URL != "" {
-		v.logger.Debug("Attempting to load schema from URL.", "url", v.source.URL)
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.source.URL, nil)
-		if err != nil {
-			return nil, NewValidationError(
-				ErrSchemaLoadFailed,
-				"Failed to create HTTP request for schema URL",
-				errors.Wrap(err, "http.NewRequestWithContext failed"),
-			).WithContext("url", v.source.URL)
-		}
-
-		resp, err := v.httpClient.Do(req)
-		if err != nil {
-			return nil, NewValidationError(
-				ErrSchemaLoadFailed,
-				"Failed to fetch schema from URL",
-				errors.Wrap(err, "httpClient.Do failed"),
-			).WithContext("url", v.source.URL)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			bodyBytes, _ := io.ReadAll(resp.Body) // Read body for context.
-			return nil, NewValidationError(
-				ErrSchemaLoadFailed,
-				fmt.Sprintf("Failed to fetch schema: HTTP status %d", resp.StatusCode),
-				nil,
-			).WithContext("url", v.source.URL).
-				WithContext("statusCode", resp.StatusCode).
-				WithContext("responseBody", string(bodyBytes)) // Add response body to error context.
-		}
-
-		data, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, NewValidationError(
-				ErrSchemaLoadFailed,
-				"Failed to read schema from HTTP response",
-				errors.Wrap(err, "io.ReadAll failed"),
-			).WithContext("url", v.source.URL)
-		}
-
-		v.logger.Debug("Successfully loaded schema from URL.",
-			"url", v.source.URL,
-			"size", len(data))
+	// 1. Try embedded schema first.
+	if data, err := v.loadSchemaFromEmbedded(); err == nil {
 		return data, nil
+	} // Error is not possible currently, but good practice
+
+	// 2. Try local file second.
+	// We load it here but might discard if URL provides newer data or indicates no change.
+	var initialFileData []byte
+	var initialFileErr error
+	if v.source.FilePath != "" {
+		initialFileData, initialFileErr = v.loadSchemaFromFile(v.source.FilePath)
+		if initialFileErr != nil {
+			v.logger.Warn("Failed to load schema from file initially, will try URL if configured.",
+				"path", v.source.FilePath,
+				"error", initialFileErr)
+			// Don't return error yet, URL might succeed.
+		} else {
+			v.logger.Debug("Successfully loaded schema from file initially.",
+				"path", v.source.FilePath,
+				"size", len(initialFileData))
+			// If no URL is configured, this file data is definitive.
+			if v.source.URL == "" {
+				// v.extractSchemaVersion(initialFileData) // Version extracted in Initialize now
+				return initialFileData, nil
+			}
+		}
 	}
 
-	// 4. If we get here, all sources failed.
+	// 3. Try URL third (if configured).
+	if v.source.URL != "" {
+		// Pass lock-acquired context to HTTP fetch
+		data, status, err := v.fetchSchemaFromURL(ctx)
+		if err != nil {
+			// If URL fetch fails completely, return the error.
+			// We don't fall back to potentially stale file data in this case.
+			return nil, err // fetchSchemaFromURL already wraps the error
+		}
+
+		switch status {
+		case http.StatusOK:
+			// Successfully fetched new data from URL.
+			v.logger.Debug("Successfully loaded schema from URL.", "url", v.source.URL, "size", len(data))
+			// v.extractSchemaVersion(data) // Version extracted in Initialize now
+			v.tryCacheSchemaToFile(data) // Attempt to cache the freshly downloaded data
+			return data, nil
+		case http.StatusNotModified:
+			// Schema hasn't changed on the server.
+			v.logger.Info("Schema not modified since last fetch (HTTP 304)", "url", v.source.URL)
+			// Use the data we loaded from the file earlier (if successful).
+			if initialFileErr == nil {
+				v.logger.Debug("Using initially loaded file data as schema is unchanged.", "path", v.source.FilePath)
+				// Ensure version is extracted from file data if we haven't done it yet.
+				// if v.schemaVersion == "" {
+				// 	v.extractSchemaVersion(initialFileData) // Done in Initialize now
+				// }
+				return initialFileData, nil
+			}
+			// If file load failed BUT we got 304, it implies a previous successful load must have happened.
+			// Signal to the caller (Initialize) to use the already compiled schemas.
+			v.logger.Warn("Schema unchanged (304) but failed to load local file cache. Signaling to use previously compiled schemas if available.",
+				"path", v.source.FilePath,
+				"fileError", initialFileErr)
+			return nil, nil // Signal "use existing compiled"
+		default:
+			// Should not happen if fetchSchemaFromURL is correct, but handle defensively.
+			return nil, NewValidationError(
+				ErrSchemaLoadFailed,
+				fmt.Sprintf("unexpected HTTP status %d from URL fetch", status),
+				nil,
+			).WithContext("url", v.source.URL).WithContext("statusCode", status)
+		}
+	}
+
+	// 4. If only FilePath was specified and it failed initially.
+	if v.source.FilePath != "" && v.source.URL == "" && initialFileErr != nil {
+		// Wrap the initial file error properly if it hasn't been wrapped yet.
+		var validationErr *ValidationError
+		if errors.As(initialFileErr, &validationErr) {
+			return nil, initialFileErr // Already a validation error
+		}
+		// Wrap the raw file error
+		return nil, NewValidationError(ErrSchemaLoadFailed, "Failed to load schema from file", initialFileErr).
+			WithContext("path", v.source.FilePath)
+	}
+
+	// 5. If we get here, no source was configured or loadable.
 	return nil, NewValidationError(
 		ErrSchemaNotFound,
-		"No valid schema source configured",
+		"No valid schema source configured or loadable",
 		nil,
-	).WithContext("sources", map[string]interface{}{
+	).WithContext("sourcesChecked", map[string]interface{}{
 		"embedded": len(v.source.Embedded) > 0,
 		"filePath": v.source.FilePath,
 		"url":      v.source.URL,
 	})
 }
 
+// loadSchemaFromEmbedded loads schema from embedded bytes.
+// Does not require lock.
+func (v *SchemaValidator) loadSchemaFromEmbedded() ([]byte, error) {
+	if len(v.source.Embedded) > 0 {
+		v.logger.Debug("Loading schema from embedded data.", "size", len(v.source.Embedded))
+		// Version extraction happens later in Initialize.
+		return v.source.Embedded, nil
+	}
+	return nil, errors.New("no embedded schema provided") // Internal signal, not user-facing error
+}
+
+// loadSchemaFromFile loads schema from a local file path.
+// Does not require lock.
+func (v *SchemaValidator) loadSchemaFromFile(filePath string) ([]byte, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		// Wrap error for context, but don't classify as ValidationError yet.
+		return nil, errors.Wrapf(err, "failed to read schema file: %s", filePath)
+	}
+	// Version extraction happens later in Initialize.
+	return data, nil
+}
+
+// fetchSchemaFromURL fetches the schema from a URL, handling caching headers.
+// Returns data, HTTP status code, and error.
+// It requires the main lock (`v.mu`) to be held by the caller
+// because it reads and potentially modifies cache headers (`v.schemaETag`, `v.schemaLastModified`).
+func (v *SchemaValidator) fetchSchemaFromURL(ctx context.Context) ([]byte, int, error) {
+	v.logger.Debug("Attempting to load schema from URL.", "url", v.source.URL)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.source.URL, nil)
+	if err != nil {
+		return nil, 0, NewValidationError(
+			ErrSchemaLoadFailed,
+			"Failed to create HTTP request for schema URL",
+			errors.Wrap(err, "http.NewRequestWithContext failed"),
+		).WithContext("url", v.source.URL)
+	}
+
+	// Add caching headers IF THEY EXIST from previous successful requests.
+	// Lock is held by caller (Initialize).
+	if v.schemaETag != "" {
+		req.Header.Set("If-None-Match", v.schemaETag)
+		v.logger.Debug("Using cached ETag for conditional request", "etag", v.schemaETag)
+	}
+	if v.schemaLastModified != "" {
+		req.Header.Set("If-Modified-Since", v.schemaLastModified)
+		v.logger.Debug("Using cached Last-Modified for conditional request", "lastModified", v.schemaLastModified)
+	}
+
+	resp, err := v.httpClient.Do(req)
+	if err != nil {
+		// Clear potentially stale cache headers on network error
+		v.schemaETag = ""
+		v.schemaLastModified = ""
+		return nil, 0, NewValidationError(
+			ErrSchemaLoadFailed,
+			"Failed to fetch schema from URL",
+			errors.Wrap(err, "httpClient.Do failed"),
+		).WithContext("url", v.source.URL)
+	}
+	defer resp.Body.Close()
+
+	// Handle non-OK statuses before reading body (except 304)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotModified {
+		bodyBytes, _ := io.ReadAll(resp.Body) // Read body for context, ignore read error
+		// Clear potentially stale cache headers on server error status
+		v.schemaETag = ""
+		v.schemaLastModified = ""
+		return nil, resp.StatusCode, NewValidationError(
+			ErrSchemaLoadFailed,
+			fmt.Sprintf("Failed to fetch schema: HTTP status %d", resp.StatusCode),
+			nil, // No underlying Go error, it's an HTTP error status
+		).WithContext("url", v.source.URL).
+			WithContext("statusCode", resp.StatusCode).
+			WithContext("responseBody", string(bodyBytes))
+	}
+
+	// If status is 304, return immediately with no data and the status code.
+	// Cache headers remain unchanged.
+	if resp.StatusCode == http.StatusNotModified {
+		return nil, http.StatusNotModified, nil
+	}
+
+	// Status must be 200 OK here. Update ETag/Last-Modified from response headers.
+	// Lock is held by caller (Initialize).
+	newETag := resp.Header.Get("ETag")
+	newLastModified := resp.Header.Get("Last-Modified")
+	if newETag != v.schemaETag || newLastModified != v.schemaLastModified {
+		v.logger.Debug("Received new schema HTTP cache headers", "etag", newETag, "lastModified", newLastModified)
+		v.schemaETag = newETag                 // Update validator's state
+		v.schemaLastModified = newLastModified // Update validator's state
+	}
+
+	// Read the response body.
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		// Clear potentially stale cache headers if read fails after OK status
+		v.schemaETag = ""
+		v.schemaLastModified = ""
+		return nil, resp.StatusCode, NewValidationError(
+			ErrSchemaLoadFailed,
+			"Failed to read schema from HTTP response",
+			errors.Wrap(err, "io.ReadAll failed"),
+		).WithContext("url", v.source.URL)
+	}
+
+	return data, http.StatusOK, nil
+}
+
+// tryCacheSchemaToFile attempts to write data to the configured cache file path.
+// Logs info on success, warning on failure.
+// Does not require lock.
+func (v *SchemaValidator) tryCacheSchemaToFile(data []byte) {
+	if v.source.FilePath == "" {
+		return // No cache file path configured
+	}
+
+	dir := filepath.Dir(v.source.FilePath)
+	// Use 0750 permissions: Owner rwx, Group rx, Other ---
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		v.logger.Warn("Failed to create directory for schema cache file",
+			"path", dir,
+			"error", err)
+		return // Can't create directory, so can't write file
+	}
+
+	// Use 0600 permissions: Owner rw, Group ---, Other --- (Gosec G306 fix)
+	if err := os.WriteFile(v.source.FilePath, data, 0600); err != nil {
+		v.logger.Warn("Failed to cache fetched schema to local file",
+			"path", v.source.FilePath,
+			"error", err)
+	} else {
+		v.logger.Info("Cached fetched schema to local file", "path", v.source.FilePath)
+	}
+}
+
 // Validate validates the given JSON data against the schema for the specified message type.
+// Refactored to reduce cyclomatic complexity by extracting schema lookup logic.
 func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data []byte) error {
 	// Check if initialized.
 	if !v.IsInitialized() {
@@ -419,36 +626,19 @@ func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data
 			WithContext("dataPreview", calculatePreview(data)) // Use helper here.
 	}
 
-	// Get the specific schema for the message type.
-	v.mu.RLock()
-	schema, ok := v.schemas[messageType]
-	// If specific type not found, try falling back to base JSON-RPC types.
-	if !ok {
-		if strings.HasSuffix(messageType, "_notification") {
-			schema, ok = v.schemas["JSONRPCNotification"]
-		} else if strings.HasSuffix(messageType, "_response") { // crude check for response
-			schema, ok = v.schemas["JSONRPCResponse"] // Check against generic response first
-			if !ok {
-				schema, ok = v.schemas["JSONRPCError"] // Then generic error
-			}
-		} else { // Assume request if not notification/response
-			schema, ok = v.schemas["JSONRPCRequest"]
-		}
-	}
-	// Final fallback to the root schema ("base").
-	if !ok {
-		schema, ok = v.schemas["base"]
-	}
-	v.mu.RUnlock()
-
+	// Get the specific schema for the message type using the helper method.
+	schema, schemaUsedKey, ok := v.getSchemaForMessageType(messageType)
 	if !ok {
 		// If we still don't have a schema (not even base), initialization likely failed partially.
+		v.mu.RLock()
+		availableKeys := getSchemaKeys(v.schemas) // RLock is needed here for availableSchemas
+		v.mu.RUnlock()
 		return NewValidationError(
 			ErrSchemaNotFound,
-			fmt.Sprintf("Schema definition not found for message type '%s' or fallbacks.", messageType),
+			fmt.Sprintf("Schema definition not found for message type '%s' or standard fallbacks.", messageType),
 			nil,
 		).WithContext("messageType", messageType).
-			WithContext("availableSchemas", getSchemaKeys(v.schemas))
+			WithContext("availableSchemas", availableKeys)
 	}
 
 	// Validate the instance against the schema.
@@ -460,12 +650,20 @@ func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data
 		// Convert jsonschema validation error to our custom error type.
 		var valErr *jsonschema.ValidationError
 		if errors.As(err, &valErr) {
-			v.logger.Debug("Schema validation failed.", "duration", validationDuration, "messageType", messageType, "schemaUsed", messageType) // Log which schema was used
+			v.logger.Debug("Schema validation failed.",
+				"duration", validationDuration,
+				"messageType", messageType,
+				"schemaUsed", schemaUsedKey, // Log which schema was actually used
+				"error", valErr.Error()) // Log basic error message
 			return convertValidationError(valErr, messageType, data)
 		}
 
 		// For other types of errors during validation.
-		v.logger.Error("Unexpected error during schema.Validate.", "duration", validationDuration, "messageType", messageType, "error", err)
+		v.logger.Error("Unexpected error during schema.Validate.",
+			"duration", validationDuration,
+			"messageType", messageType,
+			"schemaUsed", schemaUsedKey,
+			"error", err)
 		return NewValidationError(
 			ErrValidationFailed,
 			"Schema validation failed with unexpected error",
@@ -473,79 +671,112 @@ func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data
 		).WithContext("messageType", messageType).
 			WithContext("dataPreview", calculatePreview(data))
 	}
-	v.logger.Debug("Schema validation successful.", "duration", validationDuration, "messageType", messageType)
 
+	v.logger.Debug("Schema validation successful.",
+		"duration", validationDuration,
+		"messageType", messageType,
+		"schemaUsed", schemaUsedKey)
 	return nil
+}
+
+// getSchemaForMessageType finds the appropriate compiled schema based on the message type,
+// including fallback logic. Returns the schema, the key used to find it, and success status.
+func (v *SchemaValidator) getSchemaForMessageType(messageType string) (*jsonschema.Schema, string, bool) {
+	v.mu.RLock() // Read lock needed to access v.schemas
+	defer v.mu.RUnlock()
+
+	// Try specific message type first.
+	if schema, ok := v.schemas[messageType]; ok {
+		return schema, messageType, true
+	}
+
+	// Fallback logic based on message type patterns.
+	var fallbackKey string
+	if strings.HasSuffix(messageType, "_notification") {
+		fallbackKey = "JSONRPCNotification"
+	} else if strings.Contains(messageType, "Response") || strings.Contains(messageType, "Result") || strings.Contains(messageType, "_response") {
+		fallbackKey = "JSONRPCResponse"
+		if _, ok := v.schemas[fallbackKey]; !ok {
+			// If generic response not found, try generic error.
+			if strings.Contains(messageType, "Error") {
+				fallbackKey = "JSONRPCError"
+			}
+		}
+	} else { // Assume request if not notification/response/error.
+		fallbackKey = "JSONRPCRequest"
+	}
+
+	// Check if the fallback schema exists.
+	if schema, ok := v.schemas[fallbackKey]; ok {
+		v.logger.Debug("Using fallback schema.", "originalType", messageType, "fallbackKey", fallbackKey)
+		return schema, fallbackKey, true
+	}
+
+	// Final fallback to the base schema.
+	if schema, ok := v.schemas["base"]; ok {
+		v.logger.Debug("Using base schema as final fallback.", "originalType", messageType)
+		return schema, "base", true
+	}
+
+	// No suitable schema found.
+	return nil, "", false
 }
 
 // convertValidationError converts a jsonschema.ValidationError to our custom ValidationError.
 func convertValidationError(valErr *jsonschema.ValidationError, messageType string, data []byte) *ValidationError {
-	// Extract error details.
-	// In this library, the error details are in the Basic Output format described in JSON Schema spec.
-
-	// Extract schema path and instance path from the error.
-	// Note: The library's internal structure might make precise path extraction tricky directly.
-	// We rely on the error message and potentially BasicOutput() for paths.
-	var schemaPath string
-	var instancePath string
-
-	// Try to extract paths using BasicOutput().
+	// Extract error details using BasicOutput format.
 	basicOutput := valErr.BasicOutput()
+
+	var primaryError jsonschema.BasicError
 	if len(basicOutput.Errors) > 0 {
-		// Find the most specific error detail (often the last one?).
-		// This is heuristic as the library might nest errors differently.
-		lastError := basicOutput.Errors[len(basicOutput.Errors)-1]
-		instancePath = lastError.InstanceLocation
-		schemaPath = lastError.KeywordLocation // KeywordLocation often points to the relevant schema part.
-	} else {
-		// Fallback if BasicOutput is empty - try parsing from message (less reliable).
-		errorMsg := valErr.Error()
-		// Simple parsing attempt - might need refinement based on actual error formats.
-		if strings.Contains(errorMsg, "schema path:") {
-			parts := strings.SplitN(errorMsg, "schema path:", 2)
-			if len(parts) > 1 {
-				schemaPath = strings.Split(strings.TrimSpace(parts[1]), " ")[0]
-			}
-		}
-		if strings.Contains(errorMsg, "instance path:") {
-			parts := strings.SplitN(errorMsg, "instance path:", 2)
-			if len(parts) > 1 {
-				instancePath = strings.Split(strings.TrimSpace(parts[1]), " ")[0]
-			}
-		}
+		// The 'BasicOutput' structure puts the most specific error often last,
+		// but the overall error message (valErr.Message) usually summarizes the root issue.
+		// Let's use the first error for path details as it might be the higher-level one.
+		primaryError = basicOutput.Errors[0]
 	}
 
 	// Create our custom error with the extracted paths.
 	customErr := NewValidationError(
 		ErrValidationFailed,
-		valErr.Message, // Use the primary message from the validation error.
+		valErr.Message, // Use the primary message from the top-level validation error.
 		valErr,         // Include the original error as cause.
-	).WithContext("messageType", messageType).
-		WithContext("dataPreview", calculatePreview(data)) // Use helper here.
+	)
 
-	// Assign paths if found.
-	if schemaPath != "" {
-		customErr.SchemaPath = schemaPath
+	// Assign paths if found from the primary basic error.
+	if primaryError.KeywordLocation != "" {
+		customErr.SchemaPath = primaryError.KeywordLocation // Points to schema keyword/path.
 	}
-	if instancePath != "" {
-		customErr.InstancePath = instancePath
+	if primaryError.InstanceLocation != "" {
+		customErr.InstancePath = primaryError.InstanceLocation // Points to data location.
 	}
 
-	// Add basic info about the validation error causes.
-	if len(valErr.Causes) > 0 {
-		causes := make([]string, 0, len(valErr.Causes))
-		for _, cause := range valErr.Causes {
-			causes = append(causes, cause.Error())
+	// *** Fix for errcheck: Assign result back to customErr ***
+	customErr = customErr.WithContext("messageType", messageType)
+	customErr = customErr.WithContext("dataPreview", calculatePreview(data)) // Use helper here.
+
+	// Add details about the validation error causes if available in BasicOutput.
+	if len(basicOutput.Errors) > 0 {
+		causes := make([]map[string]string, 0, len(basicOutput.Errors))
+		for _, cause := range basicOutput.Errors {
+			causes = append(causes, map[string]string{
+				"instanceLocation": cause.InstanceLocation,
+				"keywordLocation":  cause.KeywordLocation,
+				"error":            cause.Error,
+			})
 		}
-		// Use _ to explicitly ignore the error return value.
-		_ = customErr.WithContext("causes", causes)
+		// *** Fix for errcheck: Assign result back to customErr ***
+		customErr = customErr.WithContext("validationErrors", causes)
 	}
 
 	return customErr
 }
 
 // getSchemaKeys returns the keys of the schemas map for debugging purposes.
+// Assumes lock is held by caller if needed.
 func getSchemaKeys(schemas map[string]*jsonschema.Schema) []string {
+	if schemas == nil {
+		return []string{}
+	}
 	keys := make([]string, 0, len(schemas))
 	for k := range schemas {
 		keys = append(keys, k)
@@ -554,22 +785,123 @@ func getSchemaKeys(schemas map[string]*jsonschema.Schema) []string {
 }
 
 // HasSchema checks if a schema with the given name exists.
-// This is useful for determining if specific method schemas are available.
+// This is useful for determining if specific method schemas are available
 // before attempting validation.
 func (v *SchemaValidator) HasSchema(name string) bool {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
+	// Ensure schemas map is initialized
+	if v.schemas == nil {
+		return false
+	}
 	_, ok := v.schemas[name]
 	return ok
 }
 
 // calculatePreview generates a string preview of a byte slice, limited to a max length.
-// maxLength parameter was removed as it was always 100.
 func calculatePreview(data []byte) string {
 	const maxPreviewLen = 100 // Use a constant for the max length.
 	previewLen := len(data)
 	if previewLen > maxPreviewLen {
 		previewLen = maxPreviewLen
 	}
-	return string(data[:previewLen])
+	// Replace non-printable characters for cleaner logging/error messages potentially
+	// This is a simple replacement, more robust handling might be needed.
+	previewBytes := bytes.Map(func(r rune) rune {
+		if r < 32 || r == 127 { // Control characters + DEL
+			return '.' // Replace with dot
+		}
+		return r
+	}, data[:previewLen])
+
+	return string(previewBytes)
+}
+
+// extractSchemaVersion attempts to extract version information from schema data.
+// Assumes lock is held by caller if needed (when modifying v.schemaVersion).
+// Refactored for lower cyclomatic complexity.
+func (v *SchemaValidator) extractSchemaVersion(data []byte) {
+	var schemaDoc map[string]interface{}
+	if err := json.Unmarshal(data, &schemaDoc); err != nil {
+		v.logger.Warn("Failed to unmarshal schema to extract version.", "error", err)
+		return // Silently fail, this is just for metadata
+	}
+
+	detectedVersion := v.getVersionFromSchemaField(schemaDoc)
+
+	if detectedVersion == "" {
+		detectedVersion = v.getVersionFromTopLevelFields(schemaDoc)
+	}
+
+	if detectedVersion == "" {
+		detectedVersion = v.getVersionFromInfoBlock(schemaDoc)
+	}
+
+	if detectedVersion == "" {
+		detectedVersion = v.getVersionFromMCPHeuristics(schemaDoc)
+	}
+
+	// Update the validator state if a new, non-empty version was detected
+	if detectedVersion != "" && detectedVersion != v.schemaVersion {
+		v.logger.Info("Detected schema version.", "version", detectedVersion)
+		v.schemaVersion = detectedVersion // Assumes lock is held by caller
+	} else if detectedVersion == "" && v.schemaVersion == "" {
+		v.logger.Debug("Could not detect specific version information in the schema.")
+	}
+}
+
+// --- Helper functions for extractSchemaVersion ---
+
+func (v *SchemaValidator) getVersionFromSchemaField(schemaDoc map[string]interface{}) string {
+	if schemaField, ok := schemaDoc["$schema"].(string); ok {
+		if strings.Contains(schemaField, "draft-2020-12") || strings.Contains(schemaField, "draft/2020-12") {
+			return "draft-2020-12"
+		}
+		if strings.Contains(schemaField, "draft-07") {
+			return "draft-07"
+		}
+		// Add more draft checks if needed
+	}
+	return ""
+}
+
+func (v *SchemaValidator) getVersionFromTopLevelFields(schemaDoc map[string]interface{}) string {
+	if versionField, ok := schemaDoc["version"].(string); ok {
+		return versionField
+	}
+	return ""
+}
+
+func (v *SchemaValidator) getVersionFromInfoBlock(schemaDoc map[string]interface{}) string {
+	if infoBlock, ok := schemaDoc["info"].(map[string]interface{}); ok {
+		if versionField, ok := infoBlock["version"].(string); ok {
+			return versionField
+		}
+	}
+	return ""
+}
+
+func (v *SchemaValidator) getVersionFromMCPHeuristics(schemaDoc map[string]interface{}) string {
+	idRegex := regexp.MustCompile(`(\d{4}-\d{2}-\d{2})`) // Basic YYYY-MM-DD pattern
+
+	if id, ok := schemaDoc["$id"].(string); ok && strings.Contains(id, "modelcontextprotocol") {
+		if matches := idRegex.FindStringSubmatch(id); len(matches) > 1 {
+			return matches[1] // Prefer version from $id
+		}
+	}
+
+	if title, ok := schemaDoc["title"].(string); ok && strings.Contains(strings.ToLower(title), "mcp") {
+		if matches := idRegex.FindStringSubmatch(title); len(matches) > 1 {
+			return matches[1] // Fallback to version from title
+		}
+	}
+
+	return ""
+}
+
+// GetSchemaVersion returns the detected schema version, if available.
+func (v *SchemaValidator) GetSchemaVersion() string {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	return v.schemaVersion
 }
