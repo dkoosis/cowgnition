@@ -1,12 +1,14 @@
 ./
 ├── cmd/
 │   ├── rtm_connection_test/
-│   │   └── main.go
+│   │   ├── main.go
+│   │   └── main.new
 │   ├── schema_test/
 │   │   └── main.go
 │   ├── server/
 │   │   └── server_runner.go
 │   ├── claude_desktop_registration.go
+│   ├── claude_desktop_registration.new
 │   └── main.go
 ├── docs/
 │   ├── adr/
@@ -85,9 +87,10 @@
 │   └── pkgdep.sh*
 ├── Makefile
 ├── README.md
+├── README_old.md
 ├── coverage.out
 ├── cowgnition*
 ├── go.mod
 └── go.sum
 
-20 directories, 71 files
+20 directories, 74 files
