@@ -71,11 +71,15 @@
 │   │   ├── token_storage_interface.go
 │   │   └── types.go
 │   ├── schema/
+│   │   ├── errors.go
+│   │   ├── helpers.go
+│   │   ├── loader.go
 │   │   ├── name_rules.go
 │   │   ├── name_rules_test.go
 │   │   ├── schema.json
 │   │   ├── validator.go
-│   │   └── validator_test.go
+│   │   ├── validator_test.go
+│   │   └── version.go
 │   └── transport/
 │       ├── in_memory_transport.go
 │       ├── transport.go
@@ -91,4 +95,4 @@
 ├── go.mod
 └── go.sum
 
-20 directories, 72 files
+20 directories, 76 files
