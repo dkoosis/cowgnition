@@ -137,40 +137,66 @@ func (m *ValidationMiddleware) HandleMessage(ctx context.Context, message []byte
 }
 
 // handleOutgoingValidation encapsulates the logic for validating outgoing responses.
+// file: internal/middleware/validation.go.
+
+// handleOutgoingValidation encapsulates the logic for validating outgoing responses.
+// It returns the bytes for an error response if validation fails *and* StrictOutgoing is true,
+// otherwise it returns nil, nil (indicating the original response should be used).
 func (m *ValidationMiddleware) handleOutgoingValidation(ctx context.Context, responseBytes []byte, requestID interface{}) ([]byte, error) {
+	// If no response or outgoing validation is disabled, do nothing.
 	if responseBytes == nil || !m.options.ValidateOutgoing {
-		return nil, nil // Nothing to validate or validation disabled
+		return nil, nil
 	}
 
 	requestMethod, _ := ctx.Value(contextKeyRequestMethod).(string)
 
+	// Perform the actual validation of the outgoing response bytes.
 	outgoingValidationErr := m.validateOutgoingResponse(ctx, requestMethod, responseBytes)
+
+	// If validation passed, return nil, nil to signal using original responseBytes.
 	if outgoingValidationErr == nil {
-		return nil, nil // Validation passed
+		return nil, nil
 	}
 
-	if !m.options.StrictOutgoing && isNonCriticalValidationError(outgoingValidationErr) {
+	// --- Validation Failed ---
+
+	// If NOT in strict outgoing mode, log the error but allow the original response through.
+	if !m.options.StrictOutgoing {
 		m.logger.Warn("Outgoing validation error ignored (non-strict outgoing mode).",
 			"requestMethod", requestMethod,
-			"error", outgoingValidationErr)
-		return nil, nil // Ignore non-critical error
+			"requestID", requestID,
+			"error", outgoingValidationErr) // Log the actual validation error detail.
+		// Return nil, nil to indicate the original responseBytes should be sent.
+		return nil, nil
 	}
 
-	m.logger.Error("Outgoing response validation failed!",
+	// --- Strict Outgoing Mode: Validation Failed ---
+	// Log the failure as an error because we are replacing the response.
+	m.logger.Error("Outgoing response validation failed (strict outgoing mode)!",
 		"requestMethod", requestMethod,
-		"error", fmt.Sprintf("%+v", outgoingValidationErr))
+		"requestID", requestID,
+		"error", fmt.Sprintf("%+v", outgoingValidationErr)) // Log with stack trace if available.
 
+	// Create a formatted JSON-RPC error response based on the validation failure.
 	rpcErrorBytes, creationErr := createValidationErrorResponse(requestID, outgoingValidationErr)
 	if creationErr != nil {
+		// If we can't even create the validation error response, log critical and create internal error.
 		m.logger.Error("CRITICAL: Failed to create validation error response for outgoing failure.",
 			"creationError", fmt.Sprintf("%+v", creationErr),
 			"originalValidationError", fmt.Sprintf("%+v", outgoingValidationErr))
+
+		// Attempt to create a generic internal error response.
 		internalErrResp, creationErr2 := createInternalErrorResponse(requestID)
 		if creationErr2 != nil {
+			// If even *that* fails, return the marshalling error directly. Critical failure.
 			return nil, creationErr2
 		}
+		// Return the generic internal error response bytes.
 		return internalErrResp, nil
 	}
+
+	// Return the created validation error response bytes. The 'error' return is nil because
+	// we successfully created the error *response* to send back.
 	return rpcErrorBytes, nil
 }
 
@@ -369,6 +395,8 @@ func isCallToolResultShape(message []byte) bool {
 }
 
 // --- Helper: Check for non-critical validation errors ---.
+//
+//nolint:unused
 func isNonCriticalValidationError(err error) bool {
 	var schemaValErr *schema.ValidationError
 	if !errors.As(err, &schemaValErr) {
