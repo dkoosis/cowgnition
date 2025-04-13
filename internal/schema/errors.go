@@ -108,14 +108,15 @@ func convertValidationError(valErr *jsonschema.ValidationError, messageType stri
 	customErr = customErr.WithContext("dataPreview", calculatePreview(data)) // Assumes calculatePreview exists
 
 	// Extract nested causes if they exist
-	if valErr.Causes != nil && len(valErr.Causes) > 0 {
+	// FIX: Remove redundant nil check (gosimple S1009)
+	if len(valErr.Causes) > 0 {
 		causes := extractValidationCauses(valErr)
 		if len(causes) > 0 {
 			customErr = customErr.WithContext("validationCauses", causes)
 		}
 	}
 
-	// Add user-friendly suggestion based on the primary error message and instance path
+	// Add user-friendly suggestion based on the primary error message and instance path.
 	suggestion := generateErrorSuggestion(valErr.Message, valErr.InstanceLocation)
 	if suggestion != "" {
 		customErr = customErr.WithContext("suggestion", suggestion)
@@ -124,10 +125,11 @@ func convertValidationError(valErr *jsonschema.ValidationError, messageType stri
 	return customErr
 }
 
-// extractValidationCauses extracts nested error causes from a ValidationError
+// extractValidationCauses extracts nested error causes from a ValidationError.
 func extractValidationCauses(valErr *jsonschema.ValidationError) []map[string]string {
 	// Base case: If there are no causes, return nil.
-	if valErr.Causes == nil || len(valErr.Causes) == 0 {
+	// FIX: Remove redundant nil check (gosimple S1009)
+	if len(valErr.Causes) == 0 {
 		return nil
 	}
 
@@ -164,6 +166,8 @@ func extractValidationCauses(valErr *jsonschema.ValidationError) []map[string]st
 }
 
 // generateErrorSuggestion creates a user-friendly suggestion based on error details.
+//
+//nolint:gocyclo // Suppressing complexity warning; function generates suggestions based on many error patterns.
 func generateErrorSuggestion(errorMsg, instancePath string) string {
 	pathDisplay := instancePath
 	if pathDisplay == "/" || pathDisplay == "" {
@@ -184,7 +188,7 @@ func generateErrorSuggestion(errorMsg, instancePath string) string {
 	}
 
 	// Type mismatch error
-	if strings.Contains(errorMsg, "expected") && strings.Contains(errorMsg, "but got") {
+	if strings.Contains(errorMsg, "invalid type") || (strings.Contains(errorMsg, "expected") && strings.Contains(errorMsg, "but got")) {
 		expected, actual := extractTypeInfo(errorMsg) // Assuming extractTypeInfo exists
 		if expected != "" && actual != "" {
 			return fmt.Sprintf("Incorrect data type for %s. Expected '%s' but received '%s'.", pathDisplay, expected, actual)
@@ -353,3 +357,27 @@ func extractFormat(msg string) string {
 	}
 	return ""
 }
+
+// // calculatePreview needs to be defined, likely in helpers.go
+// // Ensure it handles potential errors gracefully.
+// func calculatePreview(data []byte) string {
+// 	const maxPreviewLen = 100
+// 	if len(data) > maxPreviewLen {
+// 		// Consider replacing control characters for cleaner previews
+// 		previewBytes := bytes.Map(func(r rune) rune {
+// 			if r < 32 || r == 127 {
+// 				return '.'
+// 			}
+// 			return r
+// 		}, data[:maxPreviewLen])
+// 		return string(previewBytes) + "..."
+// 	}
+// 	// Consider replacing control characters here too
+// 	previewBytes := bytes.Map(func(r rune) rune {
+// 		if r < 32 || r == 127 {
+// 			return '.'
+// 		}
+// 		return r
+// 	}, data)
+// 	return string(previewBytes)
+// }

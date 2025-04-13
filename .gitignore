@@ -36,6 +36,7 @@ configs/config.yaml
 .env
 *_token*
 cowgnition.yaml
+.zshrc
 
 # Test artifacts
 test/coverage.out
