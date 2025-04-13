@@ -381,17 +381,19 @@ func isNonCriticalValidationError(err error) bool {
 // --- Helper: Identify Message ---
 // This function attempts to determine the message type (request, notification, response)
 // and extracts the request ID. It also performs basic structural validation.
+// nolint:gocyclo
 func (m *ValidationMiddleware) identifyMessage(message []byte) (string, interface{}, error) {
 	// Ensure validator exists before checking HasSchema
 	if m.validator == nil {
-		return "", nil, errors.New("identifyMessage: validator is nil")
+		// Added a more specific error message for this case
+		return "", nil, errors.New("identifyMessage: ValidationMiddleware's validator is nil")
 	}
 
 	// Attempt to parse the message into a generic map first
 	var parsed map[string]json.RawMessage
 	if err := json.Unmarshal(message, &parsed); err != nil {
 		// Try to extract ID even if full parse fails, might be partially valid
-		id := m.identifyRequestID(message)
+		id := m.identifyRequestID(message) // identifyRequestID handles its own errors/logging
 		return "", id, errors.Wrap(err, "identifyMessage: failed to parse message structure")
 	}
 
@@ -408,7 +410,7 @@ func (m *ValidationMiddleware) identifyMessage(message []byte) (string, interfac
 	// CRITICAL CHECK: If 'id' key existed but helper returned nil (and raw ID wasn't "null"), it means the ID type was invalid.
 	if idExists && id == nil {
 		// Check if the raw value was actually "null" before declaring invalid type
-		idRaw := parsed["id"]
+		idRaw := parsed["id"] // Safe to access, idExists is true
 		if idRaw != nil && string(idRaw) != "null" {
 			return "", nil, errors.New("Invalid JSON-RPC ID type detected") // Specific error for invalid ID type
 		}
@@ -418,53 +420,52 @@ func (m *ValidationMiddleware) identifyMessage(message []byte) (string, interfac
 	// Determine message type based on existing fields
 	if methodExists {
 		// Potentially a Request or Notification
-		methodRaw := parsed["method"]
+		methodRaw := parsed["method"] // Safe, methodExists is true
 		if methodRaw == nil {
 			return "", id, errors.New("identifyMessage: 'method' field exists but is null")
 		}
 		var method string
 		if err := json.Unmarshal(methodRaw, &method); err != nil {
+			// ID might be valid even if method isn't, return it
 			return "", id, errors.Wrap(err, "identifyMessage: failed to parse 'method' field")
 		}
 		if method == "" {
+			// ID might be valid even if method is empty, return it
 			return "", id, errors.New("identifyMessage: 'method' field cannot be empty")
 		}
 
 		// Check if it's a notification (ID is nil AFTER type validation)
 		if id == nil {
-			specificNotifType := method
-			// Handle potential hierarchical notification names like "notifications/progress"
+			// *** REFACTORED NOTIFICATION LOGIC (incorporating fix for ineffassign) ***
+			determinedSchemaKey := "JSONRPCNotification" // Default to generic
+
+			// Check for hierarchical notifications first (e.g., "notifications/progress")
 			if strings.HasPrefix(method, "notifications/") {
-				// Use the full method name as the base type if it exists
+				// Try the full method name as the schema key if it exists
 				if m.validator.HasSchema(method) {
-					specificNotifType = method
+					determinedSchemaKey = method
 				} else {
-					// If the specific schema (e.g., "notifications/progress") doesn't exist,
-					// try appending "_notification" as per original logic, IF that schema exists.
-					notifSchemaKey := method + "_notification"
-					if m.validator.HasSchema(notifSchemaKey) {
-						specificNotifType = notifSchemaKey
-					} else {
-						// Fallback to the generic notification type
-						specificNotifType = "JSONRPCNotification"
-					}
+					m.logger.Debug("Specific hierarchical notification schema not found, using generic.", "method", method)
+					// If specific hierarchical schema not found, stick with generic JSONRPCNotification
+					// We don't check method+"_notification" for hierarchical ones
 				}
 			} else {
-				// For non-namespaced methods, check for the method_notification schema
+				// For non-namespaced methods (e.g., "ping"), check for the method_notification convention
 				notifSchemaKey := method + "_notification"
 				if m.validator.HasSchema(notifSchemaKey) {
-					specificNotifType = notifSchemaKey
+					determinedSchemaKey = notifSchemaKey // Use specific e.g., "ping_notification"
 				} else {
-					// Fallback to generic notification type
-					specificNotifType = "JSONRPCNotification"
+					// If method_notification doesn't exist, stick with generic JSONRPCNotification
+					m.logger.Debug("Specific method_notification schema not found, using generic.", "method", method, "triedKey", notifSchemaKey)
 				}
 			}
 
-			// Use determineIncomingSchemaType to potentially apply further fallback logic if needed
-			// Pass the determined specific type (or generic) to determineIncomingSchemaType
-			schemaType := m.determineIncomingSchemaType(specificNotifType)
-			m.logger.Debug("Identified message as Notification", "method", method, "determinedSchemaType", schemaType)
-			return schemaType, nil, nil // Return nil ID for notifications
+			// Final determination using the helper (applies further fallback e.g., to "base" if needed)
+			finalSchemaType := m.determineIncomingSchemaType(determinedSchemaKey)
+
+			m.logger.Debug("Identified message as Notification", "method", method, "determinedSchemaType", finalSchemaType)
+			return finalSchemaType, nil, nil // Return nil ID for notifications
+			// *** END REFACTORED NOTIFICATION LOGIC ***
 		}
 
 		// It's a Request (has method and a valid, non-null ID)
@@ -476,27 +477,27 @@ func (m *ValidationMiddleware) identifyMessage(message []byte) (string, interfac
 		if errorExists { // JSON-RPC spec forbids both result and error
 			return "", id, errors.New("identifyMessage: message cannot contain both 'result' and 'error' fields")
 		}
-		if !idExists || id == nil { // JSON-RPC spec requires ID for responses (must not be null)
-			return "", id, errors.New("identifyMessage: response message must contain a non-null 'id' field")
+		// JSON-RPC spec requires ID for responses (must not be null according to strict interpretation,
+		// although some implementations might allow null ID if the request ID was null, but we extracted non-null ID before)
+		if !idExists || id == nil {
+			return "", id, errors.New("identifyMessage: success response message must contain a valid non-null 'id' field")
 		}
 		schemaType := m.determineIncomingSchemaType("success_response") // Use generic success response type
 		m.logger.Debug("Identified message as Success Response", "id", id, "determinedSchemaType", schemaType)
 		return schemaType, id, nil
 	} else if errorExists {
 		// It's an Error Response
-		// JSON-RPC spec allows ID to be null for errors triggered by invalid requests before ID parsing
-		// Our identifyRequestID helper returns nil for null ID.
+		// ID can be null if error occurred before ID processing, id will be nil in that case.
 		schemaType := m.determineIncomingSchemaType("error_response") // Use generic error response type
 		m.logger.Debug("Identified message as Error Response", "id", id, "determinedSchemaType", schemaType)
 		return schemaType, id, nil // ID can be nil here
 	}
 
-	// If none of the above, we couldn't identify it.
-	return "", id, errors.New("identifyMessage: unable to identify message type (not request, notification, or response)")
+	// If none of the key fields (method, result, error) were found
+	return "", id, errors.New("identifyMessage: unable to identify message type (missing method, result, or error field)")
 }
 
-// --- Helper to Extract Request ID ---
-// (Include the corrected version from the previous response here)
+// --- Helper to Extract Request ID ---.
 func (m *ValidationMiddleware) identifyRequestID(message []byte) interface{} {
 	var parsed struct {
 		ID json.RawMessage `json:"id"`
@@ -537,12 +538,13 @@ func (m *ValidationMiddleware) identifyRequestID(message []byte) interface{} {
 			return nil
 		}
 	}
-	// ID field is missing or explicitly null
+	// ID field is missing or explicitly null.
 	return nil
 }
 
 // --- Helper: Determine Incoming Schema Type ---.
-// (Include the implementation from validation.go here)
+// (Include the implementation from validation.go here).
+// nolint:gocyclo
 func (m *ValidationMiddleware) determineIncomingSchemaType(msgType string) string {
 	// Ensure validator exists and is initialized before accessing HasSchema
 	if m.validator == nil || !m.validator.IsInitialized() {
