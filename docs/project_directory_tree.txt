@@ -22,6 +22,7 @@
 │   ├── prompts/
 │   │   └── 001P_error_handling.md
 │   ├── TODO.md
+│   ├── USER_GUIDE.md
 │   ├── contributing.md
 │   ├── llm.md
 │   └── project_directory_tree.txt
@@ -85,7 +86,6 @@
 │   └── pkgdep.sh*
 ├── Makefile
 ├── README.md
-├── README_old.md
 ├── coverage.out
 ├── cowgnition*
 ├── go.mod
