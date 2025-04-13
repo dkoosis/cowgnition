@@ -37,6 +37,37 @@ Detailed implementation patterns, Go code examples, security checklists, guidanc
 
 Developers **must** consult this guide when implementing or reviewing error handling code. It covers specific usage of `cockroachdb/errors`, required logging fields, error mapping logic, `tools/call` error handling, security best practices, and our pun policy.
 
+### 7. Testing Error Handling
+
+When writing tests that assert specific error conditions, **avoid** relying on matching substrings within the `error.Error()` string output (e.g., using `strings.Contains` or `testify/assert.Contains` on the error string). This approach is brittle and prone to breaking due to minor changes in error formatting or wrapping.
+
+Instead, **prefer** the following robust patterns:
+
+1.  **Check Error Type:** Use `errors.As` to verify that the returned error is, or wraps, the expected custom error type (e.g., `*schema.ValidationError`, `*transport.Error`, `*mcperrors.RTMError`). This confirms the general category of the error.
+2.  **Check Specific Error Fields (Codes/Types):** After confirming the type with `errors.As`, assert on specific fields within the custom error struct to verify the _reason_ for the error. Use the defined constants for codes or types (e.g., `assert.Equal(t, schema.ErrValidationFailed, validationErr.Code)`).
+3.  **Check Sentinel Errors:** For specific, fixed error conditions represented by exported variables, use `errors.Is`.
+
+This approach leverages the structured error types defined in the project, aligns with standard Go error handling practices, and creates more maintainable and reliable tests.
+
+**Example Test Snippet:**
+
+```go
+    // ... (previous test setup)
+    err := functionUnderTest() // Function that returns an error
+
+    // Assert an error occurred
+    require.Error(t, err, "Expected an error from functionUnderTest")
+
+    // Check if the error is the specific custom type we expect
+    var specificErr *schema.ValidationError // Replace with actual expected type
+    require.True(t, errors.As(err, &specificErr), "Error should be (or wrap) the expected type")
+
+    // Assert on the specific error code within the custom type
+    assert.Equal(t, schema.ErrValidationFailed, specificErr.Code, "Error code should match expected reason")
+
+    // Optionally, assert on other relevant fields like InstancePath
+    assert.Contains(t, specificErr.InstancePath, "/expected/path/field", "Instance path should indicate the location")
+
 ## Error Handling Architecture: Transport and MCP Error Relationship
 
 ### Overview
@@ -139,3 +170,4 @@ The following standard JSON-RPC 2.0 error codes (referenced by MCP) will be used
 2.  [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
 3.  [MCP Specification - Concepts](https://www.google.com/search?q=https://modelcontextprotocol.io/docs/concepts/)
 4.  [MCP Specification - Logging](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/utilities/logging/)
+```

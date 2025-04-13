@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
-	"strings"
 	"time" // Keep time import
 
 	"github.com/cockroachdb/errors"
@@ -203,27 +202,39 @@ func (c *Client) handleRTMError(rsp baseRsp, method string) error {
 	)
 }
 
-// generateSignature generates an API signature using MD5.
+// file: internal/rtm/client.go
+
+// file: internal/rtm/client.go
+
 // generateSignature generates an API signature using MD5.
 // Ensures keys are sorted alphabetically before concatenation.
+// file: internal/rtm/client.go
+
+// generateSignature generates an API signature using MD5.
+// Ensures keys are sorted alphabetically before concatenation.
+// file: internal/rtm/client.go
+
+// generateSignature generates an API signature using MD5.
 func (c *Client) generateSignature(params map[string]string) string {
+	// Step 1: Extract and sort keys alphabetically
 	keys := make([]string, 0, len(params))
 	for k := range params {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys) // Sort keys alphabetically.
+	sort.Strings(keys)
 
-	var sb strings.Builder
-	sb.WriteString(c.config.SharedSecret) // Start with the secret.
+	// Step 2: Build the raw string to hash (secret + sorted params)
+	rawString := c.config.SharedSecret
 	for _, k := range keys {
-		sb.WriteString(k)         // Append the key.
-		sb.WriteString(params[k]) // Append the value.
+		rawString += k
+		rawString += params[k]
 	}
 
-	// Calculate MD5 hash.
-	h := md5.New()                        //nolint:gosec // RTM requires MD5.
-	_, _ = io.WriteString(h, sb.String()) // Error is practically impossible for strings.Builder.
-	return hex.EncodeToString(h.Sum(nil))
+	// Step 3: Calculate MD5 hash
+	hashBytes := md5.Sum([]byte(rawString)) // nolint:gosec // required by RTM API
+
+	// Step 4: Convert to hex string
+	return hex.EncodeToString(hashBytes[:])
 }
 
 // CallMethod makes a direct call to the RTM API.

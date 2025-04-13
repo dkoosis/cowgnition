@@ -15,58 +15,81 @@ import (
 )
 
 func TestClient_GenerateSignature(t *testing.T) {
-	// Setup
+	// Setup logger once.
 	logger := logging.GetNoopLogger()
-	client := &Client{
-		config: Config{
-			SharedSecret: "test_secret",
-		},
-		logger: logger,
-	}
 
-	// Test cases
+	// Test cases including the secret for each case.
 	testCases := []struct {
 		name     string
+		secret   string // Added secret field for each test case.
 		params   map[string]string
 		expected string
 	}{
 		{
-			name: "Simple params",
+			name:   "Simple params",
+			secret: "test_secret", // Use the original secret.
 			params: map[string]string{
 				"method":  "rtm.test.echo",
 				"api_key": "abc123",
 				"format":  "json",
 			},
-			// Expected signature calculated with MD5("test_secretapi_keyabc123formatjsonmethodrtm.test.echo")
+			// Expected signature calculated with MD5("test_secret"+"api_key"+"abc123"+"format"+"json"+"method"+"rtm.test.echo").
 			expected: "0f252d75e5a0a2d7551377bb4b32100c",
 		},
 		{
-			name: "With auth token",
+			name:   "With auth token",
+			secret: "test_secret", // Use the original secret.
 			params: map[string]string{
 				"method":     "rtm.lists.getList",
 				"api_key":    "abc123",
 				"format":     "json",
 				"auth_token": "token123",
 			},
-			// Expected signature calculated with MD5("test_secretapi_keyabc123auth_tokentoken123formatjsonmethodrtm.lists.getList")
-			expected: "0a50261ebd1a390fed2bf326f2673c23",
+			// CORRECTED Expected signature: MD5("test_secret"+"api_key"+"abc123"+"auth_token"+"token123"+"format"+"json"+"method"+"rtm.lists.getList").
+			expected: "fa17f481daca02dca3286483755718a0",
+		},
+		{
+			name:   "RTM Example (BANANAS)",
+			secret: "BANANAS", // Use the secret from the example.
+			params: map[string]string{
+				"abc": "baz",
+				"feg": "bar",
+				"yxz": "foo",
+			},
+			// Expected signature: MD5("BANANAS"+"abc"+"baz"+"feg"+"bar"+"yxz"+"foo").
+			expected: "82044aae4dd676094f23f1ec152159ba",
+		},
+		{
+			name:   "Custom Case - Empty Params",
+			secret: "another_secret", // Use a different secret.
+			params: map[string]string{},
+			// Expected signature: MD5("another_secret").
+			expected: "8f6851e0a15e7e418a8e82810d439d96", // Calculated MD5 for "another_secret".
 		},
 	}
 
-	// Run tests
+	// Run tests.
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Call the method
+			// Create a client instance specifically for this test case with its secret.
+			client := &Client{
+				config: Config{
+					SharedSecret: tc.secret, // Use the secret defined in the test case.
+				},
+				logger: logger,
+			}
+
+			// Call the method.
 			signature := client.generateSignature(tc.params)
 
-			// Verify result
+			// Verify result.
 			assert.Equal(t, tc.expected, signature, "Signature should match expected value")
 		})
 	}
 }
 
 func TestClient_PrepareParameters(t *testing.T) {
-	// Setup
+	// Setup.
 	logger := logging.GetNoopLogger()
 	client := &Client{
 		config: Config{
@@ -77,7 +100,7 @@ func TestClient_PrepareParameters(t *testing.T) {
 		logger: logger,
 	}
 
-	// Test cases
+	// Test cases.
 	testCases := []struct {
 		name            string
 		method          string
@@ -112,18 +135,18 @@ func TestClient_PrepareParameters(t *testing.T) {
 		},
 	}
 
-	// Run tests
+	// Run tests.
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Call the method
+			// Call the method.
 			fullParams := client.prepareParameters(tc.method, tc.params)
 
-			// Verify common parameters
+			// Verify common parameters.
 			assert.Equal(t, tc.method, fullParams["method"], "Method should be set correctly")
 			assert.Equal(t, "test_key", fullParams["api_key"], "API key should be set correctly")
 			assert.Equal(t, "json", fullParams["format"], "Format should be set correctly")
 
-			// Verify auth token
+			// Verify auth token.
 			if tc.expectAuthToken {
 				assert.Equal(t, "test_token", fullParams["auth_token"], "Auth token should be set for most methods")
 			} else {
@@ -131,10 +154,10 @@ func TestClient_PrepareParameters(t *testing.T) {
 				assert.False(t, hasAuthToken, "Auth token should not be set for auth methods")
 			}
 
-			// Verify signature
+			// Verify signature.
 			assert.NotEmpty(t, fullParams["api_sig"], "Signature should be set")
 
-			// Verify original params are preserved
+			// Verify original params are preserved.
 			for k, v := range tc.params {
 				assert.Equal(t, v, fullParams[k], "Original parameters should be preserved")
 			}
@@ -143,30 +166,29 @@ func TestClient_PrepareParameters(t *testing.T) {
 }
 
 func TestClient_CallMethod(t *testing.T) {
-	// Create a test server
-	// Create a test server
+	// Create a test server.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request
+		// Verify request.
 		err := r.ParseForm()
 		require.NoError(t, err, "Failed to parse form data")
 
-		// Verify basic parameters
+		// Verify basic parameters.
 		assert.Equal(t, "test_key", r.Form.Get("api_key"), "API key should be set")
 		assert.NotEmpty(t, r.Form.Get("api_sig"), "Signature should be set")
 
-		// Check the method and respond accordingly
+		// Check the method and respond accordingly.
 		switch r.Form.Get("method") {
 		case "rtm.test.echo":
-			// Construct the response JSON including *all* parameters
+			// Construct the response JSON including *all* parameters.
 			responseMap := map[string]interface{}{
 				"rsp": map[string]interface{}{
 					"stat": "ok",
 				},
 			}
-			// Add all form parameters to the response under rsp
+			// Add all form parameters to the response under rsp.
 			for k, v := range r.Form {
 				if len(v) > 0 {
-					// Ensure we don't overwrite the stat field
+					// Ensure we don't overwrite the stat field.
 					if k != "stat" {
 						responseMap["rsp"].(map[string]interface{})[k] = v[0]
 					}
@@ -178,12 +200,12 @@ func TestClient_CallMethod(t *testing.T) {
 			w.Write(jsonBytes)
 
 		case "rtm.test.error":
-			// Return an error response
+			// Return an error response.
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"rsp":{"stat":"fail","err":{"code":"112","msg":"Method not found"}}}`))
 
 		case "rtm.auth.checkToken":
-			// Return a valid auth check response
+			// Return a valid auth check response.
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{
 				"rsp": {
@@ -200,14 +222,14 @@ func TestClient_CallMethod(t *testing.T) {
 			}`))
 
 		default:
-			// Unknown method
+			// Unknown method.
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(`{"rsp":{"stat":"fail","err":{"code":"112","msg":"Method not found"}}}`))
 		}
 	}))
 	defer server.Close()
 
-	// Create client with test server URL
+	// Create client with test server URL.
 	logger := logging.GetNoopLogger()
 	client := &Client{
 		config: Config{
@@ -219,31 +241,31 @@ func TestClient_CallMethod(t *testing.T) {
 		logger: logger,
 	}
 
-	// Test cases
+	// Test cases.
 	t.Run("Success - Echo", func(t *testing.T) {
 		ctx := context.Background()
-		params := map[string]string{"test_param": "test_value", "another_param": "value2"} // Add more params
+		params := map[string]string{"test_param": "test_value", "another_param": "value2"} // Add more params.
 
-		// Call the method
+		// Call the method.
 		result, err := client.CallMethod(ctx, "rtm.test.echo", params)
 
-		// Verify
+		// Verify.
 		require.NoError(t, err, "CallMethod should not return error on success")
 		require.NotNil(t, result, "Result should not be nil")
-		// Check specifically for the echoed params within the "rsp" object
+		// Check specifically for the echoed params within the "rsp" object.
 		assert.Contains(t, string(result), `"test_param":"test_value"`, "Result should contain echoed parameter")
 		assert.Contains(t, string(result), `"another_param":"value2"`, "Result should contain another echoed parameter")
-		// Ensure other standard params are also present if needed for assertion
+		// Ensure other standard params are also present if needed for assertion.
 		assert.Contains(t, string(result), `"method":"rtm.test.echo"`, "Result should contain method")
 	})
 	t.Run("Error - API Error", func(t *testing.T) {
 		ctx := context.Background()
 		params := map[string]string{}
 
-		// Call the method
+		// Call the method.
 		result, err := client.CallMethod(ctx, "rtm.test.error", params)
 
-		// Verify
+		// Verify.
 		require.Error(t, err, "CallMethod should return error for API error")
 		assert.Contains(t, err.Error(), "Method not found", "Error should contain API error message")
 		assert.Nil(t, result, "Result should be nil for error")
@@ -253,10 +275,10 @@ func TestClient_CallMethod(t *testing.T) {
 		ctx := context.Background()
 		params := map[string]string{}
 
-		// Call the method
+		// Call the method.
 		result, err := client.CallMethod(ctx, "rtm.auth.checkToken", params)
 
-		// Verify
+		// Verify.
 		require.NoError(t, err, "CallMethod should not return error for successful auth check")
 		require.NotNil(t, result, "Result should not be nil")
 		assert.Contains(t, string(result), "testuser", "Result should contain username")

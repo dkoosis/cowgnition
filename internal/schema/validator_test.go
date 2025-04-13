@@ -61,7 +61,7 @@ func getFullSchemaPath(t *testing.T) string {
 	}
 	absPath, err := filepath.Abs(path)
 	require.NoError(t, err, "Failed to get absolute path for schema.json")
-	// t.Logf("Using schema path: %s", absPath) // Optional: uncomment for debugging path issues
+	// t.Logf("Using schema path: %s", absPath) // Optional: uncomment for debugging path issues.
 	return absPath
 }
 
@@ -105,20 +105,24 @@ func TestSchemaValidator_Initialize_Success_File(t *testing.T) {
 
 	validator.mu.RLock()
 	_, okBase := validator.schemas["base"]
-	_, okDef := validator.schemas["JSONRPCRequest"] // Check for a known definition
+	_, okDef := validator.schemas["JSONRPCRequest"] // Check for a known definition.
 	validator.mu.RUnlock()
 	assert.True(t, okBase, "Base schema should be compiled and stored.")
 	assert.True(t, okDef, "Known definition 'JSONRPCRequest' should be compiled.")
 }
 
-// Test SchemaValidator Initialization Success (Embedded - Keep for basic embedded test).
+// file: internal/schema/validator_test.go
+
 func TestSchemaValidator_Initialize_Success_Embedded(t *testing.T) {
 	logger := logging.GetNoopLogger()
-	// Use a small, valid schema just for the embedded test case
+	// Use a small, valid schema with just the definitions we need for this test.
 	localMinValidSchema := `{
-		"$schema": "http://json-schema.org/draft-07/schema#",
-		"definitions": { "ping": {"type": "object"} }
-	}`
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "definitions": {
+            "ping": {"type": "object", "properties": {"jsonrpc": {"type": "string"}}},
+            "base": {"type": "object"}
+        }
+    }`
 	source := SchemaSource{Embedded: []byte(localMinValidSchema)}
 	validator := NewSchemaValidator(source, logger)
 	ctx := context.Background()
@@ -128,12 +132,18 @@ func TestSchemaValidator_Initialize_Success_Embedded(t *testing.T) {
 	assert.True(t, validator.IsInitialized(), "Validator should be marked as initialized.")
 	assert.NotZero(t, validator.GetLoadDuration(), "Load duration should be recorded.")
 	assert.NotZero(t, validator.GetCompileDuration(), "Compile duration should be recorded.")
+
+	// Only check for the specific schemas we included in our test schema.
 	validator.mu.RLock()
-	_, okBase := validator.schemas["base"]
-	_, okPing := validator.schemas["ping"]
+	_, hasBase := validator.schemas["base"]
+	_, hasPing := validator.schemas["ping"]
 	validator.mu.RUnlock()
-	assert.True(t, okBase, "Base schema should be compiled and stored.")
-	assert.True(t, okPing, "Specific definition 'ping' should be compiled.")
+
+	assert.True(t, hasBase, "Base schema should be compiled and stored.")
+	assert.True(t, hasPing, "Specific definition 'ping' should be compiled.")
+
+	// We specifically don't check for JSONRPCRequest, JSONRPCNotification, etc..
+	// since they're not in our minimal test schema.
 }
 
 // Test SchemaValidator Initialization Failure (Invalid JSON in File).
@@ -148,10 +158,12 @@ func TestSchemaValidator_Initialize_Failure_InvalidFileContent(t *testing.T) {
 	require.Error(t, err, "Initialize should fail with invalid schema file content.")
 	assert.False(t, validator.IsInitialized(), "Validator should not be marked as initialized on failure.")
 
+	// Check the specific error type and code.
 	var validationErr *ValidationError
-	assert.True(t, errors.As(err, &validationErr), "Error should be of type *ValidationError.")
+	require.True(t, errors.As(err, &validationErr), "Error should be of type *ValidationError.")
 	assert.Equal(t, ErrSchemaLoadFailed, validationErr.Code, "Error code should indicate schema load failure.")
-	assert.Contains(t, validationErr.Error(), "invalid character", "Error message should indicate JSON syntax error")
+	// Can still check the underlying cause's message if needed, but checking Code is primary.
+	assert.Contains(t, err.Error(), "invalid character", "Error message should indicate JSON syntax error")
 }
 
 // Test SchemaValidator Initialization Failure (File Not Found).
@@ -164,8 +176,10 @@ func TestSchemaValidator_Initialize_Failure_FileNotFound(t *testing.T) {
 	err := validator.Initialize(ctx)
 	require.Error(t, err, "Initialize should fail if file not found and no URL.")
 	assert.False(t, validator.IsInitialized(), "Validator should not be marked as initialized.")
+
+	// Check the specific error type and code.
 	var validationErr *ValidationError
-	assert.True(t, errors.As(err, &validationErr), "Error should be of type *ValidationError.")
+	require.True(t, errors.As(err, &validationErr), "Error should be of type *ValidationError.")
 	assert.Equal(t, ErrSchemaNotFound, validationErr.Code, "Error code should indicate schema not found.")
 }
 
@@ -178,7 +192,7 @@ func TestSchemaValidator_Validate_Success(t *testing.T) {
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Initialization failed.")
 
-	// Validate against a specific definition within the loaded schema
+	// Validate against a specific definition within the loaded schema.
 	err = validator.Validate(ctx, "JSONRPCRequest", []byte(validMessage))
 	assert.NoError(t, err, "Validation should succeed for a valid message against JSONRPCRequest.")
 }
@@ -192,15 +206,17 @@ func TestSchemaValidator_Validate_Failure_InvalidMessage_Missing(t *testing.T) {
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Initialization failed.")
 
-	// Validate against a specific definition expected to fail
+	// Validate against a specific definition expected to fail.
 	err = validator.Validate(ctx, "JSONRPCRequest", []byte(invalidMessageMissingMethod))
 	require.Error(t, err, "Validation should fail for invalid message (missing required).")
 
+	// Check the specific error type, code, and instance path.
 	var validationErr *ValidationError
-	assert.True(t, errors.As(err, &validationErr), "Error should be a ValidationError.")
+	require.True(t, errors.As(err, &validationErr), "Error should be a ValidationError.")
 	assert.Equal(t, ErrValidationFailed, validationErr.Code, "Error code should be ErrValidationFailed.")
-	// Adjust expected error substring based on actual jsonschema output for missing 'method'
-	assert.Contains(t, validationErr.Error(), `missing properties: "method"`, "Error message should indicate missing 'method' property.")
+	assert.Contains(t, validationErr.Message, `missing properties: "method"`, "Error message should indicate missing 'method' property.")
+	// Note: InstancePath might be empty if the error is about the root object missing properties.
+	// Adjust assertion based on actual library output if needed.
 }
 
 // Test SchemaValidator Validate Failure (Invalid Message - Wrong Type).
@@ -212,16 +228,16 @@ func TestSchemaValidator_Validate_Failure_InvalidMessage_Type(t *testing.T) {
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Initialization failed.")
 
-	// Validate against a specific definition expected to fail
+	// Validate against a specific definition expected to fail.
 	err = validator.Validate(ctx, "JSONRPCRequest", []byte(invalidMessageWrongType))
 	require.Error(t, err, "Validation should fail for invalid message (wrong type).")
 
+	// Check the specific error type, code, and instance path.
 	var validationErr *ValidationError
-	assert.True(t, errors.As(err, &validationErr), "Error should be a ValidationError.")
+	require.True(t, errors.As(err, &validationErr), "Error should be a ValidationError.")
 	assert.Equal(t, ErrValidationFailed, validationErr.Code, "Error code should be ErrValidationFailed.")
-	// Adjust expected error substring based on actual jsonschema output for wrong 'method' type
-	assert.Contains(t, validationErr.Error(), `expected string, but got number`, "Error message should indicate 'method' type mismatch.")
-	assert.Contains(t, validationErr.InstancePath, "/method", "Error instance path should point to '/method'")
+	assert.Contains(t, validationErr.Message, `expected string, but got number`, "Error message should indicate 'method' type mismatch.")
+	assert.Contains(t, validationErr.InstancePath, "/method", "Error instance path should point to '/method'.")
 }
 
 // Test SchemaValidator Validate Failure (Invalid JSON Syntax).
@@ -236,8 +252,9 @@ func TestSchemaValidator_Validate_Failure_InvalidJSON(t *testing.T) {
 	err = validator.Validate(ctx, "JSONRPCRequest", []byte(invalidJsonSyntaxMessage))
 	require.Error(t, err, "Validation should fail for invalid JSON syntax.")
 
+	// Check the specific error type and code.
 	var validationErr *ValidationError
-	assert.True(t, errors.As(err, &validationErr), "Error should be a ValidationError.")
+	require.True(t, errors.As(err, &validationErr), "Error should be a ValidationError.")
 	assert.Equal(t, ErrInvalidJSONFormat, validationErr.Code, "Error code should be ErrInvalidJSONFormat.")
 	assert.Contains(t, validationErr.Message, `Invalid JSON format`, "Error message should indicate invalid JSON.")
 }
@@ -252,8 +269,9 @@ func TestSchemaValidator_Validate_NotInitialized(t *testing.T) {
 	err := validator.Validate(ctx, "JSONRPCRequest", []byte(validMessage))
 	require.Error(t, err, "Validation should fail if validator is not initialized.")
 
+	// Check the specific error type and code.
 	var validationErr *ValidationError
-	assert.True(t, errors.As(err, &validationErr), "Error should be a ValidationError.")
+	require.True(t, errors.As(err, &validationErr), "Error should be a ValidationError.")
 	assert.Equal(t, ErrSchemaNotFound, validationErr.Code, "Error code should indicate schema not found/uninitialized.")
 	assert.Contains(t, validationErr.Message, "Schema validator not initialized", "Error message should indicate not initialized.")
 }
