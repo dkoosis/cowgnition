@@ -46,10 +46,10 @@ all: tree check deps fmt golangci-lint check-line-length test build
 build:
 	@printf "$(ICON_START) $(BOLD)$(BLUE)Building $(BINARY_NAME)...$(NC)\n"
 	@go build $(LDFLAGS) -o $(BINARY_NAME) $(MAIN_PACKAGE) && \
-	    printf "   $(ICON_OK) Setting execute permissions...\n" && \
-	    chmod +x $(BINARY_NAME) && \
-	    printf "   $(ICON_OK) $(GREEN)Build successful$(NC)\n" || \
-	    (printf "   $(ICON_FAIL) $(RED)Build failed$(NC)\n" && exit 1)
+		printf "   $(ICON_OK) Setting execute permissions...\n" && \
+		chmod +x $(BINARY_NAME) && \
+		printf "   $(ICON_OK) $(GREEN)Build successful$(NC)\n" || \
+		(printf "   $(ICON_FAIL) $(RED)Build failed$(NC)\n" && exit 1)
 	@printf "\n" # Add spacing
 
 
@@ -86,15 +86,14 @@ deps:
 
 # --- Quality & Testing ---
 
-# --- Quality & Testing ---
-
 # Run tests
 test:
 	@printf "$(ICON_START) $(BOLD)$(BLUE)Running tests with gotestsum...$(NC)\n"
 	@# gotestsum runs 'go test' underneath and summarizes the output.
 	@# We pass arguments to 'go test' after the '--'.
 	@# It will exit with a non-zero status if tests fail.
-	@gotestsum --format pkgname -- -coverprofile=coverage.out ./... && \
+	@# Pass RTM credentials from the environment running 'make' to the 'go test' process.
+	@RTM_API_KEY=$(RTM_API_KEY) RTM_SHARED_SECRET=$(RTM_SHARED_SECRET) gotestsum --format pkgname -- -coverprofile=coverage.out ./... && \
 		printf "   $(ICON_OK) $(GREEN)Tests passed$(NC)\n" || \
 		(printf "   $(ICON_FAIL) $(RED)Tests failed$(NC)\n" && exit 1)
 	@printf "\n" # Add spacing

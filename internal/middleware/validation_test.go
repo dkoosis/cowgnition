@@ -201,12 +201,10 @@ func TestValidationMiddleware_HandleMessage_SkipType(t *testing.T) {
 // Assertion logic remains the same as the middleware should *return* the same error response.
 // Test ValidationMiddleware HandleMessage - Validation Failure (Strict Mode).
 func TestValidationMiddleware_HandleMessage_ValidationFailure_Strict(t *testing.T) {
-	// --- FIX: Ensure simulated error has SchemaPath set ---
 	simulatedValidationError := schema.NewValidationError(schema.ErrValidationFailed, "required property 'params' is missing", nil)
 	// Set the paths explicitly for the test
 	simulatedValidationError.InstancePath = ""         // Error is about the root object
 	simulatedValidationError.SchemaPath = "#/required" // Match test expectation
-	// --- End FIX ---
 
 	mockValidator := &mockSchemaValidator{
 		shouldFail: true,
@@ -237,20 +235,14 @@ func TestValidationMiddleware_HandleMessage_ValidationFailure_Strict(t *testing.
 	}
 	errUnmarshal := json.Unmarshal(respBytes, &errorResp)
 	require.NoError(t, errUnmarshal, "Failed to unmarshal error response.")
-
 	assert.Equal(t, "2.0", errorResp.Jsonrpc)
-	// Fix: Expect int64(1) if that's what identifyRequestID produces for numbers.
-	assert.Equal(t, int64(1), errorResp.ID)
-
+	assert.Equal(t, float64(1), errorResp.ID)
 	assert.Equal(t, transport.JSONRPCInvalidRequest, errorResp.Error.Code, "Error code should be Invalid Request (-32600).")
 	assert.Equal(t, "Invalid Request", errorResp.Error.Message)
-
 	errorData, ok := errorResp.Error.Data.(map[string]interface{})
 	require.True(t, ok, "Error data should be a map.")
 	assert.Equal(t, "", errorData["validationPath"], "Error data should contain instance path.")
-	// --- Assertion that was failing ---
 	assert.Equal(t, "#/required", errorData["schemaPath"])
-	// --- End Assertion ---
 	assert.Contains(t, errorData["validationError"], "required property 'params' is missing")
 	assert.Contains(t, errorData["suggestion"], "Ensure the required field 'params' is provided")
 }
