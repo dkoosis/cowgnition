@@ -51,6 +51,7 @@
 │   ├── middleware/
 │   │   ├── chain.go
 │   │   ├── validation.go
+│   │   ├── validation_errors.go
 │   │   └── validation_test.go
 │   ├── rtm/
 │   │   ├── transport/
@@ -95,4 +96,4 @@
 ├── go.mod
 └── go.sum
 
-20 directories, 76 files
+20 directories, 77 files
