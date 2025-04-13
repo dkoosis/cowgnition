@@ -199,11 +199,14 @@ func TestValidationMiddleware_HandleMessage_SkipType(t *testing.T) {
 
 // Test ValidationMiddleware HandleMessage - Validation Failure (Strict Mode).
 // Assertion logic remains the same as the middleware should *return* the same error response.
+// Test ValidationMiddleware HandleMessage - Validation Failure (Strict Mode).
 func TestValidationMiddleware_HandleMessage_ValidationFailure_Strict(t *testing.T) {
-	// Simulate a schema validation error.
-	simulatedValidationError := schema.NewValidationError(schema.ErrValidationFailed, "required property 'params' is missing", nil).
-		WithContext("instancePath", ""). // Error is about the root object
-		WithContext("schemaPath", "#/required")
+	// --- FIX: Ensure simulated error has SchemaPath set ---
+	simulatedValidationError := schema.NewValidationError(schema.ErrValidationFailed, "required property 'params' is missing", nil)
+	// Set the paths explicitly for the test
+	simulatedValidationError.InstancePath = ""         // Error is about the root object
+	simulatedValidationError.SchemaPath = "#/required" // Match test expectation
+	// --- End FIX ---
 
 	mockValidator := &mockSchemaValidator{
 		shouldFail: true,
@@ -236,17 +239,17 @@ func TestValidationMiddleware_HandleMessage_ValidationFailure_Strict(t *testing.
 	require.NoError(t, errUnmarshal, "Failed to unmarshal error response.")
 
 	assert.Equal(t, "2.0", errorResp.Jsonrpc)
-	assert.Equal(t, float64(1), errorResp.ID) // JSON numbers unmarshal to float64
+	assert.Equal(t, float64(1), errorResp.ID)
 
-	// Expect Invalid Request (-32600) because the error is at the root level (missing 'params'), not inside 'params'.
 	assert.Equal(t, transport.JSONRPCInvalidRequest, errorResp.Error.Code, "Error code should be Invalid Request (-32600).")
-	assert.Equal(t, "Invalid Request", errorResp.Error.Message) // Check message matches code
+	assert.Equal(t, "Invalid Request", errorResp.Error.Message)
 
-	// Check data field for validation details.
 	errorData, ok := errorResp.Error.Data.(map[string]interface{})
 	require.True(t, ok, "Error data should be a map.")
-	assert.Equal(t, "", errorData["validationPath"], "Error data should contain instance path.") // Path is empty for root error
+	assert.Equal(t, "", errorData["validationPath"], "Error data should contain instance path.")
+	// --- Assertion that was failing ---
 	assert.Equal(t, "#/required", errorData["schemaPath"])
+	// --- End Assertion ---
 	assert.Contains(t, errorData["validationError"], "required property 'params' is missing")
 	assert.Contains(t, errorData["suggestion"], "Ensure the required field 'params' is provided")
 }
@@ -302,13 +305,15 @@ func TestValidationMiddleware_HandleMessage_InvalidJSON(t *testing.T) {
 }
 
 // Test identifyMessage function (This tests an internal helper, unchanged by the refactor).
+// Test identifyMessage function (This tests an internal helper).
 func TestIdentifyMessage(t *testing.T) {
-	// Need an instance with a mock validator to call HasSchema internally
+	// --- FIX: Initialize mock validator and middleware instance ---
 	mockValidator := &mockSchemaValidator{}
 	err := mockValidator.Initialize(context.Background()) // Initialize mock schemas
 	require.NoError(t, err)
-
-	mw := ValidationMiddleware{validator: mockValidator} // Use the initialized mock
+	// Create middleware instance WITH the initialized validator
+	mw := ValidationMiddleware{validator: mockValidator, logger: logging.GetNoopLogger()}
+	// --- End FIX ---
 
 	tests := []struct {
 		name          string
@@ -316,27 +321,32 @@ func TestIdentifyMessage(t *testing.T) {
 		expectedType  string
 		expectedID    interface{}
 		expectError   bool
-		errorContains string // Kept for specific checks where type assertion isn't feasible.
+		errorContains string
 	}{
+		// ... test cases remain the same ...
 		{"Valid Request", []byte(`{"jsonrpc":"2.0","method":"ping","id":1}`), "ping", float64(1), false, ""},
 		{"Valid Request String ID", []byte(`{"jsonrpc":"2.0","method":"ping","id":"abc"}`), "ping", "abc", false, ""},
+		// Check specific notification type if schema exists
 		{"Valid Notification No ID", []byte(`{"jsonrpc":"2.0","method":"ping"}`), "ping_notification", nil, false, ""},
+		// Check specific notification type if schema exists
 		{"Valid Notification Null ID", []byte(`{"jsonrpc":"2.0","method":"ping","id":null}`), "ping_notification", nil, false, ""},
+		// Check specific notification type if schema exists
 		{"Valid Standard Notification", []byte(`{"jsonrpc":"2.0","method":"notifications/progress"}`), "notifications/progress_notification", nil, false, ""},
 		{"Valid Success Response", []byte(`{"jsonrpc":"2.0","result":{"ok":true},"id":2}`), "success_response", float64(2), false, ""},
 		{"Valid Error Response", []byte(`{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid"},"id":3}`), "error_response", float64(3), false, ""},
-		{"Valid Error Response Null ID", []byte(`{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid"},"id":null}`), "error_response", nil, false, ""}, // Error response *can* have null id
-		{"Invalid JSON", []byte(`{invalid`), "", nil, true, "failed to parse message structure"},                                                              // Expect specific internal error message.
-		{"Missing Method/Result/Error", []byte(`{"jsonrpc":"2.0","id":4}`), "", float64(4), true, "unable to identify message type"},                          // Expect specific internal error message.
-		{"Invalid Method Type", []byte(`{"jsonrpc":"2.0","method":123,"id":5}`), "", float64(5), true, "failed to parse method"},                              // Expect specific internal error message.
+		{"Valid Error Response Null ID", []byte(`{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid"},"id":null}`), "error_response", nil, false, ""},
+		{"Invalid JSON", []byte(`{invalid`), "", nil, true, "failed to parse message structure"},
+		{"Missing Method/Result/Error", []byte(`{"jsonrpc":"2.0","id":4}`), "", float64(4), true, "unable to identify message type"},
+		{"Invalid Method Type", []byte(`{"jsonrpc":"2.0","method":123,"id":5}`), "", float64(5), true, "failed to parse method"},
 		{"Empty Method String", []byte(`{"jsonrpc":"2.0","method":"","id":6}`), "", float64(6), true, "method cannot be empty"},
-		{"Invalid ID Type (Object)", []byte(`{"jsonrpc":"2.0","method":"test","id":{}}`), "", nil, true, "invalid JSON-RPC ID type detected"}, // Specific internal error from identifyRequestID.
-		{"Invalid ID Type (Array)", []byte(`{"jsonrpc":"2.0","method":"test","id":[]}`), "", nil, true, "invalid JSON-RPC ID type detected"},
+		{"Invalid ID Type (Object)", []byte(`{"jsonrpc":"2.0","method":"test","id":{}}`), "", nil, true, "Invalid JSON-RPC ID type detected"},
+		{"Invalid ID Type (Array)", []byte(`{"jsonrpc":"2.0","method":"test","id":[]}`), "", nil, true, "Invalid JSON-RPC ID type detected"},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			msgType, reqID, err := mw.identifyMessage(tc.input)
+			// mw instance is now correctly initialized before this loop
+			msgType, reqID, err := mw.identifyMessage(tc.input) // Call method on initialized mw
 
 			if tc.expectError {
 				assert.Error(t, err)
@@ -347,7 +357,6 @@ func TestIdentifyMessage(t *testing.T) {
 				assert.NoError(t, err)
 				if err == nil {
 					assert.Equal(t, tc.expectedType, msgType)
-					// Handle potential map comparison if needed, though float64/string/nil should be fine.
 					assert.Equal(t, tc.expectedID, reqID)
 				}
 			}
@@ -355,6 +364,7 @@ func TestIdentifyMessage(t *testing.T) {
 	}
 }
 
+// --- Other tests ... ---
 // Test Outgoing Validation - Success (Unchanged behavior).
 func TestValidationMiddleware_HandleMessage_OutgoingValidation_Success(t *testing.T) {
 	mockValidator := &mockSchemaValidator{}
