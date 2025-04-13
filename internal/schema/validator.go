@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/logging" // Assuming this path is correct
+	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
@@ -26,6 +26,8 @@ type SchemaValidator struct {
 	compiler *jsonschema.Compiler
 	// schemas maps message types to their compiled schema.
 	schemas map[string]*jsonschema.Schema
+	// schemaDoc holds the parsed schema document for reuse.
+	schemaDoc map[string]interface{}
 	// mu protects concurrent access to the schemas map and internal state like cache headers.
 	mu sync.RWMutex
 	// httpClient is used for remote schema fetching.
@@ -65,6 +67,7 @@ func NewSchemaValidator(source SchemaSource, logger logging.Logger) *SchemaValid
 		source:     source,
 		compiler:   compiler,
 		schemas:    make(map[string]*jsonschema.Schema),
+		schemaDoc:  make(map[string]interface{}),
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 		logger:     logger.WithField("component", "schema_validator"),
 	}
@@ -84,7 +87,6 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 
 	// --- Load Schema Data ---
 	loadStart := time.Now()
-	// Pass the lock-acquired context (ctx here is outer context)
 	schemaData, err := v.loadSchemaData(ctx)
 	v.lastLoadDuration = time.Since(loadStart) // Store load duration.
 	if err != nil {
@@ -92,6 +94,7 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 		v.logger.Error("Schema loading failed.", "duration", v.lastLoadDuration, "error", err)
 		return err // Return the wrapped error directly
 	}
+
 	// Check if loadSchemaData signaled "use existing compiled" (returned nil data, nil error)
 	// This happens on HTTP 304 when local file cache also failed.
 	if schemaData == nil {
@@ -110,7 +113,18 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 	}
 	v.logger.Info("Schema loaded.", "duration", v.lastLoadDuration, "sizeBytes", len(schemaData))
 
-	// Try to extract version information from the newly loaded data
+	// --- Parse Schema JSON Once for Definitions and Version Extraction ---
+	if err := json.Unmarshal(schemaData, &v.schemaDoc); err != nil {
+		v.logger.Error("Failed to parse schema JSON to find definitions.", "error", err)
+		// Return error as we can't discover definitions.
+		return NewValidationError(
+			ErrSchemaLoadFailed,
+			"Failed to parse schema JSON to find definitions",
+			errors.Wrap(err, "json.Unmarshal failed during definition discovery"),
+		)
+	}
+
+	// Extract version information from the parsed schema document
 	v.extractSchemaVersion(schemaData)
 
 	// --- Add Schema Resource ---
@@ -131,46 +145,51 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 
 	// --- Compile Base Schema and Key Definitions ---
 	compileStart := time.Now()
-	// Define schemas relative to the added resource ID
-	schemasToCompile := map[string]string{
-		"base":                resourceID, // Compile the root.
-		"JSONRPCRequest":      resourceID + "#/definitions/JSONRPCRequest",
-		"JSONRPCNotification": resourceID + "#/definitions/JSONRPCNotification",
-		"JSONRPCResponse":     resourceID + "#/definitions/JSONRPCResponse",
-		"JSONRPCError":        resourceID + "#/definitions/JSONRPCError",
-		"InitializeRequest":   resourceID + "#/definitions/InitializeRequest",
-		"InitializeResult":    resourceID + "#/definitions/InitializeResult",
-		"ListToolsRequest":    resourceID + "#/definitions/ListToolsRequest",
-		"ListToolsResult":     resourceID + "#/definitions/ListToolsResult",
-		"CallToolRequest":     resourceID + "#/definitions/CallToolRequest",
-		"CallToolResult":      resourceID + "#/definitions/CallToolResult",
-		"ping":                resourceID + "#/definitions/PingRequest", // Assuming PingRequest definition exists
-		"ping_notification":   resourceID + "#/definitions/PingRequest", // Reuse if notification has same params
-		// Add other common/required definitions...
-		"success_response": resourceID + "#/definitions/JSONRPCResponse", // Map generic to base JSON-RPC
-		"error_response":   resourceID + "#/definitions/JSONRPCError",    // Map generic to base JSON-RPC
-	}
-
 	compiledSchemas := make(map[string]*jsonschema.Schema)
+
+	// Always compile the base schema first.
+	baseSchema, baseCompileErr := v.compiler.Compile(resourceID)
+	if baseCompileErr != nil {
+		v.logger.Error("CRITICAL: Failed to compile base schema resource.", "resourceID", resourceID, "error", baseCompileErr)
+		// Cannot proceed without base schema.
+		return NewValidationError(
+			ErrSchemaCompileFailed,
+			"Failed to compile base schema resource",
+			errors.Wrap(baseCompileErr, "compiler.Compile failed for base schema"),
+		).WithContext("pointer", resourceID)
+	}
+	compiledSchemas["base"] = baseSchema
+	v.logger.Debug("Compiled base schema definition.", "name", "base")
+
+	// Track any compilation errors for reporting
 	var firstCompileError error
 
-	for name, pointer := range schemasToCompile {
-		schema, err := v.compiler.Compile(pointer)
-		if err != nil {
-			v.logger.Warn("Failed to compile schema definition.", "name", name, "pointer", pointer, "error", err)
-			// Store the first error encountered, but try to compile others.
-			if firstCompileError == nil {
-				firstCompileError = NewValidationError(
-					ErrSchemaCompileFailed,
-					fmt.Sprintf("Failed to compile schema definition '%s'", name),
-					errors.Wrap(err, "compiler.Compile failed"),
-				).WithContext("pointer", pointer)
+	// Compile definitions found under the "definitions" key.
+	if defs, ok := v.schemaDoc["definitions"].(map[string]interface{}); ok {
+		for name := range defs {
+			pointer := resourceID + "#/definitions/" + name
+			schema, err := v.compiler.Compile(pointer)
+			if err != nil {
+				v.logger.Warn("Failed to compile schema definition.", "name", name, "pointer", pointer, "error", err)
+				// Store the first error encountered, but try to compile others.
+				if firstCompileError == nil {
+					firstCompileError = NewValidationError(
+						ErrSchemaCompileFailed,
+						fmt.Sprintf("Failed to compile schema definition '%s'", name),
+						errors.Wrap(err, "compiler.Compile failed"),
+					).WithContext("pointer", pointer)
+				}
+			} else {
+				compiledSchemas[name] = schema
+				v.logger.Debug("Compiled schema definition.", "name", name)
 			}
-		} else {
-			compiledSchemas[name] = schema
-			v.logger.Debug("Compiled schema definition.", "name", name)
 		}
+	} else {
+		v.logger.Warn("No 'definitions' section found in the schema JSON.")
 	}
+
+	// Add fallback generic mappings for common MCP types
+	v.addGenericMappings(compiledSchemas)
 
 	v.lastCompileDuration = time.Since(compileStart) // Store total compile duration.
 
@@ -191,6 +210,48 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 		"schemasCompiled", getSchemaKeys(v.schemas))
 
 	return nil
+}
+
+// addGenericMappings creates mappings from generic type names to specific schema definitions.
+// This allows the validation middleware to use more generic names when specific ones aren't available.
+func (v *SchemaValidator) addGenericMappings(compiledSchemas map[string]*jsonschema.Schema) {
+	// Standard mappings that align with middleware expectations
+	mappings := map[string][]string{
+		// Generic name -> potential target definitions (in priority order)
+		"success_response":        {"JSONRPCResponse", "Response"},
+		"error_response":          {"JSONRPCError", "Error"},
+		"ping_notification":       {"PingRequest", "PingNotification", "JSONRPCNotification"},
+		"notification":            {"JSONRPCNotification", "Notification"},
+		"request":                 {"JSONRPCRequest", "Request"},
+		"CallToolResult":          {"CallToolResult", "ToolResult"},
+		"initialize_response":     {"InitializeResult"},
+		"tools/list_response":     {"ListToolsResult"},
+		"resources/list_response": {"ListResourcesResult"},
+		"prompts/list_response":   {"ListPromptsResult"},
+	}
+
+	// Track what was successfully mapped for logging
+	mapped := make([]string, 0)
+
+	for genericName, potentialTargets := range mappings {
+		// Skip if generic name already exists as a real definition
+		if _, exists := compiledSchemas[genericName]; exists {
+			continue
+		}
+
+		// Try each potential target in priority order
+		for _, targetDef := range potentialTargets {
+			if targetSchema, ok := compiledSchemas[targetDef]; ok {
+				compiledSchemas[genericName] = targetSchema
+				mapped = append(mapped, fmt.Sprintf("%s→%s", genericName, targetDef))
+				break // Use first match
+			}
+		}
+	}
+
+	if len(mapped) > 0 {
+		v.logger.Debug("Added generic schema mappings.", "mappings", mapped)
+	}
 }
 
 // GetLoadDuration returns the duration of the last schema load operation.
@@ -232,6 +293,7 @@ func (v *SchemaValidator) Shutdown() error {
 
 	// Clear cached schemas to free memory.
 	v.schemas = nil
+	v.schemaDoc = nil
 	v.initialized = false
 	v.logger.Info("Schema validator shut down.")
 
