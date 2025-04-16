@@ -1,5 +1,7 @@
 ./
 ├── cmd/
+│   ├── fix_comments/
+│   │   └── main.go
 │   ├── rtm_connection_test/
 │   │   └── main.go
 │   ├── schema_test/
@@ -8,24 +10,6 @@
 │   │   └── server_runner.go
 │   ├── claude_desktop_registration.go
 │   └── main.go
-├── docs/
-│   ├── adr/
-│   │   ├── 001_error_handling_strategy.md
-│   │   ├── 002_schema_validation_strategy.md
-│   │   ├── 003_state_machine.md
-│   │   ├── 004_in_memory_transport.md
-│   │   ├── 005_secret_management.md
-│   │   ├── 006_modular_multi_service_support.md
-│   │   └── 007_unix_style_pipelining.md
-│   ├── assets/
-│   │   └── cowgnition_logo.png
-│   ├── prompts/
-│   │   └── 001P_error_handling.md
-│   ├── TODO.md
-│   ├── USER_GUIDE.md
-│   ├── contributing.md
-│   ├── llm.md
-│   └── project_directory_tree.txt
 ├── internal/
 │   ├── config/
 │   │   └── config.go
@@ -54,7 +38,6 @@
 │   │   ├── validation_errors.go
 │   │   └── validation_test.go
 │   ├── rtm/
-│   │   ├── transport/
 │   │   ├── auth.go
 │   │   ├── client.go
 │   │   ├── client_test.go
@@ -65,11 +48,11 @@
 │   │   ├── mcp_resources.go
 │   │   ├── mcp_tools.go
 │   │   ├── methods.go
-│   │   ├── secure_token_storage.go
 │   │   ├── service.go
 │   │   ├── service_mock_test.bak
 │   │   ├── token_storage.go
 │   │   ├── token_storage_interface.go
+│   │   ├── token_storage_secure.go
 │   │   └── types.go
 │   ├── schema/
 │   │   ├── errors.go
@@ -87,13 +70,13 @@
 │       └── transport_errors.go
 ├── scripts/
 │   ├── check_file_length.sh*
+│   ├── check_go_bin_path.sh*
 │   ├── graph.d2
 │   └── pkgdep.sh*
 ├── Makefile
 ├── README.md
-├── coverage.out
-├── cowgnition*
 ├── go.mod
-└── go.sum
+├── go.sum
+└── test.go
 
-20 directories, 77 files
+16 directories, 64 files

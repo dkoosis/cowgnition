@@ -1,5 +1,8 @@
+// Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
 // File: internal/schema/validator_test.go.
 package schema
+
+// file: internal/schema/validator_test.go
 
 import (
 	"context"
@@ -110,8 +113,6 @@ func TestSchemaValidator_Initialize_Success_File(t *testing.T) {
 	assert.True(t, okBase, "Base schema should be compiled and stored.")
 	assert.True(t, okDef, "Known definition 'JSONRPCRequest' should be compiled.")
 }
-
-// file: internal/schema/validator_test.go.
 
 func TestSchemaValidator_Initialize_Success_Embedded(t *testing.T) {
 	logger := logging.GetNoopLogger()

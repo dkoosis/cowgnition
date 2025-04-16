@@ -1,6 +1,8 @@
-// file: internal/mcp/handler.go
+// Package mcp implements the Model Context Protocol server logic, including handlers and types.
 
 package mcp
+
+// file: internal/mcp/handler.go
 
 import (
 	// Keep only imports needed for Handler struct and NewHandler.

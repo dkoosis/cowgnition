@@ -1,5 +1,7 @@
-// file: internal/middleware/validation_errors.go
+// Package middleware provides chainable handlers for processing MCP messages, like validation.
 package middleware
+
+// file: internal/middleware/validation_errors.go
 
 import (
 	"encoding/json"

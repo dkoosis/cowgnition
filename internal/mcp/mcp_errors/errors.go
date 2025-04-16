@@ -1,5 +1,7 @@
-// file: internal/mcp/errors/errors.go
+// Package errors (errors) provides functionality related to its domain.
 package errors
+
+// file: internal/mcp/mcp_errors/errors.go
 
 import (
 	"fmt"

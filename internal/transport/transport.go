@@ -1,5 +1,7 @@
-// file: internal/transport/transport.go
+// Package transport defines interfaces and implementations for sending and receiving MCP messages.
 package transport
+
+// file: internal/transport/transport.go
 
 import (
 	"bufio"
@@ -44,7 +46,7 @@ type MessageHandler func(ctx context.Context, message []byte) ([]byte, error)
 type ErrorHandler func(ctx context.Context, err error)
 
 // DefaultErrorHandler provides a basic error handling implementation.
-func DefaultErrorHandler(ctx context.Context, err error) {
+func DefaultErrorHandler(_ context.Context, err error) {
 	// Default implementation does nothing; implementations should replace with
 	// appropriate logging, metrics, etc.
 }

@@ -1,5 +1,7 @@
-// file: internal/logging/slog.go
+// Package logging provides a common interface and setup for application-wide logging.
 package logging
+
+// file: internal/logging/slog.go
 
 import (
 	"context"

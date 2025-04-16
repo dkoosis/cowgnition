@@ -1,5 +1,7 @@
-// file: internal/mcp/connection_state.go
+// Package mcp implements the Model Context Protocol server logic, including handlers and types.
 package mcp
+
+// file: internal/mcp/connection_state.go
 
 import (
 	"fmt"

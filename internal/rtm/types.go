@@ -1,5 +1,7 @@
-// file: internal/rtm/types.go
+// Package rtm implements the client and service logic for interacting with the Remember The Milk API.
 package rtm
+
+// file: internal/rtm/types.go
 
 import (
 	"net/http"

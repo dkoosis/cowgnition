@@ -1,4 +1,7 @@
+// Package rtm implements the client and service logic for interacting with the Remember The Milk API.
 package rtm
+
+// file: internal/rtm/mcp_tools.go
 
 import (
 	"context"

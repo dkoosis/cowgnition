@@ -1,6 +1,8 @@
-// file: internal/mcp/handlers_notifications.go
+// Package mcp implements the Model Context Protocol server logic, including handlers and types.
 
 package mcp
+
+// file: internal/mcp/handlers_notifications.go
 
 import (
 	"context"

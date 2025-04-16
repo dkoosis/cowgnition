@@ -1,5 +1,7 @@
-// file: internal/mcp/mcp_server_test.go
+// Package mcp implements the Model Context Protocol server logic, including handlers and types.
 package mcp
+
+// file: internal/mcp/mcp_server_test.go
 
 import (
 	"context"

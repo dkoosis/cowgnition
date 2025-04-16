@@ -1,5 +1,5 @@
 # Specify phony targets (targets not associated with files)
-.PHONY: all tree build clean test lint golangci-lint fmt check deps install-tools check-line-length help
+.PHONY: all tree build clean test lint golangci-lint fmt check deps install-tools check-line-length help run run-http run-debug
 
 # --- Configuration ---
 
@@ -39,6 +39,7 @@ FAIL_LINES := 650  # Fail if lines exceed this
 # --- Core Targets ---
 
 # Default target - run all checks and build
+# Order: Check deps, Format code, Run linters (incl. format check), Check line length, Run tests, Build
 all: tree check deps fmt golangci-lint check-line-length test build
 	@printf "$(GREEN)$(BOLD)✨ All checks passed and build completed successfully! ✨$(NC)\n"
 
@@ -65,7 +66,7 @@ clean:
 
 # Download dependencies
 deps:
-	@printf "$(ICON_START) $(BOLD)$(BLUE)Downloading dependencies...$(NC)\n"
+	@printf "$(ICON_START) $(BOLD)$(BLUE)Synchronizing dependencies...$(NC)\n"
 	@printf "   $(ICON_INFO) Running go mod tidy...\n"; \
 	go mod tidy > /dev/null 2>&1; \
 	if [ $$? -ne 0 ]; then \
@@ -75,12 +76,11 @@ deps:
 	@printf "   $(ICON_INFO) Running go mod download...\n"; \
 	go mod download > /dev/null 2>&1; \
 	if [ $$? -eq 0 ]; then \
-		printf "   Dependencies synchronized successfully\n"; \
+		printf "   $(ICON_OK) $(GREEN)Dependencies synchronized successfully$(NC)\n"; \
 	else \
 		printf "   $(ICON_FAIL) $(RED)Failed to download dependencies$(NC)\n"; \
 		exit 1; \
 	fi
-	@printf "   $(ICON_OK) $(GREEN)Dependencies downloaded$(NC)\n"
 	@printf "\n" # Add spacing
 
 
@@ -90,27 +90,27 @@ deps:
 test:
 	@printf "$(ICON_START) $(BOLD)$(BLUE)Running tests with gotestsum...$(NC)\n"
 	@# gotestsum runs 'go test' underneath and summarizes the output.
-	@# We pass arguments to 'go test' after the '--'.
-	@# It will exit with a non-zero status if tests fail.
-	@# Pass RTM credentials from the environment running 'make' to the 'go test' process.
+	@# Pass RTM credentials if needed (ensure these vars are set in your env)
 	@RTM_API_KEY=$(RTM_API_KEY) RTM_SHARED_SECRET=$(RTM_SHARED_SECRET) gotestsum --format pkgname -- -coverprofile=coverage.out ./... && \
 		printf "   $(ICON_OK) $(GREEN)Tests passed$(NC)\n" || \
 		(printf "   $(ICON_FAIL) $(RED)Tests failed$(NC)\n" && exit 1)
 	@printf "\n" # Add spacing
 
 # Run basic Go linter (go vet)
+# Note: 'govet' checks are also included in 'golangci-lint run'
 lint:
-	@printf "$(ICON_START) $(BOLD)$(BLUE)Running linters (go vet)...$(NC)\n"
+	@printf "$(ICON_START) $(BOLD)$(BLUE)Running basic linter (go vet)...$(NC)\n"
 	@go vet ./... && \
 		printf "   $(ICON_OK) $(GREEN)go vet passed$(NC)\n" || \
 		(printf "   $(ICON_FAIL) $(RED)go vet found issues$(NC)\n" && exit 1)
 	@printf "\n" # Add spacing
 
-# Run comprehensive golangci-lint
+# Run comprehensive golangci-lint (includes format checks)
 golangci-lint: install-tools # Ensure tool is installed first
-	@printf "$(ICON_START) $(BOLD)$(BLUE)Running golangci-lint...$(NC)\n"
-	@# The golangci-lint tool produces its own output and indentation for errors
-	@golangci-lint run && \
+	@printf "$(ICON_START) $(BOLD)$(BLUE)Running golangci-lint (linters + format check)...$(NC)\n"
+	@# The golangci-lint tool produces its own output.
+	@# 'run' implicitly uses formatters defined in config for checking.
+	@golangci-lint run ./... && \
 		printf "   $(ICON_OK) $(GREEN)golangci-lint passed$(NC)\n" || \
 		(printf "   $(ICON_FAIL) $(RED)golangci-lint failed (see errors above)$(NC)\n" && exit 1)
 	@printf "\n" # Add spacing
@@ -122,83 +122,109 @@ check-line-length:
 		printf "   $(ICON_FAIL) $(RED)Error: Script './scripts/check_file_length.sh' not found or not executable.$(NC)\n"; \
 		exit 1; \
 	fi
-	@# Execute the script.
-	@./scripts/check_file_length.sh $(WARN_LINES) $(FAIL_LINES) $(GO_FILES)
-	@# Check the exit status of the previous line explicitly.
-	@if [ $$? -ne 0 ]; then \
-		printf "   $(ICON_FAIL) $(RED)Check failed (see script output above)$(NC)\n"; \
-		exit 1; \
-	fi
-	@# If we reach here, the script exited 0. Script should have printed its summary.
+	@# Execute the script. It should handle its own output and exit status.
+	@./scripts/check_file_length.sh $(WARN_LINES) $(FAIL_LINES) $(GO_FILES) || \
+        (printf "   $(ICON_FAIL) $(RED)Check failed (see script output above)$(NC)\n" && exit 1)
+	@# Script should print its own success message if it passes.
 	@printf "\n" # Add spacing
-	@# Note: Ensure './scripts/check_file_length.sh' prints its own summary like "✓ Warnings issued..." or "✓ Check passed".
 
-# Run gofmt to format code
-fmt:
-	@printf "$(ICON_START) $(BOLD)$(BLUE)Formatting code...$(NC)\n"
-	@# go fmt will print its own errors if any
-	@go fmt ./... && \
+# Format code using configured formatters (golangci-lint v2+)
+fmt: install-tools # Ensure tool is installed first
+	@printf "$(ICON_START) $(BOLD)$(BLUE)Formatting code using golangci-lint fmt...$(NC)\n"
+	@# Uses formatters defined in .golangci.yml (e.g., gofmt, goimports)
+	@golangci-lint fmt ./... && \
 		printf "   $(ICON_OK) $(GREEN)Code formatted$(NC)\n" || \
 		(printf "   $(ICON_FAIL) $(RED)Formatting failed (see errors above)$(NC)\n" && exit 1)
 	@printf "\n" # Add spacing
 
 # --- Tooling & Setup ---
 
-# Install required tools (currently just golangci-lint)
+# Install required Go tools (golangci-lint, gotestsum)
 install-tools:
-	@printf "$(ICON_START) $(BOLD)$(BLUE)Installing required tools...$(NC)\n"
+	@printf "$(ICON_START) $(BOLD)$(BLUE)Checking/installing required Go tools...$(NC)\n"
+	
+	@# Check/Install golangci-lint
 	@printf $(LABEL_FMT) "golangci-lint:"
 	@if command -v golangci-lint >/dev/null 2>&1; then \
+		printf "$(ICON_OK) $(GREEN)Already installed$(NC) ($(shell golangci-lint --version))\n"; \
+	else \
+		printf "$(ICON_INFO) $(YELLOW)Not Found. Installing...$(NC)" ;\
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && \
+		printf " $(ICON_OK) $(GREEN)Installed$(NC) ($(shell golangci-lint --version))\n" || \
+		(printf " $(ICON_FAIL) $(RED)Installation failed$(NC)\n" && exit 1); \
+	fi
+
+	@# Check/Install gotestsum
+	@printf $(LABEL_FMT) "gotestsum:"
+	@if command -v gotestsum >/dev/null 2>&1; then \
 		printf "$(ICON_OK) $(GREEN)Already installed$(NC)\n"; \
 	else \
-		printf "$(ICON_INFO) $(BLUE)Installing...$(NC)" ;\
-		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && \
+		printf "$(ICON_INFO) $(YELLOW)Not Found. Installing...$(NC)" ;\
+		go install gotest.tools/gotestsum@latest && \
 		printf " $(ICON_OK) $(GREEN)Installed$(NC)\n" || \
 		(printf " $(ICON_FAIL) $(RED)Installation failed$(NC)\n" && exit 1); \
 	fi
-	@printf "   $(ICON_OK) $(GREEN)Tools installation check complete$(NC)\n"
+
+	@# Add checks/installs for other 'go install'-able tools here if needed
+
+	@printf "   $(ICON_OK) $(GREEN)Go tools check/installation complete$(NC)\n"
 	@printf "\n" # Add spacing
 
 # Check for required tools locally
-check:
-	@printf "$(ICON_START) $(BOLD)$(BLUE)Checking for required tools...$(NC)\n"
+check: install-tools # Optional dependency
+	@printf "$(ICON_START) $(BOLD)$(BLUE)Checking for required tools and environment...$(NC)\n"
 	@printf $(LABEL_FMT) "Go:"
-	@if command -v go >/dev/null 2>&1; then \
-		printf "$(ICON_OK) $(GREEN)$(shell go version)$(NC)\n"; \
-	else \
-		printf "$(ICON_FAIL) $(RED)Not Found - Go is required$(NC)\n"; \
-		exit 1; \
-	fi
+	# ... (existing check for go command) ...
 	@printf $(LABEL_FMT) "golangci-lint:"
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		printf "$(ICON_OK) $(GREEN)Found$(NC)\n"; \
-	else \
-		printf "$(ICON_WARN) $(YELLOW)Not Found (run 'make install-tools')$(NC)\n"; \
-	fi
-	@printf "   $(ICON_OK) $(GREEN)Tool check complete$(NC)\n"
+	# ... (existing check for golangci-lint) ...
+	@printf $(LABEL_FMT) "gotestsum:"
+	# ... (existing check for gotestsum) ...
+	@printf $(LABEL_FMT) "tree:"
+	# ... (existing check for tree) ...
+
+	@# --- Check Go Bin Path using external script ---
+	@printf $(LABEL_FMT) "Go Bin Path:"
+	@# Execute the script directly. Make will fail if the script exits with non-zero status.
+	@# The script itself prints the specific error message to stderr upon failure.
+	@./scripts/check_go_bin_path.sh
+	@# If the script succeeded (exit 0), print the success message. (This line only runs if the script exits 0)
+	@printf "$(ICON_OK) $(GREEN)Verified in PATH$(NC)\n"
+	# --- End Go Bin Path Check ---
+
+	@printf "   $(ICON_OK) $(GREEN)Tool and environment check complete$(NC)\n"
 	@printf "\n" # Add spacing
 
 # Generate a tree view of the project
 tree:
 	@printf "$(ICON_START) $(BOLD)$(BLUE)Generating project tree...$(NC)\n"
-	@tree -F -I 'vendor|test' --dirsfirst > ./docs/project_directory_tree.txt
-	@printf "   $(ICON_OK) $(GREEN)Project tree generated at ./docs/project_directory_tree.txt$(NC)\n"
+	@# Ensure the docs directory exists
+	@mkdir -p ./docs
+	@# Check if tree command exists before running
+	@if ! command -v tree > /dev/null; then \
+		printf "   $(ICON_FAIL) $(RED)'tree' command not found. Please install it (e.g., 'brew install tree' or 'apt install tree').$(NC)\n"; \
+		exit 1; \
+	fi
+	@tree -F -I 'vendor|test|docs|.git|.idea|bin|coverage.out|$(BINARY_NAME)' --dirsfirst > ./docs/project_directory_tree.txt && \
+		printf "   $(ICON_OK) $(GREEN)Project tree generated at ./docs/project_directory_tree.txt$(NC)\n" || \
+		printf "   $(ICON_FAIL) $(RED)Failed to generate project tree.$(NC)\n"
+	@printf "\n" # Add spacing
 
 
 # --- Convenience Targets ---
 
 # Run CowGnition server with default settings
-run:
+# Depends on build to ensure the binary is up-to-date
+run: build
 	@printf "$(ICON_START) $(BOLD)$(BLUE)Running CowGnition server...$(NC)\n"
 	@./$(BINARY_NAME) serve
 
 # Run with HTTP transport instead of stdio
-run-http:
+run-http: build
 	@printf "$(ICON_START) $(BOLD)$(BLUE)Running CowGnition server with HTTP transport...$(NC)\n"
 	@./$(BINARY_NAME) serve --transport http
 
 # Run with debug logging
-run-debug:
+run-debug: build
 	@printf "$(ICON_START) $(BOLD)$(BLUE)Running CowGnition server with debug logging...$(NC)\n"
 	@./$(BINARY_NAME) serve --debug
 
@@ -207,15 +233,22 @@ run-debug:
 # Help target: Display available commands
 help:
 	@printf "$(BLUE)$(BOLD)CowGnition Make Targets:$(NC)\n"
-	@printf "  %-20s %s\n" "all" "Run checks, formatting, tests, and build (default)"
-	@printf "  %-20s %s\n" "build" "Build the application"
-	@printf "  %-20s %s\n" "clean" "Clean build artifacts"
-	@printf "  %-20s %s\n" "test" "Run tests"
-	@printf "  %-20s %s\n" "lint" "Run basic 'go vet' linter"
-	@printf "  %-20s %s\n" "golangci-lint" "Run comprehensive golangci-lint"
+	@printf "  %-20s %s\n" "all" "Run checks, format, tests, and build (default)"
+	@printf "  %-20s %s\n" "build" "Build the application binary ($(BINARY_NAME))"
+	@printf "  %-20s %s\n" "clean" "Clean build artifacts and caches"
+	@printf "  %-20s %s\n" "deps" "Tidy and download Go module dependencies"
+	@printf "  %-20s %s\n" "install-tools" "Install/update required development tools (golangci-lint)"
+	@printf "  %-20s %s\n" "check" "Check if required tools (Go, golangci-lint, etc.) are installed"
+	@printf "\n$(YELLOW)Code Quality & Testing:$(NC)\n"
+	@printf "  %-20s %s\n" "test" "Run tests using gotestsum"
+	@printf "  %-20s %s\n" "lint" "Run basic 'go vet' checks (subset of golangci-lint)"
+	@printf "  %-20s %s\n" "golangci-lint" "Run comprehensive linters and format checks"
+	@printf "  %-20s %s\n" "fmt" "Format code using formatters configured in .golangci.yml"
 	@printf "  %-20s %s\n" "check-line-length" "Check Go file line count (W:$(WARN_LINES), F:$(FAIL_LINES))"
-	@printf "  %-20s %s\n" "fmt" "Format code using 'go fmt'"
-	@printf "  %-20s %s\n" "deps" "Tidy and download dependencies"
-	@printf "  %-20s %s\n" "install-tools" "Install required development tools (golangci-lint)"
-	@printf "  %-20s %s\n" "check" "Check if required tools (Go) are installed"
+	@printf "\n$(YELLOW)Running the Application:$(NC)\n"
+	@printf "  %-20s %s\n" "run" "Build and run the server with default settings"
+	@printf "  %-20s %s\n" "run-http" "Build and run the server with HTTP transport"
+	@printf "  %-20s %s\n" "run-debug" "Build and run the server with debug logging enabled"
+	@printf "\n$(YELLOW)Other:$(NC)\n"
+	@printf "  %-20s %s\n" "tree" "Generate project directory tree view in ./docs/"
 	@printf "  %-20s %s\n" "help" "Display this help message"

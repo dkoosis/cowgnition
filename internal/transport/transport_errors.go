@@ -1,5 +1,7 @@
-// file: internal/transport/transport_errors.go
+// Package transport defines interfaces and implementations for sending and receiving MCP messages.
 package transport
+
+// file: internal/transport/transport_errors.go
 
 import (
 	"fmt"

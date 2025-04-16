@@ -1,69 +1,125 @@
+# .golangci.yml
+version: 2
+
+run:
+  # Specify the Go version used by your project
+  # Update this if your project uses a newer Go version
+  go: '1.24'
+
+# v2: Formatters are configured here and used implicitly by 'run'
+# and explicitly by the 'golangci-lint fmt' command.
+formatters:
+  enable:
+  - gofmt
+  - goimports # Includes gofmt checks + import sorting/grouping
+
 linters:
   disable-all: true # Disable all linters by default
   # Enable the linters you want to use
   enable:
-    # Core linters
-    - errcheck # Check for unchecked errors
-    - gosimple # Simplify code
-    - govet # Reports suspicious constructs
-    - ineffassign # Detect ineffectual assignments
-    - staticcheck # Static analysis checks
-    - typecheck # Standard Go type checks
-    - unused # Check for unused constants, variables, functions and types
+  # --- Formatters (gofmt, goimports) are NOT listed here in v2 ---
 
-    # Code quality linters
-    - gosec # Security checks
-    - gocyclo # Cyclomatic complexity
-    - gofmt # Go formatting
-    - goimports # Fix imports ordering
-    - misspell # Correct commonly misspelled words
-    - revive # Replacement for golint
-    - unconvert # Remove unnecessary type conversions
-    - unparam # Find unused parameters
-    - whitespace # Whitespace style
+  # Core linters
+  - errcheck # Check for unchecked errors
+  - govet # Reports suspicious constructs
+  - ineffassign # Detect ineffectual assignments
+  - staticcheck # Static analysis checks
+  - unused # Check for unused constants, variables, functions and types
 
-    # Additional linters
-    - bodyclose # Check for unclosed HTTP response bodies
-    - copyloopvar # Checks for proper loop variable capture (replacement for exportloopref)
-    - dogsled # Check for too many blank identifiers (_ = _, _ = _)
-    - durationcheck # Check for durations with different units
-    - errorlint # Find error handling mistakes
-    - godot # Check comments end with a period
-    - nilerr # Check for pattern return nil, err == nil
-    - noctx # Check for HTTP requests without context
-    - thelper # Detect t.Helper() calls in tests
-    - tparallel # Detect incorrect usage of t.Parallel()
+  # Code quality linters
+  - gosec # Security checks
+  - gocyclo # Cyclomatic complexity
+  - misspell # Correct commonly misspelled words
+  - revive # Replacement for golint
+  - unconvert # Remove unnecessary type conversions
+  - unparam # Find unused parameters
+  - whitespace # Whitespace style
+
+  # Additional linters
+  - bodyclose # Check for unclosed HTTP response bodies
+  - copyloopvar # Checks for proper loop variable capture
+  - dogsled # Check for too many blank identifiers (_ = _, _ = _)
+  - durationcheck # Check for durations with different units
+  - errorlint # Find error handling mistakes
+  - godot # Check comments end with a period
+  - nilerr # Check for pattern return nil, err == nil
+  - noctx # Check for HTTP requests without context
+  - thelper # Detect t.Helper() calls in tests
+  - tparallel # Detect incorrect usage of t.Parallel()
+  # - gocritic # Consider enabling for more checks
+  # - makezero # Consider enabling
+  # - exhaustive # Consider enabling if using enums extensively
+  # - testpackage # Consider enabling
 
 linters-settings:
   gocyclo:
     min-complexity: 15
-    skip-tests: true
+    # skip-tests: true # Uncomment if you want to skip tests
 
   gosec:
-    # Severity of errors to show
+    # Severity of errors to show (options: low, medium, high)
     severity: medium
+    # exclude_rules:
+    #  - G101 # Example: Exclude specific rules if needed
 
   revive:
     # Rules with custom configuration
     rules:
-      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#exported
-      - name: exported
-        severity: warning
-        disabled: false
-        arguments:
-          - "checkPrivateReceivers"
-          - "sayRepetitiveInsteadOfStutters"
+    - name: exported
+      severity: warning # Or "error" for stricter enforcement
+      disabled: false
+      arguments: [ "checkPrivateReceivers", "sayRepetitiveInsteadOfStutters" ]
+    # Add other revive rule configurations here if needed
 
   errorlint:
-    # Check for comparison of errors using errors.Is
+    # Check for comparison of errors using errors.Is/As
     asserts: true
-    # Check for wrapping errors using errors.As
+    # Check for wrapping errors using fmt.Errorf (vs %w)
     errorf: true
+  # goimports:
+  #   local-prefixes: github.com/yourorg/yourrepo # Optional: Helps group local imports
 
 issues:
+  # Maximum issues count per linter. Set to 0 to disable limit. Default is 50.
+  max-issues-per-linter: 0
+  # Maximum count of issues with the same text. Set to 0 to disable limit. Default is 3.
+  max-same-issues: 0
+
   exclude-rules:
-    - path: "_test\\.go$"
-      linters:
-        - gocyclo
-        - errcheck
-        - gosec
+  # Exclude some linters from running on test files
+  - path: "_test\\.go$"
+    linters:
+    - gocyclo # Complexity in tests is often acceptable
+    - errcheck # Be cautious: might hide actual test bugs. Consider specific exclusions.
+    - gosec # Be cautious: test code can still have security implications.
+    # Example: Exclude specific check message globally or in specific path
+    # - linters: [revive]
+    #   text: "exported func .* should have comment"
+
+    # Set minimum confidence level for staticcheck findings (0.0 to 1.0)
+    # staticcheck:
+    #   confidence: 0.8 # Default is 0. Filter out less confident findings if needed.
+
+
+    #output: // new lint ver seems to choke on output section, so I'm omitting for now. 5/2025
+    # Print lines with issues. Default is true.
+    #  print-issued-lines: true
+    # Print linter name in the end of issue text. Default is true.
+    #  print-linter-name: true
+    # Make issues output unique by line. Default is true.
+    #  uniq-by-line: true
+    # Sort results by: file, line, column, severity, message, linter. Default is true.
+    #  sort-results: true
+
+    # Define output formats. It should be a LIST/SLICE of maps.
+    #  formats:
+    # Each item starts with '-' and contains key-value pairs (a map).
+    #  - format: colored-line-number # Default and usually best for console
+    # path: report.txt # Optional: Path can only be specified for one format
+
+    #  - format: json
+    #    path: report.json # Example: output JSON to a file
+    # Add other formats as needed, e.g.:
+    # - format: checkstyle
+    #   path: report.xml
+    # - format: github-actions

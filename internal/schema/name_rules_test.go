@@ -1,5 +1,8 @@
+// Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
 // File: internal/schema/name_rules_test.go
 package schema
+
+// file: internal/schema/name_rules_test.go
 
 import (
 	// Import regexp to verify the pattern if needed, though not strictly required for testing ValidateName directly.

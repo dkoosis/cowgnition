@@ -224,7 +224,13 @@ func testInternetConnectivity(ctx context.Context, client *http.Client, logger l
 			Duration:    duration,
 		}
 	}
-	defer resp.Body.Close()
+	defer func() {
+		// Check and log error from closing response body.
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			// Use the logger passed into the function.
+			logger.Warn("Error closing response body in testRTMAvailability.", "error", closeErr)
+		}
+	}()
 
 	if resp.StatusCode >= 400 {
 		return TestResult{
@@ -272,7 +278,14 @@ func testRTMAvailability(ctx context.Context, client *http.Client, logger loggin
 			Duration:    duration,
 		}
 	}
-	defer resp.Body.Close()
+	// in testRTMAvailability
+	defer func() {
+		// Check and log error from closing response body.
+		// Use the logger passed into the function.
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			logger.Warn("Error closing response body in testRTMAvailability.", "error", closeErr)
+		}
+	}() // Note the added parentheses to call the deferred function
 
 	logger.Info("RTM API endpoint is reachable", "status", resp.Status, "duration", duration)
 	return TestResult{

@@ -1,5 +1,7 @@
-// file: internal/rtm/client_test.go
+// Package rtm implements the client and service logic for interacting with the Remember The Milk API.
 package rtm
+
+// file: internal/rtm/client_test.go
 
 import (
 	"context"
@@ -170,6 +172,7 @@ func TestClient_CallMethod(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request.
 		err := r.ParseForm()
+		// Use require inside tests for fatal errors
 		require.NoError(t, err, "Failed to parse form data")
 
 		// Verify basic parameters.
@@ -197,17 +200,24 @@ func TestClient_CallMethod(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			jsonBytes, marshalErr := json.Marshal(responseMap)
 			require.NoError(t, marshalErr, "Failed to marshal echo response")
-			w.Write(jsonBytes)
+			// Corrected: Check w.Write error
+			if _, writeErr := w.Write(jsonBytes); writeErr != nil {
+				t.Logf("httptest server failed to write echo response: %v", writeErr)
+			}
 
 		case "rtm.test.error":
 			// Return an error response.
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"rsp":{"stat":"fail","err":{"code":"112","msg":"Method not found"}}}`))
+			// Corrected: Check w.Write error
+			if _, writeErr := w.Write([]byte(`{"rsp":{"stat":"fail","err":{"code":"112","msg":"Method not found"}}}`)); writeErr != nil {
+				t.Logf("httptest server failed to write error response: %v", writeErr)
+			}
 
 		case "rtm.auth.checkToken":
 			// Return a valid auth check response.
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{
+			// Corrected: Check w.Write error
+			if _, writeErr := w.Write([]byte(`{
 				"rsp": {
 					"stat": "ok",
 					"auth": {
@@ -219,12 +229,17 @@ func TestClient_CallMethod(t *testing.T) {
 						}
 					}
 				}
-			}`))
+			}`)); writeErr != nil {
+				t.Logf("httptest server failed to write checkToken response: %v", writeErr)
+			}
 
 		default:
 			// Unknown method.
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(`{"rsp":{"stat":"fail","err":{"code":"112","msg":"Method not found"}}}`))
+			// Corrected: Check w.Write error
+			if _, writeErr := w.Write([]byte(`{"rsp":{"stat":"fail","err":{"code":"112","msg":"Method not found"}}}`)); writeErr != nil {
+				t.Logf("httptest server failed to write default error response: %v", writeErr)
+			}
 		}
 	}))
 	defer server.Close()

@@ -1,5 +1,7 @@
-// file: cmd/server/server_runner.go
+// Package server contains the runner and setup logic for the main CowGnition MCP server process.
 package server
+
+// file: cmd/server/server_runner.go
 
 import (
 	"context"

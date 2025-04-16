@@ -1,5 +1,7 @@
-// file: internal/config/config.go
+// Package config handles loading, parsing, and validating application configuration.
 package config
+
+// file: internal/config/config.go
 
 import (
 	"fmt"
@@ -94,6 +96,7 @@ func LoadFromFile(path string) (*Config, error) {
 	}
 
 	// Read the file.
+	// nolint:gosec
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read config file")

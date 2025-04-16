@@ -92,7 +92,7 @@ func createDefaultConfig(configPath string) error {
 
 	// Ensure directory exists
 	configDir := filepath.Dir(configPath)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0700); err != nil {
 		return errors.Wrap(err, "failed to create configuration directory")
 	}
 
@@ -151,6 +151,7 @@ func configureClaudeDesktop(exePath, configPath string) error {
 	// Read existing Claude config if it exists
 	var claudeConfig ClaudeDesktopConfig
 	if _, err := os.Stat(claudeConfigPath); err == nil {
+		// #nosec G304 -- Path is determined based on OS, not user input.
 		data, err := os.ReadFile(claudeConfigPath)
 		if err != nil {
 			return errors.Wrap(err, "failed to read Claude Desktop configuration")
@@ -183,7 +184,7 @@ func configureClaudeDesktop(exePath, configPath string) error {
 
 	// Ensure directory exists
 	claudeConfigDir := filepath.Dir(claudeConfigPath)
-	if err := os.MkdirAll(claudeConfigDir, 0755); err != nil {
+	if err := os.MkdirAll(claudeConfigDir, 0700); err != nil {
 		return errors.Wrap(err, "failed to create Claude Desktop configuration directory")
 	}
 

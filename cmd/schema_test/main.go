@@ -71,7 +71,7 @@ func (l *stdLogger) Debug(msg string, args ...any)                  { l.log("DEB
 func (l *stdLogger) Info(msg string, args ...any)                   { l.log("INFO", msg, args...) }
 func (l *stdLogger) Warn(msg string, args ...any)                   { l.log("WARN", msg, args...) }
 func (l *stdLogger) Error(msg string, args ...any)                  { l.log("ERROR", msg, args...) }
-func (l *stdLogger) WithContext(ctx context.Context) logging.Logger { return l }
+func (l *stdLogger) WithContext(_ context.Context) logging.Logger   { return l }
 func (l *stdLogger) WithField(key string, value any) logging.Logger { return l }
 
 func (l *stdLogger) log(level, msg string, args ...any) {

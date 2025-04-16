@@ -1,6 +1,8 @@
-// file: internal/schema/name_rules.go
+// Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
 
 package schema
+
+// file: internal/schema/name_rules.go
 
 import (
 	"fmt"

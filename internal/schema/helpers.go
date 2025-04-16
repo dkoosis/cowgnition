@@ -1,5 +1,7 @@
-// file: internal/schema/helpers.go
+// Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
 package schema
+
+// file: internal/schema/helpers.go
 
 import (
 	"bytes"

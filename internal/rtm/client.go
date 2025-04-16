@@ -1,4 +1,7 @@
+// Package rtm implements the client and service logic for interacting with the Remember The Milk API.
 package rtm
+
+// file: internal/rtm/client.go
 
 import (
 	"context"
@@ -75,8 +78,13 @@ func (c *Client) callMethod(ctx context.Context, method string, params map[strin
 		// Wrap HTTP client errors
 		return nil, errors.Wrapf(err, "RTM HTTP request failed (method: %s)", method)
 	}
-	defer resp.Body.Close()
-
+	defer func() {
+		// Check and log error from closing RTM API response body.
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			// Use the client's logger instance.
+			c.logger.Warn("Error closing RTM API response body.", "error", closeErr)
+		}
+	}()
 	// --- 3. Read Response Body ---
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -202,17 +210,11 @@ func (c *Client) handleRTMError(rsp baseRsp, method string) error {
 	)
 }
 
-// file: internal/rtm/client.go
-
-// file: internal/rtm/client.go
+// generateSignature generates an API signature using MD5.
+// Ensures keys are sorted alphabetically before concatenation.
 
 // generateSignature generates an API signature using MD5.
 // Ensures keys are sorted alphabetically before concatenation.
-// file: internal/rtm/client.go
-
-// generateSignature generates an API signature using MD5.
-// Ensures keys are sorted alphabetically before concatenation.
-// file: internal/rtm/client.go
 
 // generateSignature generates an API signature using MD5.
 func (c *Client) generateSignature(params map[string]string) string {

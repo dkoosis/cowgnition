@@ -1,5 +1,7 @@
-// file: internal/schema/loader.go
+// Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
 package schema
+
+// file: internal/schema/loader.go
 
 import (
 	"context"
@@ -153,6 +155,7 @@ func (v *SchemaValidator) loadSchemaFromEmbedded() ([]byte, error) {
 // loadSchemaFromFile loads schema from a local file path.
 // Does not require lock.
 func (v *SchemaValidator) loadSchemaFromFile(filePath string) ([]byte, error) {
+	// nolint:gpsec
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		// Wrap error for context, but don't classify as ValidationError yet.
@@ -200,7 +203,13 @@ func (v *SchemaValidator) fetchSchemaFromURL(ctx context.Context) ([]byte, int, 
 			errors.Wrap(err, "httpClient.Do failed"),
 		).WithContext("url", v.source.URL)
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Assuming 'v' is the SchemaValidator with a logger
+			v.logger.Warn("Error closing response body in fetchSchemaFromURL", "error", err)
+		}
+	}()
 
 	// Handle non-OK statuses before reading body (except 304).
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotModified {

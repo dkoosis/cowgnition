@@ -1,5 +1,7 @@
-// file: internal/mcp/mcp_server.go
+// Package mcp implements the Model Context Protocol server logic, including handlers and types.
 package mcp
+
+// file: internal/mcp/mcp_server.go
 
 import (
 	"context"
@@ -399,8 +401,6 @@ func extractRequestID(msgBytes []byte) json.RawMessage {
 	}
 	return json.RawMessage("null")
 }
-
-// file: internal/mcp/mcp_server.go
 
 // mapErrorToJSONRPCComponents maps Go errors to JSON-RPC code, message, and optional data.
 func (s *Server) mapErrorToJSONRPCComponents(err error) (code int, message string, data interface{}) {

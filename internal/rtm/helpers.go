@@ -1,5 +1,7 @@
-// file: internal/rtm/helpers.go
+// Package rtm implements the client and service logic for interacting with the Remember The Milk API.
 package rtm
+
+// file: internal/rtm/helpers.go
 
 import (
 	"encoding/json"

@@ -1,5 +1,7 @@
-// file: internal/rtm/token_storage_interface.go
+// Package rtm implements the client and service logic for interacting with the Remember The Milk API.
 package rtm
+
+// file: internal/rtm/token_storage_interface.go
 
 import "github.com/dkoosis/cowgnition/internal/logging"
 
