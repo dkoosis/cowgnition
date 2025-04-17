@@ -67,12 +67,12 @@ type stdLogger struct {
 	logger *log.Logger
 }
 
-func (l *stdLogger) Debug(msg string, args ...any)                  { l.log("DEBUG", msg, args...) }
-func (l *stdLogger) Info(msg string, args ...any)                   { l.log("INFO", msg, args...) }
-func (l *stdLogger) Warn(msg string, args ...any)                   { l.log("WARN", msg, args...) }
-func (l *stdLogger) Error(msg string, args ...any)                  { l.log("ERROR", msg, args...) }
-func (l *stdLogger) WithContext(_ context.Context) logging.Logger   { return l }
-func (l *stdLogger) WithField(key string, value any) logging.Logger { return l }
+func (l *stdLogger) Debug(msg string, args ...any)                { l.log("DEBUG", msg, args...) }
+func (l *stdLogger) Info(msg string, args ...any)                 { l.log("INFO", msg, args...) }
+func (l *stdLogger) Warn(msg string, args ...any)                 { l.log("WARN", msg, args...) }
+func (l *stdLogger) Error(msg string, args ...any)                { l.log("ERROR", msg, args...) }
+func (l *stdLogger) WithContext(_ context.Context) logging.Logger { return l }
+func (l *stdLogger) WithField(_ string, _ any) logging.Logger     { return l } // Renamed key and value to _
 
 func (l *stdLogger) log(level, msg string, args ...any) {
 	if len(args) == 0 {

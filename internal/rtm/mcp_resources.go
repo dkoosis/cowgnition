@@ -87,7 +87,7 @@ func (s *Service) readAuthResource(ctx context.Context) ([]interface{}, error) {
 		// Return internal error from GetAuthState
 		return nil, errors.Wrap(err, "failed to get auth state for resource")
 	}
-	return s.createJsonResourceContent("rtm://auth", authState) // Use helper
+	return s.createJSONResourceContent("rtm://auth", authState) // Use helper
 }
 
 func (s *Service) readListsResource(ctx context.Context) ([]interface{}, error) {
@@ -99,7 +99,7 @@ func (s *Service) readListsResource(ctx context.Context) ([]interface{}, error) 
 		// Return internal error from GetLists
 		return nil, errors.Wrap(err, "failed to get lists for resource")
 	}
-	return s.createJsonResourceContent("rtm://lists", lists) // Use helper
+	return s.createJSONResourceContent("rtm://lists", lists) // Use helper
 }
 
 func (s *Service) readTagsResource(ctx context.Context) ([]interface{}, error) {
@@ -111,7 +111,7 @@ func (s *Service) readTagsResource(ctx context.Context) ([]interface{}, error) {
 		// Return internal error from GetTags
 		return nil, errors.Wrap(err, "failed to get tags for resource")
 	}
-	return s.createJsonResourceContent("rtm://tags", tags) // Use helper
+	return s.createJSONResourceContent("rtm://tags", tags) // Use helper
 }
 
 func (s *Service) readTasksResourceWithFilter(ctx context.Context, filter string) ([]interface{}, error) {
@@ -128,7 +128,7 @@ func (s *Service) readTasksResourceWithFilter(ctx context.Context, filter string
 		// Return internal error from GetTasks
 		return nil, errors.Wrapf(err, "failed to get tasks for resource (filter: '%s')", filter)
 	}
-	return s.createJsonResourceContent(resourceURI, tasks) // Use helper
+	return s.createJSONResourceContent(resourceURI, tasks) // Use helper
 }
 
 // --- Resource Helpers ---
@@ -143,8 +143,8 @@ func extractFilterFromURI(uriString string) (string, error) {
 	return parsedURL.Query().Get("filter"), nil
 }
 
-// createJsonResourceContent marshals data and wraps it in TextResourceContents.
-func (s *Service) createJsonResourceContent(uri string, data interface{}) ([]interface{}, error) {
+// createJSONResourceContent marshals data and wraps it in TextResourceContents.
+func (s *Service) createJSONResourceContent(uri string, data interface{}) ([]interface{}, error) {
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		// Return internal marshalling error

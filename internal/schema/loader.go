@@ -155,7 +155,7 @@ func (v *SchemaValidator) loadSchemaFromEmbedded() ([]byte, error) {
 // loadSchemaFromFile loads schema from a local file path.
 // Does not require lock.
 func (v *SchemaValidator) loadSchemaFromFile(filePath string) ([]byte, error) {
-	// nolint:gpsec
+	// #nosec G304 -- File path is determined internally or validated by caller context.
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		// Wrap error for context, but don't classify as ValidationError yet.

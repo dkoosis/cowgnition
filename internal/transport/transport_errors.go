@@ -28,25 +28,30 @@ const (
 type ErrorType int
 
 const (
+	// ErrorTypeGeneric represents a general or unspecified transport error.
 	ErrorTypeGeneric ErrorType = iota
+	// ErrorTypeMessageSize indicates an error due to excessive message size.
 	ErrorTypeMessageSize
+	// ErrorTypeParse indicates a JSON parsing error.
 	ErrorTypeParse
+	// ErrorTypeTimeout indicates a timeout during a read or write operation.
 	ErrorTypeTimeout
+	// ErrorTypeClosed indicates an operation was attempted on a closed transport.
 	ErrorTypeClosed
 )
 
 // Error represents a transport-level error with contextual information.
 type Error struct {
-	Type    ErrorType              // Discriminator field
-	Code    ErrorCode              // Numeric error code
-	Message string                 // Human-readable error message
-	Cause   error                  // Underlying error, if any
-	Context map[string]interface{} // Contextual information for debugging
+	Type    ErrorType              // Discriminator field.
+	Code    ErrorCode              // Numeric error code.
+	Message string                 // Human-readable error message.
+	Cause   error                  // Underlying error, if any.
+	Context map[string]interface{} // Contextual information for debugging.
 
-	// Fields for specific error types, used based on Type value
-	Size     int    // For MessageSize errors
-	MaxSize  int    // For MessageSize errors
-	Fragment []byte // For MessageSize errors
+	// Fields for specific error types, used based on Type value.
+	Size     int    // For MessageSize errors.
+	MaxSize  int    // For MessageSize errors.
+	Fragment []byte // For MessageSize errors.
 }
 
 // Error implements the error interface.
@@ -79,7 +84,7 @@ func (e *Error) Is(target error) bool {
 		return false
 	}
 
-	// Match by error type and code
+	// Match by error type and code.
 	return e.Type == t.Type && e.Code == t.Code
 }
 
@@ -89,7 +94,7 @@ func NewError(code ErrorCode, message string, cause error) *Error {
 		Type:    ErrorTypeGeneric,
 		Code:    code,
 		Message: message,
-		Cause:   errors.WithStack(cause), // Preserve stack trace
+		Cause:   errors.WithStack(cause), // Preserve stack trace.
 		Context: map[string]interface{}{
 			"timestamp": time.Now().UTC(),
 		},
@@ -128,7 +133,7 @@ func NewParseError(message []byte, cause error) *Error {
 		cause,
 	)
 	err.Type = ErrorTypeParse
-	// Store the return values
+	// Store the return values.
 	err = err.WithContext("messagePreview", string(preview))
 	err = err.WithContext("messageLength", len(message))
 
@@ -138,13 +143,13 @@ func NewParseError(message []byte, cause error) *Error {
 // NewTimeoutError creates an error for read/write timeouts.
 func NewTimeoutError(operation string, cause error) *Error {
 	err := NewError(
-		ErrReadTimeout, // Will be updated below if it's a write operation
+		ErrReadTimeout, // Will be updated below if it's a write operation.
 		fmt.Sprintf("%s operation timed out", operation),
 		cause,
 	)
 	err.Type = ErrorTypeTimeout
 
-	// Determine if it's a read or write timeout
+	// Determine if it's a read or write timeout.
 	if operation == "write" {
 		err.Code = ErrWriteTimeout
 	}
@@ -181,17 +186,17 @@ const (
 // MapErrorToJSONRPC maps internal transport errors to JSON-RPC 2.0 error codes and messages.
 // This function helps maintain a consistent mapping between our application errors and JSON-RPC errors.
 func MapErrorToJSONRPC(err error) (int, string, map[string]interface{}) {
-	// Default values
+	// Default values.
 	code := JSONRPCInternalError
 	message := "Internal error"
 	data := map[string]interface{}{}
 
-	// Check for specific error types
+	// Check for specific error types.
 	var transportErr *Error
 	if errors.As(err, &transportErr) {
 		data["errorCode"] = transportErr.Code
 
-		// Map transport error codes to JSON-RPC error codes
+		// Map transport error codes to JSON-RPC error codes.
 		switch transportErr.Code {
 		case ErrJSONParseFailed:
 			code = JSONRPCParseError
@@ -203,15 +208,15 @@ func MapErrorToJSONRPC(err error) (int, string, map[string]interface{}) {
 			code = JSONRPCInvalidRequest
 			message = "Message too large"
 		default:
-			// Use the server-defined error range for other transport errors
+			// Use the server-defined error range for other transport errors.
 			code = JSONRPCServerErrorStart + int(transportErr.Code)
 			message = transportErr.Message
 		}
 
-		// Add safe context data (be careful not to expose sensitive information)
+		// Add safe context data (be careful not to expose sensitive information).
 		for k, v := range transportErr.Context {
-			// Filter out potentially sensitive context keys
-			if k != "messagePreview" && k != "timestamp" && k != "messageSize" && k != "maxSize" {
+			// Filter out potentially sensitive context keys.
+			if k != "messagePreview" && k != "timestamp" && k != "messageLength" && k != "maxSize" {
 				continue
 			}
 			data[k] = v

@@ -1,5 +1,4 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-
 package mcp
 
 // file: internal/mcp/handler.go
@@ -25,6 +24,9 @@ type Handler struct {
 	// rtmClient *rtm.Client
 }
 
+// NewHandler creates a new Handler instance with necessary dependencies.
+// It initializes the MCP handler with configuration, schema validator, server start time,
+// connection state tracking, and a logger.
 func NewHandler(cfg *config.Config, validator *schema.SchemaValidator, startTime time.Time, connState *ConnectionState, logger logging.Logger) *Handler {
 	// TODO: Initialize RTM client here when implemented
 	return &Handler{

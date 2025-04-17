@@ -30,13 +30,23 @@
 │   │   ├── handlers_tools.go
 │   │   ├── helpers.go
 │   │   ├── mcp_server.go
+│   │   ├── mcp_server_error_handling.go
+│   │   ├── mcp_server_processing.go
 │   │   ├── mcp_server_test.go
 │   │   └── types.go
 │   ├── middleware/
 │   │   ├── chain.go
 │   │   ├── validation.go
 │   │   ├── validation_errors.go
-│   │   └── validation_test.go
+│   │   ├── validation_helpers.go
+│   │   ├── validation_identify.go
+│   │   ├── validation_identify_test.go
+│   │   ├── validation_incoming_test.go
+│   │   ├── validation_mocks_test.go
+│   │   ├── validation_options_test.go
+│   │   ├── validation_outgoing_test.go
+│   │   ├── validation_process.go
+│   │   └── validation_schema.go
 │   ├── rtm/
 │   │   ├── auth.go
 │   │   ├── client.go
@@ -76,7 +86,6 @@
 ├── Makefile
 ├── README.md
 ├── go.mod
-├── go.sum
-└── test.go
+└── go.sum
 
-16 directories, 64 files
+16 directories, 73 files

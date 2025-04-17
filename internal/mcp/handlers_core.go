@@ -1,5 +1,4 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-
 package mcp
 
 // file: internal/mcp/handlers_core.go
@@ -18,7 +17,7 @@ const supportedMCPVersion = "2025-03-26" // Match the bundled schema version
 // Official definition: This request is sent from the client to the server when it first connects,
 // asking it to begin initialization. The server responds with information about its capabilities,
 // supported protocol version, and other metadata.
-func (h *Handler) handleInitialize(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handleInitialize(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	var req InitializeRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, errors.Wrap(err, "invalid params for initialize")
@@ -63,7 +62,7 @@ func (h *Handler) handleInitialize(ctx context.Context, params json.RawMessage) 
 // handlePing handles the ping request.
 // Official definition: A ping, issued by either the server or the client, to check that
 // the other party is still alive. The receiver must promptly respond, or else may be disconnected.
-func (h *Handler) handlePing(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handlePing(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 	h.logger.Debug("Handling ping request.")
 	// Empty object is a valid response for ping.
 	resultBytes, err := json.Marshal(map[string]interface{}{})

@@ -1,5 +1,4 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-
 package mcp
 
 // file: internal/mcp/handlers_tools.go
@@ -15,7 +14,7 @@ import (
 // handleToolsList handles the tools/list request.
 // Official definition: Used by the client to request a list of tools the server has.
 // The server should respond with a list of Tool objects that describe the available tools.
-func (h *Handler) handleToolsList(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handleToolsList(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Handling tools/list request.")
 
 	// Define RTM tools.
@@ -160,7 +159,7 @@ func (h *Handler) handleToolCall(ctx context.Context, params json.RawMessage) (j
 // it that the list of tools it offers has changed. This may be issued by servers
 // without any previous subscription from the client.
 // nolint:unused,unparam
-func (h *Handler) handleToolListChanged(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handleToolListChanged(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Sending tool list changed notification to client.")
 	// NOTE: This would typically be sent from the server to the client, not handled by the server.
 	// Included here for completeness of the protocol implementation.

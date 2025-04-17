@@ -35,8 +35,8 @@ func (s *Service) invalidToolArgumentsError(toolName string, err error) *mcp.Cal
 	return s.simpleToolErrorResult(msg)
 }
 
-// rtmApiErrorResult creates a result for errors returned from the RTM API client.
-func (s *Service) rtmApiErrorResult(action string, err error) *mcp.CallToolResult {
+// rtmAPIErrorResult creates a result for errors returned from the RTM API client.
+func (s *Service) rtmAPIErrorResult(action string, err error) *mcp.CallToolResult {
 	msg := fmt.Sprintf("Error %s: %v.", action, err)
 	// Error should have been logged in the client, but maybe log here too?
 	// s.logger.Warn("RTM API call failed.", "action", action, "error", err)

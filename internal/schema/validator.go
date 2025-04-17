@@ -92,15 +92,15 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 	schemaData, err := v.loadSchemaData(ctx)
 	v.lastLoadDuration = time.Since(loadStart) // Store load duration.
 	if err != nil {
-		// loadSchemaData returns wrapped ValidationError on failure
+		// loadSchemaData returns wrapped ValidationError on failure.
 		v.logger.Error("Schema loading failed.", "duration", v.lastLoadDuration, "error", err)
-		return err // Return the wrapped error directly
+		return err // Return the wrapped error directly.
 	}
 
-	// Check if loadSchemaData signaled "use existing compiled" (returned nil data, nil error)
+	// Check if loadSchemaData signaled "use existing compiled" (returned nil data, nil error).
 	// This happens on HTTP 304 when local file cache also failed.
 	if schemaData == nil {
-		// Remove redundant nil check, len() is safe for nil maps.
+		// Removed redundant nil check, len() is safe for nil maps.
 		if len(v.schemas) == 0 {
 			// This case should ideally not happen if 304 occurs, means initial load never happened.
 			err := NewValidationError(ErrSchemaLoadFailed, "Schema unchanged (304) but no schema was previously loaded", nil)
@@ -111,7 +111,7 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 		// Mark as initialized if schemas exist.
 		v.initialized = true
 		v.logger.Info("Schema unchanged on source, re-using previously compiled schemas.", "loadDuration", v.lastLoadDuration)
-		return nil // Initialization technically successful (using cached)
+		return nil // Initialization technically successful (using cached).
 	}
 	v.logger.Info("Schema loaded.", "duration", v.lastLoadDuration, "sizeBytes", len(schemaData))
 
@@ -126,13 +126,13 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 		)
 	}
 
-	// Extract version information from the parsed schema document
+	// Extract version information from the parsed schema document.
 	v.extractSchemaVersion(schemaData)
 
 	// --- Add Schema Resource ---
 	addStart := time.Now()
 	schemaReader := bytes.NewReader(schemaData)
-	// Use a base URI that can be referenced internally, like "mcp://"
+	// Use a base URI that can be referenced internally, like "mcp://".
 	resourceID := "mcp://schema.json"
 	if err := v.compiler.AddResource(resourceID, schemaReader); err != nil {
 		addDuration := time.Since(addStart)
@@ -163,7 +163,7 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 	compiledSchemas["base"] = baseSchema
 	v.logger.Debug("Compiled base schema definition.", "name", "base")
 
-	// Track any compilation errors for reporting
+	// Track any compilation errors for reporting.
 	var firstCompileError error
 
 	// Compile definitions found under the "definitions" key.
@@ -190,7 +190,7 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 		v.logger.Warn("No 'definitions' section found in the schema JSON.")
 	}
 
-	// Add fallback generic mappings for common MCP types
+	// Add fallback generic mappings for common MCP types.
 	v.addGenericMappings(compiledSchemas)
 
 	v.lastCompileDuration = time.Since(compileStart) // Store total compile duration.
@@ -208,7 +208,7 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 		"totalDuration", initDuration,
 		"loadDuration", v.lastLoadDuration,
 		"compileDuration", v.lastCompileDuration,
-		"schemaVersion", v.schemaVersion, // Log detected version
+		"schemaVersion", v.schemaVersion, // Log detected version.
 		"schemasCompiled", getSchemaKeys(v.schemas))
 
 	return nil
@@ -217,9 +217,9 @@ func (v *SchemaValidator) Initialize(ctx context.Context) error {
 // addGenericMappings creates mappings from generic type names to specific schema definitions.
 // This allows the validation middleware to use more generic names when specific ones aren't available.
 func (v *SchemaValidator) addGenericMappings(compiledSchemas map[string]*jsonschema.Schema) {
-	// Standard mappings that align with middleware expectations
+	// Standard mappings that align with middleware expectations.
 	mappings := map[string][]string{
-		// Generic name -> potential target definitions (in priority order)
+		// Generic name -> potential target definitions (in priority order).
 		"success_response":        {"JSONRPCResponse", "Response"},
 		"error_response":          {"JSONRPCError", "Error"},
 		"ping_notification":       {"PingRequest", "PingNotification", "JSONRPCNotification"},
@@ -232,21 +232,21 @@ func (v *SchemaValidator) addGenericMappings(compiledSchemas map[string]*jsonsch
 		"prompts/list_response":   {"ListPromptsResult"},
 	}
 
-	// Track what was successfully mapped for logging
+	// Track what was successfully mapped for logging.
 	mapped := make([]string, 0)
 
 	for genericName, potentialTargets := range mappings {
-		// Skip if generic name already exists as a real definition
+		// Skip if generic name already exists as a real definition.
 		if _, exists := compiledSchemas[genericName]; exists {
 			continue
 		}
 
-		// Try each potential target in priority order
+		// Try each potential target in priority order.
 		for _, targetDef := range potentialTargets {
 			if targetSchema, ok := compiledSchemas[targetDef]; ok {
 				compiledSchemas[genericName] = targetSchema
 				mapped = append(mapped, fmt.Sprintf("%s→%s", genericName, targetDef))
-				break // Use first match
+				break // Use first match.
 			}
 		}
 	}
@@ -286,8 +286,8 @@ func (v *SchemaValidator) Shutdown() error {
 	if transport, ok := v.httpClient.Transport.(*http.Transport); ok {
 		transport.CloseIdleConnections()
 	} else {
-		// If using default transport, create one to close connections
-		// This might not be strictly necessary but ensures cleanup attempt
+		// If using default transport, create one to close connections.
+		// This might not be strictly necessary but ensures cleanup attempt.
 		if dt, ok := http.DefaultTransport.(*http.Transport); ok {
 			dt.CloseIdleConnections()
 		}
@@ -311,7 +311,7 @@ func (v *SchemaValidator) IsInitialized() bool {
 
 // Validate validates the given JSON data against the schema for the specified message type.
 // Refactored to reduce cyclomatic complexity by extracting schema lookup logic.
-func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data []byte) error {
+func (v *SchemaValidator) Validate(_ context.Context, messageType string, data []byte) error { // Renamed unused 'ctx' to '_'.
 	// Check if initialized.
 	if !v.IsInitialized() {
 		return NewValidationError(
@@ -337,7 +337,7 @@ func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data
 	if !ok {
 		// If we still don't have a schema (not even base), initialization likely failed partially.
 		v.mu.RLock()
-		availableKeys := getSchemaKeys(v.schemas) // RLock is needed here for availableSchemas
+		availableKeys := getSchemaKeys(v.schemas) // RLock is needed here for availableSchemas.
 		v.mu.RUnlock()
 		return NewValidationError(
 			ErrSchemaNotFound,
@@ -359,8 +359,8 @@ func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data
 			v.logger.Debug("Schema validation failed.",
 				"duration", validationDuration,
 				"messageType", messageType,
-				"schemaUsed", schemaUsedKey, // Log which schema was actually used
-				"error", valErr.Error()) // Log basic error message
+				"schemaUsed", schemaUsedKey, // Log which schema was actually used.
+				"error", valErr.Error()) // Log basic error message.
 			return convertValidationError(valErr, messageType, data)
 		}
 
@@ -388,7 +388,7 @@ func (v *SchemaValidator) Validate(ctx context.Context, messageType string, data
 // getSchemaForMessageType finds the appropriate compiled schema based on the message type,
 // including fallback logic. Returns the schema, the key used to find it, and success status.
 func (v *SchemaValidator) getSchemaForMessageType(messageType string) (*jsonschema.Schema, string, bool) {
-	v.mu.RLock() // Read lock needed to access v.schemas
+	v.mu.RLock() // Read lock needed to access v.schemas.
 	defer v.mu.RUnlock()
 
 	// Try specific message type first.
@@ -431,16 +431,16 @@ func (v *SchemaValidator) getSchemaForMessageType(messageType string) (*jsonsche
 // compileSubSchema compiles a sub-schema from the base schema.
 // nolint:unused // Reserved for future dynamic schema compilation features.
 func (v *SchemaValidator) compileSubSchema(name, pointer string) error {
-	// This method requires the main lock because it modifies v.schemas
+	// This method requires the main lock because it modifies v.schemas.
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	// Check if already compiled
+	// Check if already compiled.
 	if _, exists := v.schemas[name]; exists {
-		return nil // Already exists
+		return nil // Already exists.
 	}
 
-	// Ensure the compiler is ready (should be if initialized)
+	// Ensure the compiler is ready (should be if initialized).
 	if v.compiler == nil {
 		return NewValidationError(ErrSchemaCompileFailed, "Compiler not available", nil)
 	}
@@ -454,7 +454,7 @@ func (v *SchemaValidator) compileSubSchema(name, pointer string) error {
 		).WithContext("schemaPointer", pointer)
 	}
 
-	// Add to the map
+	// Add to the map.
 	if v.schemas == nil {
 		v.schemas = make(map[string]*jsonschema.Schema)
 	}
@@ -469,7 +469,7 @@ func (v *SchemaValidator) compileSubSchema(name, pointer string) error {
 func (v *SchemaValidator) HasSchema(name string) bool {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
-	// Ensure schemas map is initialized
+	// Ensure schemas map is initialized.
 	if v.schemas == nil {
 		return false
 	}

@@ -1,5 +1,4 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-
 package mcp
 
 // file: internal/mcp/handlers_prompts.go
@@ -14,7 +13,7 @@ import (
 // handlePromptsList handles the prompts/list request.
 // Official definition: Sent from the client to request a list of prompts and prompt templates the server has.
 // The server responds with information about prompts that the client can access.
-func (h *Handler) handlePromptsList(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handlePromptsList(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Handling prompts/list request.")
 
 	// Parse pagination cursor if provided.
@@ -56,7 +55,7 @@ func (h *Handler) handlePromptsList(ctx context.Context, params json.RawMessage)
 // handlePromptsGet handles the prompts/get request.
 // Official definition: Used by the client to get a prompt provided by the server.
 // It retrieves a specific prompt by name, optionally with arguments for templating.
-func (h *Handler) handlePromptsGet(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handlePromptsGet(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	var req struct {
 		Name      string            `json:"name"`
 		Arguments map[string]string `json:"arguments,omitempty"`
@@ -79,7 +78,7 @@ func (h *Handler) handlePromptsGet(ctx context.Context, params json.RawMessage) 
 // any previous subscription from the client.
 //
 //nolint:unused,unparam
-func (h *Handler) handlePromptsListChanged(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handlePromptsListChanged(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Sending prompts list changed notification to client.")
 
 	// This would typically be sent from the server to the client, not handled by the server.

@@ -1,5 +1,4 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-
 package mcp
 
 // file: internal/mcp/handlers_resources.go
@@ -21,7 +20,7 @@ import (
 // handleResourcesList handles the resources/list request.
 // Official definition: Sent from the client to request a list of resources the server has.
 // The server should respond with information about resources that the client can access.
-func (h *Handler) handleResourcesList(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handleResourcesList(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Handling resources/list request.")
 
 	// Parse pagination cursor if provided.
@@ -86,7 +85,7 @@ func (h *Handler) handleResourcesList(ctx context.Context, params json.RawMessag
 // handleResourcesRead handles the resources/read request.
 // Official definition: Sent from the client to the server, to read a specific resource URI.
 // The server responds with the contents of the resource.
-func (h *Handler) handleResourcesRead(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handleResourcesRead(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	var req ReadResourceRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, errors.Wrap(err, "invalid params for resources/read")
@@ -282,7 +281,7 @@ func (h *Handler) handleResourcesUpdated(_ context.Context, params json.RawMessa
 // it that the list of resources it can read from has changed. This may be issued by
 // servers without any previous subscription from the client.
 // nolint:unused,unparam
-func (h *Handler) handleResourceListChanged(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handleResourceListChanged(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Sending resource list changed notification to client.")
 	// NOTE: This would typically be sent from the server to the client, not handled by the server.
 	// Included here for completeness of the protocol implementation.

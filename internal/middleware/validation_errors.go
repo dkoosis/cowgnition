@@ -7,16 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time" // Added import for time.
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/schema"
+	"github.com/dkoosis/cowgnition/internal/schema" // Added import for schema.
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
 
 // --- JSON-RPC Error Response Creation Helpers ---
-// createParseErrorResponse, createInvalidRequestErrorResponse,
-// createValidationErrorResponse, createInternalErrorResponse,
-// createGenericErrorResponseWithData remain the same as previous refactor.
 
 // createParseErrorResponse creates a standard JSON-RPC -32700 error response.
 func createParseErrorResponse(id interface{}, parseErr error) ([]byte, error) {
@@ -46,39 +44,48 @@ func createInvalidRequestErrorResponse(id interface{}, requestErr error) ([]byte
 func createValidationErrorResponse(id interface{}, validationErr error) ([]byte, error) {
 	var schemaValErr *schema.ValidationError
 	if !errors.As(validationErr, &schemaValErr) {
+		// If the error isn't a schema.ValidationError, treat it as an internal error.
+		// Maybe log the original error here for debugging.
+		// log.Printf("createValidationErrorResponse called with non-schema error: %v", validationErr) // Example logging.
 		return createInternalErrorResponse(id)
 	}
 
-	code := transport.JSONRPCInvalidRequest // Default code (-32600)
+	code := transport.JSONRPCInvalidRequest // Default code (-32600).
 	message := "Invalid Request"
 
+	// Use InvalidParams code if the error path indicates parameters are the issue.
 	if schemaValErr.InstancePath != "" && (strings.HasPrefix(schemaValErr.InstancePath, "/params") ||
 		strings.HasPrefix(schemaValErr.InstancePath, "params") ||
 		strings.Contains(schemaValErr.InstancePath, "/params/") ||
 		strings.Contains(schemaValErr.InstancePath, ".params.")) {
-		code = transport.JSONRPCInvalidParams // -32602
+		code = transport.JSONRPCInvalidParams // -32602.
 		message = "Invalid params"
 	}
 
+	// Construct the data payload for the error response.
 	errorData := map[string]interface{}{
 		"validationPath":  schemaValErr.InstancePath,
 		"schemaPath":      schemaValErr.SchemaPath,
 		"validationError": schemaValErr.Message,
 	}
 
+	// Merge context from the validation error into the data payload.
 	if schemaValErr.Context != nil {
 		for k, v := range schemaValErr.Context {
+			// Avoid overwriting standard fields; prefix context keys if necessary.
 			if _, exists := errorData[k]; !exists {
-				errorData["context_"+k] = v
+				errorData["context_"+k] = v // Example: Prefix with "context_".
 			}
+			// Special handling for suggestion if provided in context.
 			if k == "suggestion" {
 				errorData["suggestion"] = v
 			}
 		}
 	}
 
+	// Generate a default suggestion if none was provided in the context.
 	if _, exists := errorData["suggestion"]; !exists {
-		errorData["suggestion"] = generateDefaultSuggestion(schemaValErr) // Call refactored suggestion generator
+		errorData["suggestion"] = generateDefaultSuggestion(schemaValErr) // Call suggestion generator.
 	}
 
 	return createGenericErrorResponseWithData(id, code, message, errorData)
@@ -96,6 +103,7 @@ func createInternalErrorResponse(id interface{}) ([]byte, error) {
 // createGenericErrorResponseWithData creates a standard JSON-RPC error response structure.
 func createGenericErrorResponseWithData(id interface{}, code int, message string, data interface{}) ([]byte, error) {
 	if id == nil {
+		// Ensure ID is explicitly null if nil, required by JSON-RPC spec for responses.
 		id = json.RawMessage("null")
 	}
 	response := map[string]interface{}{
@@ -106,20 +114,26 @@ func createGenericErrorResponseWithData(id interface{}, code int, message string
 			"message": message,
 		},
 	}
+	// Add data payload if it's present and non-empty (if it's a map).
 	if data != nil {
+		errorPayload := response["error"].(map[string]interface{}) // Type assertion.
 		dataMap, isMap := data.(map[string]interface{})
+		// Add data if it's not a map, or if it is a map and has entries.
 		if (isMap && len(dataMap) > 0) || !isMap {
-			response["error"].(map[string]interface{})["data"] = data
+			errorPayload["data"] = data
 		}
 	}
+	// Marshal the final response structure.
 	responseBytes, err := json.Marshal(response)
 	if err != nil {
+		// This is a critical failure - the server couldn't even format its error message.
 		return nil, errors.Wrap(err, "CRITICAL: failed to marshal generic error response")
 	}
 	return responseBytes, nil
 }
 
-// --- Suggestion Generation (Refactored Again for Complexity) ---
+// --- Suggestion Generation Helpers ---
+// (generateDefaultSuggestion and its helper functions remain unchanged from previous version)
 
 // suggestionFunc defines the signature for helper functions that generate suggestions.
 type suggestionFunc func(msg, path string) string
@@ -130,7 +144,7 @@ func generateDefaultSuggestion(validationErr *schema.ValidationError) string {
 	msg := validationErr.Message
 	path := validationErr.InstancePath
 	if path == "" {
-		path = "root" // Use "root" if path is empty
+		path = "root" // Use "root" if path is empty.
 	}
 
 	// List of suggestion functions to try in order.
@@ -143,7 +157,7 @@ func generateDefaultSuggestion(validationErr *schema.ValidationError) string {
 		suggestForFormat,
 		suggestForEnum,
 		suggestForAdditionalProperties,
-		// Add more specific suggestion functions here if needed
+		// Add more specific suggestion functions here if needed.
 	}
 
 	// Iterate and return the first non-empty suggestion.
@@ -157,9 +171,8 @@ func generateDefaultSuggestion(validationErr *schema.ValidationError) string {
 	return fmt.Sprintf("Review the value at '%s' against the MCP schema specification for correctness.", path)
 }
 
-// --- Suggestion Generation Detail Extractors (remain the same) ---
-// extractPropertyName, extractTypeInfo, extractPattern, extractNumericLimit,
-// extractFormat, extractEnumValues, extractOffendingProperty remain the same
+// --- Suggestion Generation Detail Extractors ---
+// (extractPropertyName, extractTypeInfo, etc. remain unchanged)
 
 func extractPropertyName(msg string, prefixes ...string) string {
 	for _, prefix := range prefixes {
@@ -228,7 +241,7 @@ func extractNumericLimit(msg string) string {
 					numStr += string(r)
 					foundDigit = true
 				} else if foundDigit {
-					break
+					break // Stop accumulating digits once a non-digit is found after a digit.
 				}
 			}
 			if numStr != "" {
@@ -242,6 +255,7 @@ func extractNumericLimit(msg string) string {
 func extractFormat(msg string) string {
 	formats := []string{"date-time", "date", "time", "email", "uri", "uri-reference", "hostname", "ipv4", "ipv6", "uuid", "json-pointer", "relative-json-pointer", "regex"}
 	for _, format := range formats {
+		// Check for format surrounded by single or double quotes.
 		if strings.Contains(msg, "'"+format+"'") || strings.Contains(msg, `"`+format+`"`) {
 			return format
 		}
@@ -250,12 +264,14 @@ func extractFormat(msg string) string {
 }
 
 func extractEnumValues(msg string) string {
+	// Look for values within square brackets (common for enum lists).
 	if idx := strings.Index(msg, "["); idx != -1 {
 		endIdx := strings.Index(msg[idx:], "]")
 		if endIdx != -1 {
 			return strings.TrimSpace(msg[idx+1 : idx+endIdx])
 		}
 	}
+	// Look for "one of:" pattern.
 	if idx := strings.Index(msg, "one of:"); idx != -1 {
 		return strings.TrimSpace(msg[idx+len("one of:"):])
 	}
@@ -263,7 +279,9 @@ func extractEnumValues(msg string) string {
 }
 
 func extractOffendingProperty(msg string) string {
+	// Specifically target "additionalProperties ... not allowed" messages.
 	if strings.Contains(msg, "additionalProperties") && strings.Contains(msg, "not allowed") {
+		// Extract the property name, usually quoted.
 		startQuote := strings.IndexAny(msg, `"'`)
 		if startQuote != -1 {
 			quoteChar := msg[startQuote]
@@ -276,7 +294,8 @@ func extractOffendingProperty(msg string) string {
 	return ""
 }
 
-// --- Individual Suggestion Helper Functions (remain the same) ---
+// --- Individual Suggestion Helper Functions ---
+// (suggestForRequired, suggestForTypeMismatch, etc. remain unchanged)
 
 func suggestForRequired(msg, path string) string {
 	if strings.Contains(msg, "required property") || strings.Contains(msg, "missing properties") {
@@ -309,7 +328,7 @@ func suggestForPattern(msg, path string) string {
 }
 
 func suggestForNumericLimit(msg, path string) string {
-	if strings.Contains(msg, "minimum") || strings.Contains(msg, "maximum") { // Covers min/max value and length
+	if strings.Contains(msg, "minimum") || strings.Contains(msg, "maximum") { // Covers min/max value and length.
 		limit := extractNumericLimit(msg)
 		if limit != "" {
 			if strings.Contains(msg, "minimum") || strings.Contains(msg, "minLength") {
@@ -367,4 +386,30 @@ func suggestForAdditionalProperties(msg, path string) string {
 		return fmt.Sprintf("The object at '%s' contains additional properties that are not allowed by the schema.", path)
 	}
 	return ""
+}
+
+// --- NewValidationError Function ---
+
+// NewValidationError creates a new schema.ValidationError instance,
+// adding standard context like a timestamp and wrapping the cause error.
+func NewValidationError(code schema.ErrorCode, message string, cause error) *schema.ValidationError {
+	// Ensure cause is wrapped with stack trace if it's not nil and not already wrapped.
+	// Check if cause already has stack trace using errors.As(&stackTracer{}, &cause) is complex.
+	// Simpler approach: just wrap if not nil. errors.WithStack is idempotent-like for stack traces.
+	wrappedCause := cause
+	if cause != nil {
+		wrappedCause = errors.WithStack(cause)
+	}
+
+	return &schema.ValidationError{
+		Code:    code,
+		Message: message,
+		Cause:   wrappedCause, // Use the potentially wrapped cause.
+		Context: map[string]interface{}{
+			// Add timestamp for when the validation error was created.
+			"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+		},
+		// InstancePath and SchemaPath are typically filled in by the validator itself.
+		// If creating manually, these might need to be set if known.
+	}
 }

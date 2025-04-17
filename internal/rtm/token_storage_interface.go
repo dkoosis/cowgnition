@@ -5,7 +5,7 @@ package rtm
 
 import "github.com/dkoosis/cowgnition/internal/logging"
 
-// TokenStorage defines the interface for storing and retrieving auth tokens.
+// TokenStorageInterface defines the interface for storing and retrieving auth tokens.
 type TokenStorageInterface interface {
 	// SaveToken saves a token with associated user information.
 	SaveToken(token string, userID, username string) error
@@ -26,17 +26,17 @@ type TokenStorageInterface interface {
 // NewTokenStorage creates the most appropriate token storage implementation.
 // It will try to use secure storage if available, falling back to file-based storage.
 func NewTokenStorage(tokenPath string, logger logging.Logger) (TokenStorageInterface, error) {
-	// First try to use secure storage
+	// First try to use secure storage.
 	secureStorage := NewSecureTokenStorage(logger)
 
-	// Check if secure storage is available
+	// Check if secure storage is available.
 	if secureStorage.IsAvailable() {
-		logger.Info("Using secure token storage (OS keyring)")
+		logger.Info("Using secure token storage (OS keyring).")
 		return secureStorage, nil
 	}
 
-	// Fall back to file-based storage
-	logger.Info("Secure token storage not available, falling back to file-based storage",
+	// Fall back to file-based storage.
+	logger.Info("Secure token storage not available, falling back to file-based storage.",
 		"path", tokenPath)
 	return NewFileTokenStorage(tokenPath, logger)
 }

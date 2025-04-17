@@ -1,5 +1,4 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-
 package mcp
 
 // file: internal/mcp/handlers_roots.go
@@ -17,7 +16,7 @@ import (
 // removes, or modifies any root. The server should then request an updated list of roots
 // using the ListRootsRequest.
 // nolint:unused,unparam
-func (h *Handler) handleRootsListChanged(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handleRootsListChanged(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Received roots/list_changed notification.")
 
 	// This would typically trigger a roots/list request from the server to get updated roots.
@@ -31,7 +30,7 @@ func (h *Handler) handleRootsListChanged(_ context.Context, params json.RawMessa
 // Official definition: Sent from the server to request a list of root URIs from the client.
 // NOTE: This is typically a server-to-client request, but included here as a stub for completeness.
 // nolint:unused,unparam
-func (h *Handler) handleRootsList(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) handleRootsList(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 	h.logger.Warn("Received roots/list, which is a server-to-client request.")
 	// This would typically be implemented by the client, not the server.
 	return nil, errors.New("roots/list is a server-to-client request, not implemented by the server")
