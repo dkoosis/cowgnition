@@ -118,22 +118,35 @@ func LoadFromFile(path string) (*Config, error) {
 // applyEnvironmentOverrides applies any configuration overrides from environment variables.
 // It also checks for potential misspellings if required RTM variables are missing.
 // This function now requires a logger instance.
+// applyEnvironmentOverrides applies any configuration overrides from environment variables.
+// It also checks for potential misspellings if required RTM variables are missing.
+// This function now requires a logger instance.
 func applyEnvironmentOverrides(config *Config, logger logging.Logger) {
 	apiKeyMissing := false
 	sharedSecretMissing := false
+	apiKeySourceLogged := false
+	sharedSecretSourceLogged := false
 
 	// Override RTM API key if environment variable is set.
 	if apiKey := os.Getenv("RTM_API_KEY"); apiKey != "" {
+		logger.Debug("Using RTM API Key from environment variable (RTM_API_KEY).")
 		config.RTM.APIKey = apiKey
 	} else if config.RTM.APIKey == "" { // Check if still empty after potential file load.
 		apiKeyMissing = true
+	} else if config.RTM.APIKey != "" && !apiKeySourceLogged {
+		logger.Debug("Using RTM API Key from configuration file.")
+		// Removed: apiKeySourceLogged = true // Ineffectual assignment
 	}
 
 	// Override RTM shared secret if environment variable is set.
 	if sharedSecret := os.Getenv("RTM_SHARED_SECRET"); sharedSecret != "" {
+		logger.Debug("Using RTM Shared Secret from environment variable (RTM_SHARED_SECRET).")
 		config.RTM.SharedSecret = sharedSecret
 	} else if config.RTM.SharedSecret == "" { // Check if still empty after potential file load.
 		sharedSecretMissing = true
+	} else if config.RTM.SharedSecret != "" && !sharedSecretSourceLogged {
+		logger.Debug("Using RTM Shared Secret from configuration file.")
+		// Removed: sharedSecretSourceLogged = true // Ineffectual assignment
 	}
 
 	// --- Added Check for Misspelled RTM Variables ---
@@ -153,6 +166,14 @@ func applyEnvironmentOverrides(config *Config, logger logging.Logger) {
 				"suggestion", "Found possible alternatives in environment. Did you misspell the variable name?",
 				"foundNames", strings.Join(foundAlternatives, ", "),
 			)
+		} else {
+			// Log clearly if required vars are missing and no alternatives found
+			if apiKeyMissing {
+				logger.Warn("Required RTM_API_KEY is missing from environment and config file.")
+			}
+			if sharedSecretMissing {
+				logger.Warn("Required RTM_SHARED_SECRET is missing from environment and config file.")
+			}
 		}
 	}
 	// --- End Added Check ---

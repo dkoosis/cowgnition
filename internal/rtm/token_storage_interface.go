@@ -31,12 +31,11 @@ func NewTokenStorage(tokenPath string, logger logging.Logger) (TokenStorageInter
 
 	// Check if secure storage is available.
 	if secureStorage.IsAvailable() {
-		logger.Info("Using secure token storage (OS keyring).")
+		logger.Info("Using secure token storage (OS keyring/vault).") // Updated log
 		return secureStorage, nil
 	}
 
 	// Fall back to file-based storage.
-	logger.Info("Secure token storage not available, falling back to file-based storage.",
-		"path", tokenPath)
+	logger.Info("Secure token storage unavailable, using file-based storage.", "path", tokenPath) // Existing log is clear
 	return NewFileTokenStorage(tokenPath, logger)
 }

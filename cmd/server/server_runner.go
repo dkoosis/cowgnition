@@ -1,7 +1,11 @@
-// Package server contains the runner and setup logic for the main CowGnition MCP server process.
-package server
-
+// Package server provides the runner and setup logic for the main CowGnition MCP server process.
+// It handles server lifecycle management including initialization, runtime operation,
+// and graceful shutdown. The package integrates various components such as configuration
+// loading, schema validation, RTM service connectivity diagnostics, and transport-specific
+// server implementations (stdio, http). It also manages signal handling for proper
+// server termination and resource cleanup.
 // file: cmd/server/server_runner.go
+package server
 
 import (
 	"context"
@@ -16,16 +20,14 @@ import (
 	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/mcp"
 	"github.com/dkoosis/cowgnition/internal/rtm"
+	"github.com/dkoosis/cowgnition/internal/schema" // Add import for schema validator
 )
 
 // RunServer starts the MCP server with the specified transport type.
 // It handles setup, startup, and graceful shutdown of the server.
 // nolint:gocyclo
-// RunServer starts the MCP server with the specified transport type.
-// It handles setup, startup, and graceful shutdown of the server.
-// nolint:gocyclo
 func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout time.Duration, debug bool) error {
-	startTime := time.Now() // *** CAPTURE START TIME ***
+	startTime := time.Now()
 
 	// --- Context and Signal Handling ---
 	ctx, cancel := context.WithCancel(context.Background())
@@ -64,7 +66,16 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	logger.Info("Configuration loaded successfully")
 
 	// --- Schema Validator Initialization ---
-	// [Existing schema validator initialization code remains unchanged]
+	logger.Info("Initializing schema validator...")
+	schemaSource := schema.SchemaSource{
+		// Configure appropriate schema source
+		URL: "https://raw.githubusercontent.com/anthropics/ModelContextProtocol/main/schema/mcp-schema.json",
+	}
+	validator := schema.NewSchemaValidator(schemaSource, logger.WithField("component", "schema_validator"))
+	if err = validator.Initialize(ctx); err != nil {
+		return errors.Wrap(err, "failed to initialize schema validator")
+	}
+	logger.Info("Schema validator initialized")
 
 	// --- RTM Service Initialization and Diagnostics ---
 	logger.Info("Creating and initializing RTM service...")
@@ -117,19 +128,11 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		return errors.Wrap(err, "failed to create MCP server")
 	}
 
-	// --- Create MCP Server Instance ---
-	// *** MODIFIED: Pass startTime and validator ***
-	server, err := mcp.NewServer(cfg, opts, validator, startTime, logger) // Pass validator and startTime
-	if err != nil {
-		return errors.Wrap(err, "failed to create MCP server")
-	}
-
 	// --- Start Server (logic for selecting transport) ---
 	switch transportType {
 	case "stdio":
 		logger.Info("Starting server with stdio transport")
 		go func() {
-			// *** MODIFIED: Call ServeSTDIO which now uses middleware ***
 			if err := server.ServeSTDIO(ctx); err != nil {
 				// Check if the error is due to context cancellation (expected during shutdown)
 				if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
@@ -149,7 +152,6 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		addr := fmt.Sprintf(":%d", cfg.Server.Port)
 		logger.Info("Starting server with HTTP transport", "address", addr)
 		go func() {
-			// *** MODIFIED: Call ServeHTTP which should also use middleware ***
 			if err := server.ServeHTTP(ctx, addr); err != nil {
 				if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, errors.New("HTTP transport not implemented")) /* Temp check */ {
 					logger.Error("Server error (http)", "error", fmt.Sprintf("%+v", err))
@@ -185,7 +187,7 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
 
-	// *** ADDED: Shutdown validator ***
+	// Shutdown validator
 	if err := validator.Shutdown(); err != nil {
 		logger.Error("Error shutting down schema validator", "error", err)
 		// We continue with server shutdown even if schema validator shutdown failed

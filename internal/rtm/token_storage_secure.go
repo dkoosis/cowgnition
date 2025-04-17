@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	keyringService = "CowGnitionRTM"       // Service name for keyring
-	keyringUser    = "RTMAuthTokenDetails" // User/Account name for keyring entry
+	keyringService = "CowGnitionRTM"       // Service name for keyring.
+	keyringUser    = "RTMAuthTokenDetails" // User/Account name for keyring entry.
 )
 
 // SecureTokenStorage handles storing/retrieving tokens using the OS keychain.
@@ -53,7 +53,7 @@ func (s *SecureTokenStorage) IsAvailable() bool {
 
 // SaveToken saves token data securely to the OS keyring.
 func (s *SecureTokenStorage) SaveToken(token string, userID, username string) error {
-	s.logger.Debug("Saving auth token to secure storage", "username", username)
+	s.logger.Debug("Saving auth token to secure storage.", "username", username)
 	data := TokenData{
 		Token:     token,
 		UserID:    userID,
@@ -69,34 +69,36 @@ func (s *SecureTokenStorage) SaveToken(token string, userID, username string) er
 
 	err = keyring.Set(keyringService, keyringUser, string(jsonData))
 	if err != nil {
-		s.logger.Error("Failed to save token to keyring", "error", err)
+		s.logger.Error("Failed to save token to keyring.", "error", err)
 		return errors.Wrap(err, "failed to save token to keyring")
 	}
-	s.logger.Info("Successfully saved token to secure storage")
+	s.logger.Info("Successfully saved token to secure storage.")
 	return nil
 }
 
 // LoadToken loads the token from the secure OS keyring.
 func (s *SecureTokenStorage) LoadToken() (string, error) {
+	s.logger.Info("Attempting to load token from secure OS storage (keyring/vault)...") // Added log
 	jsonData, err := keyring.Get(keyringService, keyringUser)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			s.logger.Debug("No token found in secure storage.")
-			return "", nil // Not an error, just not found
+			return "", nil // Not an error, just not found.
 		}
-		s.logger.Error("Failed to load token from keyring", "error", err)
+		s.logger.Error("Failed to load token from keyring.", "error", err)
 		return "", errors.Wrap(err, "failed to load token from keyring")
 	}
+	s.logger.Info("Successfully loaded token data from secure OS storage.") // Added log
 
 	var data TokenData
 	if err := json.Unmarshal([]byte(jsonData), &data); err != nil {
 		// Data might be corrupted, delete it? Or just report error?
 		s.logger.Error("Failed to parse token data from secure storage, attempting deletion.", "error", err)
-		_ = s.DeleteToken() // Attempt to delete corrupted entry
+		_ = s.DeleteToken() // Attempt to delete corrupted entry.
 		return "", errors.Wrap(err, "failed to parse token data from secure storage")
 	}
 
-	s.logger.Debug("Loaded auth token from secure storage", "username", data.Username)
+	s.logger.Debug("Parsed auth token from secure storage.", "username", data.Username) // Updated log
 	return data.Token, nil
 }
 
@@ -107,7 +109,7 @@ func (s *SecureTokenStorage) DeleteToken() error {
 	err := keyring.Delete(keyringService, keyringUser)
 	// We only return an error if it's something other than "not found".
 	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
-		s.logger.Error("Failed to delete token from keyring", "error", err)
+		s.logger.Error("Failed to delete token from keyring.", "error", err)
 		return errors.Wrap(err, "failed to delete token from keyring")
 	}
 	s.logger.Info("Successfully deleted token from secure storage (or it didn't exist).")
@@ -119,16 +121,16 @@ func (s *SecureTokenStorage) GetTokenData() (*TokenData, error) {
 	jsonData, err := keyring.Get(keyringService, keyringUser)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
-			return nil, nil // Return nil data and nil error if not found
+			return nil, nil // Return nil data and nil error if not found.
 		}
-		s.logger.Error("Failed to load token data from keyring", "error", err)
+		s.logger.Error("Failed to load token data from keyring.", "error", err)
 		return nil, errors.Wrap(err, "failed to load token data from keyring")
 	}
 
 	var data TokenData
 	if err := json.Unmarshal([]byte(jsonData), &data); err != nil {
 		s.logger.Error("Failed to parse token data from secure storage, attempting deletion.", "error", err)
-		_ = s.DeleteToken() // Attempt to delete corrupted entry
+		_ = s.DeleteToken() // Attempt to delete corrupted entry.
 		return nil, errors.Wrap(err, "failed to parse token data from secure storage")
 	}
 
@@ -140,6 +142,6 @@ func (s *SecureTokenStorage) UpdateToken(token string, userID, username string) 
 	// Keyring Set usually overwrites, so we can just call SaveToken.
 	// If more complex update logic is needed (e.g., preserving CreatedAt),
 	// load existing data first.
-	s.logger.Debug("Updating token in secure storage", "username", username)
+	s.logger.Debug("Updating token in secure storage.", "username", username)
 	return s.SaveToken(token, userID, username)
 }

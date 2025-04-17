@@ -5,6 +5,7 @@ package rtm
 
 import (
 	"context"
+	"fmt" // Keep fmt import
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,12 +17,12 @@ import (
 
 // Service provides Remember The Milk functionality to the MCP server.
 type Service struct {
-	client       *Client // Assumes Client is defined in client.go
+	client       *Client // Assumes Client is defined in client.go.
 	config       *config.Config
 	logger       logging.Logger
-	authState    *AuthState // Assumes AuthState is defined in types.go
+	authState    *AuthState // Assumes AuthState is defined in types.go.
 	authMutex    sync.RWMutex
-	tokenStorage TokenStorageInterface // Changed from *TokenStorage
+	tokenStorage TokenStorageInterface // Changed from *TokenStorage.
 	initialized  bool
 }
 
@@ -32,12 +33,12 @@ func NewService(cfg *config.Config, logger logging.Logger) *Service {
 	}
 	serviceLogger := logger.WithField("component", "rtm_service")
 
-	rtmConfig := Config{ // Assumes Config is defined in types.go
+	rtmConfig := Config{ // Assumes Config is defined in types.go.
 		APIKey:       cfg.RTM.APIKey,
 		SharedSecret: cfg.RTM.SharedSecret,
-		// APIEndpoint and HTTPClient will use defaults in NewClient
+		// APIEndpoint and HTTPClient will use defaults in NewClient.
 	}
-	client := NewClient(rtmConfig, logger) // Assumes NewClient is in client.go
+	client := NewClient(rtmConfig, logger) // Assumes NewClient is in client.go.
 
 	tokenPath := cfg.Auth.TokenPath
 	if tokenPath == "" {
@@ -52,7 +53,7 @@ func NewService(cfg *config.Config, logger logging.Logger) *Service {
 
 	tokenStorage, err := NewTokenStorage(tokenPath, logger)
 	if err != nil {
-		serviceLogger.Warn("Failed to initialize token storage.", "error", err)
+		serviceLogger.Warn("Failed to initialize token storage. Token persistence disabled.", "error", err) // Added warning
 		tokenStorage = nil
 	}
 
@@ -67,130 +68,150 @@ func NewService(cfg *config.Config, logger logging.Logger) *Service {
 
 // Initialize initializes the RTM service by checking config, loading tokens, and verifying auth state.
 func (s *Service) Initialize(ctx context.Context) error {
-	s.logger.Info("Initializing RTM service.")
+	s.logger.Info("Initializing RTM Service...") // Log start
 
 	// 1. Check Prerequisites
 	if err := s.checkPrerequisites(); err != nil {
-		return err // Return error early if config is missing
+		s.logger.Error("-> Initialization Failed: Prerequisites not met.", "error", err) // Log failure reason
+		return err                                                                       // Return error early if config is missing.
 	}
 
 	// 2. Load Token from Storage (if available)
-	s.loadAndSetTokenFromStorage()
+	tokenFound := s.loadAndSetTokenFromStorage() // Logs status internally, returns true if token found.
 
 	// 3. Check and Handle Initial Auth State
-	if err := s.checkAndHandleInitialAuthState(ctx); err != nil {
-		// Log the error from auth check, but initialization might still proceed
-		s.logger.Warn("Initial RTM authentication check failed or indicated logged out.", "error", err)
-		// Ensure state reflects not authenticated
+	verificationErr := s.checkAndHandleInitialAuthState(ctx) // Logs status internally.
+	if verificationErr != nil {
+		s.logger.Warn("Initial RTM authentication check failed.", "error", verificationErr)
+		// Continue initialization but ensure state is not authenticated.
 		s.updateAuthState(&AuthState{IsAuthenticated: false})
+	} else if tokenFound && !s.IsAuthenticated() {
+		// Token was loaded, but verification showed it was invalid.
+		s.logger.Warn("Loaded token was invalid according to RTM API.")
 	}
 
-	// 4. Store Verified Token If Necessary (only if auth check succeeded)
-	if s.IsAuthenticated() {
-		s.storeVerifiedTokenIfNeeded()
-	}
+	// 4. Store Verified Token If Necessary (only if auth check succeeded and state is now authenticated)
+	s.storeVerifiedTokenIfNeeded() // Logs status internally.
 
 	// 5. Finalize Initialization
 	s.initialized = true
-	s.logger.Info("RTM service initialization complete.",
-		"authenticated", s.IsAuthenticated(),
-		"username", s.GetUsername())
+	statusMsg := "Not Authenticated"
+	if s.IsAuthenticated() {
+		statusMsg = fmt.Sprintf("Authenticated as %q", s.GetUsername())
+	}
+	s.logger.Info(fmt.Sprintf("Initialization complete. Status: %s.", statusMsg)) // Simplified final status log
 	return nil
 }
 
 // checkPrerequisites verifies required configuration.
 func (s *Service) checkPrerequisites() error {
+	s.logger.Info("Checking configuration (API Key/Secret)...") // Simpler message
 	if s.config.RTM.APIKey == "" || s.config.RTM.SharedSecret == "" {
+		s.logger.Error("-> Configuration Check Failed: RTM API Key or Shared Secret is missing.") // Clearer error
 		return errors.New("RTM API key and shared secret are required")
 	}
-	// Add any other essential checks here
+	s.logger.Info("-> Configuration OK.") // Clearer success
 	return nil
 }
 
 // loadAndSetTokenFromStorage attempts to load a token from storage and set it on the client.
-func (s *Service) loadAndSetTokenFromStorage() {
+// Returns true if a token was found and loaded, false otherwise.
+func (s *Service) loadAndSetTokenFromStorage() bool {
+	s.logger.Info("Loading saved authentication token...") // Simpler message
 	if s.tokenStorage == nil {
-		s.logger.Debug("Token storage not configured, skipping token load.")
-		return
+		s.logger.Info("-> Skipped (Token storage not configured).")
+		return false
 	}
 
-	token, err := s.tokenStorage.LoadToken()
+	token, err := s.tokenStorage.LoadToken() // tokenStorage logs source (secure/file) and attempt outcome
 	if err != nil {
-		s.logger.Warn("Failed to load auth token from storage.", "error", err)
-		// Don't set token if loading failed
+		s.logger.Warn("-> Failed to load token.", "error", err) // Log specific error
+		return false
 	} else if token != "" {
-		s.logger.Info("Loaded auth token from storage.")
-		s.client.SetAuthToken(token) // Set token on the client
-	} else {
-		s.logger.Debug("No token found in storage.")
+		// s.logger.Info("-> Found and loaded saved token.") // Redundant, LoadToken logs success
+		s.client.SetAuthToken(token) // Set token on the client.
+		return true
 	}
+	s.logger.Info("-> No saved token found.") // Clearer outcome
+	return false
 }
 
 // checkAndHandleInitialAuthState verifies the current token with the RTM API.
 // If the token is invalid, it clears it from the client and storage.
 // Returns an error if the API call itself fails, or nil otherwise (even if not authenticated).
 func (s *Service) checkAndHandleInitialAuthState(ctx context.Context) error {
-	authState, err := s.client.GetAuthState(ctx) // Assumes client.GetAuthState handles its own errors
-	if err != nil {
-		// Auth check failed - potentially invalid token or API issue
-		s.logger.Warn("GetAuthState failed during initialization.", "error", err)
+	s.logger.Info("Verifying saved token with RTM...") // Simpler message
+	currentToken := s.client.GetAuthToken()
+	if currentToken == "" {
+		s.logger.Info("-> Skipped (No token to verify).") // Clearer reason
+		s.updateAuthState(&AuthState{IsAuthenticated: false})
+		return nil // No error, just not authenticated.
+	}
 
-		// If we had a token loaded, it's likely invalid, so clear it.
+	authState, err := s.client.GetAuthState(ctx) // Assumes client.GetAuthState handles its own errors.
+
+	if err != nil {
+		s.logger.Warn("-> Verification API call failed.")                      // Clearer status
+		s.logger.Warn("RTM token verification API call failed.", "error", err) // Keep specific error log
+
+		// Clear potentially invalid token
 		if s.client.GetAuthToken() != "" {
-			s.logger.Info("Clearing potentially invalid auth token due to GetAuthState failure.")
+			s.logger.Info("-> Clearing potentially invalid token due to API error.") // Clearer reason
 			s.client.SetAuthToken("")
 			if s.tokenStorage != nil {
 				if delErr := s.tokenStorage.DeleteToken(); delErr != nil {
-					// Log deletion error, but don't overwrite the original GetAuthState error
 					s.logger.Warn("Failed to delete invalid token from storage.", "error", delErr)
 				}
 			}
 		}
 		s.updateAuthState(&AuthState{IsAuthenticated: false})
-		// Return the original error from GetAuthState
-		return err
+		return err // Return the original error
 	}
 
-	// Auth check succeeded, update our cached state
-	s.updateAuthState(authState)
-	if !authState.IsAuthenticated && s.client.GetAuthToken() != "" {
-		// RTM says we're not authenticated, but we had a token. Clear the invalid token.
-		s.logger.Info("Clearing auth token as RTM reports not authenticated.")
-		s.client.SetAuthToken("")
-		if s.tokenStorage != nil {
-			if delErr := s.tokenStorage.DeleteToken(); delErr != nil {
-				s.logger.Warn("Failed to delete unauthenticated token from storage.", "error", delErr)
+	// API call succeeded, check RTM's verdict.
+	s.updateAuthState(authState) // Update cache first.
+	if authState.IsAuthenticated {
+		s.logger.Info(fmt.Sprintf("-> Token verified successfully (User: %q).", authState.Username)) // Include username
+	} else {
+		s.logger.Warn("-> Token reported as invalid by RTM.") // Clearer failure
+		if s.client.GetAuthToken() != "" {
+			s.logger.Info("-> Clearing invalid token.") // Clearer action
+			s.client.SetAuthToken("")
+			if s.tokenStorage != nil {
+				if delErr := s.tokenStorage.DeleteToken(); delErr != nil {
+					s.logger.Warn("Failed to delete unauthenticated token from storage.", "error", delErr)
+				}
 			}
 		}
 	}
-
-	return nil // No error from the check process itself
+	return nil // No error from the check process itself.
 }
 
 // storeVerifiedTokenIfNeeded saves the currently set (and verified) auth token if it's not already stored correctly.
 func (s *Service) storeVerifiedTokenIfNeeded() {
-	// No need to check IsAuthenticated() here, as this is called only when authenticated.
 	if s.tokenStorage == nil {
-		return // Nothing to store if storage isn't configured
+		return
 	}
-
 	currentToken := s.client.GetAuthToken()
-	if currentToken == "" {
-		return // Nothing to store
+	if currentToken == "" || !s.IsAuthenticated() { // Only save if authenticated and have a token
+		return
 	}
 
-	storedToken, loadErr := s.tokenStorage.LoadToken()
-	// Store only if loading failed OR the stored token doesn't match the current valid token
+	s.logger.Info("Checking if token needs saving...") // Simpler message
+	storedToken, loadErr := s.tokenStorage.LoadToken() // LoadToken logs attempt/source/result
+
 	if loadErr != nil || storedToken != currentToken {
-		s.logger.Info("Storing verified auth token.")
+		s.logger.Info("-> Saving verified token to storage.") // Clearer action
 		userID, username := s.getUserInfoFromState()
 		if saveErr := s.tokenStorage.SaveToken(currentToken, userID, username); saveErr != nil {
-			s.logger.Warn("Failed to save verified auth token.", "error", saveErr)
+			s.logger.Warn("-> Failed to save token.", "error", saveErr) // Log specific error
 		}
+	} else {
+		s.logger.Info("-> Token already saved correctly.") // Clearer status
 	}
 }
 
-// --- Auth State Management ---
+// --- Auth State Management --- (No logging changes needed here)
 
 // IsAuthenticated checks if the service is currently authenticated.
 func (s *Service) IsAuthenticated() bool {
@@ -211,12 +232,11 @@ func (s *Service) GetUsername() string {
 
 // GetAuthState retrieves the current cached or refreshed auth state.
 func (s *Service) GetAuthState(ctx context.Context) (*AuthState, error) {
-	// Refresh from API
 	authState, err := s.client.GetAuthState(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get auth state from RTM client")
 	}
-	s.updateAuthState(authState) // Update cache
+	s.updateAuthState(authState)
 	return authState, nil
 }
 
@@ -237,85 +257,74 @@ func (s *Service) getUserInfoFromState() (userID, username string) {
 	return "", ""
 }
 
-// --- Auth Lifecycle ---
+// --- Auth Lifecycle --- (Simplified logging)
 
 // StartAuth begins the authentication flow. Returns the auth URL.
 func (s *Service) StartAuth(ctx context.Context) (string, error) {
-	s.logger.Info("Starting RTM auth flow.")
-	// Correctly handle the 3 return values from the refactored client method
-	authURL, frob, err := s.client.StartAuthFlow(ctx)
+	s.logger.Info("Starting RTM authentication flow (getting auth URL)...") // Clarified purpose
+	authURL, _, err := s.client.StartAuthFlow(ctx)                          // Frob unused here
 	if err != nil {
-		// Error is already wrapped by StartAuthFlow
+		s.logger.Error("-> Failed to start auth flow.", "error", err) // Log specific error
 		return "", err
 	}
-	// Service layer might not need the frob directly, but log for debugging?
-	s.logger.Debug("Obtained frob during StartAuth", "frobLength", len(frob))
-	// Return only the URL as per the original signature requirement (or adjust if needed)
+	s.logger.Info("-> Auth URL generated.")
 	return authURL, nil
 }
 
 // CompleteAuth completes the authentication flow using the frob.
 func (s *Service) CompleteAuth(ctx context.Context, frob string) error {
-	s.logger.Info("Completing RTM auth flow.") // Don't log frob
-
-	// Correctly handle the 2 return values from the refactored client method
+	s.logger.Info("Completing RTM authentication flow (exchanging code for token)...") // Clarified purpose
 	token, err := s.client.CompleteAuthFlow(ctx, frob)
 	if err != nil {
-		return errors.Wrap(err, "failed to complete auth flow with RTM client") // Already wrapped
+		s.logger.Error("-> Failed to complete auth flow.", "error", err) // Log specific error
+		return err
 	}
-	// Token is set internally in the client by CompleteAuthFlow
 
-	// Immediately refresh and store the auth state
+	// Verify state and save token
 	authState, stateErr := s.client.GetAuthState(ctx)
 	if stateErr != nil {
-		s.logger.Error("Failed to fetch auth state immediately after auth flow.", "error", stateErr)
-		s.updateAuthState(&AuthState{IsAuthenticated: false}) // Assume failure
-		// Decide whether to return the stateErr or the original nil error from CompleteAuthFlow
+		s.logger.Error("-> Failed to verify auth state after getting token.", "error", stateErr)
+		s.updateAuthState(&AuthState{IsAuthenticated: false})
 		return errors.Wrap(stateErr, "failed to confirm auth state after completing auth flow")
 	}
 	s.updateAuthState(authState)
 
-	// Save the newly obtained token if storage is available and auth is confirmed
-	if s.tokenStorage != nil && s.IsAuthenticated() && token != "" {
-		s.logger.Info("Saving auth token to storage after completing auth flow.")
-		userID, username := s.getUserInfoFromState()
-		if saveErr := s.tokenStorage.SaveToken(token, userID, username); saveErr != nil {
-			s.logger.Warn("Failed to save auth token to storage.", "error", saveErr)
-			// Don't fail the whole operation for a save error
+	if s.IsAuthenticated() {
+		s.logger.Info(fmt.Sprintf("-> Authentication successful (User: %q).", s.GetUsername()))
+		if s.tokenStorage != nil && token != "" {
+			s.logger.Info("-> Saving new token...")
+			userID, username := s.getUserInfoFromState()
+			if saveErr := s.tokenStorage.SaveToken(token, userID, username); saveErr != nil {
+				s.logger.Warn("-> Failed to save new token.", "error", saveErr)
+			}
 		}
-	} else if !s.IsAuthenticated() {
-		s.logger.Warn("Authentication flow seemed complete, but state verification failed.")
+	} else {
+		s.logger.Warn("-> Authentication flow seemed complete, but state verification failed.")
 	}
 
-	return nil // Return nil if CompleteAuthFlow succeeded, even if state check/save had issues (logged)
+	return nil
 }
 
 // SetAuthToken explicitly sets the auth token and updates storage.
 func (s *Service) SetAuthToken(token string) {
+	// No logging changes needed here - relies on other methods that were updated
 	s.client.SetAuthToken(token)
-
-	// Clear auth state cache if token is cleared
 	if token == "" {
 		s.updateAuthState(&AuthState{IsAuthenticated: false})
 		if s.tokenStorage != nil {
-			_ = s.tokenStorage.DeleteToken() // Attempt to delete, ignore error
+			_ = s.tokenStorage.DeleteToken()
 		}
 		return
 	}
-
-	// If setting a non-empty token, attempt verification and storage update
 	if s.tokenStorage != nil {
-		ctx := context.Background() // Use background context for verification
+		ctx := context.Background()
 		authState, err := s.client.GetAuthState(ctx)
 		if err != nil {
 			s.logger.Warn("Failed to verify manually set token.", "error", err)
-			s.updateAuthState(&AuthState{IsAuthenticated: false}) // Assume invalid
-			// Optionally clear the invalid token from client? s.client.SetAuthToken("")
+			s.updateAuthState(&AuthState{IsAuthenticated: false})
 			return
 		}
-
-		s.updateAuthState(authState) // Update cache
-
+		s.updateAuthState(authState)
 		if s.IsAuthenticated() {
 			s.logger.Info("Saving manually set (and verified) auth token to storage.")
 			userID, username := s.getUserInfoFromState()
@@ -335,21 +344,22 @@ func (s *Service) GetAuthToken() string {
 
 // ClearAuth clears the current authentication state and token storage.
 func (s *Service) ClearAuth() error {
-	s.logger.Info("Clearing RTM authentication.")
+	s.logger.Info("Clearing RTM authentication...") // Simpler message
 	s.client.SetAuthToken("")
 	s.updateAuthState(&AuthState{IsAuthenticated: false})
 	if s.tokenStorage != nil {
 		if err := s.tokenStorage.DeleteToken(); err != nil {
+			s.logger.Error("-> Failed to clear token from storage.", "error", err) // Log specific error
 			return errors.Wrap(err, "failed to delete token from storage")
 		}
 	}
+	s.logger.Info("-> Authentication cleared.")
 	return nil
 }
 
 // Shutdown performs cleanup for the service.
 func (s *Service) Shutdown() error {
 	s.logger.Info("Shutting down RTM service.")
-	// No specific shutdown actions needed for client/state currently.
 	return nil
 }
 
