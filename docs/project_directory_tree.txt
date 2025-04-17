@@ -1,24 +1,32 @@
 ./
 ├── cmd/
 │   ├── fix_comments/
-│   │   └── main.go
+│   │   ├── main.go
+│   │   └── stub_test.go
 │   ├── rtm_connection_test/
-│   │   └── main.go
+│   │   ├── main.go
+│   │   └── stub_test.go
 │   ├── schema_test/
-│   │   └── main.go
+│   │   ├── main.go
+│   │   └── stub_test.go
 │   ├── server/
-│   │   └── server_runner.go
+│   │   ├── server_runner.go
+│   │   └── stub_test.go
 │   ├── claude_desktop_registration.go
-│   └── main.go
+│   ├── main.go
+│   └── stub_test.go
 ├── internal/
 │   ├── config/
-│   │   └── config.go
+│   │   ├── config.go
+│   │   └── stub_test.go
 │   ├── logging/
 │   │   ├── logger.go
-│   │   └── slog.go
+│   │   ├── slog.go
+│   │   └── stub_test.go
 │   ├── mcp/
 │   │   ├── mcp_errors/
-│   │   │   └── errors.go
+│   │   │   ├── errors.go
+│   │   │   └── stub_test.go
 │   │   ├── connection_state.go
 │   │   ├── handler.go
 │   │   ├── handlers_core.go
@@ -76,6 +84,7 @@
 │   │   └── version.go
 │   └── transport/
 │       ├── in_memory_transport.go
+│       ├── stub_test.go
 │       ├── transport.go
 │       └── transport_errors.go
 ├── scripts/
@@ -88,4 +97,4 @@
 ├── go.mod
 └── go.sum
 
-16 directories, 73 files
+16 directories, 82 files

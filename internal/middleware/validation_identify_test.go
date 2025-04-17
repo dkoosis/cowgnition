@@ -26,7 +26,7 @@ func TestIdentifyMessage(t *testing.T) {
 		expectErrorMsg string // Substring expected in the error message OR data field.
 	}{
 		{
-			name:           "Valid Request",
+			name:           "Request_Valid_NoError", // Renamed
 			message:        `{"jsonrpc": "2.0", "method": "initialize", "id": 1, "params": {}}`,
 			expectedType:   "initialize",
 			expectedID:     float64(1),
@@ -34,7 +34,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "",
 		},
 		{
-			name:           "Valid Request String ID",
+			name:           "Request_ValidStringID_NoError", // Renamed
 			message:        `{"jsonrpc": "2.0", "method": "tools/list", "id": "req-abc", "params": null}`,
 			expectedType:   "tools/list",
 			expectedID:     "req-abc",
@@ -42,7 +42,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "",
 		},
 		{
-			name:           "Valid Notification No ID",
+			name:           "Notification_NoID_NoError", // Renamed
 			message:        `{"jsonrpc": "2.0", "method": "ping"}`,
 			expectedType:   "ping",
 			expectedID:     nil,
@@ -50,7 +50,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "",
 		},
 		{
-			name:           "Valid Notification Null ID",
+			name:           "Notification_NullID_NoError", // Renamed
 			message:        `{"jsonrpc": "2.0", "method": "ping", "id": null}`,
 			expectedType:   "ping",
 			expectedID:     nil,
@@ -58,7 +58,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "",
 		},
 		{
-			name:           "Valid Success Response",
+			name:           "SuccessResponse_Valid_NoError", // Renamed
 			message:        `{"jsonrpc": "2.0", "id": 10, "result": "ok"}`,
 			expectedType:   "success_response",
 			expectedID:     float64(10),
@@ -66,7 +66,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "",
 		},
 		{
-			name:           "Valid Success Response Null ID",
+			name:           "SuccessResponse_NullID_NoError", // Renamed
 			message:        `{"jsonrpc": "2.0", "id": null, "result": "ok_for_null"}`,
 			expectedType:   "success_response",
 			expectedID:     nil,
@@ -74,7 +74,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "",
 		},
 		{
-			name:           "Valid Error Response",
+			name:           "ErrorResponse_Valid_NoError", // Renamed
 			message:        `{"jsonrpc": "2.0", "id": 11, "error": {"code": -32600, "message": "Invalid Request"}}`,
 			expectedType:   "error_response",
 			expectedID:     float64(11),
@@ -82,7 +82,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "",
 		},
 		{
-			name:           "Valid Error Response Null ID",
+			name:           "ErrorResponse_NullID_NoError", // Renamed
 			message:        `{"jsonrpc": "2.0", "id": null, "error": {"code": -32700, "message": "Parse error"}}`,
 			expectedType:   "error_response",
 			expectedID:     nil,
@@ -90,7 +90,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "",
 		},
 		{
-			name:           "Valid Error Response Missing ID",
+			name:           "ErrorResponse_MissingID_NoError", // Renamed
 			message:        `{"jsonrpc": "2.0", "error": {"code": -32700, "message": "Parse error"}}`,
 			expectedType:   "error_response",
 			expectedID:     nil,
@@ -98,7 +98,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "",
 		},
 		{
-			name:           "Invalid JSON",
+			name:           "JSON_InvalidSyntax_ReturnsError", // Renamed
 			message:        `{"jsonrpc": "2.0", "method": "test`,
 			expectedType:   "",
 			expectedID:     nil,
@@ -106,7 +106,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "Parse error", // This comes from createParseErrorResponse message
 		},
 		{
-			name:           "Invalid Request Missing Method",
+			name:           "Request_MissingMethod_ReturnsError", // Renamed
 			message:        `{"jsonrpc": "2.0", "id": 1}`,
 			expectedType:   "",
 			expectedID:     float64(1),
@@ -114,7 +114,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "missing method, result, or error", // This detail comes from identifyMessage
 		},
 		{
-			name:           "Invalid Request Missing Jsonrpc",
+			name:           "Request_MissingJsonrpc_NoError", // Renamed
 			message:        `{"method": "test", "id": 1}`,
 			expectedType:   "test",
 			expectedID:     float64(1),
@@ -122,7 +122,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "",
 		},
 		{
-			name:           "Invalid Request Invalid ID Type (Bool)",
+			name:           "Request_InvalidIDTypeBool_ReturnsError", // Renamed
 			message:        `{"jsonrpc": "2.0", "method": "test", "id": true}`,
 			expectedType:   "",
 			expectedID:     nil,
@@ -130,7 +130,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "Invalid JSON-RPC ID type detected", // This detail comes from identifyMessage
 		},
 		{
-			name:           "Invalid Request Invalid ID Type (Object)",
+			name:           "Request_InvalidIDTypeObject_ReturnsError", // Renamed
 			message:        `{"jsonrpc": "2.0", "method": "test", "id": {}}`,
 			expectedType:   "",
 			expectedID:     nil,
@@ -138,7 +138,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "Invalid JSON-RPC ID type detected", // This detail comes from identifyMessage
 		},
 		{
-			name:           "Invalid Response Both Result and Error",
+			name:           "Response_ResultAndError_ReturnsError", // Renamed
 			message:        `{"jsonrpc": "2.0", "id": 1, "result": "ok", "error": {}}`,
 			expectedType:   "",
 			expectedID:     float64(1),
@@ -146,7 +146,7 @@ func TestIdentifyMessage(t *testing.T) {
 			expectErrorMsg: "cannot contain both 'result' and 'error'", // This detail comes from identifyMessage
 		},
 		{
-			name:           "Invalid Response Missing ID (Success)",
+			name:           "SuccessResponse_MissingID_ReturnsError", // Renamed
 			message:        `{"jsonrpc": "2.0", "result": "ok"}`,
 			expectedType:   "",
 			expectedID:     nil,
@@ -156,6 +156,7 @@ func TestIdentifyMessage(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// Run each case as a subtest with the (newly renamed) test case name
 		t.Run(tc.name, func(t *testing.T) {
 			options := middleware.DefaultValidationOptions()
 			options.StrictMode = true

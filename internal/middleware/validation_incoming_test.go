@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidationMiddleware_HandleMessage_IncomingValidation_Success(t *testing.T) {
+func TestValidationMiddleware_IncomingValidation_Success_CallsNextHandler(t *testing.T) {
 	options := middleware.DefaultValidationOptions()
 	options.StrictMode = true
 	mw, mockValidator, mockNextHandler := setupTestMiddleware(t, options)
@@ -39,7 +39,7 @@ func TestValidationMiddleware_HandleMessage_IncomingValidation_Success(t *testin
 	mockNextHandler.AssertExpectations(t)
 }
 
-func TestValidationMiddleware_HandleMessage_IncomingValidation_Failure_Strict(t *testing.T) {
+func TestValidationMiddleware_IncomingValidation_FailureInStrictMode_ReturnsErrorResponse(t *testing.T) {
 	options := middleware.DefaultValidationOptions()
 	options.StrictMode = true
 	mw, mockValidator, mockNextHandler := setupTestMiddleware(t, options)
@@ -84,7 +84,7 @@ func TestValidationMiddleware_HandleMessage_IncomingValidation_Failure_Strict(t 
 	mockValidator.AssertExpectations(t)
 }
 
-func TestValidationMiddleware_HandleMessage_IncomingValidation_Failure_NonStrict(t *testing.T) {
+func TestValidationMiddleware_IncomingValidation_FailureInNonStrictMode_CallsNextHandler(t *testing.T) {
 	options := middleware.DefaultValidationOptions()
 	options.StrictMode = false // Non-strict mode.
 	mw, mockValidator, mockNextHandler := setupTestMiddleware(t, options)

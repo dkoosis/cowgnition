@@ -54,9 +54,10 @@ func getCurrentDir() string {
 	return dir
 }
 
-// TestMCPInitializationProtocol tests the basic MCP protocol handshake
-// using the in-memory transport for testing.
+// TestMCPInitializationProtocol verifies the complete MCP handshake:
+// 'initialize' request/response -> 'notifications/initialized' -> successful 'tools/list'.
 func TestMCPInitializationProtocol(t *testing.T) {
+	t.Logf("Testing %s: Verifying the full MCP handshake ('initialize' -> 'initialized' -> 'tools/list').", t.Name())
 	// Create an in-memory transport pair.
 	transportPair := transport.NewInMemoryTransportPair()
 	defer transportPair.CloseChannels()
@@ -208,9 +209,10 @@ func TestMCPInitializationProtocol(t *testing.T) {
 	}
 }
 
-// TestInvalidMethodSequence tests that the server correctly enforces
-// MCP protocol sequence (e.g., initialize must happen before other methods).
+// TestInvalidMethodSequence tests that the server correctly rejects requests
+// made prior to the required initialization sequence (out of sequence).
 func TestInvalidMethodSequence(t *testing.T) {
+	t.Logf("Testing %s: Ensuring server rejects requests prior to initialization (out of sequence).", t.Name())
 	// Create an in-memory transport pair.
 	transportPair := transport.NewInMemoryTransportPair()
 	defer transportPair.CloseChannels()
@@ -300,9 +302,10 @@ func TestInvalidMethodSequence(t *testing.T) {
 	assert.NoError(t, err, "Failed to close server transport.")
 }
 
-// TestMCPMethodNotFound tests that the server correctly handles
-// requests for non-existent methods.
+// TestMCPMethodNotFound tests that the server correctly handles requests
+// for unknown methods (e.g., "non_existent_method") after successful initialization.
 func TestMCPMethodNotFound(t *testing.T) {
+	t.Logf("Testing %s: Ensuring server handles requests for unknown methods correctly after initialization.", t.Name())
 	// Create an in-memory transport pair.
 	transportPair := transport.NewInMemoryTransportPair()
 	defer transportPair.CloseChannels()

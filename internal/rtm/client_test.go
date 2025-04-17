@@ -6,6 +6,7 @@ package rtm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,86 +17,88 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// file: internal/rtm/client_test.go
-
+// TestClient_GenerateSignature verifies the RTM API signature generation logic.
 func TestClient_GenerateSignature(t *testing.T) {
 	// Setup logger once.
 	logger := logging.GetNoopLogger()
 
 	// Test cases including the secret for each case.
 	testCases := []struct {
-		name     string
-		secret   string // Added secret field for each test case.
-		params   map[string]string
-		expected string
+		name     string            // Test case name.
+		secret   string            // RTM shared secret for this case.
+		params   map[string]string // Input parameters for signing.
+		expected string            // Expected MD5 signature hash.
 	}{
 		{
 			name:   "Simple params",
-			secret: "test_secret", // Use the original secret.
+			secret: "test_secret",
 			params: map[string]string{
 				"method":  "rtm.test.echo",
 				"api_key": "abc123",
 				"format":  "json",
 			},
-			// Corrected expected signature calculated according to RTM spec:
-			// MD5("test_secret" + "api_key" + "abc123" + "format" + "json" + "method" + "rtm.test.echo")
 			expected: "ce7eb5843f9dcb6209227c72baf957bc",
 		},
 		{
-			name:   "With auth token",
-			secret: "test_secret", // Use the original secret.
+			name:   "With auth token 🔒",
+			secret: "test_secret",
 			params: map[string]string{
 				"method":     "rtm.lists.getList",
 				"api_key":    "abc123",
 				"format":     "json",
 				"auth_token": "token123",
 			},
-			// The expected value here may also need to be updated if this test is failing
 			expected: "fa17f481daca02dca3286483755718a0",
 		},
 		{
-			name:   "RTM Example (BANANAS)",
-			secret: "BANANAS", // Use the secret from the example.
+			name:   "RTM Example (BANANAS) 🍌",
+			secret: "BANANAS",
 			params: map[string]string{
 				"abc": "baz",
 				"feg": "bar",
 				"yxz": "foo",
 			},
-			// Correct expected signature from RTM documentation:
-			// MD5("BANANAS" + "abc" + "baz" + "feg" + "bar" + "yxz" + "foo")
 			expected: "82044aae4dd676094f23f1ec152159ba",
 		},
 		{
-			name:   "Custom Case - Empty Params",
-			secret: "another_secret", // Use a different secret.
-			params: map[string]string{},
-			// Corrected expected signature calculated according to RTM spec:
-			// MD5("another_secret")
+			name:     "Custom Case - Empty Params",
+			secret:   "another_secret",
+			params:   map[string]string{},
 			expected: "bb4a87f07bd27e737e0b4a44cfee12f3",
 		},
 	}
 
-	// Run tests.
+	// Run tests using subtests.
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Logf("Testing signature generation for case: %s.", tc.name)
 			// Create a client instance specifically for this test case with its secret.
 			client := &Client{
 				config: Config{
-					SharedSecret: tc.secret, // Use the secret defined in the test case.
+					SharedSecret: tc.secret,
 				},
 				logger: logger,
 			}
 
-			// Call the method.
+			// Call the method under test.
+			t.Logf("Generating signature with secret '%s' and params: %v.", tc.secret, tc.params)
 			signature := client.generateSignature(tc.params)
+			t.Logf("Generated signature: %s.", signature)
 
-			// Verify result.
-			assert.Equal(t, tc.expected, signature, "Signature should match expected value")
+			// Verify the result.
+			assert.Equal(t, tc.expected, signature, "Generated signature '%s' didn't match expected '%s'. Udderly wrong.", signature, tc.expected)
+			if t.Failed() {
+				t.Logf("Signature mismatch details: Params=%v, Secret=%s.", tc.params, tc.secret)
+			} else {
+				t.Logf("Signature matched expectations. Moo-velous.")
+			}
 		})
 	}
 }
+
+// TestClient_PrepareParameters ensures standard parameters are added correctly before signing.
 func TestClient_PrepareParameters(t *testing.T) {
-	// Setup.
+	// Setup a test client instance.
 	logger := logging.GetNoopLogger()
 	client := &Client{
 		config: Config{
@@ -105,35 +108,36 @@ func TestClient_PrepareParameters(t *testing.T) {
 		},
 		logger: logger,
 	}
+	t.Logf("Testing parameter preparation with API Key '%s' and Auth Token '%s'.", client.config.APIKey, client.config.AuthToken)
 
-	// Test cases.
+	// Test cases defining different method types and parameter sets.
 	testCases := []struct {
-		name            string
-		method          string
-		params          map[string]string
-		expectAuthToken bool
+		name            string            // Name of the test case.
+		method          string            // RTM method being called.
+		params          map[string]string // Original parameters provided by the caller.
+		expectAuthToken bool              // Whether the auth token should be included for this method.
 	}{
 		{
-			name:            "Regular method",
+			name:            "Regular method - Expecting auth token",
 			method:          "rtm.test.login",
 			params:          map[string]string{},
 			expectAuthToken: true,
 		},
 		{
-			name:            "Auth method - getFrob",
-			method:          "rtm.auth.getFrob",
+			name:            "Auth method (getFrob) - Should skip auth token",
+			method:          methodGetFrob, // Use constant.
 			params:          map[string]string{},
 			expectAuthToken: false,
 		},
 		{
-			name:            "Auth method - getToken",
-			method:          "rtm.auth.getToken",
+			name:            "Auth method (getToken) - Should skip auth token",
+			method:          methodGetToken, // Use constant.
 			params:          map[string]string{"frob": "test_frob"},
 			expectAuthToken: false,
 		},
 		{
-			name:   "With existing params",
-			method: "rtm.tasks.getList",
+			name:   "Method with existing params - Ensuring preservation",
+			method: methodGetTasks, // Use constant.
 			params: map[string]string{
 				"filter": "status:incomplete",
 			},
@@ -141,91 +145,94 @@ func TestClient_PrepareParameters(t *testing.T) {
 		},
 	}
 
-	// Run tests.
+	// Run tests using subtests.
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Call the method.
+			t.Logf("Preparing parameters for method: %s with initial params: %v.", tc.method, tc.params)
+			// Call the method under test.
 			fullParams := client.prepareParameters(tc.method, tc.params)
+			t.Logf("Prepared parameters: %v.", fullParams)
 
-			// Verify common parameters.
-			assert.Equal(t, tc.method, fullParams["method"], "Method should be set correctly")
-			assert.Equal(t, "test_key", fullParams["api_key"], "API key should be set correctly")
-			assert.Equal(t, "json", fullParams["format"], "Format should be set correctly")
+			// Verify common parameters are always present.
+			assert.Equal(t, tc.method, fullParams["method"], "Field 'method' should be '%s'.", tc.method)
+			assert.Equal(t, "test_key", fullParams["api_key"], "Field 'api_key' should be 'test_key'.")
+			assert.Equal(t, "json", fullParams["format"], "Field 'format' should be 'json'.")
 
-			// Verify auth token.
+			// Verify auth token presence based on expectation.
 			if tc.expectAuthToken {
-				assert.Equal(t, "test_token", fullParams["auth_token"], "Auth token should be set for most methods")
+				assert.Equal(t, "test_token", fullParams["auth_token"], "Auth token should be present and correct for method '%s'.", tc.method)
 			} else {
 				_, hasAuthToken := fullParams["auth_token"]
-				assert.False(t, hasAuthToken, "Auth token should not be set for auth methods")
+				assert.False(t, hasAuthToken, "Auth token should NOT be present for auth method '%s'. It's like a cow trying to hide behind a fence post.", tc.method)
 			}
 
-			// Verify signature.
-			assert.NotEmpty(t, fullParams["api_sig"], "Signature should be set")
+			// Verify signature was generated and added.
+			assert.NotEmpty(t, fullParams["api_sig"], "API signature 'api_sig' should be generated and not empty.")
 
-			// Verify original params are preserved.
+			// Verify original parameters passed in are preserved.
 			for k, v := range tc.params {
-				assert.Equal(t, v, fullParams[k], "Original parameters should be preserved")
+				assert.Equal(t, v, fullParams[k], "Original parameter '%s' should be preserved with value '%s'.", k, v)
 			}
+			t.Logf("Parameter preparation successful for method '%s'.", tc.method)
 		})
 	}
 }
 
+// TestClient_CallMethod tests the full API call cycle using a mock HTTP server.
 func TestClient_CallMethod(t *testing.T) {
-	// Create a test server.
+	// --- Mock Server Setup ---
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request.
+		// Basic request verification.
 		err := r.ParseForm()
-		// Use require inside tests for fatal errors
-		require.NoError(t, err, "Failed to parse form data")
+		require.NoError(t, err, "[Mock Server] Failed to parse incoming form data.")
 
-		// Verify basic parameters.
-		assert.Equal(t, "test_key", r.Form.Get("api_key"), "API key should be set")
-		assert.NotEmpty(t, r.Form.Get("api_sig"), "Signature should be set")
+		apiKey := r.Form.Get("api_key")
+		apiSig := r.Form.Get("api_sig")
+		method := r.Form.Get("method")
+
+		t.Logf("[Mock Server] Received request: Method=%s, APIKey=%s, Sig=%s.", method, apiKey, apiSig)
+		require.Equal(t, "test_key", apiKey, "[Mock Server] API key in request must match 'test_key'.")
+		require.NotEmpty(t, apiSig, "[Mock Server] API signature must be present in request.")
 
 		// Check the method and respond accordingly.
-		switch r.Form.Get("method") {
+		w.Header().Set("Content-Type", "application/json") // Set content type for all responses.
+		switch method {
 		case "rtm.test.echo":
-			// Construct the response JSON including *all* parameters.
+			t.Logf("[Mock Server] Responding to echo request.")
 			responseMap := map[string]interface{}{
 				"rsp": map[string]interface{}{
 					"stat": "ok",
 				},
 			}
-			// Add all form parameters to the response under rsp.
 			for k, v := range r.Form {
-				if len(v) > 0 {
-					// Ensure we don't overwrite the stat field.
-					if k != "stat" {
-						responseMap["rsp"].(map[string]interface{})[k] = v[0]
-					}
+				if len(v) > 0 && k != "stat" {
+					responseMap["rsp"].(map[string]interface{})[k] = v[0]
 				}
 			}
-			w.Header().Set("Content-Type", "application/json")
 			jsonBytes, marshalErr := json.Marshal(responseMap)
-			require.NoError(t, marshalErr, "Failed to marshal echo response")
-			// Corrected: Check w.Write error
-			if _, writeErr := w.Write(jsonBytes); writeErr != nil {
-				t.Logf("httptest server failed to write echo response: %v", writeErr)
+			require.NoError(t, marshalErr, "[Mock Server] Failed to marshal echo response.")
+			_, writeErr := w.Write(jsonBytes)
+			if writeErr != nil {
+				t.Logf("[Mock Server] Failed to write echo response: %v.", writeErr)
 			}
 
 		case "rtm.test.error":
-			// Return an error response.
-			w.Header().Set("Content-Type", "application/json")
-			// Corrected: Check w.Write error
-			if _, writeErr := w.Write([]byte(`{"rsp":{"stat":"fail","err":{"code":"112","msg":"Method not found"}}}`)); writeErr != nil {
-				t.Logf("httptest server failed to write error response: %v", writeErr)
+			t.Logf("[Mock Server] Responding with a simulated API error (stat: fail).")
+			// Note: Returning 200 OK but with RTM error status.
+			_, writeErr := w.Write([]byte(`{"rsp":{"stat":"fail","err":{"code":"112","msg":"Method not found"}}}`))
+			if writeErr != nil {
+				t.Logf("[Mock Server] Failed to write stat:fail error response: %v.", writeErr)
 			}
 
-		case "rtm.auth.checkToken":
-			// Return a valid auth check response.
-			w.Header().Set("Content-Type", "application/json")
-			// Corrected: Check w.Write error
-			if _, writeErr := w.Write([]byte(`{
+		case methodCheckToken: // Use constant.
+			t.Logf("[Mock Server] Responding to checkToken request with success.")
+			// Use fmt.Fprintf for efficient formatted writing.
+			_, writeErr := fmt.Fprintf(w, `{
 				"rsp": {
 					"stat": "ok",
 					"auth": {
-						"token": "token123",
+						"token": "%s",
+						"perms": "delete",
 						"user": {
 							"id": "user123",
 							"username": "testuser",
@@ -233,74 +240,126 @@ func TestClient_CallMethod(t *testing.T) {
 						}
 					}
 				}
-			}`)); writeErr != nil {
-				t.Logf("httptest server failed to write checkToken response: %v", writeErr)
+			}`, r.Form.Get("auth_token")) // Echo back the token for verification.
+			if writeErr != nil {
+				t.Logf("[Mock Server] Failed to write checkToken response: %v.", writeErr)
 			}
 
-		default:
-			// Unknown method.
-			w.WriteHeader(http.StatusBadRequest)
-			// Corrected: Check w.Write error
-			if _, writeErr := w.Write([]byte(`{"rsp":{"stat":"fail","err":{"code":"112","msg":"Method not found"}}}`)); writeErr != nil {
-				t.Logf("httptest server failed to write default error response: %v", writeErr)
+		default: // Handles unknown methods like rtm.cows.moo
+			t.Logf("[Mock Server] Responding with HTTP 400 for unknown method '%s'.", method)
+			// Unknown method should ideally get an HTTP error status from a real API gateway,
+			// or potentially a 200 OK with stat:fail if the endpoint itself is valid but method isn't.
+			// We'll simulate the HTTP 400 here.
+			w.WriteHeader(http.StatusBadRequest) // Return 400 Bad Request.
+			_, writeErr := w.Write([]byte(`{"rsp":{"stat":"fail","err":{"code":"112","msg":"Method not found"}}}`))
+			if writeErr != nil {
+				t.Logf("[Mock Server] Failed to write default HTTP 400 error response: %v.", writeErr)
 			}
 		}
 	}))
 	defer server.Close()
+	t.Logf("Mock RTM server started at URL: %s.", server.URL)
 
-	// Create client with test server URL.
+	// --- Test Client Setup ---
 	logger := logging.GetNoopLogger()
 	client := &Client{
 		config: Config{
 			APIKey:       "test_key",
 			SharedSecret: "test_secret",
-			APIEndpoint:  server.URL,
+			APIEndpoint:  server.URL, // Point to mock server.
 			HTTPClient:   &http.Client{Timeout: 5 * time.Second},
+			AuthToken:    "test_token_123", // Add a token for relevant tests.
 		},
 		logger: logger,
 	}
 
-	// Test cases.
-	t.Run("Success - Echo", func(t *testing.T) {
+	// --- Test Cases ---
+	// Subtest: Echo/Success/ReturnsOK
+	t.Run("Echo_Success_ReturnsOK", func(t *testing.T) {
 		ctx := context.Background()
-		params := map[string]string{"test_param": "test_value", "another_param": "value2"} // Add more params.
+		params := map[string]string{"test_param": "test_value", "another_param": "value2"}
+		t.Logf("Calling 'rtm.test.echo' with params: %v.", params)
 
-		// Call the method.
 		result, err := client.CallMethod(ctx, "rtm.test.echo", params)
 
-		// Verify.
-		require.NoError(t, err, "CallMethod should not return error on success")
-		require.NotNil(t, result, "Result should not be nil")
-		// Check specifically for the echoed params within the "rsp" object.
-		assert.Contains(t, string(result), `"test_param":"test_value"`, "Result should contain echoed parameter")
-		assert.Contains(t, string(result), `"another_param":"value2"`, "Result should contain another echoed parameter")
-		// Ensure other standard params are also present if needed for assertion.
-		assert.Contains(t, string(result), `"method":"rtm.test.echo"`, "Result should contain method")
+		require.NoError(t, err, "CallMethod for 'rtm.test.echo' should succeed.")
+		require.NotNil(t, result, "Result from 'rtm.test.echo' should not be nil.")
+		t.Logf("Received successful response for echo: %s.", string(result))
+
+		// Unmarshal and check specific fields for robustness against formatting changes.
+		var respData map[string]map[string]interface{}
+		err = json.Unmarshal(result, &respData)
+		require.NoError(t, err, "Failed to unmarshal successful echo response JSON.")
+
+		rsp, ok := respData["rsp"]
+		require.True(t, ok, "Response JSON must contain 'rsp' field.")
+
+		assert.Equal(t, "ok", rsp["stat"], "Response status should be 'ok'.")
+		assert.Equal(t, "test_value", rsp["test_param"], "Response should echo back 'test_param'.")
+		assert.Equal(t, "value2", rsp["another_param"], "Response should echo back 'another_param'.")
+		assert.Equal(t, "rtm.test.echo", rsp["method"], "Response should echo back the method.")
+		t.Logf("Echo test passed. The server heard our moo.")
 	})
-	t.Run("Error - API Error", func(t *testing.T) {
+
+	// Subtest: APIErrorResponse/ReturnsError
+	t.Run("APIErrorResponse_ReturnsError", func(t *testing.T) {
 		ctx := context.Background()
 		params := map[string]string{}
+		t.Logf("Calling 'rtm.test.error', expecting an RTM API level error (stat: fail).")
 
-		// Call the method.
 		result, err := client.CallMethod(ctx, "rtm.test.error", params)
 
-		// Verify.
-		require.Error(t, err, "CallMethod should return error for API error")
-		assert.Contains(t, err.Error(), "Method not found", "Error should contain API error message")
-		assert.Nil(t, result, "Result should be nil for error")
+		require.Error(t, err, "CallMethod for 'rtm.test.error' should return an error.")
+		assert.Nil(t, result, "Result should be nil when an RTM API error occurs.")
+		t.Logf("Received expected error: %v.", err)
+
+		// Check the error message reflects the RTM error.
+		assert.Contains(t, err.Error(), "RTM API Error:", "Error message should indicate an RTM API Error.")
+		assert.Contains(t, err.Error(), "Method not found", "Error message should contain the RTM error message 'Method not found'.")
+		// Check for RTM error code if needed (requires error type assertion).
+		t.Logf("API error test passed. Correctly handled the server saying 'nope' (stat: fail).")
 	})
 
-	t.Run("Success - Auth Check", func(t *testing.T) {
+	// Subtest: AuthCheck/Success/ReturnsOK
+	t.Run("AuthCheck_Success_ReturnsOK", func(t *testing.T) {
 		ctx := context.Background()
 		params := map[string]string{}
+		t.Logf("Calling '%s' to verify authentication token.", methodCheckToken)
 
-		// Call the method.
-		result, err := client.CallMethod(ctx, "rtm.auth.checkToken", params)
+		result, err := client.CallMethod(ctx, methodCheckToken, params)
 
-		// Verify.
-		require.NoError(t, err, "CallMethod should not return error for successful auth check")
-		require.NotNil(t, result, "Result should not be nil")
-		assert.Contains(t, string(result), "testuser", "Result should contain username")
-		assert.Contains(t, string(result), "token123", "Result should contain token")
+		require.NoError(t, err, "CallMethod for '%s' should succeed.", methodCheckToken)
+		require.NotNil(t, result, "Result from '%s' should not be nil.", methodCheckToken)
+		t.Logf("Received successful response for auth check: %s.", string(result))
+
+		// Unmarshal and check specific fields.
+		var respData checkTokenRsp // Use the specific struct type.
+		err = json.Unmarshal(result, &respData)
+		require.NoError(t, err, "Failed to unmarshal successful auth check response JSON.")
+
+		assert.Equal(t, "ok", respData.Rsp.Stat, "Auth check response status should be 'ok'.")
+		require.NotNil(t, respData.Rsp.Auth.User, "Auth check response should contain user info.")
+		assert.Equal(t, "testuser", respData.Rsp.Auth.User.Username, "Auth check response should contain the username.")
+		assert.Equal(t, "test_token_123", respData.Rsp.Auth.Token, "Auth check response should echo back the token used.")
+		t.Logf("Auth check test passed. We're authenticated in this pasture.")
+	})
+
+	// Subtest: UnknownMethod/HTTPError/ReturnsError
+	t.Run("UnknownMethod_HTTPError_ReturnsError", func(t *testing.T) {
+		ctx := context.Background()
+		params := map[string]string{}
+		unknownMethod := "rtm.cows.moo"
+		t.Logf("Calling unknown method '%s', expecting HTTP 400 error.", unknownMethod)
+
+		result, err := client.CallMethod(ctx, unknownMethod, params)
+
+		require.Error(t, err, "CallMethod for unknown method '%s' should return an error.", unknownMethod)
+		assert.Nil(t, result, "Result should be nil for unknown method resulting in HTTP error.")
+		t.Logf("Received expected error for unknown method: %v.", err)
+
+		// Verify the error message indicates an HTTP status error, not just the RTM error message.
+		assert.Contains(t, err.Error(), "API returned non-200 status: 400", "Error message should indicate HTTP 400 Bad Request.")
+		// Do NOT assert contains "Method not found" here, as that's in the body which callMethod doesn't parse on HTTP error.
+		t.Logf("Unknown method test passed. Correctly handled HTTP 400 error.")
 	})
 }
