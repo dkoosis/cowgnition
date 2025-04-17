@@ -256,3 +256,8 @@ func (c *Client) generateSignature(params map[string]string) string {
 func (c *Client) CallMethod(ctx context.Context, method string, params map[string]string) (json.RawMessage, error) {
 	return c.callMethod(ctx, method, params)
 }
+
+// GetAPIEndpoint returns the API endpoint URL used by the client.
+func (c *Client) GetAPIEndpoint() string {
+	return c.config.APIEndpoint
+}

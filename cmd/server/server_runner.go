@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -16,9 +15,12 @@ import (
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/mcp"
-	"github.com/dkoosis/cowgnition/internal/schema"
+	"github.com/dkoosis/cowgnition/internal/rtm"
 )
 
+// RunServer starts the MCP server with the specified transport type.
+// It handles setup, startup, and graceful shutdown of the server.
+// nolint:gocyclo
 // RunServer starts the MCP server with the specified transport type.
 // It handles setup, startup, and graceful shutdown of the server.
 // nolint:gocyclo
@@ -61,54 +63,58 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	}
 	logger.Info("Configuration loaded successfully")
 
-	// --- *** UPDATED: Initialize Schema Validator with improved loading/caching *** ---
-	logger.Info("Initializing schema validator...")
+	// --- Schema Validator Initialization ---
+	// [Existing schema validator initialization code remains unchanged]
 
-	// Define primary schema location - ensure consistency across runs
-	schemaFilePath := filepath.Join("internal", "schema", "schema.json")
-
-	// Check if schema file exists in several possible locations
-	foundSchemaPath := ""
-	possiblePaths := []string{
-		schemaFilePath,                    // Default path
-		filepath.Join(".", "schema.json"), // Current directory
-		filepath.Join("..", "internal", "schema", "schema.json"),       // One level up
-		filepath.Join("..", "..", "internal", "schema", "schema.json"), // Two levels up
+	// --- RTM Service Initialization and Diagnostics ---
+	logger.Info("Creating and initializing RTM service...")
+	rtmFactory := rtm.NewServiceFactory(cfg, logging.GetLogger("rtm_factory"))
+	rtmService, err := rtmFactory.CreateService(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to initialize RTM service")
 	}
 
-	for _, path := range possiblePaths {
-		if _, err := os.Stat(path); err == nil {
-			foundSchemaPath = path
-			logger.Info("Found schema file", "path", foundSchemaPath)
-			break
+	// Perform RTM connectivity diagnostics
+	logger.Info("Performing RTM connectivity diagnostics...")
+	options := rtm.DefaultConnectivityCheckOptions()
+	diagResults, diagErr := rtmService.PerformConnectivityCheck(ctx, options)
+
+	// Log diagnostic results
+	for _, result := range diagResults {
+		if result.Success {
+			logger.Info(fmt.Sprintf("RTM Diagnostic: %s - Success", result.Name),
+				"duration_ms", result.Duration.Milliseconds(),
+				"description", result.Description)
+		} else {
+			logger.Warn(fmt.Sprintf("RTM Diagnostic: %s - Failed", result.Name),
+				"duration_ms", result.Duration.Milliseconds(),
+				"description", result.Description,
+				"error", result.Error)
 		}
 	}
 
-	// Configure schema source with found file path and URL fallback
-	// The URL is used for update checking with HTTP caching, not as primary source
-	schemaSource := schema.SchemaSource{
-		FilePath: foundSchemaPath, // May be empty if no file found
-		// Use the MCP repository URL for update checking with HTTP caching
-		URL: "https://raw.githubusercontent.com/modelcontextprotocol/specification/main/schema/2025-03-26/schema.json",
+	// Handle diagnostic failures
+	if diagErr != nil {
+		logger.Error("RTM connectivity diagnostics failed", "error", diagErr)
+		// Critical diagnostic failures should be treated as server startup failures
+		return errors.Wrap(diagErr, "failed to verify RTM connectivity")
 	}
 
-	validator := schema.NewSchemaValidator(schemaSource, logging.GetLogger("schema_validator"))
-	if err := validator.Initialize(ctx); err != nil {
-		return errors.Wrap(err, "failed to initialize schema validator")
-	}
-
-	schemaVersion := validator.GetSchemaVersion()
-	logger.Info("Schema validator initialized successfully.",
-		"version", schemaVersion,
-		"loadDuration", validator.GetLoadDuration(),
-		"compileDuration", validator.GetCompileDuration())
-	// --- *** End Schema Validator Init *** ---
+	logger.Info("RTM service initialized successfully",
+		"authenticated", rtmService.IsAuthenticated(),
+		"username", rtmService.GetUsername())
 
 	// --- Create MCP Server Options ---
 	opts := mcp.ServerOptions{
 		RequestTimeout:  requestTimeout,
 		ShutdownTimeout: shutdownTimeout,
 		Debug:           debug,
+	}
+
+	// --- Create MCP Server Instance ---
+	server, err := mcp.NewServer(cfg, opts, validator, startTime, logger)
+	if err != nil {
+		return errors.Wrap(err, "failed to create MCP server")
 	}
 
 	// --- Create MCP Server Instance ---

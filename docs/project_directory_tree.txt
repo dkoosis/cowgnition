@@ -60,6 +60,7 @@
 │   │   ├── client.go
 │   │   ├── client_test.go
 │   │   ├── constants.go
+│   │   ├── diagnostics.go
 │   │   ├── factory.go
 │   │   ├── helpers.go
 │   │   ├── mcp_integration_test.go
@@ -97,4 +98,4 @@
 ├── go.mod
 └── go.sum
 
-16 directories, 82 files
+16 directories, 83 files
