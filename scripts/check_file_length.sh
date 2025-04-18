@@ -1,24 +1,30 @@
 #!/bin/bash
 
 # Shell script to check file line counts with warning and failure thresholds.
-# Called from Makefile to enforce coding standards on file lengths.
-# /scripts/check_file_length.sh
+# Sorts output by line count (descending) and formats as requested.
+# /scripts/check_file_length.sh (Modified)
 # Usage: ./check_file_length.sh <warn_lines> <fail_lines> <file1> [file2] ...
 
 # --- Configuration ---
-# Color Codes (copied from Makefile for consistency)
+# Color Codes
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
 BLUE='\033[0;34m'
+BOLD='\033[1m'
 NC='\033[0m' # No Color
+
+# Icons (Includes color reset after icon)
+ICON_WARN=$(printf "${YELLOW}⚠${NC}") # Yellow Warning Triangle
+ICON_FAIL=$(printf "${RED}✗${NC}")   # Red X Mark
+ICON_OK=$(printf "${GREEN}✓${NC}")   # Green Check Mark
+ICON_INFO=$(printf "${BLUE}ℹ${NC}")  # Blue Info Icon
 
 # --- Argument Parsing ---
 if [ "$#" -lt 3 ]; then
-  # Use printf for consistent escape sequence handling
   printf "%b\n" "Usage: $0 <warn_lines> <fail_lines> <file1> [file2] ..."
   printf "%b\n" "${RED}Error: Insufficient arguments.${NC}"
-  exit 2 # Using 2 for usage errors
+  exit 2
 fi
 
 WARN_LINES="$1"
@@ -27,51 +33,80 @@ shift 2 # Remove the line counts, "$@" now contains only filenames
 
 # Basic validation of line count arguments
 if ! [[ "$WARN_LINES" =~ ^[0-9]+$ ]] || ! [[ "$FAIL_LINES" =~ ^[0-9]+$ ]]; then
-    # Use printf for consistent escape sequence handling
     printf "%b\n" "${RED}Error: warn_lines ('$WARN_LINES') and fail_lines ('$FAIL_LINES') must be positive integers.${NC}"
     exit 2
 fi
 
 if [ "$WARN_LINES" -ge "$FAIL_LINES" ]; then
-    # Use printf for consistent escape sequence handling
     printf "%b\n" "${RED}Error: warn_lines (${WARN_LINES}) must be less than fail_lines (${FAIL_LINES}).${NC}"
     exit 2
 fi
 
-# --- File Checking Logic ---
-#printf "${BLUE}▶ Checking file lengths (warn > ${WARN_LINES}, fail > ${FAIL_LINES})...${NC}\n"
-warnings_found=0
-errors_found=0
+# --- File Checking & Data Collection ---
+warning_count=0 # Counter for warnings
+error_count=0   # Counter for errors
+output_data="" # Variable to store lines for sorting
+
+# Indentation for detail lines
+INDENT="   "
 
 # Process all files passed as arguments
 for file in "$@"; do
-    # Check if file exists and is readable
     if [ ! -f "$file" ] || [ ! -r "$file" ]; then
-        printf "${YELLOW}⚠ WARNING: Skipping unreadable or non-existent file '$file'${NC}\n"
-        continue # Skip to next file
+        printf "%s%s Skipping unreadable or non-existent file %s\n" "$INDENT" "$ICON_WARN" "$file" >&2
+        continue
     fi
 
-    # Get line count robustly (using awk to strip potential whitespace from wc)
     lines=$(wc -l < "$file" | awk '{print $1}')
+    filename=$(basename "$file")
 
-    # Check against limits (using arithmetic comparison)
+    status="ok"
+    icon=""
+
     if [ "$lines" -gt "$FAIL_LINES" ]; then
-        printf "${RED}✗ ERROR: File '$file' has $lines lines (exceeds FAIL limit of ${FAIL_LINES})${NC}\n"
-        errors_found=1
+        status="error"
+        icon="$ICON_FAIL"
+        ((error_count++)) # Increment error count
     elif [ "$lines" -gt "$WARN_LINES" ]; then
-        printf "${YELLOW}⚠ WARNING: File '$file' has $lines lines (exceeds WARN limit of ${WARN_LINES})${NC}\n"
-        warnings_found=1
+        status="warning"
+        icon="$ICON_WARN"
+        ((warning_count++)) # Increment warning count
+    fi
+
+    # If status is not "ok", store data for later sorting and printing
+    # Format: lines<TAB>status<TAB>icon<TAB>filename<TAB>filepath
+    if [ "$status" != "ok" ]; then
+        printf -v line_data "%s\t%s\t%s\t%s\t%s\n" "$lines" "$status" "$icon" "$filename" "$file"
+        output_data+="$line_data"
     fi
 done
 
-# --- Exit Status & Summary ---
-if [ "$errors_found" -eq 1 ]; then
-    printf "${RED}✗ File length error limit exceeded.${NC}\n"
+# --- Sorting & Output ---
+
+# Check if there's anything to print
+if [ -n "$output_data" ]; then
+  # Sort the collected data numerically (1st column), reverse (descending)
+  # Use process substitution to feed sorted data into the loop
+  # IFS=$'\t' ensures tab is the delimiter for read
+  while IFS=$'\t' read -r count status_code icon_code fname fpath; do
+      # Add check to prevent printing for empty lines read from the sorted input
+      if [ -n "$count" ]; then
+        # Print in the desired format: Icon Count lines: Filename, (Full Path)
+        printf "%s%s %s lines: %s, (%s)\n" "$INDENT" "$icon_code" "$count" "$fname" "$fpath"
+      fi
+  done < <(echo -e "$output_data" | sort -t$'\t' -k1,1nr)
+fi
+
+# --- Exit Status & Summary (Indented) ---
+if [ "$error_count" -gt 0 ]; then
+    # Icon included in text, whole line colored red, include error count
+    printf "%s%b✗ %d errors: File length error limit exceeded.%b\n" "$INDENT" "$RED" "$error_count" "$NC"
     exit 1 # Exit with failure status
-elif [ "$warnings_found" -eq 0 ]; then
-    printf "${GREEN}✓ All files checked are within the specified line limits.${NC}\n"
-    exit 0 # Exit with success status
-else
-    printf "${YELLOW}✓ Warnings issued for file length, but no errors.${NC}\n"
+elif [ "$warning_count" -gt 0 ]; then
+    # Icon included in text, whole line colored yellow, include warning count
+    printf "%s%b⚠ %d warnings issued for file length, but no errors.%b\n" "$INDENT" "$YELLOW" "$warning_count" "$NC"
     exit 0 # Exit successfully even if there are warnings
+else
+    # No output on success if no warnings/errors, handled by Makefile target
+    exit 0 # Exit with success status
 fi
