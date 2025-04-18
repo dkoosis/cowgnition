@@ -49,8 +49,8 @@ func (s *Service) PerformConnectivityCheck(ctx context.Context, options Connecti
 	results := make([]DiagnosticResult, 0, 4) // Pre-allocate slice
 	var criticalError error
 
-	// Log the start
-	s.logger.Info("Running RTM connectivity diagnostics...")
+	// Service logger can still log start/end if desired, but not individual results
+	// s.logger.Info("Running RTM connectivity diagnostics...")
 
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 
@@ -61,7 +61,6 @@ func (s *Service) PerformConnectivityCheck(ctx context.Context, options Connecti
 		if !result.Success && criticalError == nil {
 			criticalError = errors.Wrap(result.Error, "internet connectivity check failed")
 		}
-		s.logDiagnosticResult(result) // Log result immediately
 	}
 
 	// Step 2: Check RTM API availability
@@ -71,7 +70,6 @@ func (s *Service) PerformConnectivityCheck(ctx context.Context, options Connecti
 		if !result.Success && criticalError == nil {
 			criticalError = errors.Wrap(result.Error, "RTM API availability check failed")
 		}
-		s.logDiagnosticResult(result) // Log result immediately
 	}
 
 	// Step 3: Check API key validity via echo test
@@ -81,7 +79,6 @@ func (s *Service) PerformConnectivityCheck(ctx context.Context, options Connecti
 		if !result.Success && criticalError == nil {
 			criticalError = errors.Wrap(result.Error, "RTM API echo test failed (API key/secret may be invalid)")
 		}
-		s.logDiagnosticResult(result) // Log result immediately
 	}
 
 	// Step 4: Check authentication
@@ -91,38 +88,40 @@ func (s *Service) PerformConnectivityCheck(ctx context.Context, options Connecti
 		if options.RequireAuth && !authResult.Success && criticalError == nil {
 			criticalError = errors.New("authentication required but not authenticated with RTM")
 		}
-		s.logDiagnosticResult(authResult) // Log result immediately
 	}
 
-	if criticalError != nil {
-		s.logger.Error("Connectivity check failed.", "criticalError", criticalError)
-	} else {
-		s.logger.Info("Connectivity check completed.")
-	}
-
+	// No summary logging here, handled by caller (test)
 	return results, criticalError
 }
 
-// logDiagnosticResult logs the outcome of a single diagnostic check.
-func (s *Service) logDiagnosticResult(result DiagnosticResult) {
-	status := "OK"
-	logFunc := s.logger.Info
+// formatDiagnosticResult formats a diagnostic result string.
+func formatDiagnosticResult(result DiagnosticResult) string {
+	status := "PASS"
+	icon := "✅"
+	detail := result.Description
+
 	if !result.Success {
 		status = "FAIL"
-		logFunc = s.logger.Warn // Use WARN for failures
+		icon = "❌"
+		// Optionally include simplified error in description for FAIL status
+		if result.Error != nil {
+			// Limit error length in summary if desired
+			errorStr := fmt.Sprintf("%v", result.Error)
+			maxErrLen := 50
+			if len(errorStr) > maxErrLen {
+				errorStr = errorStr[:maxErrLen] + "..."
+			}
+			detail = fmt.Sprintf("%s - %s", result.Description, errorStr)
+		}
 	}
-	// Log summary line
-	logFunc(fmt.Sprintf("Diagnostic: %-25s [%s] %s", result.Name, status, result.Description), "duration_ms", result.Duration.Milliseconds())
-	// Log specific error if failed
-	if !result.Success && result.Error != nil {
-		logFunc(fmt.Sprintf("  └─ Reason: %v", result.Error)) // Use same level for the reason
-	}
+	// Format: Icon Name... STATUS (Description) - Adjusted padding
+	return fmt.Sprintf("%s %-28s %s (%s)", icon, result.Name+"...", status, detail)
 }
 
 // checkInternetConnectivity tests if the internet is reachable.
 func (s *Service) checkInternetConnectivity(ctx context.Context, client *http.Client, testURL string) DiagnosticResult {
 	start := time.Now()
-	s.logger.Debug("-> Diag: Pinging internet URL...", "url", testURL)
+	// s.logger.Debug("-> Diag: Pinging internet URL...", "url", testURL) // Commented out
 
 	req, err := http.NewRequestWithContext(ctx, "HEAD", testURL, nil)
 	if err != nil {
@@ -149,7 +148,7 @@ func (s *Service) checkInternetConnectivity(ctx context.Context, client *http.Cl
 		}
 	}
 
-	s.logger.Debug("-> Diag: Internet connectivity check successful.")
+	// s.logger.Debug("-> Diag: Internet connectivity check successful.") // Commented out
 	return DiagnosticResult{
 		Name: "Internet Connectivity", Success: true, Error: nil,
 		Description: fmt.Sprintf("Connected to %s", testURL), Duration: duration,
@@ -160,7 +159,7 @@ func (s *Service) checkInternetConnectivity(ctx context.Context, client *http.Cl
 func (s *Service) checkRTMAvailability(ctx context.Context, client *http.Client) DiagnosticResult {
 	start := time.Now()
 	apiEndpoint := s.client.GetAPIEndpoint()
-	s.logger.Debug("-> Diag: Pinging RTM API endpoint...", "url", apiEndpoint)
+	// s.logger.Debug("-> Diag: Pinging RTM API endpoint...", "url", apiEndpoint) // Commented out
 
 	req, err := http.NewRequestWithContext(ctx, "HEAD", apiEndpoint, nil)
 	if err != nil {
@@ -181,7 +180,7 @@ func (s *Service) checkRTMAvailability(ctx context.Context, client *http.Client)
 	defer func() { _ = resp.Body.Close() }() // Simplified close
 
 	// Note: RTM returns 404 for HEAD on the REST endpoint, which is okay for reachability.
-	s.logger.Debug("-> Diag: RTM API endpoint reachability check successful.")
+	// s.logger.Debug("-> Diag: RTM API endpoint reachability check successful.") // Commented out
 	return DiagnosticResult{
 		Name: "RTM API Availability", Success: true, Error: nil,
 		Description: fmt.Sprintf("Endpoint reachable (HTTP %d)", resp.StatusCode), Duration: duration,
@@ -191,7 +190,7 @@ func (s *Service) checkRTMAvailability(ctx context.Context, client *http.Client)
 // checkRTMEcho tests the rtm.test.echo method (validates API key/secret).
 func (s *Service) checkRTMEcho(ctx context.Context) DiagnosticResult {
 	start := time.Now()
-	s.logger.Debug("-> Diag: Testing RTM API echo (validates API Key/Secret)...")
+	// s.logger.Debug("-> Diag: Testing RTM API echo (validates API Key/Secret)...") // Commented out
 
 	params := map[string]string{"test_param": "cowgnition_echo"}
 	respBytes, err := s.client.CallMethod(ctx, "rtm.test.echo", params)
@@ -213,7 +212,7 @@ func (s *Service) checkRTMEcho(ctx context.Context) DiagnosticResult {
 		}
 	}
 
-	s.logger.Debug("-> Diag: RTM API echo test successful.")
+	// s.logger.Debug("-> Diag: RTM API echo test successful.") // Commented out
 	return DiagnosticResult{
 		Name: "RTM API Echo Test", Success: true, Error: nil,
 		Description: "API Key/Secret Valid", Duration: duration,
@@ -223,7 +222,7 @@ func (s *Service) checkRTMEcho(ctx context.Context) DiagnosticResult {
 // checkRTMAuth tests the authentication status using the currently loaded token.
 func (s *Service) checkRTMAuth(ctx context.Context) DiagnosticResult {
 	start := time.Now()
-	s.logger.Debug("-> Diag: Checking RTM authentication status...")
+	// s.logger.Debug("-> Diag: Checking RTM authentication status...") // Commented out
 
 	authState, err := s.GetAuthState(ctx) // Use service's GetAuthState
 	duration := time.Since(start)
@@ -242,7 +241,7 @@ func (s *Service) checkRTMAuth(ctx context.Context) DiagnosticResult {
 		}
 	}
 
-	s.logger.Debug("-> Diag: RTM authentication check successful.")
+	// s.logger.Debug("-> Diag: RTM authentication check successful.") // Commented out
 	return DiagnosticResult{
 		Name: "RTM Authentication", Success: true, Error: nil,
 		Description: fmt.Sprintf("Authenticated as %q", authState.Username), Duration: duration,

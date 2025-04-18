@@ -1,4 +1,3 @@
-// Package rtm implements the client and service logic for interacting with the Remember The Milk API.
 package rtm
 
 // file: internal/rtm/mcp_integration_test.go
@@ -7,326 +6,189 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 	"time" // Ensure time is imported
 
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/logging" // Keep logging import
+	"github.com/dkoosis/cowgnition/internal/mcp"     // Added for mcp.TextContent
 	"github.com/stretchr/testify/require"
 )
 
-// --- ANSI Color Codes. ---.
-const (
-	ColorWarn    = "\033[0;33m" // Yellow for Warn
-	ColorError   = "\033[0;31m" // Red for Error
-	ColorSkip    = "\033[0;35m" // Magenta for Skip/Emphasis
-	ColorDefault = "\033[0m"    // No Color / Reset
-	Nc           = "\033[0m"
-	Bold         = "\033[1m"
-	Green        = "\033[0;32m"
-	Yellow       = "\033[0;33m"
-	Red          = "\033[0;31m"
-	Blue         = "\033[0;34m"
-	IconStart    = "$(Blue)▶$(Nc)"
-	IconOk       = "$(Green)✓$(Nc)"
-	IconWarn     = "$(Yellow)⚠$(Nc)"
-	IconFail     = "$(Red)✗$(Nc)"
-	IconInfo     = "$(Blue)ℹ$(Nc)"
-	// Formatting Strings for Alignment.
-	LabelFmt = "%-15s" // Indent 3, Pad label to 15 chars, left-aligned.
-)
-
-// --- Test Logger Implementation (Reinstated and Refined) ---
-
-// INFO logs print plainly. WARN/ERROR have prefixes/colors. DEBUG is plain+prefix.
-// testLogger adapts t.Logf to the logging.Logger interface with cleaner output.
+// --- Test Logger Implementation (Simplified - less relevant now) ---.
 type testLogger struct {
-	t      *testing.T
-	fields map[string]any
+	t *testing.T
 }
 
-// newTestLogger creates a test logger with improved output.
 func newTestLogger(t *testing.T) logging.Logger {
 	t.Helper()
-	return &testLogger{
-		t:      t,
-		fields: make(map[string]any),
-	}
+	return &testLogger{t: t}
 }
-
-// I
-// WithContext returns a logger with context.
-func (l *testLogger) WithContext(_ context.Context) logging.Logger {
-	return l
-}
-
-// WithField returns a logger with the field added.
-func (l *testLogger) WithField(key string, value any) logging.Logger {
-	newLogger := &testLogger{
-		t:      l.t,
-		fields: make(map[string]any, len(l.fields)+1),
-	}
-
-	// Copy existing fields.
-	for k, v := range l.fields {
-		newLogger.fields[k] = v
-	}
-
-	// Add new field
-	newLogger.fields[key] = value
-
-	return newLogger
-}
-
-// formatArgs - Returns ONLY the message string. Key-value args are ignored for test output clarity.
-func (l *testLogger) formatArgs(msg string, _ ...any) string {
-	// NOTE: We completely ignore 'args' here for cleaner test output by default.
-	return msg
-}
-
-// Debug logs are generally suppressed by 'go test' unless -v is used.
-// Format includes args when shown with -v.
-// file: internal/rtm/mcp_integration_test.go
-
-// Debug logs are suppressed by default unless in verbose mode.
-func (l *testLogger) Debug(msg string, args ...any) {
-	// Only show in verbose mode to reduce noise in normal test output
+func (l *testLogger) WithContext(_ context.Context) logging.Logger { return l }
+func (l *testLogger) WithField(_ string, _ any) logging.Logger     { return l }
+func (l *testLogger) Debug(msg string, _ ...any) {
 	if testing.Verbose() {
-		// Format args in a clean way if needed
-		argStr := ""
-		if len(args) > 0 {
-			relevantArgs := make([]string, 0)
-			for i := 0; i < len(args); i += 2 {
-				if i+1 < len(args) {
-					k, v := args[i], args[i+1]
-					// Only include important args
-					if k == "error" || k == "username" {
-						relevantArgs = append(relevantArgs, fmt.Sprintf("%v=%v", k, v))
-					}
-				}
-			}
-			if len(relevantArgs) > 0 {
-				argStr = " (" + strings.Join(relevantArgs, ", ") + ")"
-			}
-		}
-
-		l.t.Logf("  [DEBUG] %s%s", msg, argStr)
+		l.t.Logf("  [DEBUG] %s", msg)
 	}
 }
-
-// Info logs *just* the message plainly for status updates.
-func (l *testLogger) Info(msg string, args ...any) {
-	l.t.Logf("  %s", l.formatArgs(msg, args...)) // Indented slightly for readability
-}
-
-// Warn logs a warning-level message in yellow with a clear prefix.
-func (l *testLogger) Warn(msg string, args ...any) {
-	l.t.Logf("%sWARN: %s%s", ColorWarn, l.formatArgs(msg, args...), ColorDefault)
-}
-
-// Error logs an error-level message in red with a clear prefix.
-func (l *testLogger) Error(msg string, args ...any) {
-	l.t.Logf("%sERROR: %s%s", ColorError, l.formatArgs(msg, args...), ColorDefault)
-}
+func (l *testLogger) Info(msg string, _ ...any)  { l.t.Logf("  INFO: %s", msg) } // Keep Info for potential service logs
+func (l *testLogger) Warn(msg string, _ ...any)  { l.t.Logf("  WARN: %s", msg) }
+func (l *testLogger) Error(msg string, _ ...any) { l.t.Logf("  ERROR: %s", msg) }
 
 // --- Test Functions ---
 
+//nolint:gocyclo // Integration test involves multiple sequential steps & checks
 func TestRTMToolsIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode.")
 	}
 
+	var apiKeyValid bool
+	var isAuthenticated bool
+	var authTestsSkipped bool
+	var username string
+
 	// Check API credentials
 	cfg := config.DefaultConfig()
 	if cfg.RTM.APIKey == "" || cfg.RTM.SharedSecret == "" {
-		t.Log("\n")
-		t.Log("┌─────────────────────────────────────────────┐")
-		t.Log("│ RTM INTEGRATION TESTS: NOT RUNNING          │")
-		t.Log("│                                             │")
-		t.Log("│ REASON: Missing API credentials             │")
-		t.Log("│                                             │")
-		t.Log("│ TO FIX: Set these environment variables:    │")
-		t.Log("│   RTM_API_KEY                               │")
-		t.Log("│   RTM_SHARED_SECRET                         │")
-		t.Log("└─────────────────────────────────────────────┘")
+		t.Log("--------------------------------------------------")
+		t.Log("TEST: RTM Integration")
+		t.Log("--------------------------------------------------")
+		t.Log("RESULT: SKIP (Reason: Missing RTM_API_KEY or RTM_SHARED_SECRET environment variables)")
+		t.Log("--------------------------------------------------")
 		t.Skip("Skipping RTM integration tests: API credentials not configured.")
+		return
 	}
 
-	// Use minimal logging for tests
-	testLogger := newTestLogger(t)
+	testLogger := newTestLogger(t) // Logger for the service
 	rtmService := NewService(cfg, testLogger)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	// Test header with consistent width
-	t.Log("\n")
-	t.Log("┌─────────────────────────────────────────────┐")
-	t.Log("│ RTM INTEGRATION TESTS                       │")
-	t.Log("└─────────────────────────────────────────────┘")
+	t.Log("--------------------------------------------------")
+	t.Log("TEST: RTM Integration")
+	t.Log("--------------------------------------------------")
 
-	// The key issue is that we need to run the credential check
-	// and initialization (non-authenticated parts) BEFORE we
-	// check if we're authenticated and potentially skip
-	t.Log("\n")
-	t.Log("[PHASE 1] CREDENTIAL VALIDATION")
-	t.Log("------------------------------")
-
-	// Run connectivity check
+	// --- Step 1: Validate Credentials ---
+	t.Logf("\033[0;34m▶  %s...\033[0m", "Validating Credentials")
 	options := DefaultConnectivityCheckOptions()
-	options.RequireAuth = false
-	results, err := rtmService.PerformConnectivityCheck(ctx, options)
-	require.NoError(t, err, "Failed to run connectivity check")
+	options.RequireAuth = false // Don't require auth for this initial check
+	diagResults, err := rtmService.PerformConnectivityCheck(ctx, options)
+	require.NoError(t, err, "Connectivity check shouldn't cause fatal error here")
 
-	// Track API key validity
-	apiKeyValid := false
-	authPresent := false
-
-	// Display results
-	t.Log("\n")
-	t.Log("Credential Status:")
-
-	for _, result := range results {
+	//authCheckSuccessful := false
+	for _, result := range diagResults {
+		// Use the new formatDiagnosticResult helper (defined above or in diagnostics.go)
+		t.Logf("  %s", formatDiagnosticResult(result)) // Log each check result cleanly
 		if result.Name == "RTM API Echo Test" {
 			apiKeyValid = result.Success
-			if apiKeyValid {
-				t.Log("✅ API KEY & SECRET: Valid and working")
-			} else {
-				t.Log("❌ API KEY & SECRET: Invalid")
-				if result.Error != nil {
-					t.Logf("   Error: %v", result.Error)
-				}
-			}
-		}
-
-		if result.Name == "RTM Authentication" {
-			authPresent = result.Success
-			if authPresent {
-				t.Log("✅ AUTHENTICATION: You are authenticated with RTM")
-			} else {
-				t.Log("❌ AUTHENTICATION: Not authenticated with RTM")
-			}
 		}
 	}
 
-	// Credential summary
-	t.Log("\n")
-	t.Log("Credential Summary:")
-	if apiKeyValid {
-		t.Log("✅ Your API key and secret are valid")
-		t.Log("   You can use them to access the RTM API")
-	} else {
-		t.Log("❌ Your API credentials are not working")
-		t.Log("   Double-check RTM_API_KEY and RTM_SHARED_SECRET")
-		t.Log("   Register at: https://www.rememberthemilk.com/services/api/")
-	}
-
-	// Skip further tests if API key is invalid
 	if !apiKeyValid {
-		t.Log("\n")
-		t.Log("┌─────────────────────────────────────────────┐")
-		t.Log("│ REMAINING TESTS: SKIPPED                    │")
-		t.Log("│                                             │")
-		t.Log("│ REASON: Invalid API credentials             │")
-		t.Log("│                                             │")
-		t.Log("│ TO FIX: Ensure your API key and secret are  │")
-		t.Log("│         valid                               │")
-		t.Log("└─────────────────────────────────────────────┘")
+		t.Log("RESULT: FAIL (Reason: RTM API Key/Secret invalid - Echo test failed)")
+		t.Log("--------------------------------------------------")
 		t.Fatal("Cannot continue tests with invalid API credentials")
+		return
 	}
+	t.Log("  Credential Check: PASS (API Key/Secret Valid)")
 
-	// Phase 2: Authentication Status
-	t.Log("\n")
-	t.Log("[PHASE 2] AUTHENTICATION STATUS")
-	t.Log("------------------------------")
-
-	// Initialize service
+	// --- Step 2: Check Authentication Status ---
+	t.Logf("\033[0;34m▶  %s...\033[0m", "Checking Authentication Status")
+	// Initialize service fully now (loads token, verifies final state)
 	err = rtmService.Initialize(ctx)
 	require.NoError(t, err, "Failed to initialize RTM service")
 
-	// Check authentication
-	isAuthenticated := rtmService.IsAuthenticated()
-	username := rtmService.GetUsername()
+	isAuthenticated = rtmService.IsAuthenticated()
+	username = rtmService.GetUsername()
+	if username == "" {
+		username = "N/A"
+	}
 
-	t.Log("\n")
-	t.Log("Authentication Status:")
 	if isAuthenticated {
-		t.Logf("✅ AUTHENTICATED: Logged in as %s", username)
+		t.Logf("  RESULT: AUTHENTICATED (User: %s)", username)
 	} else {
-		t.Log("❌ NOT AUTHENTICATED: You need to complete the RTM authentication flow")
-		t.Log("\n")
-		t.Log("To authenticate:")
-		t.Log("1. Run this command:  go run ./cmd/rtm_connection_test")
-		t.Log("2. Follow the authentication instructions in your browser")
-		t.Log("3. Run the tests again after authentication is complete")
+		authTestsSkipped = true
+		t.Log("  RESULT: NOT AUTHENTICATED")
+		t.Log("  INFO: RTM Authentication required for full test.")
+		t.Log("  INFO: To authenticate:")
+		t.Log("  INFO: 1. Run: go run ./cmd/rtm_connection_test")
+		t.Log("  INFO: 2. Follow browser instructions.")
+		t.Log("  INFO: 3. Re-run tests.")
 	}
 
-	// Skip authenticated tests if not authenticated
-	if !isAuthenticated {
-		t.Log("\n")
-		t.Log("┌─────────────────────────────────────────────┐")
-		t.Log("│ AUTHENTICATED TESTS: SKIPPED                │")
-		t.Log("│                                             │")
-		t.Log("│ REASON: Not authenticated with RTM          │")
-		t.Log("│                                             │")
-		t.Log("│ TO FIX: Complete the RTM authentication flow│")
-		t.Log("│         (see instructions above)            │")
-		t.Log("└─────────────────────────────────────────────┘")
-		t.Skip("Skipping authenticated RTM tests: Not authenticated")
-	}
-
-	// Phase 3: Authenticated Tests (only runs if authenticated)
-	t.Log("\n")
-	t.Log("[PHASE 3] AUTHENTICATED OPERATIONS")
-	t.Log("----------------------------------")
-	t.Logf("Running as authenticated user: %s", username)
-
-	// Run tests on tools, resources, etc.
-	// Test GetTools
-	tools := rtmService.GetTools()
-	if len(tools) > 0 {
-		t.Logf("✅ Found %d MCP tools", len(tools))
+	// --- Step 3: Run Authenticated Operations ---
+	t.Logf("\033[0;34m▶  %s...\033[0m", "Running Authenticated Operations")
+	if authTestsSkipped {
+		t.Log("  RESULT: SKIP (Reason: Not authenticated with RTM)")
 	} else {
-		t.Log("❌ No MCP tools returned")
-	}
-
-	// Test CallTool (getTasks)
-	t.Log("\n")
-	t.Log("Testing getTasks tool:")
-	args := map[string]interface{}{"filter": "status:incomplete"}
-	argsBytes, _ := json.Marshal(args)
-	result, err := rtmService.CallTool(ctx, "getTasks", argsBytes)
-	if err == nil && result != nil && !result.IsError {
-		t.Log("✅ Task retrieval successful")
-	} else {
-		t.Log("❌ Task retrieval failed")
-		if err != nil {
-			t.Logf("   Error: %v", err)
+		// Test GetTools
+		tools := rtmService.GetTools()
+		if len(tools) > 0 {
+			t.Logf("  CHECK: GetTools... PASS (%d tools found)", len(tools))
+		} else {
+			t.Log("  CHECK: GetTools... FAIL (No tools returned)")
+			t.Fail()
 		}
+
+		// Test CallTool (getTasks)
+		args := map[string]interface{}{"filter": "status:incomplete"}
+		argsBytes, _ := json.Marshal(args)
+		result, callErr := rtmService.CallTool(ctx, "getTasks", argsBytes)
+		if callErr == nil && result != nil && !result.IsError {
+			t.Log("  CHECK: CallTool(getTasks)... PASS")
+		} else {
+			errorDetail := "Unknown tool error"
+			if callErr != nil {
+				errorDetail = fmt.Sprintf("Internal Error: %v", callErr)
+			} else if result != nil && result.IsError && len(result.Content) > 0 {
+				if tc, ok := result.Content[0].(mcp.TextContent); ok {
+					errorDetail = fmt.Sprintf("Tool Error: %s", tc.Text)
+				}
+			}
+			t.Logf("  CHECK: CallTool(getTasks)... FAIL (%s)", errorDetail)
+			t.Fail()
+		}
+
+		// Test GetResources
+		resources := rtmService.GetResources()
+		if len(resources) > 0 {
+			t.Logf("  CHECK: GetResources... PASS (%d resources found)", len(resources))
+		} else {
+			t.Log("  CHECK: GetResources... FAIL (No resources returned)")
+			t.Fail()
+		}
+		// Add more authenticated checks here...
 	}
 
-	// Test GetResources and ReadResource
-	t.Log("\n")
-	t.Log("Testing MCP Resources:")
-	resources := rtmService.GetResources()
-	if len(resources) > 0 {
-		t.Logf("✅ Found %d MCP resources", len(resources))
-	} else {
-		t.Log("❌ No MCP resources returned")
+	// --- Final Result ---
+	t.Log("--------------------------------------------------")
+	finalResult := "PASS"
+	finalReason := ""
+
+	if authTestsSkipped {
+		// Mark as failure if auth was required but skipped
+		finalResult = "FAIL"
+		finalReason = " (Reason: Authentication check failed or was skipped)"
+		// Ensure test is marked as failed if we skipped auth tests
+		t.Errorf("Test failed due to missing RTM authentication")
+	} else if t.Failed() {
+		// If any t.Fail() was called during authenticated ops
+		finalResult = "FAIL"
+		finalReason = " (Reason: One or more authenticated checks failed)"
 	}
 
-	// Final summary
-	t.Log("\n")
-	t.Log("┌─────────────────────────────────────────────┐")
-	t.Log("│ RTM INTEGRATION TESTS: COMPLETE             │")
-	t.Log("│                                             │")
-	t.Log("│ ✅ API credentials valid                     │")
-	if isAuthenticated {
-		t.Log("│ ✅ Authentication successful                  │")
-		t.Log("│ ✅ All tests passed                          │")
-	} else {
-		t.Log("│ ❌ Authentication missing                     │")
-		t.Log("│ ℹ️ Some tests skipped                         │")
-	}
-	t.Log("└─────────────────────────────────────────────┘")
+	t.Logf("OVERALL: %s%s", finalResult, finalReason)
+	t.Log("--------------------------------------------------")
 }
+
+// Helper function to get working directory (optional, for debugging paths)
+// func getwd(t *testing.T) string {
+// 	t.Helper()
+// 	wd, err := os.Getwd()
+// 	if err != nil {
+// 		t.Logf("Warning: Could not get working directory: %v", err)
+// 		return "[unknown]"
+// 	}
+// 	return wd
+// }

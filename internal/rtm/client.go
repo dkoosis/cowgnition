@@ -1,7 +1,6 @@
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
-package rtm
-
 // file: internal/rtm/client.go
+package rtm
 
 import (
 	"context"
@@ -73,8 +72,7 @@ func (c *Client) callMethod(ctx context.Context, method string, params map[strin
 	req.Header.Add("User-Agent", "CowGnition/0.1.0") // TODO: Version from build flags.
 
 	// --- 2. Execute Request ---
-	// Log sanitized info.
-	c.logger.Debug("Making RTM API call.", "method", method, "endpoint", c.config.APIEndpoint)
+	// c.logger.Debug("Making RTM API call.", "method", method, "endpoint", c.config.APIEndpoint) // Commented out
 	resp, err := c.config.HTTPClient.Do(req)
 	if err != nil {
 		// Wrap HTTP client errors.
@@ -230,23 +228,23 @@ func (c *Client) generateSignature(params map[string]string) string {
 	var builder strings.Builder
 	builder.WriteString(c.config.SharedSecret)
 
-	sensitiveKeys := map[string]bool{"api_key": true, "auth_token": true}
-	loggedParams := []string{}
+	// sensitiveKeys := map[string]bool{"api_key": true, "auth_token": true} // Keep track if needed for logging
+	// loggedParams := []string{} // Keep track if needed for logging
 
 	for _, k := range keys {
 		value := params[k]
 		builder.WriteString(k)
 		builder.WriteString(value)
-		if !sensitiveKeys[k] {
-			loggedParams = append(loggedParams, k)
-		}
+		// if !sensitiveKeys[k] { // Conditional logging if needed
+		// 	loggedParams = append(loggedParams, k)
+		// }
 	}
 	rawString := builder.String()
 
-	c.logger.Debug("Generating API signature",
-		"rawStringLength", len(rawString),
-		"paramCount", len(params),
-		"nonSensitiveParamKeys", strings.Join(loggedParams, ","))
+	// c.logger.Debug("Generating API signature", // Commented out
+	// 	"rawStringLength", len(rawString),
+	// 	"paramCount", len(params),
+	// 	"nonSensitiveParamKeys", strings.Join(loggedParams, ","))
 
 	hasher := md5.New() // nolint:gosec
 	hasher.Write([]byte(rawString))
