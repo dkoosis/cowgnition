@@ -190,8 +190,6 @@ check: install-tools # Optional dependency
 	@./scripts/check_go_bin_path.sh
 	@# If the script succeeded (exit 0), print the success message. (This line only runs if the script exits 0)
 	@printf "$(ICON_OK) $(GREEN)Verified in PATH$(NC)\n"
-	# --- End Go Bin Path Check ---
-
 	@printf "   $(ICON_OK) $(GREEN)Tool and environment check complete$(NC)\n"
 	@printf "\n" # Add spacing
 

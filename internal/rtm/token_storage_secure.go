@@ -38,22 +38,61 @@ func NewSecureTokenStorage(logger logging.Logger) *SecureTokenStorage {
 }
 
 // IsAvailable checks if the OS keyring service is accessible.
+// file: internal/rtm/token_storage_secure.go
+
+// IsAvailable checks if the OS keyring service is accessible.
 func (s *SecureTokenStorage) IsAvailable() bool {
-	// Try a basic Get operation. If it fails significantly (not just not found),
-	// assume the service is unavailable. This isn't foolproof but a decent heuristic.
+	// Try a basic Get operation to check if keyring service is accessible
 	_, err := keyring.Get(keyringService, keyringUser)
-	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
-		s.logger.Warn("Keyring availability check failed, assuming unavailable.", "error", err)
+
+	// Check error type to determine availability
+	if err != nil {
+		if errors.Is(err, keyring.ErrNotFound) {
+			// This is expected for first-time usage - the token doesn't exist yet
+			s.logger.Debug("Keyring service is accessible (no token found, which is normal for first use)")
+			return true
+		}
+		// Other errors indicate the keyring service isn't working properly
+		s.logger.Warn("Keyring service is inaccessible or permissions are insufficient", "error", err)
 		return false
 	}
-	// If ErrNotFound or no error, keyring is likely available.
-	s.logger.Debug("Keyring availability check successful (or key not found).")
+
+	// No error means service is available and token exists
+	s.logger.Debug("Keyring service is accessible and contains an existing token")
 	return true
+}
+
+// file: internal/rtm/token_storage_secure.go
+
+// LoadToken loads the token from the secure OS keyring.
+func (s *SecureTokenStorage) LoadToken() (string, error) {
+	s.logger.Info("Attempting to load authentication token from system keyring")
+	jsonData, err := keyring.Get(keyringService, keyringUser)
+	if err != nil {
+		if errors.Is(err, keyring.ErrNotFound) {
+			s.logger.Debug("No authentication token found in system keyring")
+			return "", nil // Not an error, just not found.
+		}
+		s.logger.Error("Failed to access system keyring", "error", err)
+		return "", errors.Wrap(err, "failed to load token from system keyring")
+	}
+	s.logger.Info("Successfully retrieved token data from system keyring")
+
+	var data TokenData
+	if err := json.Unmarshal([]byte(jsonData), &data); err != nil {
+		// Data might be corrupted, delete it and report error
+		s.logger.Error("Token data in keyring is corrupted and cannot be parsed", "error", err)
+		_ = s.DeleteToken() // Attempt to delete corrupted entry.
+		return "", errors.Wrap(err, "failed to parse token data from secure storage")
+	}
+
+	s.logger.Debug("Successfully decoded authentication token", "username", data.Username)
+	return data.Token, nil
 }
 
 // SaveToken saves token data securely to the OS keyring.
 func (s *SecureTokenStorage) SaveToken(token string, userID, username string) error {
-	s.logger.Debug("Saving auth token to secure storage.", "username", username)
+	s.logger.Debug("Saving authentication token to system keyring", "username", username)
 	data := TokenData{
 		Token:     token,
 		UserID:    userID,
@@ -64,55 +103,34 @@ func (s *SecureTokenStorage) SaveToken(token string, userID, username string) er
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal token data for secure storage")
+		return errors.Wrap(err, "failed to encode token data for secure storage")
 	}
 
 	err = keyring.Set(keyringService, keyringUser, string(jsonData))
 	if err != nil {
-		s.logger.Error("Failed to save token to keyring.", "error", err)
-		return errors.Wrap(err, "failed to save token to keyring")
+		s.logger.Error("Failed to save token to system keyring", "error", err)
+		return errors.Wrap(err, "failed to save token to system keyring")
 	}
-	s.logger.Info("Successfully saved token to secure storage.")
+	s.logger.Info("Authentication token successfully saved to system keyring")
 	return nil
-}
-
-// LoadToken loads the token from the secure OS keyring.
-func (s *SecureTokenStorage) LoadToken() (string, error) {
-	s.logger.Info("Attempting to load token from secure OS storage (keyring/vault)...") // Added log
-	jsonData, err := keyring.Get(keyringService, keyringUser)
-	if err != nil {
-		if errors.Is(err, keyring.ErrNotFound) {
-			s.logger.Debug("No token found in secure storage.")
-			return "", nil // Not an error, just not found.
-		}
-		s.logger.Error("Failed to load token from keyring.", "error", err)
-		return "", errors.Wrap(err, "failed to load token from keyring")
-	}
-	s.logger.Info("Successfully loaded token data from secure OS storage.") // Added log
-
-	var data TokenData
-	if err := json.Unmarshal([]byte(jsonData), &data); err != nil {
-		// Data might be corrupted, delete it? Or just report error?
-		s.logger.Error("Failed to parse token data from secure storage, attempting deletion.", "error", err)
-		_ = s.DeleteToken() // Attempt to delete corrupted entry.
-		return "", errors.Wrap(err, "failed to parse token data from secure storage")
-	}
-
-	s.logger.Debug("Parsed auth token from secure storage.", "username", data.Username) // Updated log
-	return data.Token, nil
 }
 
 // DeleteToken removes the token from the secure OS keyring.
 func (s *SecureTokenStorage) DeleteToken() error {
-	s.logger.Debug("Deleting auth token from secure storage.")
-	// Attempt to delete the token.
+	s.logger.Debug("Deleting authentication token from system keyring")
+
 	err := keyring.Delete(keyringService, keyringUser)
-	// We only return an error if it's something other than "not found".
-	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
-		s.logger.Error("Failed to delete token from keyring.", "error", err)
-		return errors.Wrap(err, "failed to delete token from keyring")
+
+	if err != nil {
+		if errors.Is(err, keyring.ErrNotFound) {
+			s.logger.Debug("No token to delete - system keyring entry not found")
+			return nil
+		}
+		s.logger.Error("Failed to delete token from system keyring", "error", err)
+		return errors.Wrap(err, "failed to delete token from system keyring")
 	}
-	s.logger.Info("Successfully deleted token from secure storage (or it didn't exist).")
+
+	s.logger.Info("Authentication token successfully deleted from system keyring")
 	return nil
 }
 
