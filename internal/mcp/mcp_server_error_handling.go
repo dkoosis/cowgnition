@@ -1,7 +1,6 @@
-// Package mcp implements the Model Context Protocol server logic, including handlers and types.
-package mcp
-
 // file: internal/mcp/mcp_server_error_handling.go
+
+package mcp
 
 import (
 	"encoding/json"
@@ -9,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/logging" // Ensure logging is imported.
+	"github.com/dkoosis/cowgnition/internal/logging"
 	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors"
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
@@ -72,7 +71,6 @@ func extractRequestID(logger logging.Logger, msgBytes []byte) json.RawMessage {
 }
 
 // mapErrorToJSONRPCComponents maps Go errors to JSON-RPC code, message, and optional data.
-// Added logger parameter for potential warnings during mapping.
 func (s *Server) mapErrorToJSONRPCComponents(logger logging.Logger, err error) (code int, message string, data interface{}) {
 	data = make(map[string]interface{}) // Initialize data as a map.
 
@@ -160,22 +158,24 @@ func (s *Server) mapErrorToJSONRPCComponents(logger logging.Logger, err error) (
 	// Add URL from context if it exists in the original error.
 	// This handles cases where the error might not be one of the specific types above
 	// but still has URL context added by the schema loader.
+	// Proposed Change in internal/mcp/mcp_server_error_handling.go
+
 	urlContext := errors.GetAllDetails(err)
 	if urlVal, ok := urlContext["url"]; ok {
 		// Ensure data is a map before trying to add to it.
-		if dataMap, ok := data.(map[string]interface{}); ok {
-			if _, exists := dataMap["url"]; !exists { // Avoid overwriting.
-				dataMap["url"] = urlVal
-				data = dataMap // Ensure data points to the modified map.
+		existingDataMap, isMap := data.(map[string]interface{}) // Perform assertion first
+		if isMap {                                              // Check the boolean result
+			if _, exists := existingDataMap["url"]; !exists { // Avoid overwriting.
+				existingDataMap["url"] = urlVal
+				// No need to reassign `data` if it was already a map
 			}
 		} else if data == nil { // If data is nil, create a new map.
 			data = map[string]interface{}{"url": urlVal}
 		} else {
-			// If data exists but is not a map, log a warning.
+			// Existing non-map data handling (logging) remains the same
 			logger.Warn("Could not add URL context because existing error data is not a map.", "existingDataType", fmt.Sprintf("%T", data))
 		}
 	}
-
 	// Ensure data is nil if the map is empty after all checks.
 	if dataMap, ok := data.(map[string]interface{}); ok && len(dataMap) == 0 {
 		data = nil
@@ -184,10 +184,12 @@ func (s *Server) mapErrorToJSONRPCComponents(logger logging.Logger, err error) (
 	return code, message, data
 }
 
+// Rest of the file remains unchanged...
 // mapValidationError maps schema.ValidationError to JSON-RPC components.
-// Returns code, message, and map[string]interface{} for data.
-func mapValidationError(validationErr *schema.ValidationError) (code int, message string, data map[string]interface{}) {
-	data = make(map[string]interface{}) // Initialize data map.
+func mapValidationError(validationErr *schema.ValidationError) (int, string, map[string]interface{}) {
+	data := make(map[string]interface{}) // Initialize data map.
+	var code int
+	var message string
 
 	if validationErr.Code == schema.ErrInvalidJSONFormat {
 		code = transport.JSONRPCParseError // -32700.
@@ -228,10 +230,6 @@ func mapValidationError(validationErr *schema.ValidationError) (code int, messag
 
 // mapMCPError maps mcperrors.BaseError to JSON-RPC code and message.
 func mapMCPError(mcpErr *mcperrors.BaseError) (code int, message string) {
-	// Use a more generic message for the client, log specific internal message.
-	// message = mcpErr.Message // Keep internal message for logging.
-
-	// Map specific internal codes to standard or implementation-defined JSON-RPC codes.
 	switch mcpErr.Code {
 	case mcperrors.ErrProtocolInvalid:
 		code = transport.JSONRPCInvalidRequest // -32600.
@@ -245,7 +243,6 @@ func mapMCPError(mcpErr *mcperrors.BaseError) (code int, message string) {
 	case mcperrors.ErrRTMAPIFailure:
 		code = -32010                           // Example custom code.
 		message = "RTM API interaction failed." // Use a standard message.
-	// Add mappings for other custom MCP error codes.
 	default:
 		// Check if the code is already in the implementation-defined range.
 		if mcpErr.Code >= -32099 && mcpErr.Code <= -32000 {
@@ -268,7 +265,6 @@ func mapGenericGoError(_ error) (code int, message string) {
 }
 
 // logErrorDetails logs detailed error information server-side.
-// Uses explicit key-value pairs for clarity and robustness.
 func (s *Server) logErrorDetails(code int, message string, requestID json.RawMessage, data interface{}, err error) {
 	// Prepare the core log arguments.
 	args := []interface{}{
