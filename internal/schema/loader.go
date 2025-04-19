@@ -65,7 +65,8 @@ func (v *SchemaValidator) loadSchemaData(ctx context.Context) ([]byte, error) {
 		if err != nil {
 			// If URL fetch fails completely, return the error.
 			// We don't fall back to potentially stale file data in this case.
-			return nil, err // fetchSchemaFromURL already wraps the error.
+			// fetchSchemaFromURL already wraps the error and adds URL context.
+			return nil, err
 		}
 
 		switch status {
@@ -99,7 +100,7 @@ func (v *SchemaValidator) loadSchemaData(ctx context.Context) ([]byte, error) {
 				ErrSchemaLoadFailed,
 				fmt.Sprintf("unexpected HTTP status %d from URL fetch", status),
 				nil,
-			).WithContext("url", v.source.URL).WithContext("statusCode", status)
+			).WithContext("url", v.source.URL).WithContext("statusCode", status) // Added URL context here too.
 		}
 	}
 
@@ -174,6 +175,7 @@ func (v *SchemaValidator) fetchSchemaFromURL(ctx context.Context) ([]byte, int, 
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.source.URL, nil)
 	if err != nil {
+		// *** MODIFIED: Added WithContext ***
 		return nil, 0, NewValidationError(
 			ErrSchemaLoadFailed,
 			"Failed to create HTTP request for schema URL",
@@ -197,6 +199,7 @@ func (v *SchemaValidator) fetchSchemaFromURL(ctx context.Context) ([]byte, int, 
 		// Clear potentially stale cache headers on network error.
 		v.schemaETag = ""
 		v.schemaLastModified = ""
+		// *** MODIFIED: Added WithContext ***
 		return nil, 0, NewValidationError(
 			ErrSchemaLoadFailed,
 			"Failed to fetch schema from URL",
@@ -206,7 +209,7 @@ func (v *SchemaValidator) fetchSchemaFromURL(ctx context.Context) ([]byte, int, 
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			// Assuming 'v' is the SchemaValidator with a logger
+			// Assuming 'v' is the SchemaValidator with a logger.
 			v.logger.Warn("Error closing response body in fetchSchemaFromURL", "error", err)
 		}
 	}()
@@ -217,13 +220,14 @@ func (v *SchemaValidator) fetchSchemaFromURL(ctx context.Context) ([]byte, int, 
 		// Clear potentially stale cache headers on server error status.
 		v.schemaETag = ""
 		v.schemaLastModified = ""
+		// *** MODIFIED: Ensure WithContext is present ***
 		return nil, resp.StatusCode, NewValidationError(
 			ErrSchemaLoadFailed,
 			fmt.Sprintf("Failed to fetch schema: HTTP status %d", resp.StatusCode),
 			nil, // No underlying Go error, it's an HTTP error status.
-		).WithContext("url", v.source.URL).
-			WithContext("statusCode", resp.StatusCode).
-			WithContext("responseBody", string(bodyBytes))
+		).WithContext("url", v.source.URL). // Ensure URL context is added.
+							WithContext("statusCode", resp.StatusCode).
+							WithContext("responseBody", string(bodyBytes))
 	}
 
 	// If status is 304, return immediately with no data and the status code.
@@ -248,6 +252,7 @@ func (v *SchemaValidator) fetchSchemaFromURL(ctx context.Context) ([]byte, int, 
 		// Clear potentially stale cache headers if read fails after OK status.
 		v.schemaETag = ""
 		v.schemaLastModified = ""
+		// *** MODIFIED: Added WithContext ***
 		return nil, resp.StatusCode, NewValidationError(
 			ErrSchemaLoadFailed,
 			"Failed to read schema from HTTP response",

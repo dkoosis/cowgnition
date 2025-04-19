@@ -2,12 +2,14 @@
 package main
 
 import (
+	"bufio" // Added import.
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings" // Added import.
 
 	"github.com/cockroachdb/errors"
 )
@@ -37,7 +39,7 @@ type MCPServerConfig struct {
 //
 //	error: An error if setup fails, nil on success.
 func runSetup(configPath string) error {
-	// Get executable path
+	// Get executable path.
 	exePath, err := os.Executable()
 	if err != nil {
 		return errors.Wrap(err, "failed to get executable path")
@@ -51,28 +53,65 @@ func runSetup(configPath string) error {
 		log.Printf("Using executable path: %s", exePath)
 	}
 
-	// Check and create local config
+	// Prompt for RTM Credentials.
+	apiKey, sharedSecret, promptErr := promptForRTMCredentials()
+	if promptErr != nil {
+		return errors.Wrap(promptErr, "failed to get RTM credentials")
+	}
+
+	// Check and create local config.
 	err = createDefaultConfig(configPath)
 	if err != nil {
 		return errors.Wrap(err, "failed to create default configuration")
 	}
 
-	// Configure Claude Desktop
-	err = configureClaudeDesktop(exePath, configPath)
+	// Configure Claude Desktop.
+	err = configureClaudeDesktop(exePath, configPath, apiKey, sharedSecret)
 	if err != nil {
 		fmt.Printf("Warning: Failed to configure Claude Desktop automatically: %v\n", err)
 		fmt.Println("You'll need to configure Claude Desktop manually.")
 		printManualSetupInstructions(exePath, configPath)
 	}
 
-	// Print success message
-	fmt.Println("✅ CowGnition setup complete!")
+	// Print success message.
+	fmt.Println("✅ CowGnition setup complete.")
 	fmt.Println("Next steps:")
 	fmt.Println("1. Run 'cowgnition serve' to start the server")
 	fmt.Println("2. Open Claude Desktop to start using CowGnition")
 	fmt.Println("3. Type 'What are my RTM tasks?' to test the connection")
 
 	return nil
+}
+
+// promptForRTMCredentials interactively asks the user for RTM credentials.
+//
+// Returns:
+//
+//	apiKey string: The entered RTM API Key.
+//	sharedSecret string: The entered RTM Shared Secret.
+//	err error: An error if reading fails or input is empty.
+func promptForRTMCredentials() (apiKey string, sharedSecret string, err error) {
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Print("Enter RTM API Key: ")
+	apiKey, err = reader.ReadString('\n')
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to read API Key")
+	}
+	apiKey = strings.TrimSpace(apiKey)
+
+	fmt.Print("Enter RTM Shared Secret: ")
+	sharedSecret, err = reader.ReadString('\n')
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to read Shared Secret")
+	}
+	sharedSecret = strings.TrimSpace(sharedSecret)
+
+	if apiKey == "" || sharedSecret == "" {
+		return "", "", errors.New("API Key and Shared Secret cannot be empty")
+	}
+
+	return apiKey, sharedSecret, nil
 }
 
 // createDefaultConfig creates a default configuration file if none exists.
@@ -84,71 +123,83 @@ func runSetup(configPath string) error {
 //
 //	error: An error if file creation fails, nil on success.
 func createDefaultConfig(configPath string) error {
-	// Check if config already exists
+	// Check if config already exists.
 	if _, err := os.Stat(configPath); err == nil {
 		fmt.Printf("Configuration file already exists at %s\n", configPath)
 		return nil
 	}
 
-	// Ensure directory exists
+	// Ensure directory exists.
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0700); err != nil {
 		return errors.Wrap(err, "failed to create configuration directory")
 	}
 
-	// Create default config
+	// Create default config.
 	fmt.Printf("Creating default configuration at %s\n", configPath)
 
-	// Default config sample with Remember The Milk settings
+	// Default config sample with Remember The Milk settings.
 	defaultConfig := `server:
   name: "CowGnition RTM"
   port: 8080
 
-rtm:
-  api_key: ""
-  shared_secret: ""
+# RTM credentials are now set via 'cowgnition setup' and configured
+# in Claude Desktop's config to be passed as environment variables.
+# You generally do not need to set them here.
+# rtm:
+#  api_key: ""
+#  shared_secret: ""
 
 auth:
-  token_path: "~/.config/cowgnition/tokens"
+  # Default path for storing the RTM auth *token* (not API key/secret).
+  token_path: "~/.config/cowgnition/rtm_token.json"
 `
 
-	// Use more secure file permissions (0600 instead of 0644)
+	// Use more secure file permissions (0600 instead of 0644).
 	if err := os.WriteFile(configPath, []byte(defaultConfig), 0600); err != nil {
 		return errors.Wrap(err, "failed to write default configuration file")
 	}
 
-	fmt.Println("Please edit the configuration file to add your RTM API key and shared secret.")
+	// fmt.Println("Please edit the configuration file to add your RTM API key and shared secret.") // Removed this instruction.
 	return nil
 }
 
 // configureClaudeDesktop updates Claude Desktop's configuration to include CowGnition.
-// It reads the existing configuration (if any), adds the CowGnition server entry,
+// It reads the existing configuration (if any), adds the CowGnition server entry with env vars,
 // and writes the updated configuration back to disk.
 //
 // exePath string: Path to the CowGnition executable.
 // configPath string: Path to the CowGnition configuration file.
+// apiKey string: The RTM API Key.
+// sharedSecret string: The RTM Shared Secret.
 //
 // Returns:
 //
 //	error: An error if configuration fails, nil on success.
-func configureClaudeDesktop(exePath, configPath string) error {
-	// Determine Claude Desktop config path based on OS
+func configureClaudeDesktop(exePath, configPath, apiKey, sharedSecret string) error {
+	// Determine Claude Desktop config path based on OS.
 	claudeConfigPath := getClaudeConfigPath()
 
 	if debugMode {
 		log.Printf("Claude Desktop config path: %s", claudeConfigPath)
 	}
 
-	// Create args for the server
+	// Create args for the server.
 	args := []string{"serve", "--transport", "stdio", "--config", configPath}
 
-	// Build the server configuration
+	// Build the server configuration with environment variables.
 	serverConfig := MCPServerConfig{
 		Command: exePath,
 		Args:    args,
+		Env:     make(map[string]string), // Initialize the Env map.
 	}
+	// Add credentials to the environment map for the server process.
+	serverConfig.Env["RTM_API_KEY"] = apiKey
+	serverConfig.Env["RTM_SHARED_SECRET"] = sharedSecret
+	// Optionally add log level if desired.
+	// serverConfig.Env["LOG_LEVEL"] = "debug".
 
-	// Read existing Claude config if it exists
+	// Read existing Claude config if it exists.
 	var claudeConfig ClaudeDesktopConfig
 	if _, err := os.Stat(claudeConfigPath); err == nil {
 		// #nosec G304 -- Path is determined based on OS, not user input.
@@ -158,7 +209,7 @@ func configureClaudeDesktop(exePath, configPath string) error {
 		}
 
 		if err := json.Unmarshal(data, &claudeConfig); err != nil {
-			// If the file exists but is invalid, create a new one
+			// If the file exists but is invalid, create a new one.
 			if debugMode {
 				log.Printf("Failed to parse existing Claude Desktop config, creating new one: %v", err)
 			}
@@ -167,28 +218,28 @@ func configureClaudeDesktop(exePath, configPath string) error {
 			}
 		}
 	} else {
-		// Create new config if it doesn't exist
+		// Create new config if it doesn't exist.
 		claudeConfig = ClaudeDesktopConfig{
 			MCPServers: make(map[string]MCPServerConfig),
 		}
 	}
 
-	// Add our server to the config
+	// Add our server to the config.
 	claudeConfig.MCPServers["cowgnition"] = serverConfig
 
-	// Write the updated config
+	// Write the updated config.
 	data, err := json.MarshalIndent(claudeConfig, "", "  ")
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal Claude Desktop configuration")
 	}
 
-	// Ensure directory exists
+	// Ensure directory exists.
 	claudeConfigDir := filepath.Dir(claudeConfigPath)
 	if err := os.MkdirAll(claudeConfigDir, 0700); err != nil {
 		return errors.Wrap(err, "failed to create Claude Desktop configuration directory")
 	}
 
-	// Use more secure file permissions (0600 instead of 0644)
+	// Use more secure file permissions (0600 instead of 0644).
 	if err := os.WriteFile(claudeConfigPath, data, 0600); err != nil {
 		return errors.Wrap(err, "failed to write Claude Desktop configuration")
 	}
@@ -212,7 +263,7 @@ func getClaudeConfigPath() string {
 		configDir = filepath.Join(homeDir, "Library", "Application Support", "Claude")
 	case "windows":
 		configDir = filepath.Join(os.Getenv("APPDATA"), "Claude")
-	default:
+	default: // Assume Linux/other Unix-like.
 		homeDir, _ := os.UserHomeDir()
 		configDir = filepath.Join(homeDir, ".config", "Claude")
 	}
@@ -230,18 +281,26 @@ func printManualSetupInstructions(exePath, configPath string) {
 
 	fmt.Println("\n==== Manual Claude Desktop Configuration ====")
 	fmt.Printf("1. Create or edit the file at: %s\n", claudeConfigPath)
-	fmt.Println("2. Add the following configuration:")
+	fmt.Println("2. Add the following configuration (replace placeholders):")
 
+	// Example excludes the Env block as manual setup requires user intervention anyway.
+	// They would need to get the API Key/Secret separately.
 	configExample := fmt.Sprintf(`{
   "mcpServers": {
     "cowgnition": {
       "command": "%s",
-      "args": ["serve", "--transport", "stdio", "--config", "%s"]
+      "args": ["serve", "--transport", "stdio", "--config", "%s"],
+      "env": {
+          "RTM_API_KEY": "YOUR_RTM_API_KEY",
+          "RTM_SHARED_SECRET": "YOUR_RTM_SHARED_SECRET"
+      }
     }
+    // Add other servers here if needed...
   }
-}`, exePath, configPath)
+}`, exePath, configPath) // Using printf for formatting.
 
 	fmt.Println(configExample)
-	fmt.Println("3. Restart Claude Desktop to apply the changes")
+	fmt.Println("3. Replace YOUR_RTM_API_KEY and YOUR_RTM_SHARED_SECRET with your actual credentials.")
+	fmt.Println("4. Restart Claude Desktop to apply the changes.")
 	fmt.Println("==============================================")
 }

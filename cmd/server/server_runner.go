@@ -68,8 +68,8 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	// --- Schema Validator Initialization ---
 	logger.Info("Initializing schema validator...")
 	schemaSource := schema.SchemaSource{
-		// Configure appropriate schema source
-		URL: "https://raw.githubusercontent.com/anthropics/ModelContextProtocol/main/schema/mcp-schema.json",
+		// Configure appropriate schema sou
+		URL: "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/refs/heads/main/schema/2025-03-26/schema.json",
 	}
 	validator := schema.NewSchemaValidator(schemaSource, logger.WithField("component", "schema_validator"))
 	if err = validator.Initialize(ctx); err != nil {
