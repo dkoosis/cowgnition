@@ -1,7 +1,7 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
 package mcp
 
-// file: internal/mcp/handlers_resources.go
+// file: internal/mcp/handlers_resources.go.
 
 import (
 	"context"
@@ -10,13 +10,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors"
+	// Keep schema import for ValidatorInterface.
 )
 
-// Import schema
-
-// handleResourcesList handles the resources/list request.
-// Official definition: Sent from the client to request a list of resources the server has.
-// The server should respond with information about resources that the client can access.
 // handleResourcesList handles the resources/list request.
 // Official definition: Sent from the client to request a list of resources the server has.
 // The server should respond with information about resources that the client can access.
@@ -52,14 +48,14 @@ func (h *Handler) handleResourcesList(_ context.Context, params json.RawMessage)
 			Description: "Tags used in your Remember The Milk account.",
 			MimeType:    "application/json",
 		},
-		// *** ADDED HEALTH RESOURCE ***
+		// *** ADDED HEALTH RESOURCE ***.
 		{
 			Name:        "Server Health Metrics",
 			URI:         "cowgnition://health",
 			Description: "Provides internal health and performance metrics for the CowGnition server.",
 			MimeType:    "application/json",
 		},
-		// *** END ADDED HEALTH RESOURCE ***
+		// *** END ADDED HEALTH RESOURCE ***.
 	}
 
 	// Handle pagination.
@@ -97,21 +93,21 @@ func (h *Handler) handleResourcesRead(_ context.Context, params json.RawMessage)
 	switch req.URI {
 	case "auth://rtm":
 		authStatus := map[string]interface{}{
-			"isAuthenticated": true, // Placeholder
+			"isAuthenticated": true, // Placeholder.
 			"username":        "example_user",
 			"accountType":     "Pro",
 		}
-		// *** FIX: Use standard marshal and handle error ***
+		// *** FIX: Use standard marshal and handle error ***.
 		authBytes, marshalErr := json.MarshalIndent(authStatus, "", "  ")
 		if marshalErr != nil {
 			h.logger.Error("Failed to marshal auth status.", "error", marshalErr)
 			return nil, errors.Wrap(marshalErr, "failed to marshal auth status")
 		}
-		authString := string(authBytes) // Convert bytes to string
+		authString := string(authBytes) // Convert bytes to string.
 
 		contents = append(contents, TextResourceContents{
 			ResourceContents: ResourceContents{URI: req.URI, MimeType: "application/json"},
-			Text:             authString, // *** FIX: Use the marshalled string ***
+			Text:             authString, // *** FIX: Use the marshalled string ***.
 		})
 
 	case "rtm://lists":
@@ -120,17 +116,17 @@ func (h *Handler) handleResourcesRead(_ context.Context, params json.RawMessage)
 			{"id": "2", "name": "Work", "taskCount": 12},
 			{"id": "3", "name": "Personal", "taskCount": 8},
 		}
-		// *** FIX: Use standard marshal and handle error ***
+		// *** FIX: Use standard marshal and handle error ***.
 		listsBytes, marshalErr := json.MarshalIndent(lists, "", "  ")
 		if marshalErr != nil {
 			h.logger.Error("Failed to marshal RTM lists.", "error", marshalErr)
 			return nil, errors.Wrap(marshalErr, "failed to marshal RTM lists")
 		}
-		listsString := string(listsBytes) // Convert bytes to string
+		listsString := string(listsBytes) // Convert bytes to string.
 
 		contents = append(contents, TextResourceContents{
 			ResourceContents: ResourceContents{URI: req.URI, MimeType: "application/json"},
-			Text:             listsString, // *** FIX: Use the marshalled string ***
+			Text:             listsString, // *** FIX: Use the marshalled string ***.
 		})
 
 	case "rtm://tags":
@@ -139,25 +135,33 @@ func (h *Handler) handleResourcesRead(_ context.Context, params json.RawMessage)
 			{"name": "shopping", "taskCount": 2},
 			{"name": "work", "taskCount": 7},
 		}
-		// *** FIX: Use standard marshal and handle error ***
+		// *** FIX: Use standard marshal and handle error ***.
 		tagsBytes, marshalErr := json.MarshalIndent(tags, "", "  ")
 		if marshalErr != nil {
 			h.logger.Error("Failed to marshal RTM tags.", "error", marshalErr)
 			return nil, errors.Wrap(marshalErr, "failed to marshal RTM tags")
 		}
-		tagsString := string(tagsBytes) // Convert bytes to string
+		tagsString := string(tagsBytes) // Convert bytes to string.
 
 		contents = append(contents, TextResourceContents{
 			ResourceContents: ResourceContents{URI: req.URI, MimeType: "application/json"},
-			Text:             tagsString, // *** FIX: Use the marshalled string ***
+			Text:             tagsString, // *** FIX: Use the marshalled string ***.
 		})
 
 	case "cowgnition://health":
 		h.logger.Debug("Reading health metrics.")
 		uptime := time.Since(h.startTime).Round(time.Second).String()
-		schemaInitialized := h.validator.IsInitialized()
-		schemaLoadDuration := h.validator.GetLoadDuration().String()
-		schemaCompileDuration := h.validator.GetCompileDuration().String()
+		// Check h.validator field before calling methods.
+		schemaInitialized := false
+		schemaLoadDuration := "n/a"
+		schemaCompileDuration := "n/a"
+		if h.validator != nil { // Check if validator exists.
+			schemaInitialized = h.validator.IsInitialized()
+			schemaLoadDuration = h.validator.GetLoadDuration().String()
+			schemaCompileDuration = h.validator.GetCompileDuration().String()
+		} else {
+			h.logger.Warn("Validator is nil when reading health metrics.")
+		}
 		currentState := h.connectionState.CurrentState()
 
 		metrics := map[string]interface{}{
@@ -173,14 +177,14 @@ func (h *Handler) handleResourcesRead(_ context.Context, params json.RawMessage)
 			h.logger.Error("Failed to marshal health metrics.", "error", marshalErr)
 			return nil, errors.Wrap(marshalErr, "failed to marshal health metrics")
 		}
-		metricsString := string(metricsBytes) // Define metricsString
+		metricsString := string(metricsBytes) // Define metricsString.
 
 		contents = append(contents, TextResourceContents{
 			ResourceContents: ResourceContents{
 				URI:      req.URI,
 				MimeType: "application/json",
 			},
-			Text: metricsString, // *** FIX: Use metricsString here ***
+			Text: metricsString, // *** FIX: Use metricsString here ***.
 		})
 
 	default:
@@ -205,7 +209,7 @@ func (h *Handler) handleResourcesRead(_ context.Context, params json.RawMessage)
 // handleResourcesSubscribe handles the resources/subscribe request.
 // Official definition: Sent from the client to request resources/updated notifications
 // from the server whenever a particular resource changes.
-// nolint:unused,unparam
+// nolint:unused,unparam.
 func (h *Handler) handleResourcesSubscribe(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	var req struct {
 		URI string `json:"uri"`
@@ -232,7 +236,7 @@ func (h *Handler) handleResourcesSubscribe(_ context.Context, params json.RawMes
 // handleResourcesUnsubscribe handles the resources/unsubscribe request.
 // Official definition: Sent from the client to request cancellation of resources/updated
 // notifications from the server. This should follow a previous resources/subscribe request.
-// nolint:unused,unparam
+// nolint:unused,unparam.
 func (h *Handler) handleResourcesUnsubscribe(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	var req struct {
 		URI string `json:"uri"`
@@ -260,30 +264,31 @@ func (h *Handler) handleResourcesUnsubscribe(_ context.Context, params json.RawM
 // Official definition: A notification from the server to the client, informing it that
 // a resource has changed and may need to be read again. This should only be sent if
 // the client previously sent a resources/subscribe request.
-// nolint:unused,unparam
-func (h *Handler) handleResourcesUpdated(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
+// Corrected: Changed return type to void.
+//
+//nolint:unused // Reserved for future server-sent notification implementation.
+func (h *Handler) handleResourcesUpdated(_ context.Context, params json.RawMessage) {
 	var updateParams struct {
 		URI string `json:"uri"`
 	}
 	if err := json.Unmarshal(params, &updateParams); err != nil {
 		h.logger.Warn("Invalid parameters for resources/updated notification.", "error", err)
-		// Still return nil as this is a notification.
-		return nil, nil
+		return // Nothing to return.
 	}
 
 	h.logger.Info("Resource updated notification received.", "uri", updateParams.URI)
 	// No response needed for notifications.
-	return nil, nil
 }
 
 // handleResourceListChanged handles the notifications/resources/list_changed notification.
 // Official definition: An optional notification from the server to the client, informing
 // it that the list of resources it can read from has changed. This may be issued by
 // servers without any previous subscription from the client.
-// nolint:unused,unparam
-func (h *Handler) handleResourceListChanged(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
+// Corrected: Changed return type to void.
+//
+//nolint:unused // Reserved for future server-sent notification implementation.
+func (h *Handler) handleResourceListChanged(_ context.Context, _ json.RawMessage) {
 	h.logger.Info("Sending resource list changed notification to client.")
 	// NOTE: This would typically be sent from the server to the client, not handled by the server.
 	// Included here for completeness of the protocol implementation.
-	return nil, nil
 }

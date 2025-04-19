@@ -6,8 +6,6 @@
 // server termination and resource cleanup.
 package server
 
-// file: cmd/server/server_runner.go
-
 import (
 	"context"
 	"fmt"
@@ -21,22 +19,79 @@ import (
 	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/mcp"
 	"github.com/dkoosis/cowgnition/internal/rtm"
-	"github.com/dkoosis/cowgnition/internal/schema" // Add import for schema validator
+
+	// Import schema package for the interface.
+	"github.com/dkoosis/cowgnition/internal/schema"
+	// Corrected: Remove import of middleware if no longer needed directly here.
+	// "github.com/dkoosis/cowgnition/internal/middleware".
 )
 
+// Define the fallback schema JSON. This is embedded in validator.go now.
+// const fallbackSchemaJSON = `{...}` // REMOVED.
+
 // RunServer starts the MCP server with the specified transport type.
-// It handles setup, startup, and graceful shutdown of the server.
-// nolint:gocyclo
 func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout time.Duration, debug bool) error {
 	startTime := time.Now()
 
-	// --- Context and Signal Handling ---
+	// Setup Context and Signal Handling.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// --- Logging Setup ---
+	// Logging and Configuration Setup.
+	logger, cfg, err := setupLoggingAndConfig(configPath, debug)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Failed during logging/config setup: %+v\n", err)
+		return err
+	}
+
+	logger.Info("🚀 Starting CowGnition server.",
+		"transport", transportType,
+		"config_path", configPath,
+		"request_timeout", requestTimeout,
+		"shutdown_timeout", shutdownTimeout,
+		"debug_mode", debug)
+
+	// Service Initialization.
+	// Use blank identifier "_" for rtmService to fix unused variable error.
+	// Corrected: Use ValidatorInterface.
+	validator, _, err := initializeServices(ctx, cfg, logger)
+	if err != nil {
+		return err // Errors already logged within initializeServices.
+	}
+	defer func() {
+		// Ensure validator shutdown runs even if server start fails.
+		if shutdownErr := validator.Shutdown(); shutdownErr != nil {
+			logger.Error("⚠️ Error shutting down schema validator during potential early exit.", "error", shutdownErr)
+		}
+	}()
+
+	// MCP Server Creation.
+	// Corrected: Pass ValidatorInterface.
+	server, err := createMCPServer(cfg, requestTimeout, shutdownTimeout, debug, validator, startTime, logger)
+	if err != nil {
+		return err // Error already logged.
+	}
+
+	// Start Server Transport.
+	if err := startServerTransport(ctx, transportType, cfg, server, cancel, logger); err != nil {
+		return err // Error already logged.
+	}
+
+	logger.Info("✅ Server startup complete and ready to process requests.",
+		"startup_time_ms", time.Since(startTime).Milliseconds())
+
+	// Wait for Shutdown Signal.
+	waitForShutdownSignal(ctx, sigChan, logger)
+
+	// Graceful Shutdown.
+	// Corrected: Use ValidatorInterface.
+	return performGracefulShutdown(shutdownTimeout, server, validator, startTime, logger)
+}
+
+// setupLoggingAndConfig initializes the logger and loads configuration.
+func setupLoggingAndConfig(configPath string, debug bool) (logging.Logger, *config.Config, error) {
 	logLevel := "info"
 	if debug {
 		logLevel = "debug"
@@ -44,89 +99,79 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	logging.SetupDefaultLogger(logLevel)
 	logger := logging.GetLogger("server_runner")
 
-	logger.Info("🚀 Starting CowGnition server",
-		"transport", transportType,
-		"config_path", configPath,
-		"request_timeout", requestTimeout,
-		"shutdown_timeout", shutdownTimeout,
-		"debug_mode", debug)
-
-	// --- Configuration Loading ---
 	var cfg *config.Config
 	var err error
 	if configPath != "" {
-		logger.Info("📂 Loading configuration from file", "config_path", configPath)
+		logger.Info("📂 Loading configuration from file.", "config_path", configPath)
 		cfg, err = config.LoadFromFile(configPath)
 		if err != nil {
-			logger.Error("❌ Failed to load configuration", "config_path", configPath, "error", err.Error())
-			return errors.Wrap(err, "failed to load configuration from file")
+			logger.Error("❌ Failed to load configuration.", "config_path", configPath, "error", err.Error())
+			return logger, nil, errors.Wrap(err, "failed to load configuration from file")
 		}
-		logger.Info("✅ Configuration loaded successfully", "config_path", configPath)
+		logger.Info("✅ Configuration loaded successfully.", "config_path", configPath)
 	} else {
-		logger.Info("📝 Using default configuration (no config file specified)")
+		logger.Info("📝 Using default configuration (no config file specified).")
 		cfg = config.DefaultConfig()
 	}
-	logger.Info("⚙️ Configuration ready")
+	logger.Info("⚙️ Configuration ready.")
+	return logger, cfg, nil
+}
 
-	// --- Schema Validator Initialization ---
-	logger.Info("📋 Initializing schema validator...")
-
-	// Try multiple schema sources for better reliability
-	// 1. Try bundled schema in the project
-	// 2. Try specific GitHub URL used for authentication
-	// 3. Try main branch as fallback
-	schemaSource := schema.SchemaSource{
-		// Try local file first (most reliable)
-		FilePath: "internal/schema/schema.json", // Use bundled schema if available
-
-		// Then try URL with exact version (most likely to work)
-		URL: "https://raw.githubusercontent.com/modelcontextprotocol/specification/main/schema/schema.json",
-
-		// Or embed schema directly as last resort
-		Embedded: []byte(internalSchemaJSON), // Ensure the internal schema JSON is used as a fallback
+// initializeServices sets up the schema validator and RTM service.
+// Corrected: Returns schema.ValidatorInterface.
+func initializeServices(ctx context.Context, cfg *config.Config, logger logging.Logger) (schema.ValidatorInterface, *rtm.Service, error) {
+	validator, err := initializeSchemaValidator(ctx, cfg.Schema, logger)
+	if err != nil {
+		return nil, nil, err // Error logged within initializeSchemaValidator.
 	}
 
-	logger.Info("🔍 Schema sources configured",
-		"local_path", schemaSource.FilePath,
-		"fallback_url", schemaSource.URL,
-		"has_embedded", len(schemaSource.Embedded) > 0)
-
-	// Use a more descriptive log field for the schema validator
-	schemaLogger := logger.WithField("component", "schema_validator")
-
-	validator := schema.NewSchemaValidator(schemaSource, schemaLogger)
-	logger.Info("🔄 Initializing schema validator - this might take a moment...")
-	if err = validator.Initialize(ctx); err != nil {
-		logger.Error("❌ Schema validator initialization failed",
-			"error", err.Error(),
-			"advice", "Check schema source URLs and network connectivity")
-		// Provide user-friendly error message
-		if os.IsNotExist(errors.Cause(err)) {
-			logger.Error("💡 Schema file not found. Suggestions:",
-				"tip1", "Ensure schema file exists at the specified path",
-				"tip2", "Consider using MCP development kit with bundled schemas",
-				"tip3", "Check network connectivity for URL schema source")
+	rtmService, err := initializeRTMService(ctx, cfg, logger)
+	if err != nil {
+		if shutdownErr := validator.Shutdown(); shutdownErr != nil {
+			logger.Error("⚠️ Error shutting down schema validator during RTM init failure.", "error", shutdownErr)
 		}
-		return errors.Wrap(err, "failed to initialize schema validator")
+		return nil, nil, err // Error logged within initializeRTMService.
 	}
-	logger.Info("✅ Schema validator initialized successfully",
-		"schema_version", validator.GetSchemaVersion())
 
-	// --- RTM Service Initialization and Diagnostics ---
-	logger.Info("🔄 Creating and initializing RTM service...")
+	return validator, rtmService, nil
+}
+
+// initializeSchemaValidator sets up the schema validator.
+// Corrected: Returns schema.ValidatorInterface.
+func initializeSchemaValidator(ctx context.Context, schemaCfg config.SchemaConfig, logger logging.Logger) (schema.ValidatorInterface, error) {
+	logger.Info("📋 Initializing schema validator.")
+	// Corrected: Use NewValidator.
+	schemaLogger := logger.WithField("component", "schema_validator")
+	validator := schema.NewValidator(schemaCfg, schemaLogger)
+
+	logger.Info("🔄 Initializing schema validator - this might take a moment.")
+	if err := validator.Initialize(ctx); err != nil {
+		logger.Error("❌ Schema validator initialization failed.",
+			"error", err.Error(),
+			"advice", "Check schema override URI or embedded schema content.")
+		if os.IsNotExist(errors.Cause(err)) {
+			logger.Error("💡 Override schema file not found.", "uri", schemaCfg.SchemaOverrideURI)
+		}
+		return nil, errors.Wrap(err, "failed to initialize schema validator")
+	}
+	logger.Info("✅ Schema validator initialized successfully.",
+		"schema_version", validator.GetSchemaVersion())
+	return validator, nil
+}
+
+// initializeRTMService creates and initializes the RTM service, performing diagnostics.
+// (No changes needed in this function's logic related to validator rename).
+func initializeRTMService(ctx context.Context, cfg *config.Config, logger logging.Logger) (*rtm.Service, error) {
+	logger.Info("🔄 Creating and initializing RTM service.")
 	rtmFactory := rtm.NewServiceFactory(cfg, logging.GetLogger("rtm_factory"))
 	rtmService, err := rtmFactory.CreateService(ctx)
 	if err != nil {
-		logger.Error("❌ RTM service initialization failed", "error", err.Error())
-		return errors.Wrap(err, "failed to initialize RTM service")
+		logger.Error("❌ RTM service initialization failed.", "error", err.Error())
+		return nil, errors.Wrap(err, "failed to initialize RTM service")
 	}
-
-	// Perform RTM connectivity diagnostics
-	logger.Info("🔍 Performing RTM connectivity diagnostics...")
+	logger.Info("🔍 Performing RTM connectivity diagnostics.")
 	options := rtm.DefaultConnectivityCheckOptions()
 	diagResults, diagErr := rtmService.PerformConnectivityCheck(ctx, options)
-
-	// Log diagnostic results
 	for _, result := range diagResults {
 		if result.Success {
 			logger.Info(fmt.Sprintf("✅ RTM Diagnostic: %s", result.Name),
@@ -139,159 +184,124 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 				"error", result.Error)
 		}
 	}
-
-	// Handle diagnostic failures
 	if diagErr != nil {
-		logger.Error("❌ RTM connectivity diagnostics failed", "error", diagErr.Error())
+		logger.Error("❌ RTM connectivity diagnostics failed.", "error", diagErr.Error())
 		logger.Error("💡 RTM connectivity troubleshooting tips:",
-			"tip1", "Verify your RTM API key and shared secret are correct",
-			"tip2", "Check your internet connection",
-			"tip3", "Ensure the RTM API is accessible from your network")
-		// Critical diagnostic failures should be treated as server startup failures
-		return errors.Wrap(diagErr, "failed to verify RTM connectivity")
+			"tip1", "Verify your RTM API key and shared secret are correct (check env vars RTM_API_KEY, RTM_SHARED_SECRET or config file).",
+			"tip2", "Check your internet connection.",
+			"tip3", "Ensure the RTM API is accessible from your network.")
+		return nil, errors.Wrap(diagErr, "failed to verify RTM connectivity")
 	}
-
-	// User-friendly authentication status
 	if rtmService.IsAuthenticated() {
-		logger.Info("🔑 RTM authentication successful",
+		logger.Info("🔑 RTM authentication successful.",
 			"username", rtmService.GetUsername(),
-			"status", "Ready to access tasks and lists")
+			"status", "Ready to access tasks and lists.")
 	} else {
-		logger.Warn("⚠️ Not authenticated with RTM",
-			"status", "Limited functionality available",
-			"advice", "Use authentication tools through Claude Desktop to connect")
+		logger.Warn("⚠️ Not authenticated with RTM.",
+			"status", "Limited functionality available.",
+			"advice", "Use authentication tools (e.g., rtm_connection_test or Claude Desktop) to connect.")
 	}
+	return rtmService, nil
+}
 
-	// --- Create MCP Server Options ---
+// createMCPServer creates the MCP server instance.
+// Corrected: Accepts schema.ValidatorInterface.
+func createMCPServer(cfg *config.Config, requestTimeout, shutdownTimeout time.Duration, debug bool, validator schema.ValidatorInterface, startTime time.Time, logger logging.Logger) (*mcp.Server, error) {
+	logger.Info("🔄 Creating MCP server instance.")
 	opts := mcp.ServerOptions{
 		RequestTimeout:  requestTimeout,
 		ShutdownTimeout: shutdownTimeout,
 		Debug:           debug,
 	}
-
-	// --- Create MCP Server Instance ---
-	logger.Info("🔄 Creating MCP server instance")
 	server, err := mcp.NewServer(cfg, opts, validator, startTime, logger)
 	if err != nil {
-		logger.Error("❌ Failed to create MCP server", "error", err.Error())
-		return errors.Wrap(err, "failed to create MCP server")
+		logger.Error("❌ Failed to create MCP server.", "error", err.Error())
+		return nil, errors.Wrap(err, "failed to create MCP server")
 	}
+	return server, nil
+}
 
-	// --- Start Server (logic for selecting transport) ---
+// startServerTransport selects and starts the appropriate server transport.
+// (No changes needed in this function's logic related to validator rename).
+func startServerTransport(ctx context.Context, transportType string, cfg *config.Config, server *mcp.Server, cancel context.CancelFunc, logger logging.Logger) error {
 	switch transportType {
 	case "stdio":
-		logger.Info("📡 Starting server with stdio transport",
-			"description", "Communication via standard input/output")
-		go func() {
-			if err := server.ServeSTDIO(ctx); err != nil {
-				// Check if the error is due to context cancellation (expected during shutdown)
-				if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-					// Log only unexpected errors
-					logger.Error("❌ Server error (stdio)", "error", fmt.Sprintf("%+v", err))
-				} else {
-					logger.Info("🛑 Server stopped gracefully (stdio)", "reason", err)
-				}
-				cancel() // Ensure context is canceled on any server error/stop
-			} else {
-				logger.Info("🛑 Server stopped normally (stdio)")
-				cancel() // Cancel context if server stops without error
-			}
-		}()
-
+		logger.Info("📡 Starting server with stdio transport.",
+			"description", "Communication via standard input/output.")
+		go runTransportLoop(ctx, cancel, logger, "stdio", func(innerCtx context.Context) error {
+			return server.ServeSTDIO(innerCtx)
+		})
+		return nil // Return nil as the loop runs in a goroutine.
 	case "http":
 		addr := fmt.Sprintf(":%d", cfg.Server.Port)
-		logger.Info("📡 Starting server with HTTP transport",
+		logger.Info("📡 Starting server with HTTP transport.",
 			"address", addr,
-			"description", "Communication via HTTP protocol")
-		go func() {
-			if err := server.ServeHTTP(ctx, addr); err != nil {
-				if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, errors.New("HTTP transport not implemented")) /* Temp check */ {
-					logger.Error("❌ Server error (http)", "error", fmt.Sprintf("%+v", err))
-				} else {
-					logger.Info("🛑 Server stopped gracefully (http)", "reason", err)
-				}
-				cancel() // Ensure context is canceled on any server error/stop
-			} else {
-				logger.Info("🛑 Server stopped normally (http)")
-				cancel() // Cancel context if server stops without error
+			"description", "Communication via HTTP protocol.")
+		go runTransportLoop(ctx, cancel, logger, "http", func(innerCtx context.Context) error {
+			if err := server.ServeHTTP(innerCtx, addr); !errors.Is(err, errors.New("HTTP transport not implemented")) {
+				return err
 			}
-		}()
-
+			return nil
+		})
+		return nil // Return nil as the loop runs in a goroutine.
 	default:
-		// Ensure validator is shut down on this error path too.
-		if shutdownErr := validator.Shutdown(); shutdownErr != nil {
-			// Log the shutdown error, but proceed with returning the main error.
-			logger.Error("⚠️ Error shutting down schema validator during transport type error", "error", shutdownErr)
-		}
-		logger.Error("❌ Unsupported transport type",
+		logger.Error("❌ Unsupported transport type.",
 			"transport", transportType,
 			"supported", "stdio, http",
-			"advice", "Use --transport stdio or --transport http")
+			"advice", "Use --transport stdio or --transport http.")
 		return errors.Newf("unsupported transport type: %s", transportType)
 	}
+}
 
-	logger.Info("✅ Server startup complete and ready to process requests",
-		"startup_time_ms", time.Since(startTime).Milliseconds())
+// runTransportLoop runs the server's serve function in a goroutine and handles its exit.
+// (No changes needed in this function's logic).
+func runTransportLoop(ctx context.Context, cancel context.CancelFunc, logger logging.Logger, transportName string, serveFunc func(context.Context) error) {
+	if err := serveFunc(ctx); err != nil {
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			logger.Error(fmt.Sprintf("❌ Server error (%s).", transportName), "error", fmt.Sprintf("%+v", err))
+		} else {
+			logger.Info(fmt.Sprintf("🛑 Server stopped gracefully (%s).", transportName), "reason", err)
+		}
+	} else {
+		logger.Info(fmt.Sprintf("🛑 Server stopped normally (%s).", transportName))
+	}
+	cancel() // Ensure context is canceled on any server error or normal stop.
+}
 
-	// --- Wait for signal or context cancellation ---
+// waitForShutdownSignal blocks until a shutdown signal is received or the context is cancelled.
+// (No changes needed in this function's logic).
+func waitForShutdownSignal(ctx context.Context, sigChan <-chan os.Signal, logger logging.Logger) {
 	select {
 	case sig := <-sigChan:
-		logger.Info("⏹️ Received termination signal", "signal", sig)
+		logger.Info("⏹️ Received termination signal.", "signal", sig)
 	case <-ctx.Done():
-		logger.Info("⏹️ Context cancelled, initiating shutdown")
+		logger.Info("⏹️ Context cancelled, initiating shutdown.", "reason", ctx.Err())
 	}
+}
 
-	// --- Graceful Shutdown ---
-	logger.Info("🔄 Shutting down server gracefully...",
+// performGracefulShutdown handles the shutdown sequence for the server and validator.
+// Corrected: Accepts schema.ValidatorInterface.
+func performGracefulShutdown(shutdownTimeout time.Duration, server *mcp.Server, validator schema.ValidatorInterface, startTime time.Time, logger logging.Logger) error {
+	logger.Info("🔄 Shutting down server gracefully.",
 		"timeout", shutdownTimeout.String())
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
 
-	// Shutdown validator
-	logger.Debug("Shutting down schema validator")
+	logger.Debug("Shutting down schema validator.")
 	if err := validator.Shutdown(); err != nil {
-		logger.Error("⚠️ Error shutting down schema validator", "error", err)
-		// We continue with server shutdown even if schema validator shutdown failed
+		logger.Error("⚠️ Error shutting down schema validator.", "error", err)
+	} else {
+		logger.Debug("Schema validator shut down successfully.")
 	}
 
+	logger.Debug("Shutting down MCP server.")
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		logger.Error("❌ Server shutdown error", "error", err)
-		return errors.Wrap(err, "server shutdown error")
+		logger.Error("❌ Server shutdown error.", "error", err.Error())
+	} else {
+		logger.Debug("MCP server shut down successfully.")
 	}
 
-	logger.Info("👋 Server shutdown complete - goodbye!",
-		"run_duration", time.Since(startTime).String())
+	logger.Info("👋 Server shutdown complete - goodbye.",
+		"run_duration", time.Since(startTime).Round(time.Millisecond).String())
 	return nil
 }
-
-// Define the internal schema JSON to use as a fallback
-// This is a skeleton version - would need to be replaced with the real schema.
-const internalSchemaJSON = `{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "Request": {
-      "properties": {
-        "method": {
-          "type": "string"
-        },
-        "params": {
-          "additionalProperties": {},
-          "properties": {
-            "_meta": {
-              "properties": {
-                "progressToken": {
-                  "description": "Progress token for out-of-band notifications",
-                  "type": ["string", "integer"]
-                }
-              },
-              "type": "object"
-            }
-          },
-          "type": "object"
-        }
-      },
-      "required": ["method"],
-      "type": "object"
-    }
-  }
-}`

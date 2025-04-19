@@ -1,7 +1,7 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
 package mcp
 
-// file: internal/mcp/mcp_server_test.go
+// file: internal/mcp/mcp_server_test.go.
 
 import (
 	"context"
@@ -23,26 +23,27 @@ import (
 func getFullSchemaPath(t *testing.T) string {
 	t.Helper()
 
-	// Try multiple relative paths to find schema.json
+	// Try multiple relative paths to find schema.json.
 	possiblePaths := []string{
 		"../schema/schema.json",
 		"../../internal/schema/schema.json",
 		"../internal/schema/schema.json",
-		"schema.json", // Check in the current dir too
+		"schema.json", // Check in the current dir too.
 	}
 
 	for _, path := range possiblePaths {
 		if _, err := os.Stat(path); err == nil {
 			absPath, err := filepath.Abs(path)
-			require.NoError(t, err, "Failed to get absolute path for schema.json")
-			t.Logf("Using schema path: %s", absPath)
+			require.NoError(t, err, "Failed to get absolute path for schema.json.")
+			t.Logf("Using schema path: %s.", absPath)
+			// Return absolute path directly.
 			return absPath
 		}
 	}
 
-	// If we can't find the schema file, fail the test
-	t.Fatalf("Could not find schema.json in expected locations. Current directory: %s", getCurrentDir())
-	return "" // Unreachable, but needed for compilation
+	// If we can't find the schema file, fail the test.
+	t.Fatalf("Could not find schema.json in expected locations. Current directory: %s.", getCurrentDir())
+	return "" // Unreachable, but needed for compilation.
 }
 
 // getCurrentDir is a helper to get the current directory for error messages.
@@ -66,10 +67,14 @@ func TestMCPInitializationProtocol(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Create a validator using the full bundled schema
+	// Create a validator using the full bundled schema.
 	schemaPath := getFullSchemaPath(t)
-	schemaSource := schema.SchemaSource{FilePath: schemaPath}
-	validator := schema.NewSchemaValidator(schemaSource, logging.GetNoopLogger())
+	// Use config.SchemaConfig with SchemaOverrideURI.
+	schemaCfg := config.SchemaConfig{
+		SchemaOverrideURI: "file://" + schemaPath, // Use file:// prefix.
+	}
+	// Corrected: Use NewValidator.
+	validator := schema.NewValidator(schemaCfg, logging.GetNoopLogger())
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Failed to initialize schema validator with official schema file.")
 
@@ -81,7 +86,7 @@ func TestMCPInitializationProtocol(t *testing.T) {
 			ShutdownTimeout: 1 * time.Second,
 			Debug:           true,
 		},
-		validator,
+		validator, // Pass validator interface.
 		time.Now(),
 		logging.GetNoopLogger(),
 	)
@@ -133,17 +138,17 @@ func TestMCPInitializationProtocol(t *testing.T) {
 
 	// Verify the response structure.
 	result, ok := initializeResp["result"].(map[string]interface{})
-	require.True(t, ok, "Expected result object in response, got: %v", initializeResp)
+	require.True(t, ok, "Expected result object in response, got: %v.", initializeResp)
 
 	// Verify required fields in the initialize result.
 	requiredFields := []string{"serverInfo", "protocolVersion", "capabilities"}
 	for _, field := range requiredFields {
-		assert.Contains(t, result, field, "Missing required field in initialize response: %s", field)
+		assert.Contains(t, result, field, "Missing required field in initialize response: %s.", field)
 	}
 
 	// Verify protocol version.
 	protocolVersion, ok := result["protocolVersion"].(string)
-	assert.True(t, ok && protocolVersion != "", "Invalid or missing protocol version: %v", result["protocolVersion"])
+	assert.True(t, ok && protocolVersion != "", "Invalid or missing protocol version: %v.", result["protocolVersion"])
 
 	// Send notifications/initialized to complete handshake.
 	initializedNotif := map[string]interface{}{
@@ -182,10 +187,10 @@ func TestMCPInitializationProtocol(t *testing.T) {
 
 	// Verify the tools response has a result with tools array.
 	toolsResult, ok := toolsListResp["result"].(map[string]interface{})
-	require.True(t, ok, "Expected result object in tools/list response, got: %v", toolsListResp)
+	require.True(t, ok, "Expected result object in tools/list response, got: %v.", toolsListResp)
 
 	tools, ok := toolsResult["tools"].([]interface{})
-	require.True(t, ok, "Expected tools array in tools/list result, got: %v", toolsResult)
+	require.True(t, ok, "Expected tools array in tools/list result, got: %v.", toolsResult)
 
 	// Verify we have at least one tool defined (adjust if your default server has none).
 	assert.NotEmpty(t, tools, "Expected at least one tool in tools/list response, got empty array.")
@@ -201,7 +206,7 @@ func TestMCPInitializationProtocol(t *testing.T) {
 	select {
 	case err := <-serverErrCh:
 		if err != nil && !transport.IsClosedError(err) {
-			t.Errorf("Server reported unexpected error: %v", err)
+			t.Errorf("Server reported unexpected error: %v.", err)
 		}
 	case <-time.After(100 * time.Millisecond): // Shortened timeout.
 		// Server might still be running if close didn't propagate immediately, that's okay.
@@ -221,10 +226,14 @@ func TestInvalidMethodSequence(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Create a validator using the full bundled schema
+	// Create a validator using the full bundled schema.
 	schemaPath := getFullSchemaPath(t)
-	schemaSource := schema.SchemaSource{FilePath: schemaPath}
-	validator := schema.NewSchemaValidator(schemaSource, logging.GetNoopLogger())
+	// Use config.SchemaConfig with SchemaOverrideURI.
+	schemaCfg := config.SchemaConfig{
+		SchemaOverrideURI: "file://" + schemaPath, // Use file:// prefix.
+	}
+	// Corrected: Use NewValidator.
+	validator := schema.NewValidator(schemaCfg, logging.GetNoopLogger())
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Failed to initialize schema validator with official schema file.")
 
@@ -236,7 +245,7 @@ func TestInvalidMethodSequence(t *testing.T) {
 			ShutdownTimeout: 1 * time.Second,
 			Debug:           true,
 		},
-		validator,
+		validator, // Pass validator interface.
 		time.Now(),
 		logging.GetNoopLogger(),
 	)
@@ -276,16 +285,16 @@ func TestInvalidMethodSequence(t *testing.T) {
 
 	// Verify this is an error response.
 	errorObj, ok := errorResp["error"].(map[string]interface{})
-	require.True(t, ok, "Expected error object in response, got: %v", errorResp)
+	require.True(t, ok, "Expected error object in response, got: %v.", errorResp)
 
 	// Verify error has the specific code for sequence errors (-32601 Method Not Found based on mapping).
 	code, ok := errorObj["code"].(float64) // JSON numbers unmarshal to float64.
-	require.True(t, ok, "Expected numeric error code, got: %v", errorObj["code"])
+	require.True(t, ok, "Expected numeric error code, got: %v.", errorObj["code"])
 
 	assert.Equal(t, float64(transport.JSONRPCMethodNotFound), code, "Expected Method Not Found error code (-32601) for sequence violation.")
 
 	message, ok := errorObj["message"].(string)
-	require.True(t, ok, "Expected string error message, got: %v", errorObj["message"])
+	require.True(t, ok, "Expected string error message, got: %v.", errorObj["message"])
 	assert.Equal(t, "Connection initialization required.", message, "Expected specific error message for sequence violation.")
 
 	errorData, hasData := errorObj["data"].(map[string]interface{})
@@ -314,10 +323,14 @@ func TestMCPMethodNotFound(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Create a validator using the full bundled schema
+	// Create a validator using the full bundled schema.
 	schemaPath := getFullSchemaPath(t)
-	schemaSource := schema.SchemaSource{FilePath: schemaPath}
-	validator := schema.NewSchemaValidator(schemaSource, logging.GetNoopLogger())
+	// Use config.SchemaConfig with SchemaOverrideURI.
+	schemaCfg := config.SchemaConfig{
+		SchemaOverrideURI: "file://" + schemaPath, // Use file:// prefix.
+	}
+	// Corrected: Use NewValidator.
+	validator := schema.NewValidator(schemaCfg, logging.GetNoopLogger())
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Failed to initialize schema validator with official schema file.")
 
@@ -329,7 +342,7 @@ func TestMCPMethodNotFound(t *testing.T) {
 			ShutdownTimeout: 1 * time.Second,
 			Debug:           true,
 		},
-		validator,
+		validator, // Pass validator interface.
 		time.Now(),
 		logging.GetNoopLogger(),
 	)
@@ -406,11 +419,11 @@ func TestMCPMethodNotFound(t *testing.T) {
 
 	// Verify this is an error response.
 	errorObj, ok := errorResp["error"].(map[string]interface{})
-	require.True(t, ok, "Expected error object in response, got: %v", errorResp)
+	require.True(t, ok, "Expected error object in response, got: %v.", errorResp)
 
 	// Verify error has appropriate code and message.
 	code, ok := errorObj["code"].(float64) // JSON numbers unmarshal to float64.
-	require.True(t, ok, "Expected numeric error code, got: %v", errorObj["code"])
+	require.True(t, ok, "Expected numeric error code, got: %v.", errorObj["code"])
 
 	// The code should be Method Not Found (-32601).
 	assert.Equal(t, float64(transport.JSONRPCMethodNotFound), code, "Expected Method Not Found error code (-32601).")

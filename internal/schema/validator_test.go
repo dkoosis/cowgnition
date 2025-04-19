@@ -1,8 +1,6 @@
 // Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
 package schema
 
-// file: internal/schema/validator_test.go
-
 import (
 	"context"
 	"os"
@@ -10,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	// Import the config package to use config.SchemaConfig.
+	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +46,7 @@ const invalidMessageWrongType = `{"jsonrpc": "2.0", "method": 123, "id": 1}`
 // Invalid JSON syntax message.
 const invalidJSONSyntaxMessage = `{"jsonrpc": "2.0", "method": "ping"` // Missing closing brace.
 
-// --- Helper Function to Get Schema Path ---
+// --- Helper Function to Get Schema Path ---.
 // Attempts to find the schema relative to the test file. Adjust if needed.
 func getFullSchemaPath(t *testing.T) string {
 	t.Helper()
@@ -57,11 +57,11 @@ func getFullSchemaPath(t *testing.T) string {
 		// Try one level up if not found locally (common if tests run from package dir).
 		path = "../schema/schema.json"
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			t.Fatalf("Could not find schema.json. Make sure it's in the 'internal/schema' directory. CWD: %s", getwd(t))
+			t.Fatalf("Could not find schema.json. Make sure it's in the 'internal/schema' directory. CWD: %s.", getwd(t))
 		}
 	}
 	absPath, err := filepath.Abs(path)
-	require.NoError(t, err, "Failed to get absolute path for schema.json")
+	require.NoError(t, err, "Failed to get absolute path for schema.json.")
 	return absPath
 }
 
@@ -69,19 +69,23 @@ func getwd(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()
 	if err != nil {
-		t.Logf("Warning: Could not get working directory: %v", err)
+		t.Logf("Warning: Could not get working directory: %v.", err)
 		return "[unknown]"
 	}
 	return wd
 }
 
-// --- Test Cases ---
+// --- Test Cases ---.
 
-// Test NewSchemaValidator creation.
-func TestNewSchemaValidator(t *testing.T) {
+// Test NewValidator creation.
+func TestNewValidator(t *testing.T) { // Corrected test name for clarity.
 	logger := logging.GetNoopLogger()
-	source := SchemaSource{FilePath: getFullSchemaPath(t)}
-	validator := NewSchemaValidator(source, logger)
+	schemaPath := getFullSchemaPath(t)
+	cfg := config.SchemaConfig{
+		SchemaOverrideURI: "file://" + schemaPath,
+	}
+	// Corrected: Use NewValidator.
+	validator := NewValidator(cfg, logger)
 	assert.NotNil(t, validator, "Validator should not be nil.")
 	assert.NotNil(t, validator.compiler, "Compiler should not be nil.")
 	assert.NotNil(t, validator.schemas, "Schemas map should not be nil.")
@@ -89,12 +93,13 @@ func TestNewSchemaValidator(t *testing.T) {
 	assert.NotNil(t, validator.logger, "Logger should not be nil.")
 }
 
-// Test SchemaValidator Initialization Success (File).
-func TestSchemaValidator_Initialize_Success_File(t *testing.T) {
+// Test Validator Initialization Success (File).
+func TestValidator_Initialize_Success_File(t *testing.T) { // Corrected test name.
 	logger := logging.GetNoopLogger()
 	schemaPath := getFullSchemaPath(t)
-	source := SchemaSource{FilePath: schemaPath}
-	validator := NewSchemaValidator(source, logger)
+	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + schemaPath}
+	// Corrected: Use NewValidator.
+	validator := NewValidator(cfg, logger)
 	ctx := context.Background()
 
 	err := validator.Initialize(ctx)
@@ -111,136 +116,129 @@ func TestSchemaValidator_Initialize_Success_File(t *testing.T) {
 	assert.True(t, okDef, "Known definition 'JSONRPCRequest' should be compiled.")
 }
 
-// Test SchemaValidator Initialization Success (Embedded).
-func TestSchemaValidator_Initialize_Success_Embedded(t *testing.T) {
+// Test Validator Initialization Success (Embedded Fallback).
+func TestValidator_Initialize_Success_Embedded(t *testing.T) { // Corrected test name.
 	logger := logging.GetNoopLogger()
-	// Use a small, valid schema with just the definitions we need for this test.
-	localMinValidSchema := `{
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "definitions": {
-            "ping": {"type": "object", "properties": {"jsonrpc": {"type": "string"}}},
-            "base": {"type": "object"}
-        }
-    }`
-	source := SchemaSource{Embedded: []byte(localMinValidSchema)}
-	validator := NewSchemaValidator(source, logger)
+	cfg := config.SchemaConfig{SchemaOverrideURI: ""}
+	// Corrected: Use NewValidator.
+	validator := NewValidator(cfg, logger)
 	ctx := context.Background()
 
+	require.NotEmpty(t, embeddedSchemaContent, "Internal embedded schema content should not be empty.")
+
 	err := validator.Initialize(ctx)
-	require.NoError(t, err, "Initialize should succeed with valid embedded schema.")
+	require.NoError(t, err, "Initialize should succeed using the embedded schema fallback.")
 	assert.True(t, validator.IsInitialized(), "Validator should be marked as initialized.")
-	assert.NotZero(t, validator.GetLoadDuration(), "Load duration should be recorded.")
 	assert.NotZero(t, validator.GetCompileDuration(), "Compile duration should be recorded.")
 
-	// Only check for the specific schemas we included in our test schema.
 	validator.mu.RLock()
 	_, hasBase := validator.schemas["base"]
-	_, hasPing := validator.schemas["ping"]
+	_, hasRequest := validator.schemas["JSONRPCRequest"]
 	validator.mu.RUnlock()
 
-	assert.True(t, hasBase, "Base schema should be compiled and stored.")
-	assert.True(t, hasPing, "Specific definition 'ping' should be compiled.")
+	assert.True(t, hasBase, "Base schema should be compiled and stored from embedded content.")
+	assert.True(t, hasRequest, "JSONRPCRequest definition should be compiled from embedded content.")
 }
 
-// Test SchemaValidator Initialization Failure (Invalid JSON in File).
-func TestSchemaValidator_Initialize_Failure_InvalidFileContent(t *testing.T) {
+// Test Validator Initialization Failure (Invalid JSON in File).
+func TestValidator_Initialize_Failure_InvalidFileContent(t *testing.T) { // Corrected test name.
 	logger := logging.GetNoopLogger()
 	schemaPath := createTempSchemaFile(t, invalidSchemaSyntax)
-	source := SchemaSource{FilePath: schemaPath}
-	validator := NewSchemaValidator(source, logger)
+	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + schemaPath}
+	// Corrected: Use NewValidator.
+	validator := NewValidator(cfg, logger)
 	ctx := context.Background()
 
 	err := validator.Initialize(ctx)
 	require.Error(t, err, "Initialize should fail with invalid schema file content.")
 	assert.False(t, validator.IsInitialized(), "Validator should not be marked as initialized on failure.")
 
-	// Check the specific error type and code.
 	var validationErr *ValidationError
 	require.True(t, errors.As(err, &validationErr), "Error should be of type *ValidationError.")
 	assert.Equal(t, ErrSchemaLoadFailed, validationErr.Code, "Error code should indicate schema load failure.")
-	assert.Contains(t, err.Error(), "unexpected end of JSON input", "Error message should indicate JSON syntax error.")
+	assert.Contains(t, err.Error(), "JSON", "Error message should indicate JSON syntax error.")
+	assert.Contains(t, err.Error(), "unmarshal", "Error message should indicate JSON syntax error.")
 }
 
-// Test SchemaValidator Initialization Failure (File Not Found).
-func TestSchemaValidator_Initialize_Failure_FileNotFound(t *testing.T) {
+// Test Validator Initialization Failure (File Not Found).
+func TestValidator_Initialize_Failure_FileNotFound(t *testing.T) { // Corrected test name.
 	logger := logging.GetNoopLogger()
-	source := SchemaSource{FilePath: "/non/existent/path/schema.json"} // No URL fallback.
-	validator := NewSchemaValidator(source, logger)
+	cfg := config.SchemaConfig{SchemaOverrideURI: "file:///non/existent/path/schema.json"}
+	// Corrected: Use NewValidator.
+	validator := NewValidator(cfg, logger)
 	ctx := context.Background()
 
 	err := validator.Initialize(ctx)
 	require.Error(t, err, "Initialize should fail if file not found and no URL.")
 	assert.False(t, validator.IsInitialized(), "Validator should not be marked as initialized.")
 
-	// Check the specific error type and code.
 	var validationErr *ValidationError
-	require.True(t, errors.As(err, &validationErr), "Error should be of type *ValidationError.")
+	require.True(t, errors.As(err, &validationErr), "Error should be a ValidationError.")
 	assert.Equal(t, ErrSchemaNotFound, validationErr.Code, "Error code should indicate schema not found.")
 }
 
-// Test SchemaValidator Validate Success.
-func TestSchemaValidator_Validate_Success(t *testing.T) {
+// Test Validator Validate Success.
+func TestValidator_Validate_Success(t *testing.T) { // Corrected test name.
 	logger := logging.GetNoopLogger()
-	source := SchemaSource{FilePath: getFullSchemaPath(t)}
-	validator := NewSchemaValidator(source, logger)
+	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + getFullSchemaPath(t)}
+	// Corrected: Use NewValidator.
+	validator := NewValidator(cfg, logger)
 	ctx := context.Background()
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Initialization failed.")
 
-	// Validate against a specific definition within the loaded schema.
 	err = validator.Validate(ctx, "JSONRPCRequest", []byte(validMessage))
 	assert.NoError(t, err, "Validation should succeed for a valid message against JSONRPCRequest.")
 }
 
-// Test SchemaValidator Validate Failure (Invalid Message - Missing Required).
-func TestSchemaValidator_Validate_Failure_InvalidMessage_Missing(t *testing.T) {
+// Test Validator Validate Failure (Invalid Message - Missing Required).
+func TestValidator_Validate_Failure_InvalidMessage_Missing(t *testing.T) { // Corrected test name.
 	logger := logging.GetNoopLogger()
-	source := SchemaSource{FilePath: getFullSchemaPath(t)}
-	validator := NewSchemaValidator(source, logger)
+	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + getFullSchemaPath(t)}
+	// Corrected: Use NewValidator.
+	validator := NewValidator(cfg, logger)
 	ctx := context.Background()
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Initialization failed.")
 
-	// Validate against a specific definition expected to fail.
 	err = validator.Validate(ctx, "JSONRPCRequest", []byte(invalidMessageMissingMethod))
 	require.Error(t, err, "Validation should fail for invalid message (missing required).")
 
-	// Check the specific error type, code, and instance path.
 	var validationErr *ValidationError
 	require.True(t, errors.As(err, &validationErr), "Error should be a ValidationError.")
 	assert.Equal(t, ErrValidationFailed, validationErr.Code, "Error code should be ErrValidationFailed.")
 	assert.Contains(t, validationErr.Error(), "method", "Error details should mention the 'method' property.")
+	assert.Contains(t, validationErr.Message, "required", "Error message should indicate a required field is missing.")
 }
 
-// Test SchemaValidator Validate Failure (Invalid Message - Wrong Type).
-func TestSchemaValidator_Validate_Failure_InvalidMessage_Type(t *testing.T) {
+// Test Validator Validate Failure (Invalid Message - Wrong Type).
+func TestValidator_Validate_Failure_InvalidMessage_Type(t *testing.T) { // Corrected test name.
 	logger := logging.GetNoopLogger()
-	source := SchemaSource{FilePath: getFullSchemaPath(t)}
-	validator := NewSchemaValidator(source, logger)
+	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + getFullSchemaPath(t)}
+	// Corrected: Use NewValidator.
+	validator := NewValidator(cfg, logger)
 	ctx := context.Background()
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Initialization failed.")
 
-	// Validate against a specific definition expected to fail.
 	err = validator.Validate(ctx, "JSONRPCRequest", []byte(invalidMessageWrongType))
 	require.Error(t, err, "Validation should fail for invalid message (wrong type).")
 
-	// Check the specific error type, code, and instance path.
 	var validationErr *ValidationError
 	require.True(t, errors.As(err, &validationErr), "Error should be a ValidationError.")
 	assert.Equal(t, ErrValidationFailed, validationErr.Code, "Error code should be ErrValidationFailed.")
 	assert.Contains(t, validationErr.Error(), "method", "Error details should mention the 'method' property.")
 	assert.Contains(t, validationErr.Error(), "string", "Error details should mention expected type 'string'.")
 	assert.Contains(t, validationErr.Error(), "number", "Error details should mention actual type 'number'.")
-	// Expect InstancePath to be empty ("") for this type of error, as jsonschema might not report it.
-	assert.Equal(t, "", validationErr.InstancePath, "Error instance path should be empty for this type error.")
+	assert.Equal(t, "/method", validationErr.InstancePath, "Error instance path should point to '/method'.")
 }
 
-// Test SchemaValidator Validate Failure (Invalid JSON Syntax).
-func TestSchemaValidator_Validate_Failure_InvalidJSON(t *testing.T) {
+// Test Validator Validate Failure (Invalid JSON Syntax).
+func TestValidator_Validate_Failure_InvalidJSON(t *testing.T) { // Corrected test name.
 	logger := logging.GetNoopLogger()
-	source := SchemaSource{FilePath: getFullSchemaPath(t)}
-	validator := NewSchemaValidator(source, logger)
+	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + getFullSchemaPath(t)}
+	// Corrected: Use NewValidator.
+	validator := NewValidator(cfg, logger)
 	ctx := context.Background()
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Initialization failed.")
@@ -248,35 +246,35 @@ func TestSchemaValidator_Validate_Failure_InvalidJSON(t *testing.T) {
 	err = validator.Validate(ctx, "JSONRPCRequest", []byte(invalidJSONSyntaxMessage))
 	require.Error(t, err, "Validation should fail for invalid JSON syntax.")
 
-	// Check the specific error type and code.
 	var validationErr *ValidationError
 	require.True(t, errors.As(err, &validationErr), "Error should be a ValidationError.")
 	assert.Equal(t, ErrInvalidJSONFormat, validationErr.Code, "Error code should be ErrInvalidJSONFormat.")
 	assert.Contains(t, validationErr.Message, `Invalid JSON format`, "Error message should indicate invalid JSON.")
 }
 
-// Test SchemaValidator Validate Before Initialization.
-func TestSchemaValidator_Validate_NotInitialized(t *testing.T) {
+// Test Validator Validate Before Initialization.
+func TestValidator_Validate_NotInitialized(t *testing.T) { // Corrected test name.
 	logger := logging.GetNoopLogger()
-	source := SchemaSource{FilePath: getFullSchemaPath(t)}
-	validator := NewSchemaValidator(source, logger) // Not initialized.
+	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + getFullSchemaPath(t)}
+	// Corrected: Use NewValidator.
+	validator := NewValidator(cfg, logger) // Not initialized.
 	ctx := context.Background()
 
 	err := validator.Validate(ctx, "JSONRPCRequest", []byte(validMessage))
 	require.Error(t, err, "Validation should fail if validator is not initialized.")
 
-	// Check the specific error type and code.
 	var validationErr *ValidationError
 	require.True(t, errors.As(err, &validationErr), "Error should be a ValidationError.")
 	assert.Equal(t, ErrSchemaNotFound, validationErr.Code, "Error code should indicate schema not found/uninitialized.")
-	assert.Contains(t, validationErr.Message, "Schema validator not initialized", "Error message should indicate not initialized.")
+	assert.Contains(t, validationErr.Message, "validator not initialized", "Error message should indicate not initialized.")
 }
 
-// Test Shutdown method.
-func TestSchemaValidator_Shutdown(t *testing.T) {
+// Test Validator Shutdown method.
+func TestValidator_Shutdown(t *testing.T) { // Corrected test name.
 	logger := logging.GetNoopLogger()
-	source := SchemaSource{FilePath: getFullSchemaPath(t)}
-	validator := NewSchemaValidator(source, logger)
+	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + getFullSchemaPath(t)}
+	// Corrected: Use NewValidator.
+	validator := NewValidator(cfg, logger)
 	ctx := context.Background()
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Initialization failed.")

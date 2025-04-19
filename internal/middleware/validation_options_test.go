@@ -1,7 +1,7 @@
 // Package middleware_test tests the middleware components.
 package middleware_test
 
-// file: internal/middleware/validation_options_test.go
+// file: internal/middleware/validation_options_test.go.
 
 import (
 	"context"
@@ -9,6 +9,9 @@ import (
 
 	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/middleware"
+
+	// Corrected: Need schema import if interface is used directly, though likely through mock.
+	// "github.com/dkoosis/cowgnition/internal/schema".
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -36,13 +39,15 @@ func TestValidationMiddleware_HandleMessage_ValidatorNotInitialized(t *testing.T
 	options.Enabled = true
 	// Don't call setupTestMiddleware which initializes. Create manually.
 	logger := logging.GetNoopLogger()
-	mockValidator := NewMockSchemaValidator()
+	// Corrected: Use NewMockValidator.
+	mockValidator := NewMockValidator()
 	mockNextHandler := new(MockMessageHandler)
 
 	// Explicitly keep validator uninitialized.
 	mockValidator.initialized = false
-	// Expectation still needed for the mock framework, even if not asserted directly
-	mockValidator.On("IsInitialized").Return(false)
+	// Expectation still needed for the mock framework, even if not asserted directly.
+	// Ensure mock responds correctly to IsInitialized call.
+	mockValidator.On("IsInitialized").Return(false).Once()
 
 	mw := middleware.NewValidationMiddleware(mockValidator, options, logger)
 	mw.SetNext(mockNextHandler.Handle)
@@ -57,9 +62,9 @@ func TestValidationMiddleware_HandleMessage_ValidatorNotInitialized(t *testing.T
 
 	assert.NoError(t, err)
 	assert.Equal(t, expectedResp, resp)
-	// Remove the problematic assertion, as the core behavior (calling next handler) is tested.
-	// mockValidator.AssertCalled(t, "IsInitialized")
-	mockNextHandler.AssertExpectations(t) // Verify next handler was called
+	// Check if IsInitialized was called as expected.
+	mockValidator.AssertCalled(t, "IsInitialized")
+	mockNextHandler.AssertExpectations(t) // Verify next handler was called.
 }
 
 func TestValidationMiddleware_HandleMessage_SkipType(t *testing.T) {
@@ -88,7 +93,7 @@ func TestValidationMiddleware_HandleMessage_SkipType(t *testing.T) {
 			break
 		}
 	}
-	assert.False(t, calledValidate, "Validate should not have been called for incoming 'ping'")
+	assert.False(t, calledValidate, "Validate should not have been called for incoming 'ping'.")
 	mockNextHandler.AssertExpectations(t)
 	// Assert Validate *was* called for the outgoing "ping_response".
 	mockValidator.AssertCalled(t, "Validate", mock.Anything, "ping_response", expectedResp)

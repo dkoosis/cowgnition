@@ -1,19 +1,19 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
 package mcp
 
-// file: internal/mcp/mcp_server.go
-
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"os" // Keep os import.
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/logging"
-	"github.com/dkoosis/cowgnition/internal/middleware"
+	"github.com/dkoosis/cowgnition/internal/middleware" // Need middleware for chain/options.
+
+	// Import schema package to use the interface defined there.
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
@@ -36,19 +36,21 @@ type MethodHandler func(ctx context.Context, params json.RawMessage) (json.RawMe
 
 // Server represents an MCP (Model Context Protocol) server instance.
 type Server struct {
-	config          *config.Config
-	options         ServerOptions
-	handler         *Handler                 // Handles the actual method logic
-	methods         map[string]MethodHandler // Registered method handlers
-	transport       transport.Transport
-	logger          logging.Logger
-	startTime       time.Time
-	validator       middleware.SchemaValidatorInterface
+	config    *config.Config
+	options   ServerOptions
+	handler   *Handler                 // Handles the actual method logic.
+	methods   map[string]MethodHandler // Registered method handlers.
+	transport transport.Transport
+	logger    logging.Logger
+	startTime time.Time
+	// Corrected: Use the interface defined in the schema package (now ValidatorInterface).
+	validator       schema.ValidatorInterface
 	connectionState *ConnectionState
 }
 
 // NewServer creates a new MCP server instance.
-func NewServer(cfg *config.Config, opts ServerOptions, validator middleware.SchemaValidatorInterface, startTime time.Time, logger logging.Logger) (*Server, error) {
+// Corrected: Accepts schema.ValidatorInterface.
+func NewServer(cfg *config.Config, opts ServerOptions, validator schema.ValidatorInterface, startTime time.Time, logger logging.Logger) (*Server, error) {
 	if logger == nil {
 		logger = logging.GetNoopLogger()
 	}
@@ -58,14 +60,8 @@ func NewServer(cfg *config.Config, opts ServerOptions, validator middleware.Sche
 
 	connState := NewConnectionState()
 
-	// Create the core method handler instance.
-	// Ensure the validator type is compatible if Handler requires concrete type.
-	var concreteValidator *schema.SchemaValidator
-	var ok bool
-	if concreteValidator, ok = validator.(*schema.SchemaValidator); !ok {
-		return nil, errors.New("NewServer requires a concrete *schema.SchemaValidator instance for the Handler")
-	}
-	handler := NewHandler(cfg, concreteValidator, startTime, connState, logger) // Assuming NewHandler is in handler.go
+	// Pass the validator interface to the handler.
+	handler := NewHandler(cfg, validator, startTime, connState, logger)
 
 	server := &Server{
 		config:          cfg,
@@ -73,21 +69,18 @@ func NewServer(cfg *config.Config, opts ServerOptions, validator middleware.Sche
 		handler:         handler,
 		logger:          logger.WithField("component", "mcp_server"),
 		methods:         make(map[string]MethodHandler),
-		validator:       validator,
+		validator:       validator, // Store the interface.
 		startTime:       startTime,
 		connectionState: connState,
 	}
 
-	// Register methods provided by the handler.
-	server.registerMethods()
+	server.registerMethods() // Register methods provided by the handler.
 
 	return server, nil
 }
 
 // registerMethods populates the server's method map.
 func (s *Server) registerMethods() {
-	// Assuming handlers are defined in handlers_*.go files within the Handler struct.
-	// Example registration:
 	s.methods["initialize"] = s.handler.handleInitialize
 	s.methods["ping"] = s.handler.handlePing
 	s.methods["notifications/initialized"] = s.handler.handleNotificationsInitialized
@@ -97,11 +90,11 @@ func (s *Server) registerMethods() {
 	s.methods["resources/read"] = s.handler.handleResourcesRead
 	s.methods["prompts/list"] = s.handler.handlePromptsList
 	s.methods["prompts/get"] = s.handler.handlePromptsGet
-	// ... register other methods from s.handler ...
+	// ... register other methods ...
 
 	s.logger.Info("Registered MCP methods.",
 		"count", len(s.methods),
-		"methods", getMethods(s.methods)) // getMethods remains here or move to helpers
+		"methods", getMethods(s.methods))
 }
 
 // getMethods returns a slice of registered method names for logging.
@@ -116,36 +109,34 @@ func getMethods(methods map[string]MethodHandler) []string {
 // ServeSTDIO configures and starts the server using stdio transport.
 func (s *Server) ServeSTDIO(ctx context.Context) error {
 	s.logger.Info("Starting server with stdio transport.")
-	// Setup transport
-	s.transport = transport.NewNDJSONTransport(os.Stdin, os.Stdout, os.Stdin, s.logger) // Use os.Stdin as closer for stdio
+	s.transport = transport.NewNDJSONTransport(os.Stdin, os.Stdout, os.Stdin, s.logger)
 
-	// Setup validation middleware
+	// Setup validation middleware using internal/middleware package.
 	validationOpts := middleware.DefaultValidationOptions()
-	validationOpts.StrictMode = true       // Enforce strict validation
-	validationOpts.ValidateOutgoing = true // Validate server responses
+	validationOpts.StrictMode = true
+	validationOpts.ValidateOutgoing = true
 
 	if s.options.Debug {
-		validationOpts.StrictOutgoing = true     // Fail on invalid outgoing in debug
-		validationOpts.MeasurePerformance = true // Measure validation time
+		validationOpts.StrictOutgoing = true
+		validationOpts.MeasurePerformance = true
 		s.logger.Info("Debug mode enabled: using strict validation for incoming and outgoing messages.")
 	} else {
-		validationOpts.StrictOutgoing = false // Log outgoing errors but don't fail
+		validationOpts.StrictOutgoing = false
 	}
 
+	// Corrected: Pass the validator (which implements schema.ValidatorInterface).
 	validationMiddleware := middleware.NewValidationMiddleware(
 		s.validator,
 		validationOpts,
 		s.logger.WithField("subcomponent", "validation_mw"),
 	)
 
-	// Build middleware chain
-	chain := middleware.NewChain(s.handleMessage) // s.handleMessage is the final dispatcher
+	// Build middleware chain.
+	chain := middleware.NewChain(s.handleMessage)
 	chain.Use(validationMiddleware)
-	// Add other middleware here if needed, e.g., logging, auth checks
 
 	serveHandler := chain.Handler()
 
-	// Start the processing loop (serve is now in mcp_server_processing.go)
 	return s.serve(ctx, serveHandler)
 }
 
@@ -153,29 +144,24 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 func (s *Server) ServeHTTP(_ context.Context, _ string) error {
 	s.logger.Error("HTTP transport not implemented.")
 	return errors.New("HTTP transport not implemented")
-	// Implementation would involve setting up an HTTP server,
-	// creating a transport per connection (e.g., SSE), and running s.serve.
 }
 
 // Shutdown initiates a graceful shutdown of the server.
-func (s *Server) Shutdown(_ context.Context) error { // Context might be used for timeout
+func (s *Server) Shutdown(_ context.Context) error {
 	s.logger.Info("Shutting down MCP server.")
-	// Close the transport if it exists
 	if s.transport != nil {
 		if err := s.transport.Close(); err != nil {
-			// Log error but don't necessarily fail shutdown
 			s.logger.Error("Failed to close transport during shutdown.", "error", fmt.Sprintf("%+v", err))
-			// Return the error if closing transport is critical
-			// return errors.Wrap(err, "transport close failed during shutdown")
 		} else {
 			s.logger.Debug("Transport closed successfully.")
 		}
 	} else {
 		s.logger.Warn("Shutdown called but transport was nil.")
 	}
-
-	// REMOVED empty if block for s.handler != nil
-
 	s.logger.Info("Server shutdown sequence completed.")
-	return nil // Indicate successful shutdown attempt
+	return nil
 }
+
+// --- mcp_server_processing.go and mcp_server_error_handling.go content should be in their respective files ---.
+// --- Ensure handleMessage uses the correct validator interface if needed directly ---.
+// --- (Though likely validation happens in middleware before handleMessage) ---.

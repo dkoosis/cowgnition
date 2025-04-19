@@ -1,8 +1,6 @@
 // Package config handles loading, parsing, and validating application configuration.
 package config
 
-// file: internal/config/config.go
-
 import (
 	"os"
 	"path/filepath"
@@ -18,7 +16,6 @@ import (
 type ServerConfig struct {
 	// Name is the human-readable name for the server, displayed in logs and UI.
 	Name string `yaml:"name"`
-
 	// Port is the HTTP port to listen on when using HTTP transport.
 	Port int `yaml:"port"`
 }
@@ -27,7 +24,6 @@ type ServerConfig struct {
 type RTMConfig struct {
 	// APIKey is the Remember The Milk API key from developer.rememberthemilk.com.
 	APIKey string `yaml:"api_key"`
-
 	// SharedSecret is the shared secret for the RTM API from developer.rememberthemilk.com.
 	SharedSecret string `yaml:"shared_secret"`
 }
@@ -38,48 +34,29 @@ type AuthConfig struct {
 	TokenPath string `yaml:"token_path"`
 }
 
-// SchemaConfig holds schema-related settings.
+// SchemaConfig holds schema-related settings (Simplified).
 type SchemaConfig struct {
-	// DefaultVersion specifies the default MCP schema version the server targets (e.g., "2025-03-26").
-	DefaultVersion string `yaml:"defaultVersion"`
-	// CacheDir specifies the directory to store downloaded schema files. Defaults to OS cache dir.
-	CacheDir string `yaml:"cacheDir"`
-	// OverrideSource allows forcing the use of a specific schema file path or URL, bypassing default logic.
-	OverrideSource string `yaml:"overrideSource,omitempty"`
-	// BaseURL allows overriding the base URL for fetching MCP schemas. Defaults to official GitHub repo.
-	BaseURL string `yaml:"baseURL,omitempty"`
+	// SchemaOverrideURI allows specifying a file path (file://...) or URL (http://...)
+	// to load the schema from, overriding the default embedded schema. Optional.
+	SchemaOverrideURI string `yaml:"schemaOverrideURI,omitempty"`
 }
 
 // Config is the root configuration structure for the application.
 type Config struct {
-	// Server contains server-specific configuration.
 	Server ServerConfig `yaml:"server"`
-
-	// RTM contains Remember The Milk API configuration.
-	RTM RTMConfig `yaml:"rtm"`
-
-	// Auth contains authentication-related configuration.
-	Auth AuthConfig `yaml:"auth"`
-
-	// Schema contains schema loading and validation configuration.
+	RTM    RTMConfig    `yaml:"rtm"`
+	Auth   AuthConfig   `yaml:"auth"`
 	Schema SchemaConfig `yaml:"schema"`
 }
 
 // DefaultConfig returns a configuration with sensible defaults.
-// This is used when no configuration file is specified.
 func DefaultConfig() *Config {
 	homeDir, err := os.UserHomeDir()
 	tokenPath := ""
-	cacheDir := ""
-
 	if err == nil {
-		// Determine default paths based on home directory if available.
 		tokenPath = filepath.Join(homeDir, ".config", "cowgnition", "rtm_token.json")
-		cacheDir = filepath.Join(homeDir, ".cache", "cowgnition", "schemas")
 	} else {
-		// Fallbacks if home directory cannot be determined.
 		tokenPath = "rtm_token.json" //nolint:gosec // Best effort fallback.
-		cacheDir = "schema_cache"    // Best effort fallback.
 	}
 
 	cfg := &Config{
@@ -88,8 +65,6 @@ func DefaultConfig() *Config {
 			Port: 8080,
 		},
 		RTM: RTMConfig{
-			// Note: These will likely be empty and require setting
-			// through environment variables or configuration file.
 			APIKey:       os.Getenv("RTM_API_KEY"),
 			SharedSecret: os.Getenv("RTM_SHARED_SECRET"),
 		},
@@ -97,23 +72,15 @@ func DefaultConfig() *Config {
 			TokenPath: tokenPath,
 		},
 		Schema: SchemaConfig{
-			DefaultVersion: "2025-03-26", // Set your primary target version.
-			CacheDir:       cacheDir,
-			BaseURL:        "https://raw.githubusercontent.com/modelcontextprotocol/specification/main/schema/",
-			// OverrideSource is empty by default.
+			// SchemaOverrideURI is empty by default, meaning use embedded schema.
 		},
 	}
-
-	// Apply overrides and checks after creating the default structure.
-	applyEnvironmentOverrides(cfg, logging.GetLogger("config_default")) // Pass logger.
-
+	applyEnvironmentOverrides(cfg, logging.GetLogger("config_default"))
 	return cfg
 }
 
 // LoadFromFile loads configuration from the specified YAML file.
-// Returns an error if the file cannot be read or contains invalid YAML.
 func LoadFromFile(path string) (*Config, error) {
-	// Expand ~ in file path if present.
 	if len(path) > 0 && path[0] == '~' {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -122,40 +89,30 @@ func LoadFromFile(path string) (*Config, error) {
 		path = filepath.Join(homeDir, path[1:])
 	}
 
-	// Read the file.
-	// nolint:gosec // Path is provided by user command line arg or default.
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // nolint:gosec
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read config file: %s", path)
 	}
 
-	// Create a default config to establish base values and structure.
-	config := DefaultConfig()
-
-	// Parse YAML over the default config.
+	config := DefaultConfig() // Start with defaults.
 	if err := yaml.Unmarshal(data, config); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse config file: %s", path)
 	}
 
-	// Apply any environment variable overrides and checks again after loading from file.
-	applyEnvironmentOverrides(config, logging.GetLogger("config_load")) // Pass logger.
-
+	applyEnvironmentOverrides(config, logging.GetLogger("config_load")) // Apply env vars over file config.
 	return config, nil
 }
 
-// applyEnvironmentOverrides applies any configuration overrides from environment variables.
-// It also checks for potential misspellings if required RTM variables are missing.
-// This function now requires a logger instance.
+// applyEnvironmentOverrides applies configuration overrides from environment variables.
 func applyEnvironmentOverrides(config *Config, logger logging.Logger) {
+	// RTM overrides (same as before).
 	apiKeyMissing := false
 	sharedSecretMissing := false
-	apiKeySource := "default"       // Track source: default, file, env.
-	sharedSecretSource := "default" // Track source: default, file, env.
+	apiKeySource := "default"
+	sharedSecretSource := "default"
 
-	// --- RTM Overrides ---
-	// Check if RTM API key came from file (non-empty before env check).
 	if config.RTM.APIKey != "" {
-		apiKeySource = "file"
+		apiKeySource = "config"
 	}
 	if apiKeyEnv := os.Getenv("RTM_API_KEY"); apiKeyEnv != "" {
 		config.RTM.APIKey = apiKeyEnv
@@ -165,9 +122,8 @@ func applyEnvironmentOverrides(config *Config, logger logging.Logger) {
 		apiKeyMissing = true
 	}
 
-	// Check if RTM shared secret came from file.
 	if config.RTM.SharedSecret != "" {
-		sharedSecretSource = "file"
+		sharedSecretSource = "config"
 	}
 	if sharedSecretEnv := os.Getenv("RTM_SHARED_SECRET"); sharedSecretEnv != "" {
 		config.RTM.SharedSecret = sharedSecretEnv
@@ -177,11 +133,9 @@ func applyEnvironmentOverrides(config *Config, logger logging.Logger) {
 		sharedSecretMissing = true
 	}
 
-	// Log final sources.
 	logger.Debug("RTM API Key source.", "source", apiKeySource)
 	logger.Debug("RTM Shared Secret source.", "source", sharedSecretSource)
 
-	// Check for Misspelled RTM Variables.
 	if apiKeyMissing || sharedSecretMissing {
 		foundAlternatives := findAlternativeRTMEnvVars()
 		if len(foundAlternatives) > 0 {
@@ -199,7 +153,6 @@ func applyEnvironmentOverrides(config *Config, logger logging.Logger) {
 				"foundNames", strings.Join(foundAlternatives, ", "),
 			)
 		} else {
-			// Log clearly if required vars are missing and no alternatives found.
 			if apiKeyMissing {
 				logger.Warn("Required RTM_API_KEY is missing from environment and config file.")
 			}
@@ -209,7 +162,7 @@ func applyEnvironmentOverrides(config *Config, logger logging.Logger) {
 		}
 	}
 
-	// --- Server Overrides ---
+	// Server overrides (same as before).
 	if portStr := os.Getenv("SERVER_PORT"); portStr != "" {
 		if port, err := strconv.Atoi(portStr); err == nil && port > 0 && port < 65536 {
 			logger.Debug("Overriding server port from environment.", "envVar", "SERVER_PORT", "value", port)
@@ -223,34 +176,22 @@ func applyEnvironmentOverrides(config *Config, logger logging.Logger) {
 		config.Server.Name = serverName
 	}
 
-	// --- Auth Overrides ---
+	// Auth overrides (same as before).
 	if tokenPath := os.Getenv("COWGNITION_TOKEN_PATH"); tokenPath != "" {
 		logger.Debug("Overriding auth token path from environment.", "envVar", "COWGNITION_TOKEN_PATH", "value", tokenPath)
 		config.Auth.TokenPath = tokenPath
 	}
 
-	// --- Schema Overrides ---
-	if schemaDefaultVersion := os.Getenv("COWGNITION_SCHEMA_DEFAULT_VERSION"); schemaDefaultVersion != "" {
-		logger.Debug("Overriding schema default version from environment.", "envVar", "COWGNITION_SCHEMA_DEFAULT_VERSION", "value", schemaDefaultVersion)
-		config.Schema.DefaultVersion = schemaDefaultVersion
-	}
-	if schemaCacheDir := os.Getenv("COWGNITION_SCHEMA_CACHE_DIR"); schemaCacheDir != "" {
-		logger.Debug("Overriding schema cache directory from environment.", "envVar", "COWGNITION_SCHEMA_CACHE_DIR", "value", schemaCacheDir)
-		config.Schema.CacheDir = schemaCacheDir
-	}
-	if schemaOverrideSource := os.Getenv("COWGNITION_SCHEMA_OVERRIDE_SOURCE"); schemaOverrideSource != "" {
-		logger.Debug("Overriding schema source from environment.", "envVar", "COWGNITION_SCHEMA_OVERRIDE_SOURCE", "value", schemaOverrideSource)
-		config.Schema.OverrideSource = schemaOverrideSource
-	}
-	if schemaBaseURL := os.Getenv("COWGNITION_SCHEMA_BASE_URL"); schemaBaseURL != "" {
-		logger.Debug("Overriding schema base URL from environment.", "envVar", "COWGNITION_SCHEMA_BASE_URL", "value", schemaBaseURL)
-		config.Schema.BaseURL = schemaBaseURL
+	// Schema override.
+	if schemaOverride := os.Getenv("COWGNITION_SCHEMA_OVERRIDE_URI"); schemaOverride != "" {
+		logger.Debug("Overriding schema source from environment.", "envVar", "COWGNITION_SCHEMA_OVERRIDE_URI", "value", schemaOverride)
+		config.Schema.SchemaOverrideURI = schemaOverride
 	}
 }
 
-// findAlternativeRTMEnvVars scans the environment for variables that might be
-// misspelled versions of the required RTM keys.
+// findAlternativeRTMEnvVars scans the environment for potential misspellings.
 func findAlternativeRTMEnvVars() []string {
+	// (Function implementation remains the same as before).
 	alternatives := []string{}
 	prefixes := []string{"rtm_", "remember_", "rmilk_"}
 	exactMatches := map[string]bool{
@@ -267,12 +208,10 @@ func findAlternativeRTMEnvVars() []string {
 		varName := parts[0]
 		lowerVarName := strings.ToLower(varName)
 
-		// Skip the correctly named variables.
 		if lowerVarName == "rtm_api_key" || lowerVarName == "rtm_shared_secret" {
 			continue
 		}
 
-		// Check prefixes.
 		matchedPrefix := false
 		for _, prefix := range prefixes {
 			if strings.HasPrefix(lowerVarName, prefix) {
@@ -280,12 +219,9 @@ func findAlternativeRTMEnvVars() []string {
 				break
 			}
 		}
-
-		// Check exact (but incorrect) names.
 		matchedExact := exactMatches[lowerVarName]
 
 		if matchedPrefix || matchedExact {
-			// Add the *original* case name to the list.
 			alternatives = append(alternatives, varName)
 		}
 	}

@@ -1,8 +1,6 @@
 // Package middleware provides chainable handlers for processing MCP messages, like validation.
 package middleware
 
-// file: internal/middleware/validation.go
-
 import (
 	"context"
 	"fmt"
@@ -10,21 +8,14 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/logging"
+
+	// Import schema package to use the interface.
+	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
 
-// SchemaValidatorInterface defines the methods needed for schema validation.
-// Consider moving this interface to a more central package if used elsewhere,
-// or keep it here if specific to this middleware's needs.
-type SchemaValidatorInterface interface {
-	Validate(ctx context.Context, messageType string, data []byte) error
-	HasSchema(name string) bool
-	IsInitialized() bool
-	Initialize(ctx context.Context) error
-	GetLoadDuration() time.Duration
-	GetCompileDuration() time.Duration
-	Shutdown() error
-}
+// SchemaValidatorInterface is now defined in the schema package.
+// type SchemaValidatorInterface interface { ... } // REMOVED.
 
 // ValidationOptions configures the behavior of the ValidationMiddleware.
 type ValidationOptions struct {
@@ -40,8 +31,6 @@ type ValidationOptions struct {
 type contextKey string
 
 const (
-	// contextKeyRequestMethod stores the identified method of the incoming request
-	// for use during outgoing response validation.
 	contextKeyRequestMethod contextKey = "requestMethod"
 )
 
@@ -49,7 +38,7 @@ const (
 func DefaultValidationOptions() ValidationOptions {
 	return ValidationOptions{
 		Enabled:            true,
-		SkipTypes:          map[string]bool{"ping": true}, // ping is often skipped as a basic health check.
+		SkipTypes:          map[string]bool{"ping": true}, // ping is often skipped.
 		StrictMode:         true,                          // Fail on validation errors by default.
 		MeasurePerformance: false,                         // Performance timing disabled by default.
 		ValidateOutgoing:   true,                          // Validate server responses by default.
@@ -59,23 +48,23 @@ func DefaultValidationOptions() ValidationOptions {
 
 // ValidationMiddleware performs JSON schema validation on incoming and outgoing messages.
 type ValidationMiddleware struct {
-	validator SchemaValidatorInterface
+	// Corrected: Use the interface defined in the schema package (now ValidatorInterface).
+	validator schema.ValidatorInterface
 	options   ValidationOptions
 	next      transport.MessageHandler
 	logger    logging.Logger
 }
 
 // NewValidationMiddleware creates a new ValidationMiddleware instance.
-func NewValidationMiddleware(validator SchemaValidatorInterface, options ValidationOptions, logger logging.Logger) *ValidationMiddleware {
+// Corrected: Accepts the interface from the schema package (now ValidatorInterface).
+func NewValidationMiddleware(validator schema.ValidatorInterface, options ValidationOptions, logger logging.Logger) *ValidationMiddleware {
 	if logger == nil {
 		logger = logging.GetNoopLogger()
 	}
 	if validator == nil {
-		// Added more explicit error logging here.
 		logger.Error("CRITICAL: NewValidationMiddleware called with a nil validator interface.")
-		// Panic might be appropriate here if a nil validator is unrecoverable.
-		// Alternatively, return an error if the function signature allows.
-		// For now, log and continue, but this likely indicates a programming error.
+		// Panic or return error might be appropriate depending on application guarantees.
+		// For now, return the struct, but it will likely panic later.
 	}
 	return &ValidationMiddleware{
 		validator: validator,
@@ -90,11 +79,10 @@ func (m *ValidationMiddleware) SetNext(next transport.MessageHandler) {
 }
 
 // HandleMessage processes a message, performing validation before passing it on.
-// It orchestrates calls to validation logic defined in other files.
 func (m *ValidationMiddleware) HandleMessage(ctx context.Context, message []byte) ([]byte, error) {
 	// Fast path: Validation disabled or validator not ready.
 	if !m.options.Enabled || m.validator == nil || !m.validator.IsInitialized() {
-		m.logSkip("Validation disabled or validator not initialized")
+		m.logSkip("Validation disabled or validator not initialized.")
 		return m.callNext(ctx, message)
 	}
 
@@ -104,60 +92,42 @@ func (m *ValidationMiddleware) HandleMessage(ctx context.Context, message []byte
 	}
 
 	// 1. Validate Incoming Message.
-	// validateIncoming delegates parsing, identification, schema checks, and validation.
-	// It returns:
-	// - errorResponseBytes: Non-nil if validation failed strictly / parse error / invalid request occurred.
-	// - msgType: The identified type (e.g., "initialize", "tools/list").
-	// - reqID: The identified request ID (can be nil for notifications or parse errors).
-	// - internalError: Non-nil if an internal error occurred during validation processing itself.
 	errorResponseBytes, msgType, reqID, internalError := m.validateIncoming(ctx, message, startTime)
 
-	// Handle internal errors during incoming validation (e.g., failed to create error response).
 	if internalError != nil {
 		m.logger.Error("Internal error during incoming validation.", "error", fmt.Sprintf("%+v", internalError))
-		respBytes, creationErr := createInternalErrorResponse(reqID) // Use helper from validation_errors.go.
+		respBytes, creationErr := createInternalErrorResponse(reqID)
 		if creationErr != nil {
 			return nil, errors.Wrap(creationErr, "critical: failed to create internal error response")
 		}
-		return respBytes, nil // Return the generic internal error response.
+		return respBytes, nil
 	}
-	// Handle strict validation failures / parse errors / invalid requests.
 	if errorResponseBytes != nil {
-		return errorResponseBytes, nil // Return the specific error response generated by validateIncoming.
+		return errorResponseBytes, nil
 	}
 
 	// 2. Prepare context and call Next Handler.
-	// Add identified request method to context for potential use in outgoing validation.
 	ctxWithMsgType := context.WithValue(ctx, contextKeyRequestMethod, msgType)
 	responseBytes, nextErr := m.callNext(ctxWithMsgType, message)
 
 	// 3. Handle Error from Next Handler (if any).
 	if nextErr != nil {
 		m.logger.Debug("Error received from next handler, propagating.", "error", nextErr)
-		// Forward the error; allow central error handling (e.g., in mcp_server)
-		// to create the appropriate error response.
-		return nil, nextErr
+		return nil, nextErr // Let central error handling create JSON-RPC error.
 	}
 
 	// 4. Validate Outgoing Response (if enabled and next handler succeeded).
-	// handleOutgoing delegates the validation of the response from the next handler.
-	// It returns:
-	// - outgoingErrorResponseBytes: Non-nil *only* if outgoing validation failed *and* StrictOutgoing is true.
-	// - outgoingInternalError: Non-nil if an internal error occurred during outgoing validation (e.g., marshalling error).
 	outgoingErrorResponseBytes, outgoingInternalError := m.handleOutgoing(ctxWithMsgType, responseBytes, reqID)
 
-	// Handle internal errors during outgoing validation.
 	if outgoingInternalError != nil {
 		m.logger.Error("Internal error during outgoing validation handling.", "error", fmt.Sprintf("%+v", outgoingInternalError))
 		respBytes, creationErr := createInternalErrorResponse(reqID)
 		if creationErr != nil {
 			return nil, errors.Wrap(creationErr, "critical: failed to create internal error response for outgoing validation failure")
 		}
-		return respBytes, nil // Return internal error response bytes.
+		return respBytes, nil
 	}
-	// Handle strict outgoing validation failures.
 	if outgoingErrorResponseBytes != nil {
-		// Validation failed in strict mode, return the generated error response.
 		return outgoingErrorResponseBytes, nil
 	}
 
@@ -168,7 +138,6 @@ func (m *ValidationMiddleware) HandleMessage(ctx context.Context, message []byte
 // callNext safely calls the next handler in the chain.
 func (m *ValidationMiddleware) callNext(ctx context.Context, message []byte) ([]byte, error) {
 	if m.next == nil {
-		// This indicates a configuration error in the middleware chain setup.
 		m.logger.Error("Validation middleware reached end of chain without a final handler.")
 		return nil, errors.New("validation middleware has no next handler configured")
 	}
@@ -177,6 +146,9 @@ func (m *ValidationMiddleware) callNext(ctx context.Context, message []byte) ([]
 
 // logSkip logs when validation is skipped.
 func (m *ValidationMiddleware) logSkip(reason string) {
-	// Use Debug level as skipping is often expected behaviour.
 	m.logger.Debug("Validation skipped.", "reason", reason)
 }
+
+// Other files in middleware (validation_*.go) should already be using the interface.
+// via the `validator` field of the ValidationMiddleware struct, so they likely don't need changes.
+// besides potentially importing the schema package if they reference specific error types from there.
