@@ -262,13 +262,15 @@ func (s *Server) enrichWithURLContext(logger logging.Logger, err error, data int
 		return data
 	}
 
-	urlContext := errors.GetAllDetails(err)
-	if urlContext == nil {
+	// Get details from the error
+	details := errors.GetAllDetails(err)
+	if details == nil {
 		return data
 	}
 
-	urlVal, urlFound := urlContext["url"]
-	if !urlFound || urlVal == nil {
+	// Get the URL value if it exists
+	urlValue, exists := details["url"]
+	if !exists || urlValue == nil {
 		return data
 	}
 
@@ -277,12 +279,12 @@ func (s *Server) enrichWithURLContext(logger logging.Logger, err error, data int
 	case map[string]interface{}:
 		// Only add URL if it doesn't already exist
 		if _, exists := typedData["url"]; !exists {
-			typedData["url"] = urlVal
+			typedData["url"] = urlValue
 		}
 		return typedData
 	case nil:
 		// Create new map if data is nil
-		return map[string]interface{}{"url": urlVal}
+		return map[string]interface{}{"url": urlValue}
 	default:
 		// Log warning for unsupported data type
 		logger.Warn("Could not add URL context because existing error data is not a map.",
