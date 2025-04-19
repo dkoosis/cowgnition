@@ -70,118 +70,233 @@ func extractRequestID(logger logging.Logger, msgBytes []byte) json.RawMessage {
 	return json.RawMessage("null")
 }
 
-// mapErrorToJSONRPCComponents maps Go errors to JSON-RPC code, message, and optional data.
-func (s *Server) mapErrorToJSONRPCComponents(logger logging.Logger, err error) (code int, message string, data interface{}) {
-	data = make(map[string]interface{}) // Initialize data as a map.
+// file: internal/mcp/mcp_server_error_handling.go
 
+// mapErrorToJSONRPCComponents maps Go errors to JSON-RPC code, message, and optional data.
+// It orchestrates multiple specialized error handlers for different error types.
+func (s *Server) mapErrorToJSONRPCComponents(logger logging.Logger, err error) (code int, message string, data interface{}) {
+	// Initialize empty data map
+	data = make(map[string]interface{})
+
+	// Handle nil error case explicitly
+	if err == nil {
+		code = transport.JSONRPCInternalError
+		message = "An internal server error occurred (nil error passed)"
+		return code, message, data
+	}
+
+	// Extract the error string for pattern matching
+	errStr := getErrorString(err)
+
+	// Pattern-based handling first (higher precedence)
+	if isMethodNotFoundError(errStr) {
+		code, message, data = s.mapMethodNotFoundError(errStr)
+	} else if isProtocolSequenceError(errStr) {
+		code, message, data = s.mapProtocolSequenceError(errStr)
+	} else if isConnectionNotInitializedError(errStr) {
+		code, message, data = s.mapConnectionNotInitializedError(errStr)
+	} else {
+		// Type-based handling second (fallback)
+		code, message, data = s.mapErrorByType(logger, err)
+	}
+
+	// Enrich with URL context if present
+	data = s.enrichWithURLContext(logger, err, data)
+
+	// Clean up empty data maps
+	data = cleanupEmptyDataMap(data)
+
+	return code, message, data
+}
+
+// getErrorString extracts a string representation from an error
+func getErrorString(err error) string {
+	rootErr := errors.Cause(err)
+	if rootErr != nil {
+		return rootErr.Error()
+	} else if err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// isMethodNotFoundError checks if an error string indicates a method not found error
+func isMethodNotFoundError(errStr string) bool {
+	return strings.Contains(errStr, "Method not found:")
+}
+
+// isProtocolSequenceError checks if an error string indicates a protocol sequence error
+func isProtocolSequenceError(errStr string) bool {
+	return strings.Contains(errStr, "protocol sequence error:")
+}
+
+// isConnectionNotInitializedError checks if an error string indicates a connection not initialized error
+func isConnectionNotInitializedError(errStr string) bool {
+	return strings.Contains(errStr, "connection not initialized")
+}
+
+// mapMethodNotFoundError maps a method not found error to JSON-RPC components
+func (s *Server) mapMethodNotFoundError(errStr string) (int, string, interface{}) {
+	code := transport.JSONRPCMethodNotFound // -32601
+	message := "Method not found."
+
+	dataMap := map[string]interface{}{}
+	methodName := strings.TrimPrefix(errStr, "Method not found: ")
+	if methodName != errStr {
+		dataMap["method"] = methodName
+		dataMap["detail"] = "The requested method is not supported by this MCP server."
+	}
+
+	return code, message, dataMap
+}
+
+// mapProtocolSequenceError maps a protocol sequence error to JSON-RPC components
+func (s *Server) mapProtocolSequenceError(errStr string) (int, string, interface{}) {
+	code := transport.JSONRPCMethodNotFound // -32601 to match expected test value
+	message := "Connection initialization required."
+
+	dataMap := map[string]interface{}{
+		"detail": errStr,
+	}
+
+	// Safe access to connection state
+	if s.connectionState != nil {
+		dataMap["state"] = s.connectionState.CurrentState()
+	}
+
+	if strings.Contains(errStr, "must first call 'initialize'") {
+		dataMap["help"] = "The MCP protocol requires initialize to be called first."
+		dataMap["reference"] = "https://modelcontextprotocol.io/docs/concepts/messages/#server-initialization"
+	} else if strings.Contains(errStr, "can only be called once") {
+		dataMap["help"] = "The initialize method can only be called once per connection."
+		dataMap["reference"] = "https://modelcontextprotocol.io/docs/concepts/messages/#server-initialization"
+	}
+
+	return code, message, dataMap
+}
+
+// mapConnectionNotInitializedError maps a connection not initialized error to JSON-RPC components
+func (s *Server) mapConnectionNotInitializedError(errStr string) (int, string, interface{}) {
+	code := transport.JSONRPCMethodNotFound // -32601
+	message := "Connection initialization required."
+
+	dataMap := map[string]interface{}{
+		"detail": errStr,
+		"help":   "The MCP protocol requires initialize to be called first.",
+	}
+
+	// Safe access to connection state
+	if s.connectionState != nil {
+		dataMap["state"] = s.connectionState.CurrentState()
+	}
+
+	return code, message, dataMap
+}
+
+// mapErrorByType maps errors by their type to JSON-RPC components
+func (s *Server) mapErrorByType(logger logging.Logger, err error) (int, string, interface{}) {
+	var validationErr *schema.ValidationError
 	var mcpErr *mcperrors.BaseError
 	var transportErr *transport.Error
-	var validationErr *schema.ValidationError
 
-	// Use errors.Cause to get the root error before checking its string representation.
-	rootErr := errors.Cause(err)
-	errStr := ""
-	if rootErr != nil {
-		errStr = rootErr.Error() // Get the string of the root cause, handle nil rootErr.
-	} else if err != nil { // Check original error if rootErr is nil but err is not.
-		errStr = err.Error()
-	}
-
-	// --- Start of error mapping logic ---
-	// Check for specific error strings first for method not found/sequence errors.
-	if strings.Contains(errStr, "Method not found:") {
-		code = transport.JSONRPCMethodNotFound // -32601.
-		message = "Method not found."
-		methodName := strings.TrimPrefix(errStr, "Method not found: ")
-		if methodName != errStr {
-			// Safely add to data map.
-			if dataMap, ok := data.(map[string]interface{}); ok {
-				dataMap["method"] = methodName
-				dataMap["detail"] = "The requested method is not supported by this MCP server."
-			}
-		}
-	} else if strings.Contains(errStr, "protocol sequence error:") {
-		code = transport.JSONRPCMethodNotFound // -32601 to match expected test value.
-		message = "Connection initialization required."
-		dataMap := map[string]interface{}{"detail": errStr} // Initialize map.
-		if s.connectionState != nil {                       // Add state if available.
-			dataMap["state"] = s.connectionState.CurrentState()
-		}
-		if strings.Contains(errStr, "must first call 'initialize'") {
-			dataMap["help"] = "The MCP protocol requires initialize to be called first."
-			dataMap["reference"] = "https://modelcontextprotocol.io/docs/concepts/messages/#server-initialization"
-		} else if strings.Contains(errStr, "can only be called once") {
-			dataMap["help"] = "The initialize method can only be called once per connection."
-			dataMap["reference"] = "https://modelcontextprotocol.io/docs/concepts/messages/#server-initialization"
-		}
-		data = dataMap // Assign the map back to data.
-	} else if strings.Contains(errStr, "connection not initialized") {
-		code = transport.JSONRPCMethodNotFound // -32601.
-		message = "Connection initialization required."
-		dataMap := map[string]interface{}{"detail": errStr} // Initialize map.
-		if s.connectionState != nil {                       // Add state if available.
-			dataMap["state"] = s.connectionState.CurrentState()
-		}
-		dataMap["help"] = "The MCP protocol requires initialize to be called first."
-		data = dataMap // Assign the map back to data.
-	} else if errors.As(err, &validationErr) {
-		// mapValidationError now returns map[string]interface{} for data.
-		var validationData map[string]interface{}
-		code, message, validationData = mapValidationError(validationErr)
-		data = validationData // Assign the map.
+	if errors.As(err, &validationErr) {
+		return mapValidationErrorEx(validationErr)
 	} else if errors.As(err, &mcpErr) {
-		code, message = mapMCPError(mcpErr) // mapMCPError assigns code.
-		if mcpErr.Context != nil {
-			// Ensure data is a map and merge contexts.
-			if dataMap, ok := data.(map[string]interface{}); ok {
-				for k, v := range mcpErr.Context {
-					if _, exists := dataMap[k]; !exists {
-						dataMap[k] = v
-					}
-				}
-			} else if data == nil || (ok && len(dataMap) == 0) { // Check if data is nil or an empty map before overwriting.
-				data = mcpErr.Context
-			}
-		}
+		return s.mapMCPErrorEx(mcpErr)
 	} else if errors.As(err, &transportErr) {
-		// MapErrorToJSONRPC returns map[string]interface{}.
-		var transportData map[string]interface{}
-		code, message, transportData = transport.MapErrorToJSONRPC(transportErr)
-		data = transportData // Assign the map.
+		return mapTransportError(transportErr)
 	} else {
-		// Handle generic Go errors.
-		code, message = mapGenericGoError(err)
-		// Keep data as the initialized empty map unless specific details are added below.
+		// Handle generic Go errors
+		code, message := mapGenericGoError(err)
+		// Log unknown error types for debugging purposes
+		logger.Debug("Mapping generic Go error to JSON-RPC error",
+			"errorType", fmt.Sprintf("%T", err),
+			"errorMessage", err.Error())
+		return code, message, make(map[string]interface{})
 	}
-	// --- End of error mapping logic ---
+}
 
-	// Add URL from context if it exists in the original error.
-	// This handles cases where the error might not be one of the specific types above
-	// but still has URL context added by the schema loader.
-	// Proposed Change in internal/mcp/mcp_server_error_handling.go
+// mapValidationErrorEx maps schema.ValidationError to JSON-RPC components
+// Assumes mapValidationError never returns nil for the data map
+func mapValidationErrorEx(validationErr *schema.ValidationError) (int, string, interface{}) {
+	code, message, validationData := mapValidationError(validationErr)
+	// Ensure we never return nil data
+	if validationData == nil {
+		return code, message, make(map[string]interface{})
+	}
+	return code, message, validationData
+}
 
-	urlContext := errors.GetAllDetails(err)
-	if urlVal, ok := urlContext["url"]; ok {
-		// Ensure data is a map before trying to add to it.
-		existingDataMap, isMap := data.(map[string]interface{}) // Perform assertion first
-		if isMap {                                              // Check the boolean result
-			if _, exists := existingDataMap["url"]; !exists { // Avoid overwriting.
-				existingDataMap["url"] = urlVal
-				// No need to reassign `data` if it was already a map
+// mapMCPErrorEx maps mcperrors.BaseError to JSON-RPC components with context merging
+func (s *Server) mapMCPErrorEx(mcpErr *mcperrors.BaseError) (int, string, interface{}) {
+	code, message := mapMCPError(mcpErr)
+	data := make(map[string]interface{})
+
+	// Safely merge context if available
+	if mcpErr != nil && mcpErr.Context != nil {
+		for k, v := range mcpErr.Context {
+			// Skip nil values to avoid unexpected behavior
+			if v != nil {
+				data[k] = v
 			}
-		} else if data == nil { // If data is nil, create a new map.
-			data = map[string]interface{}{"url": urlVal}
-		} else {
-			// Existing non-map data handling (logging) remains the same
-			logger.Warn("Could not add URL context because existing error data is not a map.", "existingDataType", fmt.Sprintf("%T", data))
 		}
-	}
-	// Ensure data is nil if the map is empty after all checks.
-	if dataMap, ok := data.(map[string]interface{}); ok && len(dataMap) == 0 {
-		data = nil
 	}
 
 	return code, message, data
+}
+
+// mapTransportError maps transport.Error to JSON-RPC components
+func mapTransportError(transportErr *transport.Error) (int, string, interface{}) {
+	code, message, data := transport.MapErrorToJSONRPC(transportErr)
+	// Provide fallback if transport package returns nil data
+	if data == nil {
+		return code, message, make(map[string]interface{})
+	}
+	return code, message, data
+}
+
+// enrichWithURLContext attempts to add URL information from error context
+func (s *Server) enrichWithURLContext(logger logging.Logger, err error, data interface{}) interface{} {
+	// Protect against nil inputs
+	if err == nil {
+		return data
+	}
+
+	urlContext := errors.GetAllDetails(err)
+	if urlContext == nil {
+		return data
+	}
+
+	urlVal, urlFound := urlContext["url"]
+	if !urlFound || urlVal == nil {
+		return data
+	}
+
+	// Handle different data types safely
+	switch typedData := data.(type) {
+	case map[string]interface{}:
+		// Only add URL if it doesn't already exist
+		if _, exists := typedData["url"]; !exists {
+			typedData["url"] = urlVal
+		}
+		return typedData
+	case nil:
+		// Create new map if data is nil
+		return map[string]interface{}{"url": urlVal}
+	default:
+		// Log warning for unsupported data type
+		logger.Warn("Could not add URL context because existing error data is not a map.",
+			"existingDataType", fmt.Sprintf("%T", data))
+		return data
+	}
+}
+
+// cleanupEmptyDataMap returns nil if data is an empty map
+func cleanupEmptyDataMap(data interface{}) interface{} {
+	if dataMap, ok := data.(map[string]interface{}); ok && len(dataMap) == 0 {
+		return nil
+	}
+	return data
 }
 
 // Rest of the file remains unchanged...
