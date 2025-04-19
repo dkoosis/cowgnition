@@ -1,4 +1,22 @@
 // Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
+// file: internal/schema/loader.go
+//
+// Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
+//
+// Schema loading logic:
+// 1. The system first checks if a schema override URI is specified in the configuration
+// 2. If an override URI is provided:
+//   - For file:// URIs: The schema is loaded from the local filesystem
+//   - For http(s):// URIs: The schema is fetched from the remote server
+//   - Error handling accounts for file not found, HTTP errors, and invalid schema content
+//
+// 3. If no override is provided or loading fails (depending on configuration):
+//   - Falls back to the embedded schema content in validator.go
+//
+// 4. After loading, the schema is parsed, validated, and compiled for use
+//
+// This file specifically handles the URI loading logic, supporting both file system
+// and HTTP(S) loading with appropriate error context and platform-specific path handling.
 package schema
 
 import (

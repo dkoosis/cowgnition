@@ -1,4 +1,17 @@
 // Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
+// file: internal/schema/validator.go
+//
+// Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
+//
+// The validator implementation orchestrates the schema handling process:
+// 1. Loading: schema content is retrieved either from a configured URI or from embedded content
+// 2. Parsing: JSON schema is parsed into an in-memory structure
+// 3. Compilation: Schema definitions are compiled for validation use
+// 4. Validation: Incoming/outgoing messages are validated against compiled schemas
+//
+// The validator maintains compiled schemas in memory with appropriate thread safety,
+// supports schema version detection, and provides diagnostic metrics on loading and
+// compilation times. It also implements graceful shutdown and resource cleanup.
 package schema
 
 import (
