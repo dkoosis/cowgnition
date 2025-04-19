@@ -273,8 +273,18 @@ func (s *Server) enrichWithURLContext(logger logging.Logger, err error, data int
 		return data
 	}
 
+	// Convert details ([]string) into a map[string]interface{}.
+	detailsMap := make(map[string]interface{})
+	for _, detail := range details {
+		// Assuming details are in "key=value" format.
+		parts := strings.SplitN(detail, "=", 2)
+		if len(parts) == 2 {
+			detailsMap[parts[0]] = parts[1]
+		}
+	}
+
 	// Get the URL value if it exists using the original string literal key.
-	//urlValue, exists := details["url"]
+	urlValue, exists := detailsMap["url"]
 
 	if !exists {
 		logger.Debug("enrichWithURLContext: 'url' key not found in error details, returning original data.")

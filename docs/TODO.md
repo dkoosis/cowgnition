@@ -59,6 +59,8 @@ The current validation architecture primarily focuses on incoming messages but l
 - [PENDING] Add schema versioning to track supported MCP versions
 - [PENDING] Create comprehensive schema validation test suite (Basic tests exist, but not comprehensive suite)
 - [PARTIAL] Add validation metrics and monitoring (Durations logged in debug, full metrics TBD) [cite: 2]
+- [NEW] **Improve Schema Path Discovery:** Refactor logic in `cmd/server/server_runner.go` to find the local schema file more robustly (e.g., relative to executable/config, embedding) instead of relying on fragile relative path checks.
+- [NEW] **Make Schema URL Configurable:** Modify configuration (`internal/config/config.go`) and schema loading (`internal/schema/loader.go`) to allow overriding the primary schema URL via config file or environment variable, instead of being hardcoded in `cmd/server/server_runner.go`.
 
 #### Step 5: Developer Experience Enhancements
 
@@ -72,32 +74,39 @@ The current validation architecture primarily focuses on incoming messages but l
 **Status:** [NEW PHASE]
 
 - [ ] **Document Schema Validation Implementation:**
-  - **Context:** Explain the _how_ and _why_ of the schema validation approach for better developer understanding (Ref: ADR 002).
-  - **Action:** Create a new markdown file (e.g., `docs/schema_validation_details.md`) detailing the `SchemaValidator` component, the `ValidationMiddleware`, schema loading logic, error mapping, and relationship to ADR 002.
+    - **Context:** Explain the _how_ and _why_ of the schema validation approach for better developer understanding (Ref: ADR 002).
+    - **Action:** Create a new markdown file (e.g., `docs/schema_validation_details.md`) detailing the `SchemaValidator` component, the `ValidationMiddleware`, schema loading logic, error mapping, and relationship to ADR 002.
 - [ ] **Improve Visibility of Validation Rules:**
-  - **Context:** Make it easier for developers to see which schema and which naming rules are being enforced (Ref: ADR 002).
-  - **Action:** Explicitly document the configuration options for the MCP schema source (file/URL). Expose the `DumpAllRules` function from `internal/schema/name_rules.go` via a CLI flag (e.g., `./cowgnition dump-naming-rules`) to show active naming constraints.
+    - **Context:** Make it easier for developers to see which schema and which naming rules are being enforced (Ref: ADR 002).
+    - **Action:** Explicitly document the configuration options for the MCP schema source (file/URL). Expose the `DumpAllRules` function from `internal/schema/name_rules.go` via a CLI flag (e.g., `./cowgnition dump-naming-rules`) to show active naming constraints.
 - [ ] **Add Optional Raw MCP Message Logging:**
-  - **Context:** Provide a dedicated log for raw JSON-RPC messages to aid protocol-level debugging.
-  - **Action:** Implement an optional logging mechanism (enabled by config/env var, e.g., `MCP_TRACE_LOG=mcp_trace.log`) that writes incoming/outgoing message bytes to a file. Add hooks in `internal/mcp/mcp_server.go` or the `Transport` layer.
+    - **Context:** Provide a dedicated log for raw JSON-RPC messages to aid protocol-level debugging.
+    - **Action:** Implement an optional logging mechanism (enabled by config/env var, e.g., `MCP_TRACE_LOG=mcp_trace.log`) that writes incoming/outgoing message bytes to a file. Add hooks in `internal/mcp/mcp_server.go` or the `Transport` layer.
 - [ ] **Enhance Error Diagnostics with Fix Suggestions:**
-  - **Context:** Improve developer experience by making errors more actionable (Ref: ADR 001).
-  - **Action:** Identify common, diagnosable errors (e.g., `mcperrors.ErrRTMAuthFailure`). Modify the error creation logic (e.g., within `internal/rtm/`, `internal/mcp/mcp_errors/`) to add a specific `"suggestion"` key to the error's context map with a helpful hint (e.g., "Check RTM API Key/Secret"). Update `internal/mcp/mcp_server.go`'s `logErrorDetails` to display this suggestion in server logs.
+    - **Context:** Improve developer experience by making errors more actionable (Ref: ADR 001).
+    - **Action:** Identify common, diagnosable errors (e.g., `mcperrors.ErrRTMAuthFailure`). Modify the error creation logic (e.g., within `internal/rtm/`, `internal/mcp/mcp_errors/`) to add a specific `"suggestion"` key to the error's context map with a helpful hint (e.g., "Check RTM API Key/Secret"). Update `internal/mcp/mcp_server.go`'s `logErrorDetails` to display this suggestion in server logs.
 - [ ] **Implement Defensive Precondition Checks:**
-  - **Context:** Prevent errors proactively by adding checks before performing operations (Ref: ADR 001). This enhances robustness beyond schema validation (ADR 002).
-  - **Action:** Review key handlers and service methods (e.g., RTM API call sites in `internal/rtm/`). Add checks for necessary preconditions (e.g., client initialized, user authenticated, required arguments non-nil). Return specific, diagnosable internal errors (e.g., `mcperrors.ErrRTMClientNotReady`) if preconditions fail, rather than letting the operation proceed and potentially cause a less specific downstream error.
+    - **Context:** Prevent errors proactively by adding checks before performing operations (Ref: ADR 001). This enhances robustness beyond schema validation (ADR 002).
+    - **Action:** Review key handlers and service methods (e.g., RTM API call sites in `internal/rtm/`). Add checks for necessary preconditions (e.g., client initialized, user authenticated, required arguments non-nil). Return specific, diagnosable internal errors (e.g., `mcperrors.ErrRTMClientNotReady`) if preconditions fail, rather than letting the operation proceed and potentially cause a less specific downstream error.
 - [ ] **Adopt Modular Service Architecture for Extensibility:**
-  - **Context:** Make it easier for developers (including potential future contributors) to add support for new services beyond RTM (Ref: ADR 006 - Draft). The current structure makes adding services difficult.
-  - **Action:** Refactor the application based on the principles outlined in ADR 006. Define a standard `Service` interface. Move RTM logic into a dedicated package implementing this interface. Implement a service registry in the server runner/MCP server. Modify core MCP handlers (`internal/mcp/handlers_*.go`) to use the registry for dispatching calls (e.g., `tools/call`, `resources/read`) to the appropriate service implementation. _(Note: ADR 006 is currently Draft and may need refinement before full implementation)_.
+    - **Context:** Make it easier for developers (including potential future contributors) to add support for new services beyond RTM (Ref: ADR 006 - Draft). The current structure makes adding services difficult.
+    - **Action:** Refactor the application based on the principles outlined in ADR 006. Define a standard `Service` interface. Move RTM logic into a dedicated package implementing this interface. Implement a service registry in the server runner/MCP server. Modify core MCP handlers (`internal/mcp/handlers_*.go`) to use the registry for dispatching calls (e.g., `tools/call`, `resources/read`) to the appropriate service implementation. _(Note: ADR 006 is currently Draft and may need refinement before full implementation)_.
 - [ ] **Enhance Schema Loading Feedback:**
-  - **Context:** Improve developer visibility during server startup regarding schema validation setup.
-  - **Action:** Modify `internal/schema/validator.go` and its usage in `cmd/server/server_runner.go` to log which schema source (embedded, file path, URL) was successfully loaded, log compilation time more prominently, and potentially add a startup "sanity check" validation against a known-good sample message[cite: 1].
+    - **Context:** Improve developer visibility during server startup regarding schema validation setup.
+    - **Action:** Modify `internal/schema/validator.go` and its usage in `cmd/server/server_runner.go` to log which schema source (embedded, file path, URL) was successfully loaded, log compilation time more prominently, and potentially add a startup "sanity check" validation against a known-good sample message[cite: 1].
 - [ ] **Add Richer Validation Error Details:**
-  - **Context:** Provide more specific information when schema validation fails, aiding developers in fixing malformed messages (Ref: ADR 002).
-  - **Action:** Enhance `convertValidationError` in `internal/schema/validator.go` to extract more details from the underlying `jsonschema.ValidationError` (e.g., expected type/format) and add this information to the `data` field of the resulting JSON-RPC error response and server logs[cite: 1].
+    - **Context:** Provide more specific information when schema validation fails, aiding developers in fixing malformed messages (Ref: ADR 002).
+    - **Action:** Enhance `convertValidationError` in `internal/schema/validator.go` to extract more details from the underlying `jsonschema.ValidationError` (e.g., expected type/format) and add this information to the `data` field of the resulting JSON-RPC error response and server logs[cite: 1].
 - [ ] **Implement "Dry Run" Validation CLI Command:**
-  - **Context:** Allow developers to quickly check JSON message validity without running the full server.
-  - **Action:** Add a new subcommand to `cmd/main.go` (e.g., `validate-message`) that takes a file path argument, reads the JSON content, initializes the `SchemaValidator`, and runs validation, printing success or detailed errors.
+    - **Context:** Allow developers to quickly check JSON message validity without running the full server.
+    - **Action:** Add a new subcommand to `cmd/main.go` (e.g., `validate-message`) that takes a file path argument, reads the JSON content, initializes the `SchemaValidator`, and runs validation, printing success or detailed errors.
+- [NEW] **Refactor `RunServer` Complexity:** Break down the `RunServer` function in `cmd/server/server_runner.go` into smaller, more focused helper functions to improve readability and reduce its cyclomatic complexity.
+
+## Phase 10: Feature Enhancements
+
+**Status:** [NEW PHASE]
+
+- [NEW] **Implement HTTP Transport:** Complete the implementation for the HTTP transport option in `cmd/server/server_runner.go` and `internal/mcp/mcp_server.go`, potentially using SSE (Server-Sent Events) as per MCP recommendations.
 
 ## Phase 5: Testing Framework
 

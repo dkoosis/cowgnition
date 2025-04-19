@@ -4,13 +4,13 @@ package config
 // file: internal/config/config.go
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"strings" // Added strings import.
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/logging" // Assuming logger is needed.
+	"github.com/dkoosis/cowgnition/internal/logging"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,6 +38,18 @@ type AuthConfig struct {
 	TokenPath string `yaml:"token_path"`
 }
 
+// SchemaConfig holds schema-related settings.
+type SchemaConfig struct {
+	// DefaultVersion specifies the default MCP schema version the server targets (e.g., "2025-03-26").
+	DefaultVersion string `yaml:"defaultVersion"`
+	// CacheDir specifies the directory to store downloaded schema files. Defaults to OS cache dir.
+	CacheDir string `yaml:"cacheDir"`
+	// OverrideSource allows forcing the use of a specific schema file path or URL, bypassing default logic.
+	OverrideSource string `yaml:"overrideSource,omitempty"`
+	// BaseURL allows overriding the base URL for fetching MCP schemas. Defaults to official GitHub repo.
+	BaseURL string `yaml:"baseURL,omitempty"`
+}
+
 // Config is the root configuration structure for the application.
 type Config struct {
 	// Server contains server-specific configuration.
@@ -48,6 +60,9 @@ type Config struct {
 
 	// Auth contains authentication-related configuration.
 	Auth AuthConfig `yaml:"auth"`
+
+	// Schema contains schema loading and validation configuration.
+	Schema SchemaConfig `yaml:"schema"`
 }
 
 // DefaultConfig returns a configuration with sensible defaults.
@@ -55,9 +70,16 @@ type Config struct {
 func DefaultConfig() *Config {
 	homeDir, err := os.UserHomeDir()
 	tokenPath := ""
+	cacheDir := ""
 
 	if err == nil {
-		tokenPath = filepath.Join(homeDir, ".config", "cowgnition", "tokens")
+		// Determine default paths based on home directory if available.
+		tokenPath = filepath.Join(homeDir, ".config", "cowgnition", "rtm_token.json")
+		cacheDir = filepath.Join(homeDir, ".cache", "cowgnition", "schemas")
+	} else {
+		// Fallbacks if home directory cannot be determined.
+		tokenPath = "rtm_token.json" //nolint:gosec // Best effort fallback.
+		cacheDir = "schema_cache"    // Best effort fallback.
 	}
 
 	cfg := &Config{
@@ -74,11 +96,16 @@ func DefaultConfig() *Config {
 		Auth: AuthConfig{
 			TokenPath: tokenPath,
 		},
+		Schema: SchemaConfig{
+			DefaultVersion: "2025-03-26", // Set your primary target version.
+			CacheDir:       cacheDir,
+			BaseURL:        "https://raw.githubusercontent.com/modelcontextprotocol/specification/main/schema/",
+			// OverrideSource is empty by default.
+		},
 	}
 
 	// Apply overrides and checks after creating the default structure.
-	// Pass a default logger for the check, adjust if you have a better way.
-	applyEnvironmentOverrides(cfg, logging.GetLogger("config_env_check"))
+	applyEnvironmentOverrides(cfg, logging.GetLogger("config_default")) // Pass logger.
 
 	return cfg
 }
@@ -90,66 +117,71 @@ func LoadFromFile(path string) (*Config, error) {
 	if len(path) > 0 && path[0] == '~' {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to get home directory")
+			return nil, errors.Wrap(err, "failed to get home directory to expand path")
 		}
 		path = filepath.Join(homeDir, path[1:])
 	}
 
 	// Read the file.
-	// nolint:gosec
+	// nolint:gosec // Path is provided by user command line arg or default.
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read config file")
+		return nil, errors.Wrapf(err, "failed to read config file: %s", path)
 	}
 
-	// Parse YAML.
-	var config Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, errors.Wrap(err, "failed to parse config file")
+	// Create a default config to establish base values and structure.
+	config := DefaultConfig()
+
+	// Parse YAML over the default config.
+	if err := yaml.Unmarshal(data, config); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse config file: %s", path)
 	}
 
-	// Apply any environment variable overrides and checks.
-	// Pass a default logger for the check, adjust if needed.
-	applyEnvironmentOverrides(&config, logging.GetLogger("config_env_check"))
+	// Apply any environment variable overrides and checks again after loading from file.
+	applyEnvironmentOverrides(config, logging.GetLogger("config_load")) // Pass logger.
 
-	return &config, nil
+	return config, nil
 }
 
-// applyEnvironmentOverrides applies any configuration overrides from environment variables.
-// It also checks for potential misspellings if required RTM variables are missing.
-// This function now requires a logger instance.
 // applyEnvironmentOverrides applies any configuration overrides from environment variables.
 // It also checks for potential misspellings if required RTM variables are missing.
 // This function now requires a logger instance.
 func applyEnvironmentOverrides(config *Config, logger logging.Logger) {
 	apiKeyMissing := false
 	sharedSecretMissing := false
-	apiKeySourceLogged := false
-	sharedSecretSourceLogged := false
+	apiKeySource := "default"       // Track source: default, file, env.
+	sharedSecretSource := "default" // Track source: default, file, env.
 
-	// Override RTM API key if environment variable is set.
-	if apiKey := os.Getenv("RTM_API_KEY"); apiKey != "" {
-		logger.Debug("Using RTM API Key from environment variable (RTM_API_KEY).")
-		config.RTM.APIKey = apiKey
-	} else if config.RTM.APIKey == "" { // Check if still empty after potential file load.
+	// --- RTM Overrides ---
+	// Check if RTM API key came from file (non-empty before env check).
+	if config.RTM.APIKey != "" {
+		apiKeySource = "file"
+	}
+	if apiKeyEnv := os.Getenv("RTM_API_KEY"); apiKeyEnv != "" {
+		config.RTM.APIKey = apiKeyEnv
+		apiKeySource = "env"
+	}
+	if config.RTM.APIKey == "" {
 		apiKeyMissing = true
-	} else if config.RTM.APIKey != "" && !apiKeySourceLogged {
-		logger.Debug("Using RTM API Key from configuration file.")
-		// Removed: apiKeySourceLogged = true // Ineffectual assignment
 	}
 
-	// Override RTM shared secret if environment variable is set.
-	if sharedSecret := os.Getenv("RTM_SHARED_SECRET"); sharedSecret != "" {
-		logger.Debug("Using RTM Shared Secret from environment variable (RTM_SHARED_SECRET).")
-		config.RTM.SharedSecret = sharedSecret
-	} else if config.RTM.SharedSecret == "" { // Check if still empty after potential file load.
+	// Check if RTM shared secret came from file.
+	if config.RTM.SharedSecret != "" {
+		sharedSecretSource = "file"
+	}
+	if sharedSecretEnv := os.Getenv("RTM_SHARED_SECRET"); sharedSecretEnv != "" {
+		config.RTM.SharedSecret = sharedSecretEnv
+		sharedSecretSource = "env"
+	}
+	if config.RTM.SharedSecret == "" {
 		sharedSecretMissing = true
-	} else if config.RTM.SharedSecret != "" && !sharedSecretSourceLogged {
-		logger.Debug("Using RTM Shared Secret from configuration file.")
-		// Removed: sharedSecretSourceLogged = true // Ineffectual assignment
 	}
 
-	// --- Added Check for Misspelled RTM Variables ---
+	// Log final sources.
+	logger.Debug("RTM API Key source.", "source", apiKeySource)
+	logger.Debug("RTM Shared Secret source.", "source", sharedSecretSource)
+
+	// Check for Misspelled RTM Variables.
 	if apiKeyMissing || sharedSecretMissing {
 		foundAlternatives := findAlternativeRTMEnvVars()
 		if len(foundAlternatives) > 0 {
@@ -167,7 +199,7 @@ func applyEnvironmentOverrides(config *Config, logger logging.Logger) {
 				"foundNames", strings.Join(foundAlternatives, ", "),
 			)
 		} else {
-			// Log clearly if required vars are missing and no alternatives found
+			// Log clearly if required vars are missing and no alternatives found.
 			if apiKeyMissing {
 				logger.Warn("Required RTM_API_KEY is missing from environment and config file.")
 			}
@@ -176,13 +208,43 @@ func applyEnvironmentOverrides(config *Config, logger logging.Logger) {
 			}
 		}
 	}
-	// --- End Added Check ---
 
-	// Override server port if environment variable is set.
+	// --- Server Overrides ---
 	if portStr := os.Getenv("SERVER_PORT"); portStr != "" {
-		if port, err := parsePort(portStr); err == nil && port > 0 {
+		if port, err := strconv.Atoi(portStr); err == nil && port > 0 && port < 65536 {
+			logger.Debug("Overriding server port from environment.", "envVar", "SERVER_PORT", "value", port)
 			config.Server.Port = port
+		} else {
+			logger.Warn("Invalid SERVER_PORT environment variable ignored.", "value", portStr, "error", err)
 		}
+	}
+	if serverName := os.Getenv("SERVER_NAME"); serverName != "" {
+		logger.Debug("Overriding server name from environment.", "envVar", "SERVER_NAME", "value", serverName)
+		config.Server.Name = serverName
+	}
+
+	// --- Auth Overrides ---
+	if tokenPath := os.Getenv("COWGNITION_TOKEN_PATH"); tokenPath != "" {
+		logger.Debug("Overriding auth token path from environment.", "envVar", "COWGNITION_TOKEN_PATH", "value", tokenPath)
+		config.Auth.TokenPath = tokenPath
+	}
+
+	// --- Schema Overrides ---
+	if schemaDefaultVersion := os.Getenv("COWGNITION_SCHEMA_DEFAULT_VERSION"); schemaDefaultVersion != "" {
+		logger.Debug("Overriding schema default version from environment.", "envVar", "COWGNITION_SCHEMA_DEFAULT_VERSION", "value", schemaDefaultVersion)
+		config.Schema.DefaultVersion = schemaDefaultVersion
+	}
+	if schemaCacheDir := os.Getenv("COWGNITION_SCHEMA_CACHE_DIR"); schemaCacheDir != "" {
+		logger.Debug("Overriding schema cache directory from environment.", "envVar", "COWGNITION_SCHEMA_CACHE_DIR", "value", schemaCacheDir)
+		config.Schema.CacheDir = schemaCacheDir
+	}
+	if schemaOverrideSource := os.Getenv("COWGNITION_SCHEMA_OVERRIDE_SOURCE"); schemaOverrideSource != "" {
+		logger.Debug("Overriding schema source from environment.", "envVar", "COWGNITION_SCHEMA_OVERRIDE_SOURCE", "value", schemaOverrideSource)
+		config.Schema.OverrideSource = schemaOverrideSource
+	}
+	if schemaBaseURL := os.Getenv("COWGNITION_SCHEMA_BASE_URL"); schemaBaseURL != "" {
+		logger.Debug("Overriding schema base URL from environment.", "envVar", "COWGNITION_SCHEMA_BASE_URL", "value", schemaBaseURL)
+		config.Schema.BaseURL = schemaBaseURL
 	}
 }
 
@@ -228,11 +290,4 @@ func findAlternativeRTMEnvVars() []string {
 		}
 	}
 	return alternatives
-}
-
-// parsePort is a helper function to convert a string port to an integer.
-func parsePort(portStr string) (int, error) {
-	var port int
-	_, err := fmt.Sscanf(portStr, "%d", &port)
-	return port, err
 }
