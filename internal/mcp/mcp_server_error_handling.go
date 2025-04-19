@@ -101,7 +101,7 @@ func (s *Server) mapErrorToJSONRPCComponents(logger logging.Logger, err error) (
 	}
 
 	// Enrich with URL context if present
-	data = s.enrichWithURLContext(logger, err, data)
+	//dk data = s.enrichWithURLContext(logger, err, data)
 
 	// Clean up empty data maps
 	data = cleanupEmptyDataMap(data)
@@ -255,41 +255,59 @@ func mapTransportError(transportErr *transport.Error) (int, string, interface{})
 	return code, message, data
 }
 
-// enrichWithURLContext attempts to add URL information from error context
+// enrichWithURLContext attempts to add URL information from error context (REVISED)
 func (s *Server) enrichWithURLContext(logger logging.Logger, err error, data interface{}) interface{} {
 	// Protect against nil inputs
 	if err == nil {
+		logger.Debug("enrichWithURLContext: Input error is nil, returning original data.")
 		return data
 	}
 
 	// Get details from the error
 	details := errors.GetAllDetails(err)
 	if details == nil {
+		logger.Debug("enrichWithURLContext: No details found in error, returning original data.")
 		return data
 	}
 
 	// Get the URL value if it exists
-	urlValue, exists := details["url"]
-	if !exists || urlValue == nil {
+	urlValue, exists := details["url"] // urlValue is interface{}
+	if !exists {
+		logger.Debug("enrichWithURLContext: 'url' key not found in error details, returning original data.")
 		return data
 	}
+	if urlValue == nil {
+		logger.Debug("enrichWithURLContext: 'url' key found but value is nil, returning original data.")
+		return data
+	}
+
+	// Log the found URL value and its type
+	logger.Debug("enrichWithURLContext: Found 'url' in error details.", "urlValue", urlValue, "urlType", fmt.Sprintf("%T", urlValue))
 
 	// Handle different data types safely
 	switch typedData := data.(type) {
 	case map[string]interface{}:
+		logger.Debug("enrichWithURLContext: Input data is a map.")
 		// Only add URL if it doesn't already exist
-		if _, exists := typedData["url"]; !exists {
+		if _, urlKeyExists := typedData["url"]; !urlKeyExists {
+			logger.Debug("enrichWithURLContext: Adding 'url' key to existing map.")
+			// Explicitly assign the interface{} value. No conversion should happen here.
 			typedData["url"] = urlValue
+		} else {
+			logger.Debug("enrichWithURLContext: 'url' key already exists in map, not overwriting.")
 		}
-		return typedData
+		return typedData // Return the modified or original map
 	case nil:
+		logger.Debug("enrichWithURLContext: Input data is nil, creating new map for 'url'.")
 		// Create new map if data is nil
-		return map[string]interface{}{"url": urlValue}
+		// Explicitly assign the interface{} value. No conversion should happen here.
+		newMap := map[string]interface{}{"url": urlValue}
+		return newMap
 	default:
 		// Log warning for unsupported data type
-		logger.Warn("Could not add URL context because existing error data is not a map.",
+		logger.Warn("enrichWithURLContext: Could not add URL context because existing error data is not a map.",
 			"existingDataType", fmt.Sprintf("%T", data))
-		return data
+		return data // Return original data if it's not a map or nil
 	}
 }
 
