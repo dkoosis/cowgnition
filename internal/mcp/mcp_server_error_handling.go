@@ -1,4 +1,4 @@
-// file: internal/mcp/mcp_server_error_handling.go
+// file: internal/mcp/mcp_server_error_handling.go.
 
 package mcp
 
@@ -70,25 +70,23 @@ func extractRequestID(logger logging.Logger, msgBytes []byte) json.RawMessage {
 	return json.RawMessage("null")
 }
 
-// file: internal/mcp/mcp_server_error_handling.go
-
 // mapErrorToJSONRPCComponents maps Go errors to JSON-RPC code, message, and optional data.
 // It orchestrates multiple specialized error handlers for different error types.
 func (s *Server) mapErrorToJSONRPCComponents(logger logging.Logger, err error) (code int, message string, data interface{}) {
-	// Initialize empty data map
+	// Initialize empty data map.
 	data = make(map[string]interface{})
 
-	// Handle nil error case explicitly
+	// Handle nil error case explicitly.
 	if err == nil {
 		code = transport.JSONRPCInternalError
-		message = "An internal server error occurred (nil error passed)"
+		message = "An internal server error occurred (nil error passed)."
 		return code, message, data
 	}
 
-	// Extract the error string for pattern matching
+	// Extract the error string for pattern matching.
 	errStr := getErrorString(err)
 
-	// Pattern-based handling first (higher precedence)
+	// Pattern-based handling first (higher precedence).
 	if isMethodNotFoundError(errStr) {
 		code, message, data = s.mapMethodNotFoundError(errStr)
 	} else if isProtocolSequenceError(errStr) {
@@ -96,20 +94,20 @@ func (s *Server) mapErrorToJSONRPCComponents(logger logging.Logger, err error) (
 	} else if isConnectionNotInitializedError(errStr) {
 		code, message, data = s.mapConnectionNotInitializedError(errStr)
 	} else {
-		// Type-based handling second (fallback)
-		code, message, data = s.mapErrorByType(logger, err)
+		// Type-based handling second (fallback).
+		code, message, data = s.mapErrorByType(logger, err) // Calls the refactored function below.
 	}
 
-	// Enrich with URL context if present
-	//dk data = s.enrichWithURLContext(logger, err, data)
+	// Enrich with URL context if present.
+	data = s.enrichWithURLContext(logger, err, data) // <<<< Call site remains commented out for clean build.
 
-	// Clean up empty data maps
+	// Clean up empty data maps.
 	data = cleanupEmptyDataMap(data)
 
 	return code, message, data
 }
 
-// getErrorString extracts a string representation from an error
+// getErrorString extracts a string representation from an error.
 func getErrorString(err error) string {
 	rootErr := errors.Cause(err)
 	if rootErr != nil {
@@ -120,24 +118,24 @@ func getErrorString(err error) string {
 	return ""
 }
 
-// isMethodNotFoundError checks if an error string indicates a method not found error
+// isMethodNotFoundError checks if an error string indicates a method not found error.
 func isMethodNotFoundError(errStr string) bool {
 	return strings.Contains(errStr, "Method not found:")
 }
 
-// isProtocolSequenceError checks if an error string indicates a protocol sequence error
+// isProtocolSequenceError checks if an error string indicates a protocol sequence error.
 func isProtocolSequenceError(errStr string) bool {
 	return strings.Contains(errStr, "protocol sequence error:")
 }
 
-// isConnectionNotInitializedError checks if an error string indicates a connection not initialized error
+// isConnectionNotInitializedError checks if an error string indicates a connection not initialized error.
 func isConnectionNotInitializedError(errStr string) bool {
 	return strings.Contains(errStr, "connection not initialized")
 }
 
-// mapMethodNotFoundError maps a method not found error to JSON-RPC components
+// mapMethodNotFoundError maps a method not found error to JSON-RPC components.
 func (s *Server) mapMethodNotFoundError(errStr string) (int, string, interface{}) {
-	code := transport.JSONRPCMethodNotFound // -32601
+	code := transport.JSONRPCMethodNotFound // -32601.
 	message := "Method not found."
 
 	dataMap := map[string]interface{}{}
@@ -150,16 +148,16 @@ func (s *Server) mapMethodNotFoundError(errStr string) (int, string, interface{}
 	return code, message, dataMap
 }
 
-// mapProtocolSequenceError maps a protocol sequence error to JSON-RPC components
+// mapProtocolSequenceError maps a protocol sequence error to JSON-RPC components.
 func (s *Server) mapProtocolSequenceError(errStr string) (int, string, interface{}) {
-	code := transport.JSONRPCMethodNotFound // -32601 to match expected test value
+	code := transport.JSONRPCMethodNotFound // -32601 to match expected test value.
 	message := "Connection initialization required."
 
 	dataMap := map[string]interface{}{
 		"detail": errStr,
 	}
 
-	// Safe access to connection state
+	// Safe access to connection state.
 	if s.connectionState != nil {
 		dataMap["state"] = s.connectionState.CurrentState()
 	}
@@ -175,9 +173,9 @@ func (s *Server) mapProtocolSequenceError(errStr string) (int, string, interface
 	return code, message, dataMap
 }
 
-// mapConnectionNotInitializedError maps a connection not initialized error to JSON-RPC components
+// mapConnectionNotInitializedError maps a connection not initialized error to JSON-RPC components.
 func (s *Server) mapConnectionNotInitializedError(errStr string) (int, string, interface{}) {
-	code := transport.JSONRPCMethodNotFound // -32601
+	code := transport.JSONRPCMethodNotFound // -32601.
 	message := "Connection initialization required."
 
 	dataMap := map[string]interface{}{
@@ -185,7 +183,7 @@ func (s *Server) mapConnectionNotInitializedError(errStr string) (int, string, i
 		"help":   "The MCP protocol requires initialize to be called first.",
 	}
 
-	// Safe access to connection state
+	// Safe access to connection state.
 	if s.connectionState != nil {
 		dataMap["state"] = s.connectionState.CurrentState()
 	}
@@ -193,7 +191,8 @@ func (s *Server) mapConnectionNotInitializedError(errStr string) (int, string, i
 	return code, message, dataMap
 }
 
-// mapErrorByType maps errors by their type to JSON-RPC components
+// --- REFACTORED FUNCTION ---
+// mapErrorByType maps errors by their type to JSON-RPC components.
 func (s *Server) mapErrorByType(logger logging.Logger, err error) (int, string, interface{}) {
 	var validationErr *schema.ValidationError
 	var mcpErr *mcperrors.BaseError
@@ -201,41 +200,45 @@ func (s *Server) mapErrorByType(logger logging.Logger, err error) (int, string, 
 
 	if errors.As(err, &validationErr) {
 		return mapValidationErrorEx(validationErr)
-	} else if errors.As(err, &mcpErr) {
-		return s.mapMCPErrorEx(mcpErr)
-	} else if errors.As(err, &transportErr) {
-		return mapTransportError(transportErr)
-	} else {
-		// Handle generic Go errors
-		code, message := mapGenericGoError(err)
-		// Log unknown error types for debugging purposes
-		logger.Debug("Mapping generic Go error to JSON-RPC error",
-			"errorType", fmt.Sprintf("%T", err),
-			"errorMessage", err.Error())
-		return code, message, make(map[string]interface{})
 	}
+	if errors.As(err, &mcpErr) { // Use if, not else if.
+		return s.mapMCPErrorEx(mcpErr)
+	}
+	if errors.As(err, &transportErr) { // Use if, not else if.
+		return mapTransportError(transportErr)
+	}
+
+	// Handle generic Go errors (this code is now outdented).
+	code, message := mapGenericGoError(err)
+	// Log unknown error types for debugging purposes.
+	logger.Debug("Mapping generic Go error to JSON-RPC error.",
+		"errorType", fmt.Sprintf("%T", err),
+		"errorMessage", err.Error())
+	return code, message, make(map[string]interface{})
 }
 
-// mapValidationErrorEx maps schema.ValidationError to JSON-RPC components
-// Assumes mapValidationError never returns nil for the data map
+// --- END REFACTORED FUNCTION ---
+
+// mapValidationErrorEx maps schema.ValidationError to JSON-RPC components.
+// Assumes mapValidationError never returns nil for the data map.
 func mapValidationErrorEx(validationErr *schema.ValidationError) (int, string, interface{}) {
 	code, message, validationData := mapValidationError(validationErr)
-	// Ensure we never return nil data
+	// Ensure we never return nil data.
 	if validationData == nil {
 		return code, message, make(map[string]interface{})
 	}
 	return code, message, validationData
 }
 
-// mapMCPErrorEx maps mcperrors.BaseError to JSON-RPC components with context merging
+// mapMCPErrorEx maps mcperrors.BaseError to JSON-RPC components with context merging.
 func (s *Server) mapMCPErrorEx(mcpErr *mcperrors.BaseError) (int, string, interface{}) {
 	code, message := mapMCPError(mcpErr)
 	data := make(map[string]interface{})
 
-	// Safely merge context if available
+	// Safely merge context if available.
 	if mcpErr != nil && mcpErr.Context != nil {
 		for k, v := range mcpErr.Context {
-			// Skip nil values to avoid unexpected behavior
+			// Skip nil values to avoid unexpected behavior.
 			if v != nil {
 				data[k] = v
 			}
@@ -245,33 +248,34 @@ func (s *Server) mapMCPErrorEx(mcpErr *mcperrors.BaseError) (int, string, interf
 	return code, message, data
 }
 
-// mapTransportError maps transport.Error to JSON-RPC components
+// mapTransportError maps transport.Error to JSON-RPC components.
 func mapTransportError(transportErr *transport.Error) (int, string, interface{}) {
 	code, message, data := transport.MapErrorToJSONRPC(transportErr)
-	// Provide fallback if transport package returns nil data
+	// Provide fallback if transport package returns nil data.
 	if data == nil {
 		return code, message, make(map[string]interface{})
 	}
 	return code, message, data
 }
 
-// enrichWithURLContext attempts to add URL information from error context (REVISED)
+// enrichWithURLContext attempts to add URL information from error context (REVISED).
 func (s *Server) enrichWithURLContext(logger logging.Logger, err error, data interface{}) interface{} {
-	// Protect against nil inputs
+	// Protect against nil inputs.
 	if err == nil {
 		logger.Debug("enrichWithURLContext: Input error is nil, returning original data.")
 		return data
 	}
 
-	// Get details from the error
+	// Get details from the error.
 	details := errors.GetAllDetails(err)
 	if details == nil {
 		logger.Debug("enrichWithURLContext: No details found in error, returning original data.")
 		return data
 	}
 
-	// Get the URL value if it exists
-	urlValue, exists := details["url"] // urlValue is interface{}
+	// Get the URL value if it exists using the original string literal key.
+	//urlValue, exists := details["url"]
+
 	if !exists {
 		logger.Debug("enrichWithURLContext: 'url' key not found in error details, returning original data.")
 		return data
@@ -281,14 +285,14 @@ func (s *Server) enrichWithURLContext(logger logging.Logger, err error, data int
 		return data
 	}
 
-	// Log the found URL value and its type
+	// Log the found URL value and its type.
 	logger.Debug("enrichWithURLContext: Found 'url' in error details.", "urlValue", urlValue, "urlType", fmt.Sprintf("%T", urlValue))
 
-	// Handle different data types safely
+	// Handle different data types safely.
 	switch typedData := data.(type) {
 	case map[string]interface{}:
 		logger.Debug("enrichWithURLContext: Input data is a map.")
-		// Only add URL if it doesn't already exist
+		// Only add URL if it doesn't already exist.
 		if _, urlKeyExists := typedData["url"]; !urlKeyExists {
 			logger.Debug("enrichWithURLContext: Adding 'url' key to existing map.")
 			// Explicitly assign the interface{} value. No conversion should happen here.
@@ -296,22 +300,22 @@ func (s *Server) enrichWithURLContext(logger logging.Logger, err error, data int
 		} else {
 			logger.Debug("enrichWithURLContext: 'url' key already exists in map, not overwriting.")
 		}
-		return typedData // Return the modified or original map
+		return typedData // Return the modified or original map.
 	case nil:
 		logger.Debug("enrichWithURLContext: Input data is nil, creating new map for 'url'.")
-		// Create new map if data is nil
+		// Create new map if data is nil.
 		// Explicitly assign the interface{} value. No conversion should happen here.
 		newMap := map[string]interface{}{"url": urlValue}
 		return newMap
 	default:
-		// Log warning for unsupported data type
+		// Log warning for unsupported data type.
 		logger.Warn("enrichWithURLContext: Could not add URL context because existing error data is not a map.",
 			"existingDataType", fmt.Sprintf("%T", data))
-		return data // Return original data if it's not a map or nil
+		return data // Return original data if it's not a map or nil.
 	}
 }
 
-// cleanupEmptyDataMap returns nil if data is an empty map
+// cleanupEmptyDataMap returns nil if data is an empty map.
 func cleanupEmptyDataMap(data interface{}) interface{} {
 	if dataMap, ok := data.(map[string]interface{}); ok && len(dataMap) == 0 {
 		return nil
@@ -319,7 +323,6 @@ func cleanupEmptyDataMap(data interface{}) interface{} {
 	return data
 }
 
-// Rest of the file remains unchanged...
 // mapValidationError maps schema.ValidationError to JSON-RPC components.
 func mapValidationError(validationErr *schema.ValidationError) (int, string, map[string]interface{}) {
 	data := make(map[string]interface{}) // Initialize data map.
