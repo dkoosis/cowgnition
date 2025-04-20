@@ -98,8 +98,7 @@
 │   └── pkgdep.sh*
 ├── Makefile
 ├── README.md
-├── go.mod
 ├── go.sum
 └── log
 
-17 directories, 86 files
+17 directories, 85 files
