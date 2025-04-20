@@ -7,7 +7,7 @@ package middleware
 
 // mcptypes import path updated.
 import (
-	"github.com/dkoosis/cowgnition/internal/mcptypes"
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"
 )
 
 // middlewareChain implements the Chain interface for building middleware stacks.

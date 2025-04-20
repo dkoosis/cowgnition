@@ -42,7 +42,7 @@
 │   │   ├── mcp_server_processing.go
 │   │   ├── mcp_server_test.go
 │   │   └── types.go
-│   ├── mcptypes/
+│   ├── mcp_types/
 │   │   ├── interfaces.go
 │   │   └── middleware.bak
 │   ├── middleware/

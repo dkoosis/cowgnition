@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/mcptypes" // Use mcptypes.
+	"github.com/cockroachdb/errors" // Use mcptypes.
+	"github.com/dkoosis/cowgnition/internal/mcptypes"
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
 

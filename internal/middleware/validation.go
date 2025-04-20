@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/dkoosis/cowgnition/internal/logging"
-	"github.com/dkoosis/cowgnition/internal/mcptypes"
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"
 )
 
 // ValidationMiddleware provides JSON schema validation for MCP messages.
