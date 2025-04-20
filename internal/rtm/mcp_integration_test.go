@@ -279,7 +279,7 @@ func printTestHeader(t *testing.T, title string) {
 	t.Helper()
 	t.Log("")
 	t.Log("╔═══════════════════════════════════════════════════════════════════════════╗")
-	t.Logf("║ %s%s ║", title, strings.Repeat(" ", 65-len(title)))
+	t.Logf("║ \033[0;34m▶  Running %s...\033[0m%s ║", title, strings.Repeat(" ", 59-len(title)))
 	t.Log("╚═══════════════════════════════════════════════════════════════════════════╝")
 	t.Log("")
 }

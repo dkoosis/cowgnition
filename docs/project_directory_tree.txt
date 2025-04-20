@@ -94,11 +94,13 @@
 ├── scripts/
 │   ├── check_file_length.sh*
 │   ├── check_go_bin_path.sh*
+│   ├── check_go_mod_path.sh*
 │   ├── graph.d2
 │   └── pkgdep.sh*
 ├── Makefile
 ├── README.md
+├── go.mod
 ├── go.sum
 └── log
 
-17 directories, 85 files
+17 directories, 87 files

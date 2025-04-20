@@ -9,7 +9,7 @@ import (
 	"io"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/mcp_types"
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
 
