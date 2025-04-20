@@ -26,9 +26,6 @@ type MockValidator struct {
 	initialized bool
 	initErr     error
 	// Corrected: Removed unused fields.
-	// loadDuration     time.Duration.
-	// compileDuration  time.Duration.
-	// shutdownErr      error.
 	schemas          map[string]bool
 	validationErrors map[string]error // Map schemaKey -> error to return.
 }
@@ -60,15 +57,16 @@ func (m *MockValidator) Initialize(ctx context.Context) error {
 		m.schemas["JSONRPCResponse"] = true
 		m.schemas["JSONRPCNotification"] = true
 		m.schemas["JSONRPCError"] = true
-		m.schemas["request"] = true
-		m.schemas["notification"] = true
-		m.schemas["success_response"] = true
-		m.schemas["error_response"] = true
-		// Add schemas used in tests (relevant ones moved to specific test files if needed).
+		m.schemas["request"] = true          // Generic fallback.
+		m.schemas["notification"] = true     // Generic fallback.
+		m.schemas["success_response"] = true // Generic fallback.
+		m.schemas["error_response"] = true   // Generic fallback.
+		// --- Add Schemas Used by TestIdentifyMessage ---.
 		m.schemas["initialize"] = true
+		m.schemas["tools/list"] = true
 		m.schemas["ping"] = true
-		m.schemas["ping_notification"] = true
-		m.schemas["ping_response"] = true
+		// --- End Added Schemas ---.
+		// Add schemas used in other tests (relevant ones moved to specific test files if needed).
 		m.schemas["test_method"] = true
 		m.schemas["test_method_response"] = true
 		m.schemas["fail_method"] = true
@@ -82,8 +80,7 @@ func (m *MockValidator) Initialize(ctx context.Context) error {
 		m.schemas["outgoing_nonstrict_response"] = true
 		m.schemas["someMethod"] = true
 		m.schemas["someMethod_response"] = true
-		m.schemas["tools/list"] = true
-		m.schemas["tools/list_response"] = true
+		m.schemas["tools/list_response"] = true // Ensure this exists for tests that might use it.
 		m.schemas["CallToolResult"] = true
 		m.schemas["notifications/progress"] = true
 	}
@@ -113,8 +110,12 @@ func (m *MockValidator) Validate(ctx context.Context, schemaKey string, data []b
 func (m *MockValidator) HasSchema(name string) bool {
 	args := m.Called(name)
 	// Allow dynamic checking based on mock's internal state or specific returns.
-	if len(args) > 0 {
-		return args.Bool(0)
+	if len(args) > 0 && args.Get(0) != nil { // Check if a specific return was configured.
+		retVal, ok := args.Get(0).(bool)
+		if ok {
+			return retVal
+		}
+		// Log unexpected return type if needed.
 	}
 	// Fallback to internal map if no specific return was configured for HasSchema.
 	_, exists := m.schemas[name]
@@ -198,6 +199,7 @@ func (m *MockMessageHandler) Handle(ctx context.Context, message []byte) ([]byte
 // --- Test Setup ---.
 
 // Corrected: Return *MockValidator.
+// setupTestMiddleware initializes mocks and ensures mock validator is initialized.
 func setupTestMiddleware(t *testing.T, options middleware.ValidationOptions) (*middleware.ValidationMiddleware, *MockValidator, *MockMessageHandler) {
 	t.Helper()
 	logger := logging.GetNoopLogger() // Use NoopLogger for tests unless logging is tested.
@@ -206,22 +208,32 @@ func setupTestMiddleware(t *testing.T, options middleware.ValidationOptions) (*m
 	mockNextHandler := new(MockMessageHandler)
 
 	// Basic mock setup for initialization and schema presence checks.
-	mockValidator.On("Initialize", mock.Anything).Return(nil).Maybe()                                    // Default successful init.
-	mockValidator.On("IsInitialized").Return(true).Maybe()                                               // Assume initialized unless specified otherwise.
-	mockValidator.On("HasSchema", mock.AnythingOfType("string")).Maybe().Return(func(name string) bool { // Use dynamic check.
+	mockValidator.On("Initialize", mock.Anything).Return(nil).Maybe()
+	// NOTE: IsInitialized expectation will be set *after* Initialize is called below.
+
+	mockValidator.On("HasSchema", mock.AnythingOfType("string")).Maybe().Return(func(name string) bool { // Keep dynamic check based on internal map.
+		// Lock should ideally be used if the map could be modified concurrently,
+		// but in test setup it's likely safe enough without.
+		// m.mu.RLock()
+		// defer m.mu.RUnlock()
 		_, exists := mockValidator.schemas[name]
 		return exists
 	})
-	mockValidator.On("GetSchemaVersion").Return("mock-schema-v0.0.0").Maybe() // Mock the new method.
+	mockValidator.On("GetSchemaVersion").Return("mock-schema-v0.0.0").Maybe()
 	mockValidator.On("GetLoadDuration").Return(1 * time.Millisecond).Maybe()
 	mockValidator.On("GetCompileDuration").Return(1 * time.Millisecond).Maybe()
 	mockValidator.On("Shutdown").Return(nil).Maybe()
 
+	// --- Add explicit Initialize call ---.
 	// Initialize the validator state within the test setup.
 	err := mockValidator.Initialize(context.Background())
-	require.NoError(t, err, "Mock validator initialization failed.")
+	require.NoError(t, err, "Mock validator initialization failed in test setup.")
+	// --- End Add ---.
+
+	// --- Add explicit IsInitialized expectation *after* Initialize ---.
 	// Ensure IsInitialized mock behavior is set correctly after Initialize is called.
-	// Note: We configure IsInitialized mock above to return true by default.
+	mockValidator.On("IsInitialized").Return(true) // Now expect it to be true.
+	// --- End Add ---.
 
 	// Pass the mock (which now implements the interface) to NewValidationMiddleware.
 	mw := middleware.NewValidationMiddleware(mockValidator, options, logger)

@@ -1,11 +1,11 @@
 // Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
 package schema
 
-// file: internal/schema/errors.go
+// file: internal/schema/errors.go.
 
 import (
 	"fmt"
-	"strings" // Ensure strings is imported
+	"strings" // Ensure strings is imported.
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -30,7 +30,7 @@ type ValidationError struct {
 	Code ErrorCode
 	// Message is a human-readable error message.
 	Message string
-	// Cause is the underlying error, if any.
+	// Cause is the underlying error, if any. Should be *jsonschema.ValidationError when Code is ErrValidationFailed.
 	Cause error
 	// SchemaPath identifies the specific part of the schema that was violated.
 	SchemaPath string
@@ -49,7 +49,7 @@ func (e *ValidationError) Error() string {
 	if e.InstancePath != "" {
 		base += fmt.Sprintf(" (instance path: %s)", e.InstancePath)
 	}
-	// Use %+v for detailed cause formatting from cockroachdb/errors
+	// Use %+v for detailed cause formatting from cockroachdb/errors.
 	if e.Cause != nil {
 		base += fmt.Sprintf(": %+v", e.Cause)
 	}
@@ -82,46 +82,50 @@ func NewValidationError(code ErrorCode, message string, cause error) *Validation
 	return &ValidationError{
 		Code:    code,
 		Message: message,
-		Cause:   wrappedCause, // Use the potentially wrapped cause
+		Cause:   wrappedCause, // Use the potentially wrapped cause.
 		Context: map[string]interface{}{
-			"timestamp": time.Now().UTC(),
+			"timestamp": time.Now().UTC(), // Use UTC for consistency.
 		},
+		// InstancePath and SchemaPath are typically set later from the underlying error.
 	}
 }
 
 // convertValidationError converts a jsonschema.ValidationError to our custom ValidationError.
-// It extracts detailed error information from the validation error structure and provides
-// rich context for debugging and user feedback.
+// It wraps the original error and extracts key path information.
 func convertValidationError(valErr *jsonschema.ValidationError, messageType string, data []byte) *ValidationError {
-	// Create our custom error with the primary message from the original error
-	// Pass the original valErr directly as the cause to preserve its type and context
+	wrapperMessage := "Schema validation failed."
+	// Create our custom error, wrapping the original jsonschema error.
 	customErr := NewValidationError(
 		ErrValidationFailed,
-		valErr.Message,
-		valErr,
+		wrapperMessage, // Use the generic wrapper message.
+		valErr,         // Pass the original jsonschema error as the cause.
 	)
 
-	// Extract and set path information directly from the ValidationError fields
+	// Assign InstanceLocation and KeywordLocation from the top-level jsonschema error.
+	// These might be empty for some error types (like type mismatch), as observed in tests.
 	customErr.InstancePath = valErr.InstanceLocation
 	customErr.SchemaPath = valErr.KeywordLocation
 
-	// Add basic context
+	// Add basic context.
 	customErr = customErr.WithContext("messageType", messageType)
-	customErr = customErr.WithContext("dataPreview", calculatePreview(data)) // Assumes calculatePreview exists
-
-	// Extract nested causes if they exist
-	// FIX: Remove redundant nil check (gosimple S1009)
-	if len(valErr.Causes) > 0 {
-		causes := extractValidationCauses(valErr)
-		if len(causes) > 0 {
-			customErr = customErr.WithContext("validationCauses", causes)
-		}
-	}
+	customErr = customErr.WithContext("dataPreview", calculatePreview(data)) // Assumes calculatePreview exists.
+	// Store the original top-level message from jsonschema in context for reference.
+	customErr = customErr.WithContext("originalMessage", valErr.Message)
 
 	// Add user-friendly suggestion based on the primary error message and instance path.
+	// Generate suggestion based on the original jsonschema error message.
 	suggestion := generateErrorSuggestion(valErr.Message, valErr.InstanceLocation)
 	if suggestion != "" {
 		customErr = customErr.WithContext("suggestion", suggestion)
+	}
+
+	// Optionally, add nested causes to context if needed for detailed debugging,
+	// but the primary message check should now target the unwrapped cause directly in tests.
+	if len(valErr.Causes) > 0 {
+		causes := extractValidationCauses(valErr) // Use existing helper.
+		if len(causes) > 0 {
+			customErr = customErr.WithContext("validationCausesDetail", causes)
+		}
 	}
 
 	return customErr
@@ -130,7 +134,6 @@ func convertValidationError(valErr *jsonschema.ValidationError, messageType stri
 // extractValidationCauses extracts nested error causes from a ValidationError.
 func extractValidationCauses(valErr *jsonschema.ValidationError) []map[string]string {
 	// Base case: If there are no causes, return nil.
-	// FIX: Remove redundant nil check (gosimple S1009)
 	if len(valErr.Causes) == 0 {
 		return nil
 	}
@@ -175,11 +178,11 @@ func generateErrorSuggestion(errorMsg, instancePath string) string {
 	if pathDisplay == "/" || pathDisplay == "" {
 		pathDisplay = "the message root"
 	} else if !strings.HasPrefix(pathDisplay, "/") {
-		pathDisplay = "/" + pathDisplay // Ensure instance paths look like paths
+		pathDisplay = "/" + pathDisplay // Ensure instance paths look like paths.
 	}
 
 	// Use keywords from the error message to provide targeted suggestions.
-	// Property missing error
+	// Property missing error.
 	if strings.Contains(errorMsg, "required property") || strings.Contains(errorMsg, "missing properties") {
 		prop := extractPropertyName(errorMsg, "required property", "missing properties")
 		// If prop is found, be specific, otherwise use the general path.
@@ -189,45 +192,45 @@ func generateErrorSuggestion(errorMsg, instancePath string) string {
 		return fmt.Sprintf("Ensure all required fields are provided in %s.", pathDisplay)
 	}
 
-	// Type mismatch error
+	// Type mismatch error.
 	if strings.Contains(errorMsg, "invalid type") || (strings.Contains(errorMsg, "expected") && strings.Contains(errorMsg, "but got")) {
-		expected, actual := extractTypeInfo(errorMsg) // Assuming extractTypeInfo exists
+		expected, actual := extractTypeInfo(errorMsg) // Assuming extractTypeInfo exists.
 		if expected != "" && actual != "" {
 			return fmt.Sprintf("Incorrect data type for %s. Expected '%s' but received '%s'.", pathDisplay, expected, actual)
 		}
 		return fmt.Sprintf("Check that the data type for %s matches the schema specification.", pathDisplay)
 	}
 
-	// Pattern match error
+	// Pattern match error.
 	if strings.Contains(errorMsg, "does not match pattern") {
-		pattern := extractPattern(errorMsg) // Assuming extractPattern exists
+		pattern := extractPattern(errorMsg) // Assuming extractPattern exists.
 		if pattern != "" {
 			return fmt.Sprintf("The value for %s must match the required pattern: %s.", pathDisplay, pattern)
 		}
 		return fmt.Sprintf("The value for %s does not match the required format.", pathDisplay)
 	}
 
-	// Additional properties error
+	// Additional properties error.
 	if strings.Contains(errorMsg, "additionalProperties") {
-		offendingProp := extractOffendingProperty(errorMsg) // Assuming extractOffendingProperty exists
+		offendingProp := extractOffendingProperty(errorMsg) // Assuming extractOffendingProperty exists.
 		if offendingProp != "" {
 			return fmt.Sprintf("Remove unrecognized property '%s' from the object at %s.", offendingProp, pathDisplay)
 		}
 		return fmt.Sprintf("Remove unrecognized properties from the object at %s.", pathDisplay)
 	}
 
-	// Enum error
+	// Enum error.
 	if strings.Contains(errorMsg, "enum") || strings.Contains(errorMsg, "value must be one of") {
-		values := extractEnumValues(errorMsg) // Assuming extractEnumValues exists
+		values := extractEnumValues(errorMsg) // Assuming extractEnumValues exists.
 		if values != "" {
 			return fmt.Sprintf("The value for %s must be one of the allowed values: %s.", pathDisplay, values)
 		}
 		return fmt.Sprintf("The value for %s is not one of the allowed options.", pathDisplay)
 	}
 
-	// Format error (e.g., date-time, email)
+	// Format error (e.g., date-time, email).
 	if strings.Contains(errorMsg, "invalid format") || strings.Contains(errorMsg, "must be in format") {
-		format := extractFormat(errorMsg) // Assuming extractFormat exists
+		format := extractFormat(errorMsg) // Assuming extractFormat exists.
 		if format != "" {
 			return fmt.Sprintf("The value for %s must be a valid '%s' format.", pathDisplay, format)
 		}
@@ -266,11 +269,11 @@ func extractPropertyName(msg string, prefixes ...string) string {
 	return "[unknown]"
 }
 
-// --- Stubs or implementations for other extraction helpers used in generateErrorSuggestion ---
-// (Ensure these helpers are implemented robustly)
+// --- Stubs or implementations for other extraction helpers used in generateErrorSuggestion ---.
+// (Ensure these helpers are implemented robustly).
 
 func extractTypeInfo(msg string) (expected, actual string) {
-	// Example simple implementation:
+	// Example simple implementation.
 	if strings.Contains(msg, "expected") && strings.Contains(msg, "but got") {
 		parts := strings.SplitN(msg, "expected", 2)
 		if len(parts) < 2 {
@@ -281,7 +284,7 @@ func extractTypeInfo(msg string) (expected, actual string) {
 			return "", ""
 		}
 		expected = strings.TrimSpace(strings.TrimSuffix(typeParts[0], ","))
-		// Clean up actual type representation if needed
+		// Clean up actual type representation if needed.
 		actual = strings.TrimSpace(strings.TrimSuffix(typeParts[1], "."))
 		return expected, actual
 	}
@@ -289,12 +292,12 @@ func extractTypeInfo(msg string) (expected, actual string) {
 }
 
 func extractPattern(msg string) string {
-	// Example simple implementation:
+	// Example simple implementation.
 	if idx := strings.Index(msg, "pattern "); idx != -1 {
 		patternPart := strings.TrimPrefix(msg[idx:], "pattern ")
-		// Remove potential surrounding quotes
+		// Remove potential surrounding quotes.
 		patternPart = strings.Trim(patternPart, `'"`)
-		// Remove potential trailing punctuation
+		// Remove potential trailing punctuation.
 		patternPart = strings.TrimRight(patternPart, ".,;:!?")
 		return patternPart
 	}
@@ -302,7 +305,7 @@ func extractPattern(msg string) string {
 }
 
 func extractOffendingProperty(msg string) string {
-	// Example simple implementation:
+	// Example simple implementation.
 	if strings.Contains(msg, "additionalProperties") && strings.Contains(msg, "not allowed") {
 		startQuote := strings.IndexAny(msg, `"'`)
 		if startQuote != -1 {
@@ -317,18 +320,18 @@ func extractOffendingProperty(msg string) string {
 }
 
 func extractEnumValues(msg string) string {
-	// Example simple implementation:
+	// Example simple implementation.
 	if idx := strings.Index(msg, "enum"); idx != -1 {
-		// Look for values within square brackets
+		// Look for values within square brackets.
 		if startBracket := strings.Index(msg[idx:], "["); startBracket != -1 {
 			trueStart := idx + startBracket
 			if endBracket := strings.Index(msg[trueStart:], "]"); endBracket != -1 {
 				return strings.TrimSpace(msg[trueStart+1 : trueStart+endBracket])
 			}
 		}
-		// Look for values after "one of:"
+		// Look for values after "one of:".
 		if oneOfIdx := strings.Index(msg[idx:], "one of:"); oneOfIdx != -1 {
-			// Trim potential trailing period
+			// Trim potential trailing period.
 			return strings.TrimSpace(strings.TrimSuffix(msg[idx+oneOfIdx+len("one of:"):], "."))
 		}
 	}
@@ -336,7 +339,7 @@ func extractEnumValues(msg string) string {
 }
 
 func extractFormat(msg string) string {
-	// Example simple implementation:
+	// Example simple implementation.
 	formats := []string{"date-time", "date", "time", "email", "uri", "uri-reference", "hostname", "ipv4", "ipv6", "uuid", "json-pointer", "relative-json-pointer", "regex"}
 	for _, format := range formats {
 		if strings.Contains(msg, "'"+format+"'") || strings.Contains(msg, `"`+format+`"`) {
@@ -344,7 +347,7 @@ func extractFormat(msg string) string {
 		}
 	}
 	if strings.Contains(msg, "invalid format") {
-		// Try to extract format name if quoted after 'format'
+		// Try to extract format name if quoted after 'format'.
 		if idx := strings.Index(msg, "format "); idx != -1 {
 			remainder := msg[idx+len("format "):]
 			startQuote := strings.IndexAny(remainder, `"'`)
@@ -359,27 +362,3 @@ func extractFormat(msg string) string {
 	}
 	return ""
 }
-
-// // calculatePreview needs to be defined, likely in helpers.go
-// // Ensure it handles potential errors gracefully.
-// func calculatePreview(data []byte) string {
-// 	const maxPreviewLen = 100
-// 	if len(data) > maxPreviewLen {
-// 		// Consider replacing control characters for cleaner previews
-// 		previewBytes := bytes.Map(func(r rune) rune {
-// 			if r < 32 || r == 127 {
-// 				return '.'
-// 			}
-// 			return r
-// 		}, data[:maxPreviewLen])
-// 		return string(previewBytes) + "..."
-// 	}
-// 	// Consider replacing control characters here too
-// 	previewBytes := bytes.Map(func(r rune) rune {
-// 		if r < 32 || r == 127 {
-// 			return '.'
-// 		}
-// 		return r
-// 	}, data)
-// 	return string(previewBytes)
-// }
