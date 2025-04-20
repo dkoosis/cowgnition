@@ -1,17 +1,19 @@
 package main
 
+// file: cmd/schema_test/stub_test.go
+
 import (
-	"testing" // Import the standard Go testing package
+	"testing" // Import the standard Go testing package.
 )
 
-// TestNoTests is a sample test function.
+// TestStub_DoesNothing_When_NoTestsImplemented is a sample test function.
 // Go test functions must start with 'Test', take '*testing.T' as an argument,
 // and reside in a file ending with '_test.go'.
-func TestNoTests(t *testing.T) {
+func TestStub_DoesNothing_When_NoTestsImplemented(t *testing.T) {
 	// This is a placeholder test.
 	// It doesn't do anything yet.
 	// You might add a t.Skip() if you want to explicitly mark it as skipped for now.
-	// t.Skip("Test not implemented yet")
+	// t.Skip("Test not implemented yet.").
 
 	// Or, just leave it empty initially.
 	// Actual test logic will go here later.
@@ -21,6 +23,6 @@ func TestNoTests(t *testing.T) {
 // You might add other placeholder test functions below:
 /*
 func TestAnotherFeature(t *testing.T) {
-	t.Skip("Another feature test not implemented yet")
+	t.Skip("Another feature test not implemented yet.").
 }
 */

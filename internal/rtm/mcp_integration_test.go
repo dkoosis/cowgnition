@@ -1,6 +1,7 @@
-// file: internal/rtm/mcp_integration_test.go
-
+// Package rtm implements the client and service logic for interacting with the Remember The Milk API.
 package rtm
+
+// file: internal/rtm/mcp_integration_test.go
 
 import (
 	"context"
@@ -62,11 +63,12 @@ func (l *testLogger) Error(msg string, args ...any) {
 
 // --- Test Functions ---
 
-// TestRTMToolsIntegration tests the integration of RTM service with MCP tools.
+// TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated tests the integration of RTM service with MCP tools.
+// Renamed function to follow ADR-008 convention.
 // NOTE: Keeping this name as it accurately describes a broad integration test.
 // The internal steps and checks align with testing behavior based on state (credentials, auth).
 // nolint:gocyclo // Integration test involves multiple sequential steps & checks.
-func TestRTMToolsIntegration(t *testing.T) {
+func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode.")
 	}
@@ -224,6 +226,7 @@ func runAuthenticatedTests(ctx context.Context, t *testing.T, rtmService *Servic
 		printTestResult(t, "CallTool(getTasks)", "PASSED", "Successfully retrieved tasks.")
 		// Optionally log content preview using the helper from helpers.go.
 		if len(result.Content) > 0 {
+			// Use mcp.TextContent type defined in internal/mcp/types.go.
 			if tc, ok := result.Content[0].(mcp.TextContent); ok {
 				t.Logf("     → Tasks Result Preview: %s...", truncateString(tc.Text, 80)) // Uses helper from helpers.go.
 			}
@@ -233,6 +236,7 @@ func runAuthenticatedTests(ctx context.Context, t *testing.T, rtmService *Servic
 		if callErr != nil {
 			errorDetail = fmt.Sprintf("Internal Error: %v.", callErr)
 		} else if result != nil && result.IsError && len(result.Content) > 0 {
+			// Use mcp.TextContent type defined in internal/mcp/types.go.
 			if tc, ok := result.Content[0].(mcp.TextContent); ok {
 				errorDetail = fmt.Sprintf("Tool Error: %s.", tc.Text)
 			}
@@ -255,6 +259,7 @@ func runAuthenticatedTests(ctx context.Context, t *testing.T, rtmService *Servic
 	if readErr == nil && len(resourceContents) > 0 {
 		printTestResult(t, "ReadResource(rtm://auth)", "PASSED", "Successfully read auth resource.")
 		// Optionally log content preview using the helper from helpers.go.
+		// Use mcp.TextResourceContents type defined in internal/mcp/types.go.
 		if tc, ok := resourceContents[0].(mcp.TextResourceContents); ok {
 			t.Logf("     → Auth Resource Preview: %s...", truncateString(tc.Text, 80)) // Uses helper from helpers.go.
 		}
@@ -357,5 +362,3 @@ func truncateCredential(cred string) string {
 	}
 	return cred[:maxLength] + strings.Repeat("*", len(cred)-maxLength) // Show prefix, mask rest.
 }
-
-// NOTE: truncateString function REMOVED from this file. It now resides in helpers.go.

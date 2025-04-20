@@ -1,7 +1,7 @@
 // Package middleware provides chainable handlers for processing MCP messages, like validation.
 package middleware
 
-// file: internal/middleware/validation_schema.go
+// file: internal/middleware/validation_schema.go.
 
 import (
 	"strings"
@@ -28,7 +28,7 @@ func (m *ValidationMiddleware) determineIncomingSchemaType(msgTypeHint string) s
 
 	switch {
 	// --- Notification Fallbacks ---
-	// Example: msgTypeHint = "notifications/initialized" or "custom_notification"
+	// Example: msgTypeHint = "notifications/initialized" or "custom_notification".
 	case strings.HasPrefix(msgTypeHint, "notifications/"),
 		strings.HasSuffix(msgTypeHint, "_notification"),
 		msgTypeHint == "notification": // If hint was already generic.
@@ -41,7 +41,7 @@ func (m *ValidationMiddleware) determineIncomingSchemaType(msgTypeHint string) s
 		}
 
 	// --- Response Fallbacks ---
-	// Example: msgTypeHint = "initialize_response", "success_response", "error_response"
+	// Example: msgTypeHint = "initialize_response", "success_response", "error_response".
 	case strings.Contains(msgTypeHint, "Response"),
 		strings.Contains(msgTypeHint, "Result"),
 		strings.HasSuffix(msgTypeHint, "_response"),
@@ -63,7 +63,7 @@ func (m *ValidationMiddleware) determineIncomingSchemaType(msgTypeHint string) s
 		}
 
 	// --- Request Fallbacks ---
-	// Example: msgTypeHint = "initialize", "tools/list"
+	// Example: msgTypeHint = "initialize", "tools/list".
 	default: // Assume request if none of the above match hints.
 		if m.validator.HasSchema("JSONRPCRequest") { // Try standard base request.
 			fallbackKeys = append(fallbackKeys, "JSONRPCRequest")
@@ -120,9 +120,8 @@ func (m *ValidationMiddleware) determineOutgoingSchemaType(requestMethod string,
 	}
 
 	// 2. Identify the response type structurally (success/error).
-	// identifyMessage provides hints like "success_response", "error_response".
-	// We ignore the error case here because error responses are skipped earlier.
-	responseMsgTypeHint, _, identifyErr := m.identifyMessage(responseBytes)
+	// Fixed: Call identifyMessage directly, not as a method on m.
+	responseMsgTypeHint, _, identifyErr := identifyMessage(responseBytes)
 	if identifyErr == nil && responseMsgTypeHint == "success_response" {
 		// Specific heuristic for CallToolResult shape if identified as generic success.
 		// Check for CallToolResult schema first.

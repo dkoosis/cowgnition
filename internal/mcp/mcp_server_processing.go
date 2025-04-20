@@ -1,7 +1,6 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
+// file: internal/mcp/mcp_server_processing.go.
 package mcp
-
-// file: internal/mcp/mcp_server_processing.go
 
 import (
 	"context"
@@ -10,11 +9,12 @@ import (
 	"io"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dkoosis/cowgnition/internal/mcptypes" // Use mcptypes.
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
 
-// serve handles the main server loop, reading messages and dispatching them to the handler.
-func (s *Server) serve(ctx context.Context, handlerFunc transport.MessageHandler) error {
+// serverProcessing handles the main server loop, reading messages and dispatching them.
+func (s *Server) serverProcessing(ctx context.Context, handlerFunc mcptypes.MessageHandler) error { // Use mcptypes.MessageHandler.
 	s.logger.Info("Server processing loop started.")
 	if handlerFunc == nil {
 		return errors.New("serve called with nil handler function")
@@ -48,22 +48,22 @@ func (s *Server) serve(ctx context.Context, handlerFunc transport.MessageHandler
 // processNextMessage handles reading, processing, and responding to a single message.
 // It returns non-nil error only for terminal conditions. Other processing errors are handled internally
 // by sending a JSON-RPC error response.
-func (s *Server) processNextMessage(ctx context.Context, handlerFunc transport.MessageHandler) error {
-	// 1. Read Message
+func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.MessageHandler) error { // Use mcptypes.MessageHandler.
+	// 1. Read Message.
 	msgBytes, readErr := s.transport.ReadMessage(ctx)
 	if readErr != nil {
 		// Let handleTransportReadError decide if it's terminal.
 		return s.handleTransportReadError(readErr)
 	}
 
-	// 2. Extract Info for Logging/Context (Best Effort)
+	// 2. Extract Info for Logging/Context (Best Effort).
 	method, idStr := s.extractMessageInfo(msgBytes)
-	ctxWithState := context.WithValue(ctx, connectionStateKey, s.connectionState) // Add connection state
+	ctxWithState := context.WithValue(ctx, connectionStateKey, s.connectionState) // Add connection state.
 
-	// 3. Handle Message via Middleware Chain / Final Handler
+	// 3. Handle Message via Middleware Chain / Final Handler.
 	respBytes, handleErr := handlerFunc(ctxWithState, msgBytes)
 
-	// 4. Handle Processing Error (if any)
+	// 4. Handle Processing Error (if any).
 	if handleErr != nil {
 		// handleProcessingError logs the error and attempts to create/write a JSON-RPC error response.
 		// It returns an error only if writing the error response fails.
@@ -77,16 +77,16 @@ func (s *Server) processNextMessage(ctx context.Context, handlerFunc transport.M
 		return nil
 	}
 
-	// 5. Handle State Update for Initialize Success
+	// 5. Handle State Update for Initialize Success.
 	// Check if the successful response was for an "initialize" method.
 	if method == "initialize" && respBytes != nil {
 		var respObj struct {
-			Error *json.RawMessage `json:"error"` // Only check if 'error' field exists
+			Error *json.RawMessage `json:"error"` // Only check if 'error' field exists.
 		}
-		// Check if the response indicates success (no 'error' field)
+		// Check if the response indicates success (no 'error' field).
 		if err := json.Unmarshal(respBytes, &respObj); err == nil && respObj.Error == nil {
 			s.logger.Info("Initialize request successful, marking connection as initialized.")
-			// Safely update connection state (assuming connectionState is thread-safe or accessed serially)
+			// Safely update connection state (assuming connectionState is thread-safe or accessed serially).
 			if s.connectionState != nil {
 				s.connectionState.SetInitialized()
 			} else {
@@ -99,7 +99,7 @@ func (s *Server) processNextMessage(ctx context.Context, handlerFunc transport.M
 		// No state change if the initialize response contained an error.
 	}
 
-	// 6. Write Successful Response (if one was generated)
+	// 6. Write Successful Response (if one was generated).
 	if respBytes != nil {
 		if writeErr := s.writeResponse(ctx, respBytes, method, idStr); writeErr != nil {
 			// If writing the success response fails, return the error.
@@ -118,7 +118,7 @@ func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, er
 		JSONRPC string          `json:"jsonrpc"`
 		ID      json.RawMessage `json:"id,omitempty"`
 		Method  string          `json:"method"`
-		Params  json.RawMessage `json:"params"` // Keep as RawMessage for handler
+		Params  json.RawMessage `json:"params"` // Keep as RawMessage for handler.
 	}
 
 	// We assume the message has already passed basic JSON validation and schema checks
@@ -165,11 +165,11 @@ func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, er
 	responseObj := struct {
 		JSONRPC string          `json:"jsonrpc"`
 		ID      json.RawMessage `json:"id"`
-		Result  json.RawMessage `json:"result"` // Result is expected to be already marshalled JSON
+		Result  json.RawMessage `json:"result"` // Result is expected to be already marshalled JSON.
 	}{
 		JSONRPC: "2.0",
 		ID:      request.ID,
-		Result:  resultBytes, // Assign the raw JSON bytes from the handler
+		Result:  resultBytes, // Assign the raw JSON bytes from the handler.
 	}
 
 	// Marshal the final success response.
@@ -186,9 +186,9 @@ func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, er
 func (s *Server) handleTransportReadError(readErr error) error {
 	var transportErr *transport.Error
 	isEOF := errors.Is(readErr, io.EOF)
-	// Check for specific closed error code
+	// Check for specific closed error code.
 	isClosedCode := errors.As(readErr, &transportErr) && transportErr.Code == transport.ErrTransportClosed
-	// Also check for the closed error type for robustness
+	// Also check for the closed error type for robustness.
 	isClosedType := transport.IsClosedError(readErr)
 
 	isContextDone := errors.Is(readErr, context.Canceled) || errors.Is(readErr, context.DeadlineExceeded)
@@ -198,7 +198,7 @@ func (s *Server) handleTransportReadError(readErr error) error {
 		return readErr // Return the original error.
 	}
 
-	// Other read errors (e.g., temporary network glitch, invalid NDJSON framing handled by transport)
+	// Other read errors (e.g., temporary network glitch, invalid NDJSON framing handled by transport).
 	// are logged but might not be terminal. Return nil to allow the loop to continue.
 	s.logger.Error("Non-terminal error reading message from transport", "error", fmt.Sprintf("%+v", readErr))
 	return nil // Indicate loop should continue.
@@ -210,10 +210,10 @@ func (s *Server) handleProcessingError(ctx context.Context, msgBytes []byte, met
 	s.logger.Warn("Error processing message via handler.",
 		"method", method,
 		"requestID", id,
-		"error", fmt.Sprintf("%+v", handleErr)) // Log original error with stack trace
+		"error", fmt.Sprintf("%+v", handleErr)) // Log original error with stack trace.
 
 	// Create the JSON-RPC error response bytes using the error mapping logic.
-	errRespBytes, creationErr := s.createErrorResponse(msgBytes, handleErr) // createErrorResponse is now in mcp_server_error_handling.go
+	errRespBytes, creationErr := s.createErrorResponse(msgBytes, handleErr) // createErrorResponse is in mcp_server_error_handling.go.
 	if creationErr != nil {
 		// This is critical - failed even to create the error response structure.
 		s.logger.Error("CRITICAL: Failed to create error response.",
@@ -253,7 +253,7 @@ func (s *Server) writeResponse(ctx context.Context, respBytes []byte, method, id
 			"requestID", id,
 			"responseSize", len(respBytes),
 			"error", fmt.Sprintf("%+v", writeErr))
-		return writeErr // Propagate the error
+		return writeErr // Propagate the error.
 	}
 	s.logger.Debug("Successfully wrote response.", "method", method, "requestID", id, "responseSize", len(respBytes))
 	return nil
@@ -264,40 +264,40 @@ func (s *Server) isTerminalError(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Check standard context errors
+	// Check standard context errors.
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
-	// Check for EOF
+	// Check for EOF.
 	if errors.Is(err, io.EOF) {
 		return true
 	}
-	// Check for specific transport closed/timeout errors
+	// Check for specific transport closed/timeout errors.
 	var transportErr *transport.Error
 	if errors.As(err, &transportErr) {
 		return transportErr.Code == transport.ErrTransportClosed ||
 			transportErr.Code == transport.ErrWriteTimeout ||
-			transportErr.Code == transport.ErrReadTimeout // Read timeout might also be terminal
+			transportErr.Code == transport.ErrReadTimeout // Read timeout might also be terminal.
 	}
-	// Check using the transport helper function as well
+	// Check using the transport helper function as well.
 	if transport.IsClosedError(err) {
 		return true
 	}
 
-	// Add other conditions specific to your application if needed
+	// Add other conditions specific to your application if needed.
 
-	return false // Assume other errors are potentially recoverable
+	return false // Assume other errors are potentially recoverable.
 }
 
 // extractMessageInfo attempts to get method name and ID from raw message bytes for logging/context.
 func (s *Server) extractMessageInfo(msgBytes []byte) (method string, id string) {
 	method = ""
-	id = "unknown" // Default ID if parsing fails or not present
+	id = "unknown" // Default ID if parsing fails or not present.
 
 	// Use a simple struct to only parse needed fields.
 	var parsedInfo struct {
-		Method *string         `json:"method"` // Pointer to distinguish missing from empty string
-		ID     json.RawMessage `json:"id"`     // Keep ID raw
+		Method *string         `json:"method"` // Pointer to distinguish missing from empty string.
+		ID     json.RawMessage `json:"id"`     // Keep ID raw.
 	}
 
 	// Unmarshal partially. Ignore error as this is best-effort for logging.
@@ -308,10 +308,10 @@ func (s *Server) extractMessageInfo(msgBytes []byte) (method string, id string) 
 		method = *parsedInfo.Method
 	}
 	if parsedInfo.ID != nil && string(parsedInfo.ID) != "null" {
-		// Represent ID as its raw JSON string representation (e.g., "123", "\"req-abc\"")
+		// Represent ID as its raw JSON string representation (e.g., "123", "\"req-abc\"").
 		id = string(parsedInfo.ID)
 	} else if parsedInfo.ID != nil && string(parsedInfo.ID) == "null" {
-		id = "null" // Explicitly null ID
+		id = "null" // Explicitly null ID.
 	}
 	// If ID is missing, it remains "unknown".
 

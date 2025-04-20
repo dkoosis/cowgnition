@@ -1,6 +1,7 @@
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
-// file: internal/rtm/diagnostics.go
 package rtm
+
+// file: internal/rtm/diagnostics.go
 
 import (
 	"context"
@@ -235,5 +236,3 @@ func (s *Service) checkRTMAuth(ctx context.Context) DiagnosticResult {
 		Description: fmt.Sprintf("Authenticated as %q", authState.Username), Duration: duration,
 	}
 }
-
-// NOTE: truncateString function REMOVED from this file. It now resides in helpers.go.

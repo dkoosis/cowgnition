@@ -1,4 +1,4 @@
-// cmd/server/claude_desktop_registration.go
+// file: cmd/claude_desktop_registration.go
 package main
 
 import (
@@ -20,8 +20,9 @@ type ClaudeDesktopConfig struct {
 	MCPServers map[string]MCPServerConfig `json:"mcpServers"`
 }
 
-// MCPServerConfig represents a server configuration in Claude Desktop.
-// It contains the command to execute, arguments, and optional environment variables.
+// MCPServerConfig represents a server configuration entry within Claude Desktop's config.
+// It contains the command to execute, arguments, and optional environment variables
+// needed to launch and communicate with an MCP server.
 type MCPServerConfig struct {
 	Command string            `json:"command"`
 	Args    []string          `json:"args"`
@@ -76,9 +77,9 @@ func runSetup(configPath string) error {
 	// Print success message.
 	fmt.Println("✅ CowGnition setup complete.")
 	fmt.Println("Next steps:")
-	fmt.Println("1. Run 'cowgnition serve' to start the server")
-	fmt.Println("2. Open Claude Desktop to start using CowGnition")
-	fmt.Println("3. Type 'What are my RTM tasks?' to test the connection")
+	fmt.Println("1. Run 'cowgnition serve' to start the server.")
+	fmt.Println("2. Open Claude Desktop to start using CowGnition.")
+	fmt.Println("3. Type 'What are my RTM tasks?' to test the connection.")
 
 	return nil
 }
@@ -153,6 +154,12 @@ func createDefaultConfig(configPath string) error {
 auth:
   # Default path for storing the RTM auth *token* (not API key/secret).
   token_path: "~/.config/cowgnition/rtm_token.json"
+
+schema:
+  # Optional: Specify a local file or URL to override the embedded schema.
+  # Example: schemaOverrideURI: "file:///path/to/your/schema.json"
+  # Example: schemaOverrideURI: "https://example.com/schema.json"
+  # schemaOverrideURI: ""
 `
 
 	// Use more secure file permissions (0600 instead of 0644).
@@ -160,7 +167,6 @@ auth:
 		return errors.Wrap(err, "failed to write default configuration file")
 	}
 
-	// fmt.Println("Please edit the configuration file to add your RTM API key and shared secret.") // Removed this instruction.
 	return nil
 }
 
@@ -211,7 +217,7 @@ func configureClaudeDesktop(exePath, configPath, apiKey, sharedSecret string) er
 		if err := json.Unmarshal(data, &claudeConfig); err != nil {
 			// If the file exists but is invalid, create a new one.
 			if debugMode {
-				log.Printf("Failed to parse existing Claude Desktop config, creating new one: %v", err)
+				log.Printf("Failed to parse existing Claude Desktop config, creating new one: %v.", err)
 			}
 			claudeConfig = ClaudeDesktopConfig{
 				MCPServers: make(map[string]MCPServerConfig),

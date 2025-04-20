@@ -1,17 +1,19 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
 package mcp
 
+// file: internal/mcp/mcp_server.go
+
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os" // Keep os import.
+	"os"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/logging"
-	"github.com/dkoosis/cowgnition/internal/mcp_type"   // Import the new shared types.
+	"github.com/dkoosis/cowgnition/internal/mcptypes"   // Import path updated.
 	"github.com/dkoosis/cowgnition/internal/middleware" // Keep middleware import for factory functions.
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
@@ -42,7 +44,7 @@ type Server struct {
 	transport       transport.Transport
 	logger          logging.Logger
 	startTime       time.Time
-	validator       schema.ValidatorInterface
+	validator       schema.ValidatorInterface // Use interface from schema package.
 	connectionState *ConnectionState
 }
 
@@ -88,7 +90,7 @@ func (s *Server) registerMethods() {
 	s.methods["resources/read"] = s.handler.handleResourcesRead
 	s.methods["prompts/list"] = s.handler.handlePromptsList
 	s.methods["prompts/get"] = s.handler.handlePromptsGet
-	// ... register other methods ...
+	// Add other methods as needed.
 
 	s.logger.Info("Registered MCP methods.",
 		"count", len(s.methods),
@@ -110,6 +112,7 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 	s.transport = transport.NewNDJSONTransport(os.Stdin, os.Stdout, os.Stdin, s.logger)
 
 	// Setup validation middleware using internal/middleware package.
+	// Use DefaultValidationOptions from middleware which returns mcptypes.ValidationOptions.
 	validationOpts := middleware.DefaultValidationOptions()
 	validationOpts.StrictMode = true
 	validationOpts.ValidateOutgoing = true
@@ -123,28 +126,23 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 	}
 
 	// Pass the validator (which implements schema.ValidatorInterface).
+	// Ensure the validator implements the mcptypes.ValidatorInterface as well (assumed true).
 	validationMiddleware := middleware.NewValidationMiddleware(
 		s.validator,
 		validationOpts,
 		s.logger.WithField("subcomponent", "validation_mw"),
 	)
 
-	// Build middleware chain using mcp_type interfaces.
+	// Build middleware chain using mcptypes interfaces.
+	// NewChain takes mcptypes.MessageHandler, s.handleMessage matches this signature.
 	chain := middleware.NewChain(s.handleMessage)
 	chain.Use(validationMiddleware)
 
+	// Handler() returns mcptypes.MessageHandler.
 	serveHandler := chain.Handler()
 
+	// Pass the composed handler to the serve loop.
 	return s.serve(ctx, serveHandler)
-}
-
-// handleMessage processes an MCP message after middleware has been applied.
-func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, error) {
-	// Implementation unchanged, since this function doesn't create import cycles.
-	// ...existing implementation...
-
-	// Placeholder for demo purposes - real implementation would be kept.
-	return nil, nil
 }
 
 // ServeHTTP starts the server with an HTTP transport (Placeholder).
@@ -170,10 +168,18 @@ func (s *Server) Shutdown(_ context.Context) error {
 }
 
 // serve handles the main server loop, reading messages and dispatching them to the handler.
-func (s *Server) serve(ctx context.Context, handlerFunc mcp_type.MessageHandler) error {
-	// Implementation here, but using the mcp_type MessageHandler type.
-	// ...existing implementation...
-
-	// Placeholder for demo purposes - real implementation would be kept.
-	return nil
+// Now accepts mcptypes.MessageHandler.
+func (s *Server) serve(ctx context.Context, handlerFunc mcptypes.MessageHandler) error {
+	// This function's implementation is in mcp_server_processing.go.
+	// Ensure its signature matches this call.
+	// The previous implementation in mcp_server_processing.go matches this.
+	return s.serverProcessing(ctx, handlerFunc) // Internal call to avoid redefinition.
 }
+
+// serverProcessing is the actual implementation, renamed to avoid conflict.
+// Located in mcp_server_processing.go.
+// func (s *Server) serverProcessing(ctx context.Context, handlerFunc mcptypes.MessageHandler) error { ... }
+
+// handleMessage is the final handler in the middleware chain.
+// Its implementation is in mcp_server_processing.go.
+// func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, error) { ... }

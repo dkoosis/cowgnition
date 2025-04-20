@@ -1,7 +1,7 @@
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
 package rtm
 
-// file: internal/rtm/client_test.go
+// file: internal/rtm/client_test.go.
 
 import (
 	"context"
@@ -19,8 +19,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRTMClient_GeneratesCorrectSignature_When_GivenParamsAndSecret verifies the RTM API signature generation logic.
-func TestRTMClient_GeneratesCorrectSignature_When_GivenParamsAndSecret(t *testing.T) {
+// --- Test Specific Structs ---
+// Define struct locally to avoid exporting from main package just for tests.
+type checkTokenResp struct {
+	Resp struct {
+		Stat string `json:"stat"`
+		Auth struct {
+			Token string `json:"token"`
+			User  struct {
+				ID       string `json:"id"`
+				Username string `json:"username"`
+				Fullname string `json:"fullname"`
+			} `json:"user"`
+		} `json:"auth"`
+	} `json:"rsp"`
+}
+
+// --- End Test Specific Structs ---
+
+// TestRTMClient_GenerateSignature_Succeeds_When_GivenVariousParamsAndSecrets verifies the RTM API signature generation logic.
+// Renamed function to follow ADR-008 convention.
+func TestRTMClient_GenerateSignature_Succeeds_When_GivenVariousParamsAndSecrets(t *testing.T) {
 	// Setup logger once.
 	logger := logging.GetNoopLogger()
 
@@ -89,7 +108,6 @@ func TestRTMClient_GeneratesCorrectSignature_When_GivenParamsAndSecret(t *testin
 			t.Logf("Generated signature: %s.", signature)
 
 			// Verify the result.
-			// Changed cow pun to a more standard message for maintainability.
 			assert.Equal(t, tc.expected, signature, "Generated signature '%s' didn't match expected '%s'.", signature, tc.expected)
 			if t.Failed() {
 				t.Logf("Signature mismatch details: Params=%v, Secret=%s.", tc.params, tc.secret)
@@ -100,8 +118,9 @@ func TestRTMClient_GeneratesCorrectSignature_When_GivenParamsAndSecret(t *testin
 	}
 }
 
-// TestRTMClient_PreparesParametersCorrectly_When_GivenMethodAndParams ensures standard parameters are added correctly before signing.
-func TestRTMClient_PreparesParametersCorrectly_When_GivenMethodAndParams(t *testing.T) {
+// TestRTMClient_PrepareParameters_Succeeds_When_GivenVariousMethodsAndParams ensures standard parameters are added correctly before signing.
+// Renamed function to follow ADR-008 convention.
+func TestRTMClient_PrepareParameters_Succeeds_When_GivenVariousMethodsAndParams(t *testing.T) {
 	// Setup a test client instance.
 	logger := logging.GetNoopLogger()
 	client := &Client{
@@ -167,7 +186,6 @@ func TestRTMClient_PreparesParametersCorrectly_When_GivenMethodAndParams(t *test
 				assert.Equal(t, "test_token", fullParams["auth_token"], "Auth token should be present and correct for method '%s'.", tc.method)
 			} else {
 				_, hasAuthToken := fullParams["auth_token"]
-				// Simplified cow pun.
 				assert.False(t, hasAuthToken, "Auth token should NOT be present for auth method '%s'.", tc.method)
 			}
 
@@ -183,8 +201,9 @@ func TestRTMClient_PreparesParametersCorrectly_When_GivenMethodAndParams(t *test
 	}
 }
 
-// TestRTMClient_CallMethod uses a mock HTTP server to test the full API call cycle.
-func TestRTMClient_CallMethod(t *testing.T) {
+// TestRTMClient_CallMethod_HandlesVariousScenarios uses a mock HTTP server to test the full API call cycle.
+// Renamed function to follow ADR-008 convention (alternative approach for table-driven tests).
+func TestRTMClient_CallMethod_HandlesVariousScenarios(t *testing.T) {
 	// --- Mock Server Setup ---
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Basic request verification.
@@ -212,11 +231,10 @@ func TestRTMClient_CallMethod(t *testing.T) {
 				},
 			}
 			// Echo back query parameters.
-			for k, v := range formValues {
-				if len(v) > 0 && k != "stat" { // Check k != "stat" just in case.
-					// Access nested map safely.
-					rspMap, ok := responseMap["rsp"].(map[string]interface{})
-					if ok {
+			rspMap, ok := responseMap["rsp"].(map[string]interface{})
+			if ok {
+				for k, v := range formValues {
+					if len(v) > 0 && k != "stat" { // Check k != "stat" just in case.
 						rspMap[k] = v[0]
 					}
 				}
@@ -285,9 +303,9 @@ func TestRTMClient_CallMethod(t *testing.T) {
 		logger: logger,
 	}
 
-	// --- Test Cases (Subtests using new convention) ---
+	// --- Test Cases (Subtests using descriptive names) ---
 
-	// Subtest: ReturnsOKAndEchoedParams_When_MethodIsEchoAndAPISucceeds
+	// Subtest: ReturnsOKAndEchoedParams_When_MethodIsEchoAndAPISucceeds.
 	t.Run("ReturnsOKAndEchoedParams_When_MethodIsEchoAndAPISucceeds", func(t *testing.T) {
 		ctx := context.Background()
 		params := map[string]string{"test_param": "test_value", "another_param": "value2"}
@@ -314,7 +332,7 @@ func TestRTMClient_CallMethod(t *testing.T) {
 		t.Logf("Echo test passed successfully.")
 	})
 
-	// Subtest: ReturnsRTMError_When_APIResponseHasStatFail
+	// Subtest: ReturnsRTMError_When_APIResponseHasStatFail.
 	t.Run("ReturnsRTMError_When_APIResponseHasStatFail", func(t *testing.T) {
 		ctx := context.Background()
 		params := map[string]string{}
@@ -331,7 +349,7 @@ func TestRTMClient_CallMethod(t *testing.T) {
 		assert.Contains(t, err.Error(), "Method not found", "Error message should contain the RTM error message 'Method not found'.")
 		// Optionally assert the specific error type if needed (e.g., *mcperrors.RTMError).
 		var rtmErr *mcperrors.RTMError
-		assert.True(t, errors.As(err, &rtmErr), "Error should be wrappable as *mcperrors.RTMError")
+		assert.True(t, errors.As(err, &rtmErr), "Error should be wrappable as *mcperrors.RTMError.")
 		if rtmErr != nil {
 			// Assuming RTMError has Code field corresponding to internal code.
 			assert.Equal(t, mcperrors.ErrRTMAPIFailure, rtmErr.Code, "Error code should be ErrRTMAPIFailure.")
@@ -339,7 +357,7 @@ func TestRTMClient_CallMethod(t *testing.T) {
 		t.Logf("API error test passed. Correctly handled the server responding with stat:fail.")
 	})
 
-	// Subtest: ReturnsOKAndAuthDetails_When_MethodIsCheckTokenAndAPISucceeds
+	// Subtest: ReturnsOKAndAuthDetails_When_MethodIsCheckTokenAndAPISucceeds.
 	t.Run("ReturnsOKAndAuthDetails_When_MethodIsCheckTokenAndAPISucceeds", func(t *testing.T) {
 		ctx := context.Background()
 		params := map[string]string{}
@@ -352,18 +370,18 @@ func TestRTMClient_CallMethod(t *testing.T) {
 		t.Logf("Received successful response for auth check: %s.", string(result))
 
 		// Unmarshal and check specific fields.
-		var respData checkTokenRsp // Use the specific struct type.
+		var respData checkTokenResp // Use the specific struct type defined in this test file.
 		err = json.Unmarshal(result, &respData)
 		require.NoError(t, err, "Failed to unmarshal successful auth check response JSON.")
 
-		assert.Equal(t, "ok", respData.Rsp.Stat, "Auth check response status should be 'ok'.")
-		require.NotNil(t, respData.Rsp.Auth.User, "Auth check response should contain user info.")
-		assert.Equal(t, "testuser", respData.Rsp.Auth.User.Username, "Auth check response should contain the username.")
-		assert.Equal(t, "test_token_123", respData.Rsp.Auth.Token, "Auth check response should echo back the token used.")
+		assert.Equal(t, "ok", respData.Resp.Stat, "Auth check response status should be 'ok'.") // Use Resp.
+		require.NotNil(t, respData.Resp.Auth.User, "Auth check response should contain user info.")
+		assert.Equal(t, "testuser", respData.Resp.Auth.User.Username, "Auth check response should contain the username.")
+		assert.Equal(t, "test_token_123", respData.Resp.Auth.Token, "Auth check response should echo back the token used.")
 		t.Logf("Auth check test passed.")
 	})
 
-	// Subtest: ReturnsHTTPError_When_MethodIsUnknown
+	// Subtest: ReturnsHTTPError_When_MethodIsUnknown.
 	t.Run("ReturnsHTTPError_When_MethodIsUnknown", func(t *testing.T) {
 		ctx := context.Background()
 		params := map[string]string{}
@@ -379,7 +397,7 @@ func TestRTMClient_CallMethod(t *testing.T) {
 		// Verify the error message indicates an HTTP status error.
 		// We check for the internal RTMError type which should wrap the HTTP status details.
 		var rtmErr *mcperrors.RTMError
-		require.True(t, errors.As(err, &rtmErr), "Error should be wrappable as *mcperrors.RTMError")
+		require.True(t, errors.As(err, &rtmErr), "Error should be wrappable as *mcperrors.RTMError.")
 		assert.Equal(t, mcperrors.ErrRTMAPIFailure, rtmErr.Code, "Error code should be ErrRTMAPIFailure for HTTP error.")
 		// Check the message generated by handleHTTPError.
 		assert.Contains(t, rtmErr.Message, "API returned non-200 status: 400", "Error message should indicate HTTP 400 Bad Request.")

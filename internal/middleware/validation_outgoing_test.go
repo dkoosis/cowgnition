@@ -16,7 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidationMiddleware_HandleMessage_OutgoingValidation_Success(t *testing.T) {
+// TestValidationMiddleware_SucceedsOutgoingValidation_When_ResponseIsValid tests successful outgoing validation.
+func TestValidationMiddleware_SucceedsOutgoingValidation_When_ResponseIsValid(t *testing.T) {
 	options := middleware.DefaultValidationOptions()
 	options.ValidateOutgoing = true // Explicitly enable.
 	mw, mockValidator, mockNextHandler := setupTestMiddleware(t, options)
@@ -31,7 +32,8 @@ func TestValidationMiddleware_HandleMessage_OutgoingValidation_Success(t *testin
 	// Outgoing validation succeeds.
 	mockValidator.On("Validate", mock.Anything, "outgoing_test_response", responseFromNext).Return(nil).Once()
 
-	resp, err := mw.HandleMessage(context.Background(), testMsg)
+	// CORRECTED: Call the middleware function mw directly.
+	resp, err := mw(mockNextHandler.Handle)(context.Background(), testMsg)
 
 	assert.NoError(t, err)
 	assert.Equal(t, responseFromNext, resp) // Original response should be returned.
@@ -39,7 +41,8 @@ func TestValidationMiddleware_HandleMessage_OutgoingValidation_Success(t *testin
 	mockNextHandler.AssertExpectations(t)
 }
 
-func TestValidationMiddleware_HandleMessage_OutgoingValidation_Failure_Strict(t *testing.T) {
+// TestValidationMiddleware_ReturnsErrorResponse_When_OutgoingValidationFailsInStrictMode tests outgoing validation failure in strict mode.
+func TestValidationMiddleware_ReturnsErrorResponse_When_OutgoingValidationFailsInStrictMode(t *testing.T) {
 	options := middleware.DefaultValidationOptions()
 	options.ValidateOutgoing = true
 	options.StrictOutgoing = true // Strict outgoing mode.
@@ -58,7 +61,8 @@ func TestValidationMiddleware_HandleMessage_OutgoingValidation_Failure_Strict(t 
 	// Outgoing validation fails.
 	mockValidator.On("Validate", mock.Anything, "outgoing_fail_response", responseFromNext).Return(outgoingValidationErr).Once()
 
-	resp, err := mw.HandleMessage(context.Background(), testMsg)
+	// CORRECTED: Call the middleware function mw directly.
+	resp, err := mw(mockNextHandler.Handle)(context.Background(), testMsg)
 
 	// HandleMessage should not return an error itself.
 	assert.NoError(t, err)
@@ -67,10 +71,10 @@ func TestValidationMiddleware_HandleMessage_OutgoingValidation_Failure_Strict(t 
 	// Assert response is a JSON-RPC error response reflecting the *outgoing* validation failure.
 	var errorResp map[string]interface{}
 	err = json.Unmarshal(resp, &errorResp)
-	require.NoError(t, err, "Response should be valid JSON")
+	require.NoError(t, err, "Response should be valid JSON.")
 
 	assert.Equal(t, "2.0", errorResp["jsonrpc"])
-	require.IsType(t, float64(0), errorResp["id"], "ID should be a number")
+	require.IsType(t, float64(0), errorResp["id"], "ID should be a number.")
 	assert.EqualValues(t, 11, errorResp["id"]) // ID should match original request.
 	require.Contains(t, errorResp, "error")
 	errObj, ok := errorResp["error"].(map[string]interface{})
@@ -91,7 +95,8 @@ func TestValidationMiddleware_HandleMessage_OutgoingValidation_Failure_Strict(t 
 	mockNextHandler.AssertExpectations(t)
 }
 
-func TestValidationMiddleware_HandleMessage_OutgoingValidation_Failure_NonStrict(t *testing.T) {
+// TestValidationMiddleware_ReturnsOriginalResponse_When_OutgoingValidationFailsInNonStrictMode tests outgoing validation failure in non-strict mode.
+func TestValidationMiddleware_ReturnsOriginalResponse_When_OutgoingValidationFailsInNonStrictMode(t *testing.T) {
 	options := middleware.DefaultValidationOptions()
 	options.ValidateOutgoing = true
 	options.StrictOutgoing = false // Non-strict outgoing mode.
@@ -109,7 +114,8 @@ func TestValidationMiddleware_HandleMessage_OutgoingValidation_Failure_NonStrict
 	// Outgoing validation fails.
 	mockValidator.On("Validate", mock.Anything, "outgoing_nonstrict_response", responseFromNext).Return(outgoingValidationErr).Once()
 
-	resp, err := mw.HandleMessage(context.Background(), testMsg)
+	// CORRECTED: Call the middleware function mw directly.
+	resp, err := mw(mockNextHandler.Handle)(context.Background(), testMsg)
 
 	// In non-strict outgoing mode, the original response from 'next' should be returned despite validation failure.
 	assert.NoError(t, err)

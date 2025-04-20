@@ -1,5 +1,4 @@
 // Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
-// File: internal/schema/name_rules_test.go
 package schema
 
 // file: internal/schema/name_rules_test.go
@@ -10,16 +9,18 @@ import (
 	"testing"
 )
 
-func TestValidateName(t *testing.T) {
+// TestValidateNameHelper_HandlesVariousCases_When_GivenDifferentNamesAndTypes tests the ValidateName helper function.
+// Renamed function to follow ADR-008 convention.
+func TestValidateNameHelper_HandlesVariousCases_When_GivenDifferentNamesAndTypes(t *testing.T) {
 	// For reference, the pattern currently being tested from name_rules.go:
-	// EntityTypeTool: Pattern: regexp.MustCompile(`^[a-z][a-zA-Z0-9]*$`), MaxLength: 64
+	// EntityTypeTool: Pattern: regexp.MustCompile(`^[a-z][a-zA-Z0-9]*$`), MaxLength: 64.
 	t.Parallel()
 	testCases := []struct {
-		name          string     // Name for the subtest
-		entityType    EntityType // The type of entity
-		inputName     string     // The name string to validate
-		expectError   bool       // Whether we expect ValidateName to return an error
-		errorContains string     // Optional: substring expected in the error message
+		name          string     // Name for the subtest.
+		entityType    EntityType // The type of entity.
+		inputName     string     // The name string to validate.
+		expectError   bool       // Whether we expect ValidateName to return an error.
+		errorContains string     // Optional: substring expected in the error message.
 	}{
 		// --- Cases for EntityTypeTool (Based on ^[a-z][a-zA-Z0-9]*$ and MaxLength: 64) ---
 		{
@@ -49,7 +50,7 @@ func TestValidateName(t *testing.T) {
 		{
 			name:        "[Tool] valid - exact max length (64)",
 			entityType:  EntityTypeTool,
-			inputName:   "a" + strings.Repeat("B", 63), // length 64
+			inputName:   "a" + strings.Repeat("B", 63), // length 64.
 			expectError: false,
 		},
 		{
@@ -118,7 +119,7 @@ func TestValidateName(t *testing.T) {
 		{
 			name:          "[Tool] invalid - too long (65)",
 			entityType:    EntityTypeTool,
-			inputName:     "a" + strings.Repeat("B", 64), // length 65
+			inputName:     "a" + strings.Repeat("B", 64), // length 65.
 			expectError:   true,
 			errorContains: "exceeds maximum length",
 		},
@@ -126,14 +127,14 @@ func TestValidateName(t *testing.T) {
 		// --- Cases for Unknown Entity Type ---
 		{
 			name:          "invalid entity type",
-			entityType:    EntityType("unknown"), // Use a made-up type
+			entityType:    EntityType("unknown"), // Use a made-up type.
 			inputName:     "someName",
 			expectError:   true,
 			errorContains: "unknown entity type",
 		},
 
 		// --- Placeholder: Add cases for EntityTypeResource and EntityTypePrompt ---
-		// (They currently use the same pattern as EntityTypeTool, so tests would be similar)
+		// (They currently use the same pattern as EntityTypeTool, so tests would be similar).
 		{
 			name:        "[Resource] valid name",
 			entityType:  EntityTypeResource,
@@ -162,29 +163,29 @@ func TestValidateName(t *testing.T) {
 		},
 	}
 
-	// Loop through each test case
+	// Loop through each test case.
 	for _, tc := range testCases {
 		// Use t.Run() to create a subtest for each case. This gives clearer output.
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel() // Indicate that this test case can run in parallel with others
+			t.Parallel() // Indicate that this test case can run in parallel with others.
 
-			// Call the function we want to test
+			// Call the function we want to test.
 			err := ValidateName(tc.entityType, tc.inputName)
 
-			// Check if an error occurred when we didn't expect one
+			// Check if an error occurred when we didn't expect one.
 			if !tc.expectError && err != nil {
-				t.Errorf("ValidateName(%q, %q) returned unexpected error: %v", tc.entityType, tc.inputName, err)
+				t.Errorf("ValidateName(%q, %q) returned unexpected error: %v.", tc.entityType, tc.inputName, err)
 			}
 
-			// Check if an error did *not* occur when we expected one
+			// Check if an error did *not* occur when we expected one.
 			if tc.expectError && err == nil {
-				t.Errorf("ValidateName(%q, %q) expected an error, but got none", tc.entityType, tc.inputName)
+				t.Errorf("ValidateName(%q, %q) expected an error, but got none.", tc.entityType, tc.inputName)
 			}
 
-			// Optionally, check if the error message contains a specific substring
+			// Optionally, check if the error message contains a specific substring.
 			if tc.expectError && err != nil && tc.errorContains != "" {
 				if !strings.Contains(err.Error(), tc.errorContains) {
-					t.Errorf("ValidateName(%q, %q) error %q does not contain expected substring %q",
+					t.Errorf("ValidateName(%q, %q) error %q does not contain expected substring %q.",
 						tc.entityType, tc.inputName, err.Error(), tc.errorContains)
 				}
 			}
@@ -192,15 +193,16 @@ func TestValidateName(t *testing.T) {
 	}
 }
 
-// Optional: Add a test specifically for the regex pattern itself if desired.
-func TestToolNameRegex(t *testing.T) {
+// TestSchemaRegex_Matches_When_NameIsValidToolName verifies the regex pattern for tool names.
+// Renamed function to follow ADR-008 convention.
+func TestSchemaRegex_Matches_When_NameIsValidToolName(t *testing.T) {
 	rule, ok := GetNameRule(EntityTypeTool)
 	if !ok {
-		t.Fatal("Could not get rule for EntityTypeTool")
+		t.Fatal("Could not get rule for EntityTypeTool.")
 	}
 	expectedPattern := `^[a-z][a-zA-Z0-9]*$`
 	if rule.Pattern.String() != expectedPattern {
-		t.Errorf("Expected pattern %q, but got %q", expectedPattern, rule.Pattern.String())
+		t.Errorf("Expected pattern %q, but got %q.", expectedPattern, rule.Pattern.String())
 	}
-	// You could add more specific regex tests here too
+	// You could add more specific regex tests here too.
 }

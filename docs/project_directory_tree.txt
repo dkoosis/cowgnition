@@ -42,8 +42,9 @@
 │   │   ├── mcp_server_processing.go
 │   │   ├── mcp_server_test.go
 │   │   └── types.go
-│   ├── mcp_types/
-│   │   └── middleware.go
+│   ├── mcptypes/
+│   │   ├── interfaces.go
+│   │   └── middleware.bak
 │   ├── middleware/
 │   │   ├── chain.go
 │   │   ├── validation.go
@@ -101,4 +102,4 @@
 ├── go.sum
 └── log
 
-17 directories, 85 files
+17 directories, 86 files

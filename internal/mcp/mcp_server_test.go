@@ -1,7 +1,7 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
 package mcp
 
-// file: internal/mcp/mcp_server_test.go.
+// file: internal/mcp/mcp_server_test.go
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/dkoosis/cowgnition/internal/config"
-	"github.com/dkoosis/cowgnition/internal/logging"
+	"github.com/dkoosis/cowgnition/internal/logging" // Import mcptypes.
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
 	"github.com/stretchr/testify/assert"
@@ -55,9 +55,10 @@ func getCurrentDir() string {
 	return dir
 }
 
-// TestMCPInitializationProtocol verifies the complete MCP handshake:
+// TestMCPServer_CompletesHandshake_When_ClientFollowsProtocol verifies the complete MCP handshake:
 // 'initialize' request/response -> 'notifications/initialized' -> successful 'tools/list'.
-func TestMCPInitializationProtocol(t *testing.T) {
+// Renamed function to follow ADR-008 convention.
+func TestMCPServer_CompletesHandshake_When_ClientFollowsProtocol(t *testing.T) {
 	t.Logf("Testing %s: Verifying the full MCP handshake ('initialize' -> 'initialized' -> 'tools/list').", t.Name())
 	// Create an in-memory transport pair.
 	transportPair := transport.NewInMemoryTransportPair()
@@ -73,7 +74,7 @@ func TestMCPInitializationProtocol(t *testing.T) {
 	schemaCfg := config.SchemaConfig{
 		SchemaOverrideURI: "file://" + schemaPath, // Use file:// prefix.
 	}
-	// Corrected: Use NewValidator.
+	// Use NewValidator.
 	validator := schema.NewValidator(schemaCfg, logging.GetNoopLogger())
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Failed to initialize schema validator with official schema file.")
@@ -101,7 +102,8 @@ func TestMCPInitializationProtocol(t *testing.T) {
 		// Use context.Background() for the server to prevent premature shutdown.
 		// The test will close the transports to stop the server.
 		// Pass the actual handler function (s.handleMessage).
-		serverErrCh <- server.serve(context.Background(), server.handleMessage)
+		// Ensure s.handleMessage matches mcptypes.MessageHandler.
+		serverErrCh <- server.serverProcessing(context.Background(), server.handleMessage)
 	}()
 
 	// Client-side: Send an initialize request.
@@ -214,9 +216,10 @@ func TestMCPInitializationProtocol(t *testing.T) {
 	}
 }
 
-// TestInvalidMethodSequence tests that the server correctly rejects requests
+// TestMCPServer_ReturnsError_When_MethodCalledBeforeInitialize tests that the server correctly rejects requests
 // made prior to the required initialization sequence (out of sequence).
-func TestInvalidMethodSequence(t *testing.T) {
+// Renamed function to follow ADR-008 convention.
+func TestMCPServer_ReturnsError_When_MethodCalledBeforeInitialize(t *testing.T) {
 	t.Logf("Testing %s: Ensuring server rejects requests prior to initialization (out of sequence).", t.Name())
 	// Create an in-memory transport pair.
 	transportPair := transport.NewInMemoryTransportPair()
@@ -232,7 +235,7 @@ func TestInvalidMethodSequence(t *testing.T) {
 	schemaCfg := config.SchemaConfig{
 		SchemaOverrideURI: "file://" + schemaPath, // Use file:// prefix.
 	}
-	// Corrected: Use NewValidator.
+	// Use NewValidator.
 	validator := schema.NewValidator(schemaCfg, logging.GetNoopLogger())
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Failed to initialize schema validator with official schema file.")
@@ -257,7 +260,8 @@ func TestInvalidMethodSequence(t *testing.T) {
 	// Start the server in a goroutine.
 	serverErrCh := make(chan error, 1)
 	go func() {
-		serverErrCh <- server.serve(context.Background(), server.handleMessage)
+		// Ensure s.handleMessage matches mcptypes.MessageHandler.
+		serverErrCh <- server.serverProcessing(context.Background(), server.handleMessage)
 	}()
 
 	// Client-side: Skip initialization and send a tools/list request directly.
@@ -291,6 +295,7 @@ func TestInvalidMethodSequence(t *testing.T) {
 	code, ok := errorObj["code"].(float64) // JSON numbers unmarshal to float64.
 	require.True(t, ok, "Expected numeric error code, got: %v.", errorObj["code"])
 
+	// MethodNotFound is often used for sequence errors before init.
 	assert.Equal(t, float64(transport.JSONRPCMethodNotFound), code, "Expected Method Not Found error code (-32601) for sequence violation.")
 
 	message, ok := errorObj["message"].(string)
@@ -311,9 +316,10 @@ func TestInvalidMethodSequence(t *testing.T) {
 	assert.NoError(t, err, "Failed to close server transport.")
 }
 
-// TestMCPMethodNotFound tests that the server correctly handles requests
+// TestMCPServer_ReturnsMethodNotFoundError_When_MethodIsUnknown tests that the server correctly handles requests
 // for unknown methods (e.g., "non_existent_method") after successful initialization.
-func TestMCPMethodNotFound(t *testing.T) {
+// Renamed function to follow ADR-008 convention.
+func TestMCPServer_ReturnsMethodNotFoundError_When_MethodIsUnknown(t *testing.T) {
 	t.Logf("Testing %s: Ensuring server handles requests for unknown methods correctly after initialization.", t.Name())
 	// Create an in-memory transport pair.
 	transportPair := transport.NewInMemoryTransportPair()
@@ -329,7 +335,7 @@ func TestMCPMethodNotFound(t *testing.T) {
 	schemaCfg := config.SchemaConfig{
 		SchemaOverrideURI: "file://" + schemaPath, // Use file:// prefix.
 	}
-	// Corrected: Use NewValidator.
+	// Use NewValidator.
 	validator := schema.NewValidator(schemaCfg, logging.GetNoopLogger())
 	err := validator.Initialize(ctx)
 	require.NoError(t, err, "Failed to initialize schema validator with official schema file.")
@@ -354,7 +360,8 @@ func TestMCPMethodNotFound(t *testing.T) {
 	// Start the server in a goroutine.
 	serverErrCh := make(chan error, 1)
 	go func() {
-		serverErrCh <- server.serve(context.Background(), server.handleMessage)
+		// Ensure s.handleMessage matches mcptypes.MessageHandler.
+		serverErrCh <- server.serverProcessing(context.Background(), server.handleMessage)
 	}()
 
 	// Initialize the connection properly first.

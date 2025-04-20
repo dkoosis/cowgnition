@@ -14,6 +14,8 @@ import (
 )
 
 // GetTools returns the MCP tools provided by this service.
+// These tools allow clients (like AI assistants) to interact with
+// the user's Remember The Milk account.
 func (s *Service) GetTools() []mcp.Tool {
 	// Tool definitions using helper methods for schemas.
 	return []mcp.Tool{
@@ -56,7 +58,9 @@ func (s *Service) GetTools() []mcp.Tool {
 	}
 }
 
-// CallTool routes MCP tool calls to the appropriate handler.
+// CallTool routes MCP tool calls to the appropriate RTM handler.
+// It parses the tool name and arguments, executes the corresponding
+// service method, and returns the result or an error formatted for MCP.
 func (s *Service) CallTool(ctx context.Context, name string, args json.RawMessage) (*mcp.CallToolResult, error) {
 	if !s.initialized {
 		return s.serviceNotInitializedError(), nil // Use helper.

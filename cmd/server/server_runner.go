@@ -19,15 +19,8 @@ import (
 	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/mcp"
 	"github.com/dkoosis/cowgnition/internal/rtm"
-
-	// Import schema package for the interface.
 	"github.com/dkoosis/cowgnition/internal/schema"
-	// Corrected: Remove import of middleware if no longer needed directly here.
-	// "github.com/dkoosis/cowgnition/internal/middleware".
 )
-
-// Define the fallback schema JSON. This is embedded in validator.go now.
-// const fallbackSchemaJSON = `{...}` // REMOVED.
 
 // RunServer starts the MCP server with the specified transport type.
 func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout time.Duration, debug bool) error {

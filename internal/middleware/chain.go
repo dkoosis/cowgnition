@@ -1,26 +1,33 @@
 // Package middleware provides chainable handlers for processing MCP messages, like validation.
-// It implements the Chain interface defined in the mcp_type package for creating middleware
+// It implements the Chain interface defined in the mcptypes package for creating middleware
 // pipelines that can transform, validate, or enhance message processing.
 package middleware
 
+// file: internal/middleware/chain.go
+
+// mcptypes import path updated.
+import (
+	"github.com/dkoosis/cowgnition/internal/mcptypes"
+)
+
 // middlewareChain implements the Chain interface for building middleware stacks.
 type middlewareChain struct {
-	handler     mcp_type.MessageHandler
-	middlewares []mcp_type.MiddlewareFunc
+	handler     mcptypes.MessageHandler   // Use type from renamed package.
+	middlewares []mcptypes.MiddlewareFunc // Use type from renamed package.
 	finalized   bool
 }
 
 // NewChain creates a new middleware chain with the given final handler.
-func NewChain(finalHandler mcp_type.MessageHandler) mcp_type.Chain {
+func NewChain(finalHandler mcptypes.MessageHandler) mcptypes.Chain { // Use type from renamed package.
 	return &middlewareChain{
 		handler:     finalHandler,
-		middlewares: make([]mcp_type.MiddlewareFunc, 0),
+		middlewares: make([]mcptypes.MiddlewareFunc, 0), // Use type from renamed package.
 		finalized:   false,
 	}
 }
 
 // Use adds a middleware function to the chain.
-func (c *middlewareChain) Use(middleware mcp_type.MiddlewareFunc) mcp_type.Chain {
+func (c *middlewareChain) Use(middleware mcptypes.MiddlewareFunc) mcptypes.Chain { // Use type from renamed package.
 	if c.finalized {
 		// If already finalized, create a new chain.
 		return NewChain(c.handler).Use(middleware)
@@ -31,7 +38,7 @@ func (c *middlewareChain) Use(middleware mcp_type.MiddlewareFunc) mcp_type.Chain
 }
 
 // Handler returns the final composed handler function.
-func (c *middlewareChain) Handler() mcp_type.MessageHandler {
+func (c *middlewareChain) Handler() mcptypes.MessageHandler { // Use type from renamed package.
 	if c.finalized {
 		return c.handler
 	}

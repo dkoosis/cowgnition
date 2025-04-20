@@ -1,7 +1,7 @@
 // Package middleware provides chainable handlers for processing MCP messages, like validation.
 package middleware
 
-// file: internal/middleware/validation_process.go
+// file: internal/middleware/validation_process.go.
 
 import (
 	"context"
@@ -31,8 +31,8 @@ func (m *ValidationMiddleware) validateIncoming(ctx context.Context, message []b
 	}
 
 	// Identify message type (e.g., "initialize", "tools/list") and ID.
-	// Uses helpers from validation_identify.go.
-	msgType, reqID, identifyErr := m.identifyMessage(message)
+	// Fixed: Call identifyMessage directly, not as a method on m.
+	msgType, reqID, identifyErr := identifyMessage(message)
 	if identifyErr != nil {
 		preview := calculatePreview(message)
 		m.logger.Warn("Failed to identify message type/structure.", "error", identifyErr, "messagePreview", preview)
@@ -210,7 +210,8 @@ func (m *ValidationMiddleware) validateOutgoingResponse(ctx context.Context, req
 
 	if validationErr != nil {
 		// Log detailed context if validation fails.
-		responseMsgType, responseReqID, _ := m.identifyMessage(responseBytes) // Identify response for logging context.
+		// Fixed: Call identifyMessage directly, not as a method on m.
+		responseMsgType, responseReqID, _ := identifyMessage(responseBytes) // Identify response for logging context.
 		preview := calculatePreview(responseBytes)
 
 		// Perform specific checks for known outgoing types if validation fails (e.g., tool names).

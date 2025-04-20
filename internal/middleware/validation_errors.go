@@ -45,8 +45,6 @@ func createValidationErrorResponse(id interface{}, validationErr error) ([]byte,
 	var schemaValErr *schema.ValidationError
 	if !errors.As(validationErr, &schemaValErr) {
 		// If the error isn't a schema.ValidationError, treat it as an internal error.
-		// Maybe log the original error here for debugging.
-		// log.Printf("createValidationErrorResponse called with non-schema error: %v", validationErr) // Example logging.
 		return createInternalErrorResponse(id)
 	}
 
@@ -73,8 +71,9 @@ func createValidationErrorResponse(id interface{}, validationErr error) ([]byte,
 	if schemaValErr.Context != nil {
 		for k, v := range schemaValErr.Context {
 			// Avoid overwriting standard fields; prefix context keys if necessary.
-			if _, exists := errorData[k]; !exists {
-				errorData["context_"+k] = v // Example: Prefix with "context_".
+			contextKey := "context_" + k // Example prefixing.
+			if _, exists := errorData[contextKey]; !exists {
+				errorData[contextKey] = v
 			}
 			// Special handling for suggestion if provided in context.
 			if k == "suggestion" {

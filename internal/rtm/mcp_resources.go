@@ -7,8 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url" // Ensure url is imported
-	"strings" // Ensure strings is imported
+	"net/url" // Ensure url is imported.
+	"strings" // Ensure strings is imported.
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/mcp"
@@ -42,18 +42,20 @@ func (s *Service) GetResources() []mcp.Resource {
 			Description: "Tasks in your Remember The Milk account (default view). Use rtm://tasks?filter=... for specific filters.",
 			MimeType:    "application/json",
 		},
-		// Consider adding a ResourceTemplate if complex filtering is common
+		// Consider adding a ResourceTemplate if complex filtering is common.
 	}
 }
 
 // ReadResource handles MCP resource read requests for this service.
+// It routes the request based on the URI and returns the resource content
+// or an appropriate error if the resource is not found or access fails.
 func (s *Service) ReadResource(ctx context.Context, uri string) ([]interface{}, error) {
 	if !s.initialized {
-		// Return internal error, not MCP error result, as this indicates a server state issue
+		// Return internal error, not MCP error result, as this indicates a server state issue.
 		return nil, errors.New("RTM service is not initialized")
 	}
 
-	// Route based on URI
+	// Route based on URI.
 	switch {
 	case uri == "rtm://auth":
 		return s.readAuthResource(ctx)
@@ -62,16 +64,16 @@ func (s *Service) ReadResource(ctx context.Context, uri string) ([]interface{}, 
 	case uri == "rtm://tags":
 		return s.readTagsResource(ctx)
 	case uri == "rtm://tasks":
-		return s.readTasksResourceWithFilter(ctx, "") // No filter
+		return s.readTasksResourceWithFilter(ctx, "") // No filter.
 	case strings.HasPrefix(uri, "rtm://tasks?"):
 		filter, err := extractFilterFromURI(uri)
 		if err != nil {
-			// Return internal parsing error
+			// Return internal parsing error.
 			return nil, errors.Wrapf(err, "failed to parse filter from tasks URI: %s", uri)
 		}
 		return s.readTasksResourceWithFilter(ctx, filter)
 	default:
-		// Return MCP resource not found error
+		// Return MCP resource not found error.
 		return nil, mcperrors.NewResourceError(
 			fmt.Sprintf("Unknown RTM resource URI: %s", uri),
 			nil,
@@ -82,36 +84,36 @@ func (s *Service) ReadResource(ctx context.Context, uri string) ([]interface{}, 
 // --- Resource Readers ---
 
 func (s *Service) readAuthResource(ctx context.Context) ([]interface{}, error) {
-	authState, err := s.GetAuthState(ctx) // Use service method
+	authState, err := s.GetAuthState(ctx) // Use service method.
 	if err != nil {
-		// Return internal error from GetAuthState
+		// Return internal error from GetAuthState.
 		return nil, errors.Wrap(err, "failed to get auth state for resource")
 	}
-	return s.createJSONResourceContent("rtm://auth", authState) // Use helper
+	return s.createJSONResourceContent("rtm://auth", authState) // Use helper.
 }
 
 func (s *Service) readListsResource(ctx context.Context) ([]interface{}, error) {
 	if !s.IsAuthenticated() {
-		return s.notAuthenticatedResourceContent("rtm://lists"), nil // Return specific content, not error
+		return s.notAuthenticatedResourceContent("rtm://lists"), nil // Return specific content, not error.
 	}
-	lists, err := s.client.GetLists(ctx) // Assumes client.GetLists is correct
+	lists, err := s.client.GetLists(ctx) // Assumes client.GetLists is correct.
 	if err != nil {
-		// Return internal error from GetLists
+		// Return internal error from GetLists.
 		return nil, errors.Wrap(err, "failed to get lists for resource")
 	}
-	return s.createJSONResourceContent("rtm://lists", lists) // Use helper
+	return s.createJSONResourceContent("rtm://lists", lists) // Use helper.
 }
 
 func (s *Service) readTagsResource(ctx context.Context) ([]interface{}, error) {
 	if !s.IsAuthenticated() {
-		return s.notAuthenticatedResourceContent("rtm://tags"), nil // Return specific content, not error
+		return s.notAuthenticatedResourceContent("rtm://tags"), nil // Return specific content, not error.
 	}
-	tags, err := s.client.GetTags(ctx) // Assumes client.GetTags is correct
+	tags, err := s.client.GetTags(ctx) // Assumes client.GetTags is correct.
 	if err != nil {
-		// Return internal error from GetTags
+		// Return internal error from GetTags.
 		return nil, errors.Wrap(err, "failed to get tags for resource")
 	}
-	return s.createJSONResourceContent("rtm://tags", tags) // Use helper
+	return s.createJSONResourceContent("rtm://tags", tags) // Use helper.
 }
 
 func (s *Service) readTasksResourceWithFilter(ctx context.Context, filter string) ([]interface{}, error) {
@@ -121,14 +123,14 @@ func (s *Service) readTasksResourceWithFilter(ctx context.Context, filter string
 	}
 
 	if !s.IsAuthenticated() {
-		return s.notAuthenticatedResourceContent(resourceURI), nil // Return specific content, not error
+		return s.notAuthenticatedResourceContent(resourceURI), nil // Return specific content, not error.
 	}
-	tasks, err := s.client.GetTasks(ctx, filter) // Assumes client.GetTasks is correct
+	tasks, err := s.client.GetTasks(ctx, filter) // Assumes client.GetTasks is correct.
 	if err != nil {
-		// Return internal error from GetTasks
+		// Return internal error from GetTasks.
 		return nil, errors.Wrapf(err, "failed to get tasks for resource (filter: '%s')", filter)
 	}
-	return s.createJSONResourceContent(resourceURI, tasks) // Use helper
+	return s.createJSONResourceContent(resourceURI, tasks) // Use helper.
 }
 
 // --- Resource Helpers ---
@@ -139,7 +141,7 @@ func extractFilterFromURI(uriString string) (string, error) {
 	if err != nil {
 		return "", errors.Wrapf(err, "invalid URI format: %s", uriString)
 	}
-	// Return URL-decoded filter value
+	// Return URL-decoded filter value.
 	return parsedURL.Query().Get("filter"), nil
 }
 
@@ -147,7 +149,7 @@ func extractFilterFromURI(uriString string) (string, error) {
 func (s *Service) createJSONResourceContent(uri string, data interface{}) ([]interface{}, error) {
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		// Return internal marshalling error
+		// Return internal marshalling error.
 		return nil, errors.Wrapf(err, "failed to marshal resource data for URI: %s", uri)
 	}
 	return []interface{}{

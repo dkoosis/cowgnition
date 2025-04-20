@@ -1,7 +1,7 @@
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
 package rtm
 
-// file: internal/rtm/token_storage.go
+// file: internal/rtm/token_storage.go.
 
 import (
 	"encoding/json"
@@ -55,7 +55,7 @@ func (s *FileTokenStorage) SaveToken(token string, userID, username string) erro
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	s.logger.Debug("Saving auth token to file.", "username", username, "path", s.path) // Added path
+	s.logger.Debug("Saving auth token to file.", "username", username, "path", s.path)
 
 	// Create token data.
 	data := TokenData{
@@ -85,30 +85,30 @@ func (s *FileTokenStorage) LoadToken() (string, error) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	s.logger.Info("Attempting to load token from file...", "path", s.path) // Added log
+	s.logger.Info("Attempting to load token from file...", "path", s.path)
 
 	// Check if file exists.
 	if _, err := os.Stat(s.path); os.IsNotExist(err) {
-		s.logger.Debug("Token file does not exist.", "path", s.path) // Added path context
+		s.logger.Debug("Token file does not exist.", "path", s.path)
 		return "", nil
 	}
 
 	// Read token file.
 	data, err := os.ReadFile(s.path)
 	if err != nil {
-		s.logger.Error("Failed to read token file.", "path", s.path, "error", err) // Added path context
+		s.logger.Error("Failed to read token file.", "path", s.path, "error", err)
 		return "", errors.Wrap(err, "failed to read token file")
 	}
-	s.logger.Info("Successfully loaded token data from file.", "path", s.path) // Added log
+	s.logger.Info("Successfully loaded token data from file.", "path", s.path)
 
 	// Parse JSON.
 	var tokenData TokenData
 	if err := json.Unmarshal(data, &tokenData); err != nil {
-		s.logger.Error("Failed to parse token data from file.", "path", s.path, "error", err) // Added path context
+		s.logger.Error("Failed to parse token data from file.", "path", s.path, "error", err)
 		return "", errors.Wrap(err, "failed to parse token data")
 	}
 
-	s.logger.Debug("Parsed auth token from file.", "username", tokenData.Username) // Updated log
+	s.logger.Debug("Parsed auth token from file.", "username", tokenData.Username)
 
 	return tokenData.Token, nil
 }
@@ -120,15 +120,15 @@ func (s *FileTokenStorage) DeleteToken() error {
 
 	// Check if file exists.
 	if _, err := os.Stat(s.path); os.IsNotExist(err) {
-		s.logger.Debug("Token file does not exist, nothing to delete.", "path", s.path) // Added path context
+		s.logger.Debug("Token file does not exist, nothing to delete.", "path", s.path)
 		return nil
 	}
 
-	s.logger.Debug("Deleting auth token file.", "path", s.path) // Added path context
+	s.logger.Debug("Deleting auth token file.", "path", s.path)
 
 	// Remove the file.
 	if err := os.Remove(s.path); err != nil {
-		s.logger.Error("Failed to delete token file.", "path", s.path, "error", err) // Added path context
+		s.logger.Error("Failed to delete token file.", "path", s.path, "error", err)
 		return errors.Wrap(err, "failed to delete token file")
 	}
 
@@ -172,11 +172,11 @@ func (s *FileTokenStorage) UpdateToken(token string, userID, username string) er
 	}
 
 	// Load existing data.
-	tokenData, err := s.GetTokenData() // Changed from direct load to use GetTokenData
+	tokenData, err := s.GetTokenData() // Changed from direct load to use GetTokenData.
 	if err != nil {
 		return errors.Wrap(err, "failed to get existing token data")
 	}
-	if tokenData == nil { // If file existed but couldn't be parsed/read by GetTokenData
+	if tokenData == nil { // If file existed but couldn't be parsed/read by GetTokenData.
 		tokenData = &TokenData{CreatedAt: time.Now().UTC()} // Start fresh but preserve potential CreatedAt conceptually? Or just save new. Let's just save new.
 		s.logger.Warn("Existing token file seemed present but unreadable, overwriting.")
 		return s.SaveToken(token, userID, username)
@@ -205,4 +205,10 @@ func (s *FileTokenStorage) UpdateToken(token string, userID, username string) er
 	}
 
 	return nil
+}
+
+// IsAvailable checks if the underlying storage mechanism is functional.
+// For file storage, it's always considered available if the struct was created.
+func (s *FileTokenStorage) IsAvailable() bool {
+	return true // File storage is always assumed available once created.
 }

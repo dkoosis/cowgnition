@@ -9,42 +9,36 @@ import (
 	"time"
 
 	"github.com/dkoosis/cowgnition/internal/logging"
+	"github.com/dkoosis/cowgnition/internal/mcptypes" // Import mcptypes.
 	"github.com/dkoosis/cowgnition/internal/middleware"
 
-	// Corrected: Import schema package for the interface.
-	"github.com/dkoosis/cowgnition/internal/schema"
+	"github.com/dkoosis/cowgnition/internal/schema" // Import schema package for the interface.
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 // --- Mocks ---.
 
-// Corrected: Renamed MockSchemaValidator to MockValidator.
 // MockValidator is a mock implementation of ValidatorInterface.
 type MockValidator struct {
 	mock.Mock
-	initialized bool
-	initErr     error
-	// Corrected: Removed unused fields.
+	initialized      bool
+	initErr          error
 	schemas          map[string]bool
 	validationErrors map[string]error // Map schemaKey -> error to return.
 }
 
 // Ensure mock implements the interface (using the imported schema package).
-// Corrected: Use schema.ValidatorInterface and *MockValidator.
 var _ schema.ValidatorInterface = (*MockValidator)(nil)
 
-// Corrected: Renamed NewMockSchemaValidator to NewMockValidator.
 func NewMockValidator() *MockValidator {
-	// Corrected: Return *MockValidator.
 	return &MockValidator{
-		initialized:      false, // Start uninitialized.
+		initialized:      false,
 		schemas:          make(map[string]bool),
 		validationErrors: make(map[string]error),
 	}
 }
 
-// Corrected: Method receiver changed to *MockValidator.
 func (m *MockValidator) Initialize(ctx context.Context) error {
 	m.Called(ctx)
 	if m.initErr == nil {
@@ -87,7 +81,6 @@ func (m *MockValidator) Initialize(ctx context.Context) error {
 	return m.initErr
 }
 
-// Corrected: Method receiver changed to *MockValidator.
 func (m *MockValidator) IsInitialized() bool {
 	args := m.Called()
 	// Allow explicit return value or fallback to internal state.
@@ -97,7 +90,6 @@ func (m *MockValidator) IsInitialized() bool {
 	return m.initialized
 }
 
-// Corrected: Method receiver changed to *MockValidator.
 func (m *MockValidator) Validate(ctx context.Context, schemaKey string, data []byte) error {
 	args := m.Called(ctx, schemaKey, data)
 	if err, ok := m.validationErrors[schemaKey]; ok {
@@ -106,7 +98,6 @@ func (m *MockValidator) Validate(ctx context.Context, schemaKey string, data []b
 	return args.Error(0) // Return error configured via .Return() if any.
 }
 
-// Corrected: Method receiver changed to *MockValidator.
 func (m *MockValidator) HasSchema(name string) bool {
 	args := m.Called(name)
 	// Allow dynamic checking based on mock's internal state or specific returns.
@@ -115,19 +106,16 @@ func (m *MockValidator) HasSchema(name string) bool {
 		if ok {
 			return retVal
 		}
-		// Log unexpected return type if needed.
 	}
 	// Fallback to internal map if no specific return was configured for HasSchema.
 	_, exists := m.schemas[name]
 	return exists
 }
 
-// Corrected: Method receiver changed to *MockValidator.
 func (m *MockValidator) GetLoadDuration() time.Duration {
 	args := m.Called()
 	// Return a mock duration, can be configured via .Return().
 	if len(args) > 0 {
-		// Safely attempt type assertion.
 		if duration, ok := args.Get(0).(time.Duration); ok {
 			return duration
 		}
@@ -135,12 +123,10 @@ func (m *MockValidator) GetLoadDuration() time.Duration {
 	return 1 * time.Millisecond // Default mock duration.
 }
 
-// Corrected: Method receiver changed to *MockValidator.
 func (m *MockValidator) GetCompileDuration() time.Duration {
 	args := m.Called()
 	// Return a mock duration, can be configured via .Return().
 	if len(args) > 0 {
-		// Safely attempt type assertion.
 		if duration, ok := args.Get(0).(time.Duration); ok {
 			return duration
 		}
@@ -148,7 +134,6 @@ func (m *MockValidator) GetCompileDuration() time.Duration {
 	return 1 * time.Millisecond // Default mock duration.
 }
 
-// Corrected: Method receiver changed to *MockValidator.
 func (m *MockValidator) GetSchemaVersion() string {
 	args := m.Called()
 	// Return a mock version, can be configured via .Return().
@@ -158,7 +143,6 @@ func (m *MockValidator) GetSchemaVersion() string {
 	return "mock-schema-v0.0.0" // Default mock version.
 }
 
-// Corrected: Method receiver changed to *MockValidator.
 func (m *MockValidator) Shutdown() error {
 	args := m.Called()
 	m.initialized = false // Simulate shutdown state.
@@ -167,7 +151,6 @@ func (m *MockValidator) Shutdown() error {
 }
 
 // Helper to add schemas to the mock.
-// Corrected: Method receiver changed to *MockValidator.
 func (m *MockValidator) AddSchema(name string) {
 	if m.schemas == nil {
 		m.schemas = make(map[string]bool)
@@ -176,7 +159,6 @@ func (m *MockValidator) AddSchema(name string) {
 }
 
 // Helper to set a specific validation error for a schema key.
-// Corrected: Method receiver changed to *MockValidator.
 func (m *MockValidator) SetValidationError(schemaKey string, err error) {
 	if m.validationErrors == nil {
 		m.validationErrors = make(map[string]error)
@@ -198,12 +180,11 @@ func (m *MockMessageHandler) Handle(ctx context.Context, message []byte) ([]byte
 
 // --- Test Setup ---.
 
-// Corrected: Return *MockValidator.
 // setupTestMiddleware initializes mocks and ensures mock validator is initialized.
-func setupTestMiddleware(t *testing.T, options middleware.ValidationOptions) (*middleware.ValidationMiddleware, *MockValidator, *MockMessageHandler) {
+// Corrected: Accepts mcptypes.ValidationOptions and returns mcptypes.MiddlewareFunc.
+func setupTestMiddleware(t *testing.T, options mcptypes.ValidationOptions) (mcptypes.MiddlewareFunc, *MockValidator, *MockMessageHandler) {
 	t.Helper()
 	logger := logging.GetNoopLogger() // Use NoopLogger for tests unless logging is tested.
-	// Corrected: Use NewMockValidator.
 	mockValidator := NewMockValidator()
 	mockNextHandler := new(MockMessageHandler)
 
@@ -212,10 +193,6 @@ func setupTestMiddleware(t *testing.T, options middleware.ValidationOptions) (*m
 	// NOTE: IsInitialized expectation will be set *after* Initialize is called below.
 
 	mockValidator.On("HasSchema", mock.AnythingOfType("string")).Maybe().Return(func(name string) bool { // Keep dynamic check based on internal map.
-		// Lock should ideally be used if the map could be modified concurrently,
-		// but in test setup it's likely safe enough without.
-		// m.mu.RLock()
-		// defer m.mu.RUnlock()
 		_, exists := mockValidator.schemas[name]
 		return exists
 	})
@@ -236,8 +213,12 @@ func setupTestMiddleware(t *testing.T, options middleware.ValidationOptions) (*m
 	// --- End Add ---.
 
 	// Pass the mock (which now implements the interface) to NewValidationMiddleware.
+	// Corrected: NewValidationMiddleware now returns mcptypes.MiddlewareFunc.
 	mw := middleware.NewValidationMiddleware(mockValidator, options, logger)
-	mw.SetNext(mockNextHandler.Handle)
 
+	// Corrected: Removed mw.SetNext call as it's deprecated and mw is now a function type.
+	// mw.SetNext(mockNextHandler.Handle).
+
+	// Corrected: Return the MiddlewareFunc directly.
 	return mw, mockValidator, mockNextHandler
 }
