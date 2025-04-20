@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/cockroachdb/errors" // Use mcptypes.
+	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/mcptypes"
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
 
 // serverProcessing handles the main server loop, reading messages and dispatching them.
-func (s *Server) serverProcessing(ctx context.Context, handlerFunc mcptypes.MessageHandler) error { // Use mcptypes.MessageHandler.
+func (s *Server) serverProcessing(ctx context.Context, handlerFunc mcptypes.MessageHandler) error {
 	s.logger.Info("Server processing loop started.")
 	if handlerFunc == nil {
 		return errors.New("serve called with nil handler function")
@@ -48,7 +48,7 @@ func (s *Server) serverProcessing(ctx context.Context, handlerFunc mcptypes.Mess
 // processNextMessage handles reading, processing, and responding to a single message.
 // It returns non-nil error only for terminal conditions. Other processing errors are handled internally
 // by sending a JSON-RPC error response.
-func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.MessageHandler) error { // Use mcptypes.MessageHandler.
+func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.MessageHandler) error {
 	// 1. Read Message.
 	msgBytes, readErr := s.transport.ReadMessage(ctx)
 	if readErr != nil {

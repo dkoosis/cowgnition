@@ -5,7 +5,6 @@ package middleware
 
 // file: internal/middleware/chain.go
 
-// mcptypes import path updated.
 import (
 	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"
 )

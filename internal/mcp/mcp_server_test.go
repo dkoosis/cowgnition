@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/dkoosis/cowgnition/internal/config"
-	"github.com/dkoosis/cowgnition/internal/logging" // Import mcptypes.
+	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
 	"github.com/stretchr/testify/assert"

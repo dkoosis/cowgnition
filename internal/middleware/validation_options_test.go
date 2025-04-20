@@ -9,8 +9,6 @@ import (
 
 	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/middleware"
-
-	// Import mcptypes.
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -88,7 +86,6 @@ func TestValidationMiddleware_SkipsIncomingValidation_When_MessageTypeIsSkipped(
 	options := middleware.DefaultValidationOptions()
 	options.SkipTypes["ping"] = true // Ensure ping is skipped for incoming.
 	options.ValidateOutgoing = true  // Keep outgoing validation enabled for this test.
-	// Corrected: setupTestMiddleware returns mcptypes.MiddlewareFunc.
 	mw, mockValidator, mockNextHandler := setupTestMiddleware(t, options)
 
 	testMsg := []byte(`{"jsonrpc": "2.0", "method": "ping", "id": "ping-1"}`)

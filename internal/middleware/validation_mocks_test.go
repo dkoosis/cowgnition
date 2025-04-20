@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/dkoosis/cowgnition/internal/logging"
-	"github.com/dkoosis/cowgnition/internal/mcptypes" // Import mcptypes.
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"
 	"github.com/dkoosis/cowgnition/internal/middleware"
 
-	"github.com/dkoosis/cowgnition/internal/schema" // Import schema package for the interface.
+	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -181,7 +181,6 @@ func (m *MockMessageHandler) Handle(ctx context.Context, message []byte) ([]byte
 // --- Test Setup ---.
 
 // setupTestMiddleware initializes mocks and ensures mock validator is initialized.
-// Corrected: Accepts mcptypes.ValidationOptions and returns mcptypes.MiddlewareFunc.
 func setupTestMiddleware(t *testing.T, options mcptypes.ValidationOptions) (mcptypes.MiddlewareFunc, *MockValidator, *MockMessageHandler) {
 	t.Helper()
 	logger := logging.GetNoopLogger() // Use NoopLogger for tests unless logging is tested.

@@ -14,14 +14,14 @@ import (
 // ValidationMiddleware provides JSON schema validation for MCP messages.
 // It relies on a ValidatorInterface implementation to perform the actual schema checks.
 type ValidationMiddleware struct {
-	validator mcptypes.ValidatorInterface // Use type from mcptypes.
-	options   mcptypes.ValidationOptions  // Use type from mcptypes.
+	validator mcptypes.ValidatorInterface
+	options   mcptypes.ValidationOptions
 	logger    logging.Logger
 }
 
 // DefaultValidationOptions returns default validation options.
 // Note: This function now returns the type defined in mcptypes.
-func DefaultValidationOptions() mcptypes.ValidationOptions { // Return type from mcptypes.
+func DefaultValidationOptions() mcptypes.ValidationOptions {
 	return mcptypes.ValidationOptions{
 		Enabled:            true,
 		StrictMode:         false,
@@ -42,7 +42,7 @@ const contextKeyRequestMethod contextKey = "requestMethod"
 // It takes a ValidatorInterface, options, and a logger.
 // Returns a MiddlewareFunc that can be added to a processing chain.
 func NewValidationMiddleware(validator mcptypes.ValidatorInterface, // Use type from mcptypes.
-	options mcptypes.ValidationOptions, logger logging.Logger) mcptypes.MiddlewareFunc { // Use type from mcptypes.
+	options mcptypes.ValidationOptions, logger logging.Logger) mcptypes.MiddlewareFunc {
 	if logger == nil {
 		logger = logging.GetNoopLogger()
 	}

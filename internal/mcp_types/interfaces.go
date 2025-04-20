@@ -3,7 +3,7 @@
 // both mcp and middleware packages, preventing circular dependencies.
 package mcptypes
 
-// file: internal/mcptypes/interfaces.go
+// file: internal/mcp_types/interfaces.go
 
 import (
 	"context"

@@ -12,9 +12,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config"
-	"github.com/dkoosis/cowgnition/internal/logging" // Import path updated.
+	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/mcptypes"
-	"github.com/dkoosis/cowgnition/internal/middleware" // Keep middleware import for factory functions.
+	"github.com/dkoosis/cowgnition/internal/middleware"
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
