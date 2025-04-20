@@ -1,4 +1,4 @@
-// Package mcptypes defines shared types and interfaces for the MCP (Model Context Protocol)
+// Package mcp_types defines shared types and interfaces for the MCP (Model Context Protocol)
 // server and middleware components. It acts as a neutral package that can be imported by
 // both mcp and middleware packages, preventing circular dependencies.
 package mcp_types
