@@ -1,8 +1,6 @@
 // Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
 // file: internal/schema/validator.go
 //
-// Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
-//
 // The validator implementation orchestrates the schema handling process:
 // 1. Loading: schema content is retrieved either from a configured URI or from embedded content
 // 2. Parsing: JSON schema is parsed into an in-memory structure
@@ -86,8 +84,7 @@ func NewValidator(cfg config.SchemaConfig, logger logging.Logger) *Validator {
 	}
 }
 
-// Initialize loads and compiles the MCP schema definitions.
-// It prioritizes the override URI, otherwise uses the embedded schema.
+// Initialize loads and compiles the MCP schema definitions using a robust multi-source strategy.
 func (v *Validator) Initialize(ctx context.Context) error {
 	initStart := time.Now()
 	v.mu.Lock()
@@ -99,59 +96,70 @@ func (v *Validator) Initialize(ctx context.Context) error {
 	}
 	v.logger.Info("Initializing schema validator.")
 
-	var schemaData []byte
-	var sourceInfo string
-	var loadErr error
+	// Load schema data using our robust multi-source strategy.
 	loadStart := time.Now()
+	schemaData, sourceInfo, loadErr := loadSchemaFromMultipleSources(ctx, v.schemaConfig, v.logger, v.httpClient)
 
-	// --- Load Schema Data ---.
-	overrideURI := v.schemaConfig.SchemaOverrideURI
-	if overrideURI != "" {
-		v.logger.Info("🔄 Attempting to load schema from override URI.", "uri", overrideURI)
-		// Use the simplified loader function from loader.go.
-		schemaData, loadErr = loadSchemaFromURI(ctx, overrideURI, v.logger, v.httpClient)
-		sourceInfo = fmt.Sprintf("override: %s", overrideURI)
-	} else {
-		v.logger.Info("📦 Using embedded schema.")
-		schemaData = embeddedSchemaContent
-		sourceInfo = "embedded"
-		loadErr = nil // No error loading embedded content.
+	// Fall back to embedded schema if all external sources failed.
+	if loadErr != nil || len(schemaData) == 0 {
+		if loadErr != nil {
+			v.logger.Info("External schema loading failed, falling back to embedded schema.",
+				"error", loadErr)
+		}
+
+		if len(embeddedSchemaContent) > 0 {
+			v.logger.Info("Using embedded schema content.")
+			schemaData = embeddedSchemaContent
+			sourceInfo = "embedded"
+			// Removed ineffectual assignment to loadErr
+		} else {
+			err := errors.New("embedded schema content is empty and all external sources failed")
+			v.logger.Error("Schema loading completely failed.", "error", err)
+			return err
+		}
 	}
 	v.lastLoadDuration = time.Since(loadStart)
 
-	if loadErr != nil {
-		v.logger.Error("Schema loading failed.", "duration", v.lastLoadDuration, "source", sourceInfo, "error", loadErr)
-		// Wrap the error from loadSchemaFromURI if it occurred.
-		return errors.Wrapf(loadErr, "failed to load schema from source '%s'", sourceInfo)
-	}
-
 	if len(schemaData) == 0 {
-		// This should only happen if embedded content is empty or override load failed.
-		err := errors.New("loaded schema data is empty")
-		v.logger.Error("Schema loading failed.", "duration", v.lastLoadDuration, "source", sourceInfo, "error", err)
+		err := errors.New("loaded schema data is empty from all sources")
+		v.logger.Error("Schema loading failed - empty data.",
+			"duration", v.lastLoadDuration,
+			"source", sourceInfo,
+			"error", err)
 		return err
 	}
-	v.logger.Info("Schema loaded.", "duration", v.lastLoadDuration, "source", sourceInfo, "sizeBytes", len(schemaData))
 
-	// --- Parse Schema JSON ---.
+	v.logger.Info("Schema loaded successfully.",
+		"duration", v.lastLoadDuration,
+		"source", sourceInfo,
+		"sizeBytes", len(schemaData))
+
+	// Parse Schema JSON.
 	if err := json.Unmarshal(schemaData, &v.schemaDoc); err != nil {
 		v.logger.Error("Failed to parse schema JSON.", "error", err)
 		return NewValidationError(ErrSchemaLoadFailed, "Failed to parse schema JSON", errors.Wrap(err, "json.Unmarshal failed"))
 	}
 
-	v.extractSchemaVersion(schemaData) // Extract version info - Call is now valid.
+	v.extractSchemaVersion(schemaData) // Extract version info.
 
-	// --- Add Schema Resource ---.
+	// Add Schema Resource.
 	addStart := time.Now()
 	schemaReader := bytes.NewReader(schemaData)
 	resourceID := "mcp://schema.json" // Base URI for internal references.
 	if err := v.compiler.AddResource(resourceID, schemaReader); err != nil {
-		v.logger.Error("Failed to add schema resource to compiler.", "duration", time.Since(addStart), "resourceID", resourceID, "error", err)
-		return NewValidationError(ErrSchemaLoadFailed, "Failed to add schema resource", errors.Wrap(err, "compiler.AddResource failed")).WithContext("schemaSize", len(schemaData))
+		v.logger.Error("Failed to add schema resource to compiler.",
+			"duration", time.Since(addStart),
+			"resourceID", resourceID,
+			"error", err)
+		return NewValidationError(
+			ErrSchemaLoadFailed,
+			"Failed to add schema resource",
+			errors.Wrap(err, "compiler.AddResource failed"),
+		).WithContext("schemaSize", len(schemaData))
 	}
 	v.logger.Info("Schema resource added.", "duration", time.Since(addStart), "resourceID", resourceID)
 
-	// --- Compile Schemas ---.
+	// Compile Schemas.
 	compileStart := time.Now()
 	compiledSchemas, compileErr := v.compileAllDefinitions(resourceID)
 	v.lastCompileDuration = time.Since(compileStart)
@@ -184,7 +192,11 @@ func (v *Validator) compileAllDefinitions(baseResourceID string) (map[string]*js
 	baseSchema, err := v.compiler.Compile(baseResourceID)
 	if err != nil {
 		v.logger.Error("CRITICAL: Failed to compile base schema resource.", "resourceID", baseResourceID, "error", err)
-		return nil, NewValidationError(ErrSchemaCompileFailed, "Failed to compile base schema resource", errors.Wrap(err, "compiler.Compile failed for base schema")).WithContext("pointer", baseResourceID)
+		return nil, NewValidationError(
+			ErrSchemaCompileFailed,
+			"Failed to compile base schema resource",
+			errors.Wrap(err, "compiler.Compile failed for base schema"),
+		).WithContext("pointer", baseResourceID)
 	}
 	compiled["base"] = baseSchema
 	v.logger.Debug("Compiled base schema definition.", "name", "base")

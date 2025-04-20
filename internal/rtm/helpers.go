@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	// Ensure strings is imported.
 	"github.com/dkoosis/cowgnition/internal/mcp"
 )
 
@@ -31,15 +32,15 @@ func (s *Service) simpleToolErrorResult(errorMessage string) *mcp.CallToolResult
 // invalidToolArgumentsError creates a result for invalid tool arguments.
 func (s *Service) invalidToolArgumentsError(toolName string, err error) *mcp.CallToolResult {
 	msg := fmt.Sprintf("Invalid arguments for tool '%s': %v.", toolName, err)
-	s.logger.Warn(msg, "toolName", toolName, "error", err) // Log the error too
+	s.logger.Warn(msg, "toolName", toolName, "error", err) // Log the error too.
 	return s.simpleToolErrorResult(msg)
 }
 
 // rtmAPIErrorResult creates a result for errors returned from the RTM API client.
 func (s *Service) rtmAPIErrorResult(action string, err error) *mcp.CallToolResult {
 	msg := fmt.Sprintf("Error %s: %v.", action, err)
-	// Error should have been logged in the client, but maybe log here too?
-	// s.logger.Warn("RTM API call failed.", "action", action, "error", err)
+	// Error should have been logged in the client, but maybe log here too?.
+	// s.logger.Warn("RTM API call failed.", "action", action, "error", err).
 	return s.simpleToolErrorResult(msg)
 }
 
@@ -55,12 +56,12 @@ func (s *Service) serviceNotInitializedError() *mcp.CallToolResult {
 
 // unknownToolError creates a result for when an unknown tool is called.
 func (s *Service) unknownToolError(toolName string) *mcp.CallToolResult {
-	return s.simpleToolErrorResult(fmt.Sprintf("Unknown RTM tool requested: %s", toolName))
+	return s.simpleToolErrorResult(fmt.Sprintf("Unknown RTM tool requested: %s.", toolName))
 }
 
 // internalToolError creates a result for unexpected internal errors during tool handling.
 func (s *Service) internalToolError() *mcp.CallToolResult {
-	// Logged previously in CallTool
+	// Logged previously in CallTool.
 	return s.simpleToolErrorResult("An internal error occurred while executing the tool.")
 }
 
@@ -75,7 +76,7 @@ func (s *Service) notAuthenticatedResourceContent(uri string) []interface{} {
 	contentJSON, err := json.MarshalIndent(content, "", "  ")
 	if err != nil {
 		s.logger.Error("Failed to marshal 'not authenticated' resource content.", "error", err)
-		// Fallback to plain text
+		// Fallback to plain text.
 		return []interface{}{
 			mcp.TextResourceContents{
 				ResourceContents: mcp.ResourceContents{URI: uri, MimeType: "text/plain"},
@@ -89,4 +90,20 @@ func (s *Service) notAuthenticatedResourceContent(uri string) []interface{} {
 			Text:             string(contentJSON),
 		},
 	}
+}
+
+// --- General Helpers ---
+
+// truncateString truncates a string to a max length for previews.
+// Defined ONCE here.
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	// Ensure maxLen is not negative before slicing.
+	if maxLen < 0 {
+		maxLen = 0
+	}
+	// Consider runes if dealing with multi-byte characters, but for simple previews byte slicing is often ok.
+	return s[:maxLen] + "..."
 }

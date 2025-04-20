@@ -14,21 +14,21 @@ import (
 
 // DiagnosticResult represents the outcome of a diagnostic test.
 type DiagnosticResult struct {
-	Name        string        // Name of the test
-	Success     bool          // Whether the test was successful
-	Error       error         // Error if the test failed
-	Description string        // Human-readable description of the result
-	Duration    time.Duration // How long the test took to execute
+	Name        string        // Name of the test.
+	Success     bool          // Whether the test was successful.
+	Error       error         // Error if the test failed.
+	Description string        // Human-readable description of the result.
+	Duration    time.Duration // How long the test took to execute.
 }
 
 // ConnectivityCheckOptions defines which diagnostic checks to perform.
 type ConnectivityCheckOptions struct {
-	CheckInternet   bool   // Whether to check internet connectivity
-	CheckRTMAPI     bool   // Whether to check RTM API availability
-	CheckAPIKey     bool   // Whether to validate API key via echo test
-	CheckAuth       bool   // Whether to check authentication status
-	RequireAuth     bool   // Whether authentication is required
-	InternetTestURL string // URL to use for internet connectivity test
+	CheckInternet   bool   // Whether to check internet connectivity.
+	CheckRTMAPI     bool   // Whether to check RTM API availability.
+	CheckAPIKey     bool   // Whether to validate API key via echo test.
+	CheckAuth       bool   // Whether to check authentication status.
+	RequireAuth     bool   // Whether authentication is required.
+	InternetTestURL string // URL to use for internet connectivity test.
 }
 
 // DefaultConnectivityCheckOptions returns default options for connectivity checks.
@@ -39,22 +39,19 @@ func DefaultConnectivityCheckOptions() ConnectivityCheckOptions {
 		CheckAPIKey:     true,
 		CheckAuth:       true,
 		RequireAuth:     false,
-		InternetTestURL: "https://www.google.com",
+		InternetTestURL: "https://www.google.com", // Default test URL.
 	}
 }
 
 // PerformConnectivityCheck runs a series of diagnostic tests to verify RTM connectivity.
 // It returns the results of each test and an error if any critical test fails.
 func (s *Service) PerformConnectivityCheck(ctx context.Context, options ConnectivityCheckOptions) ([]DiagnosticResult, error) {
-	results := make([]DiagnosticResult, 0, 4) // Pre-allocate slice
+	results := make([]DiagnosticResult, 0, 4) // Pre-allocate slice.
 	var criticalError error
-
-	// Service logger can still log start/end if desired, but not individual results
-	// s.logger.Info("Running RTM connectivity diagnostics...")
 
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 
-	// Step 1: Check Internet connectivity
+	// Step 1: Check Internet connectivity.
 	if options.CheckInternet {
 		result := s.checkInternetConnectivity(ctx, httpClient, options.InternetTestURL)
 		results = append(results, result)
@@ -63,7 +60,7 @@ func (s *Service) PerformConnectivityCheck(ctx context.Context, options Connecti
 		}
 	}
 
-	// Step 2: Check RTM API availability
+	// Step 2: Check RTM API availability.
 	if options.CheckRTMAPI && (criticalError == nil || !options.CheckInternet) {
 		result := s.checkRTMAvailability(ctx, httpClient)
 		results = append(results, result)
@@ -72,7 +69,7 @@ func (s *Service) PerformConnectivityCheck(ctx context.Context, options Connecti
 		}
 	}
 
-	// Step 3: Check API key validity via echo test
+	// Step 3: Check API key validity via echo test.
 	if options.CheckAPIKey && (criticalError == nil || (!options.CheckInternet && !options.CheckRTMAPI)) {
 		result := s.checkRTMEcho(ctx)
 		results = append(results, result)
@@ -81,7 +78,7 @@ func (s *Service) PerformConnectivityCheck(ctx context.Context, options Connecti
 		}
 	}
 
-	// Step 4: Check authentication
+	// Step 4: Check authentication.
 	if options.CheckAuth && (criticalError == nil || (!options.CheckInternet && !options.CheckRTMAPI && !options.CheckAPIKey)) {
 		authResult := s.checkRTMAuth(ctx)
 		results = append(results, authResult)
@@ -90,7 +87,6 @@ func (s *Service) PerformConnectivityCheck(ctx context.Context, options Connecti
 		}
 	}
 
-	// No summary logging here, handled by caller (test)
 	return results, criticalError
 }
 
@@ -103,9 +99,9 @@ func formatDiagnosticResult(result DiagnosticResult) string {
 	if !result.Success {
 		status = "FAIL"
 		icon = "❌"
-		// Optionally include simplified error in description for FAIL status
+		// Optionally include simplified error in description for FAIL status.
 		if result.Error != nil {
-			// Limit error length in summary if desired
+			// Limit error length in summary if desired.
 			errorStr := fmt.Sprintf("%v", result.Error)
 			maxErrLen := 50
 			if len(errorStr) > maxErrLen {
@@ -114,14 +110,13 @@ func formatDiagnosticResult(result DiagnosticResult) string {
 			detail = fmt.Sprintf("%s - %s", result.Description, errorStr)
 		}
 	}
-	// Format: Icon Name... STATUS (Description) - Adjusted padding
+	// Format: Icon Name... STATUS (Description) - Adjusted padding.
 	return fmt.Sprintf("%s %-28s %s (%s)", icon, result.Name+"...", status, detail)
 }
 
 // checkInternetConnectivity tests if the internet is reachable.
 func (s *Service) checkInternetConnectivity(ctx context.Context, client *http.Client, testURL string) DiagnosticResult {
 	start := time.Now()
-	// s.logger.Debug("-> Diag: Pinging internet URL...", "url", testURL) // Commented out
 
 	req, err := http.NewRequestWithContext(ctx, "HEAD", testURL, nil)
 	if err != nil {
@@ -139,7 +134,7 @@ func (s *Service) checkInternetConnectivity(ctx context.Context, client *http.Cl
 			Description: "Failed to connect to internet test URL", Duration: duration,
 		}
 	}
-	defer func() { _ = resp.Body.Close() }() // Simplified close
+	defer func() { _ = resp.Body.Close() }() // Simplified close.
 
 	if resp.StatusCode >= 400 {
 		return DiagnosticResult{
@@ -148,7 +143,6 @@ func (s *Service) checkInternetConnectivity(ctx context.Context, client *http.Cl
 		}
 	}
 
-	// s.logger.Debug("-> Diag: Internet connectivity check successful.") // Commented out
 	return DiagnosticResult{
 		Name: "Internet Connectivity", Success: true, Error: nil,
 		Description: fmt.Sprintf("Connected to %s", testURL), Duration: duration,
@@ -159,7 +153,6 @@ func (s *Service) checkInternetConnectivity(ctx context.Context, client *http.Cl
 func (s *Service) checkRTMAvailability(ctx context.Context, client *http.Client) DiagnosticResult {
 	start := time.Now()
 	apiEndpoint := s.client.GetAPIEndpoint()
-	// s.logger.Debug("-> Diag: Pinging RTM API endpoint...", "url", apiEndpoint) // Commented out
 
 	req, err := http.NewRequestWithContext(ctx, "HEAD", apiEndpoint, nil)
 	if err != nil {
@@ -177,10 +170,9 @@ func (s *Service) checkRTMAvailability(ctx context.Context, client *http.Client)
 			Description: "Failed to connect to RTM API endpoint", Duration: duration,
 		}
 	}
-	defer func() { _ = resp.Body.Close() }() // Simplified close
+	defer func() { _ = resp.Body.Close() }() // Simplified close.
 
 	// Note: RTM returns 404 for HEAD on the REST endpoint, which is okay for reachability.
-	// s.logger.Debug("-> Diag: RTM API endpoint reachability check successful.") // Commented out
 	return DiagnosticResult{
 		Name: "RTM API Availability", Success: true, Error: nil,
 		Description: fmt.Sprintf("Endpoint reachable (HTTP %d)", resp.StatusCode), Duration: duration,
@@ -190,29 +182,27 @@ func (s *Service) checkRTMAvailability(ctx context.Context, client *http.Client)
 // checkRTMEcho tests the rtm.test.echo method (validates API key/secret).
 func (s *Service) checkRTMEcho(ctx context.Context) DiagnosticResult {
 	start := time.Now()
-	// s.logger.Debug("-> Diag: Testing RTM API echo (validates API Key/Secret)...") // Commented out
 
 	params := map[string]string{"test_param": "cowgnition_echo"}
 	respBytes, err := s.client.CallMethod(ctx, "rtm.test.echo", params)
 	duration := time.Since(start)
 
 	if err != nil {
-		return DiagnosticResult{ // Return specific failure description
+		return DiagnosticResult{ // Return specific failure description.
 			Name: "RTM API Echo Test", Success: false, Error: err,
 			Description: "API Key/Secret likely invalid", Duration: duration,
 		}
 	}
 
-	// Check if the echoed parameter is present in the response
+	// Check if the echoed parameter is present in the response.
 	respStr := string(respBytes)
-	if !strings.Contains(respStr, `"test_param":"cowgnition_echo"`) { // Check for exact match
+	if !strings.Contains(respStr, `"test_param":"cowgnition_echo"`) { // Check for exact match.
 		return DiagnosticResult{
 			Name: "RTM API Echo Test", Success: false, Error: errors.New("echoed parameter mismatch"),
 			Description: "Unexpected echo response format", Duration: duration,
 		}
 	}
 
-	// s.logger.Debug("-> Diag: RTM API echo test successful.") // Commented out
 	return DiagnosticResult{
 		Name: "RTM API Echo Test", Success: true, Error: nil,
 		Description: "API Key/Secret Valid", Duration: duration,
@@ -222,9 +212,8 @@ func (s *Service) checkRTMEcho(ctx context.Context) DiagnosticResult {
 // checkRTMAuth tests the authentication status using the currently loaded token.
 func (s *Service) checkRTMAuth(ctx context.Context) DiagnosticResult {
 	start := time.Now()
-	// s.logger.Debug("-> Diag: Checking RTM authentication status...") // Commented out
 
-	authState, err := s.GetAuthState(ctx) // Use service's GetAuthState
+	authState, err := s.GetAuthState(ctx) // Use service's GetAuthState.
 	duration := time.Since(start)
 
 	if err != nil {
@@ -241,22 +230,10 @@ func (s *Service) checkRTMAuth(ctx context.Context) DiagnosticResult {
 		}
 	}
 
-	// s.logger.Debug("-> Diag: RTM authentication check successful.") // Commented out
 	return DiagnosticResult{
 		Name: "RTM Authentication", Success: true, Error: nil,
 		Description: fmt.Sprintf("Authenticated as %q", authState.Username), Duration: duration,
 	}
 }
 
-// truncateString helper.
-// nolint:unused
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	// Ensure maxLen is not negative before slicing
-	if maxLen < 0 {
-		maxLen = 0
-	}
-	return s[:maxLen] + "..."
-}
+// NOTE: truncateString function REMOVED from this file. It now resides in helpers.go.
