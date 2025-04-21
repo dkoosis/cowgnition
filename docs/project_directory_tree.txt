@@ -60,6 +60,7 @@
 │   │   └── validation_schema.go
 │   ├── rtm/
 │   │   ├── auth.go
+│   │   ├── auth_manager.go
 │   │   ├── client.go
 │   │   ├── client_test.go
 │   │   ├── constants.go
@@ -104,4 +105,4 @@
 ├── log
 └── rtm-authentication.jpg
 
-17 directories, 88 files
+17 directories, 89 files

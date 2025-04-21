@@ -45,6 +45,10 @@ type AuthManagerOptions struct {
 	RetryAttempts int
 	// RetryBackoff for time between retry attempts.
 	RetryBackoff time.Duration
+	// AutoSaveToken determines if tokens should be saved to file after successful auth
+	AutoSaveToken bool
+	// TestTokenPath specifies a custom path for test authentication tokens
+	TestTokenPath string
 }
 
 // DefaultAuthManagerOptions provides sensible defaults.
@@ -57,6 +61,7 @@ func DefaultAuthManagerOptions() AuthManagerOptions {
 		TimeoutDuration:  2 * time.Minute,
 		RetryAttempts:    3,
 		RetryBackoff:     500 * time.Millisecond,
+		AutoSaveToken:    true,
 	}
 }
 
@@ -207,6 +212,12 @@ func (m *AuthManager) handleInteractiveAuth(ctx context.Context) (*AuthResult, e
 					m.logger.Info("Authentication successful via callback!", "username", authState.Username)
 					result.Success = true
 					result.Username = authState.Username
+
+					// Optionally save token to file if enabled
+					if m.options.AutoSaveToken {
+						m.saveTokenAfterSuccessfulAuth(authState)
+					}
+
 					return result, nil
 				} else if err != nil {
 					m.logger.Error("Failed to verify auth state after callback", "error", err)
@@ -250,7 +261,74 @@ func (m *AuthManager) handleInteractiveAuth(ctx context.Context) (*AuthResult, e
 
 	result.Success = true
 	result.Username = m.service.GetUsername()
+
+	// Optionally save token to file if enabled
+	if m.options.AutoSaveToken {
+		m.saveTokenAfterSuccessfulAuth(nil) // Passing nil to trigger fresh state check
+	}
+
 	return result, nil
+}
+
+// saveTokenAfterSuccessfulAuth saves the current auth token to a file
+// if AutoSaveToken is enabled in options.
+func (m *AuthManager) saveTokenAfterSuccessfulAuth(authState *AuthState) {
+	var username, userID string
+	var token string
+
+	// Get the token from the service or client
+	token = m.client.GetAuthToken()
+	if token == "" {
+		m.logger.Warn("Cannot save empty token to file")
+		return
+	}
+
+	// Get or refresh auth state if needed
+	if authState == nil || authState.Username == "" {
+		var err error
+		authState, err = m.service.GetAuthState(context.Background())
+		if err != nil {
+			m.logger.Warn("Failed to get auth state for token saving", "error", err)
+			return
+		}
+	}
+
+	if authState != nil {
+		username = authState.Username
+		userID = authState.UserID
+	}
+
+	// Determine path based on mode
+	var path string
+	switch m.options.Mode {
+	case AuthModeTest:
+		// Use test-specific path
+		if m.options.TestTokenPath != "" {
+			path = m.options.TestTokenPath
+		} else {
+			path = os.ExpandEnv("$HOME/.rtm_test_token.json")
+		}
+	default:
+		// Use default path
+		path = os.ExpandEnv("$HOME/.rtm_token.json")
+	}
+
+	// Create token data
+	tokenData := &TokenData{
+		Token:     token,
+		UserID:    userID,
+		Username:  username,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	// Save to file
+	err := m.saveTokenToFile(path, tokenData)
+	if err != nil {
+		m.logger.Warn("Failed to save token to file", "path", path, "error", err)
+	} else {
+		m.logger.Info("Successfully saved token to file", "path", path, "username", username)
+	}
 }
 
 // handleHeadlessAuth attempts authentication without user interaction.
@@ -333,7 +411,11 @@ func (m *AuthManager) handleHeadlessAuth(ctx context.Context) (*AuthResult, erro
 // handleTestAuth handles authentication in test environments.
 func (m *AuthManager) handleTestAuth(ctx context.Context) (*AuthResult, error) {
 	// First check if we have cached test credentials
-	testTokenPath := os.ExpandEnv("$HOME/.rtm_test_token.json")
+	testTokenPath := m.options.TestTokenPath
+	if testTokenPath == "" {
+		testTokenPath = os.ExpandEnv("$HOME/.rtm_test_token.json")
+	}
+
 	if _, err := os.Stat(testTokenPath); err == nil {
 		m.logger.Info("Found test token file, attempting to use it", "path", testTokenPath)
 		tokenData, readErr := m.readTokenFile(testTokenPath)
@@ -454,7 +536,11 @@ func (m *AuthManager) startCallbackServer(ctx context.Context, frob string) erro
 		defer func() {
 			if err := recover(); err != nil {
 				m.logger.Error("Panic in callback handler", "error", err)
-				m.resultChan <- errors.Errorf("panic in callback: %v", err)
+				m.callbackMutex.Lock()
+				if m.resultChan != nil {
+					m.resultChan <- errors.Errorf("panic in callback: %v", err)
+				}
+				m.callbackMutex.Unlock()
 
 				// Return error to browser
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -479,7 +565,12 @@ func (m *AuthManager) startCallbackServer(ctx context.Context, frob string) erro
 				"received", receivedState,
 				"expected", m.state)
 			http.Error(w, "Invalid state parameter", http.StatusBadRequest)
-			m.resultChan <- errors.New("CSRF protection failed: invalid state")
+
+			m.callbackMutex.Lock()
+			if m.resultChan != nil {
+				m.resultChan <- errors.New("CSRF protection failed: invalid state")
+			}
+			m.callbackMutex.Unlock()
 			return
 		}
 
@@ -498,7 +589,11 @@ func (m *AuthManager) startCallbackServer(ctx context.Context, frob string) erro
 				"</body></html>",
 				err.Error())
 
-			m.resultChan <- err
+			m.callbackMutex.Lock()
+			if m.resultChan != nil {
+				m.resultChan <- err
+			}
+			m.callbackMutex.Unlock()
 			return
 		}
 
@@ -516,7 +611,11 @@ func (m *AuthManager) startCallbackServer(ctx context.Context, frob string) erro
 				"</body></html>",
 				stateErr.Error())
 
-			m.resultChan <- stateErr
+			m.callbackMutex.Lock()
+			if m.resultChan != nil {
+				m.resultChan <- stateErr
+			}
+			m.callbackMutex.Unlock()
 			return
 		}
 
@@ -531,7 +630,11 @@ func (m *AuthManager) startCallbackServer(ctx context.Context, frob string) erro
 				"<p>Please try again or contact support.</p>"+
 				"</body></html>")
 
-			m.resultChan <- errors.New("auth completion succeeded but user not authenticated")
+			m.callbackMutex.Lock()
+			if m.resultChan != nil {
+				m.resultChan <- errors.New("auth completion succeeded but user not authenticated")
+			}
+			m.callbackMutex.Unlock()
 			return
 		}
 
@@ -544,7 +647,11 @@ func (m *AuthManager) startCallbackServer(ctx context.Context, frob string) erro
 			authState.Username)
 
 		// Signal success to main thread
-		m.resultChan <- nil
+		m.callbackMutex.Lock()
+		if m.resultChan != nil {
+			m.resultChan <- nil
+		}
+		m.callbackMutex.Unlock()
 	})
 
 	// Create server with timeout settings
@@ -562,11 +669,12 @@ func (m *AuthManager) startCallbackServer(ctx context.Context, frob string) erro
 		m.logger.Info("Starting callback server", "address", addr)
 		if err := m.callbackServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			m.logger.Error("Callback server error", "error", err)
+
 			m.callbackMutex.Lock()
-			defer m.callbackMutex.Unlock()
 			if m.resultChan != nil {
 				m.resultChan <- err
 			}
+			m.callbackMutex.Unlock()
 		}
 	}()
 
