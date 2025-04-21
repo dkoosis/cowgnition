@@ -1,13 +1,12 @@
-// Package rtm implements the client and service logic for interacting with the Remember The Milk API.
-package rtm
-
 // file: internal/rtm/mcp_integration_test.go
+package rtm
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os" // Added for CI environment check.
+	"os"            // Added for CI environment check and user home dir.
+	"path/filepath" // Added for joining paths.
 	"strings"
 	"testing"
 	"time"
@@ -64,10 +63,148 @@ func (l *testLogger) Error(msg string, args ...any) {
 
 // --- Test Functions ---
 
+// tryExistingTokens searches for and validates tokens from multiple sources.
+// Returns true if a valid token was found and used.
+// Corrected: ctx is the first parameter.
+func tryExistingTokens(ctx context.Context, t *testing.T, service *Service) bool {
+	t.Helper()
+
+	// Check environment variables.
+	envTokens := []string{"RTM_AUTH_TOKEN", "RTM_TEST_TOKEN"}
+	for _, envName := range envTokens {
+		token := os.Getenv(envName)
+		if token != "" {
+			t.Logf("  Found token in %s environment variable.", envName)
+			service.SetAuthToken(token) // Set temporarily for verification.
+
+			// Verify token works.
+			authState, err := service.GetAuthState(ctx)
+			if err == nil && authState != nil && authState.IsAuthenticated {
+				t.Logf("  Environment token valid - authenticated as %s.", authState.Username)
+				return true // Valid token found.
+			}
+			t.Logf("  Environment token invalid: %v.", err)
+			service.SetAuthToken("") // Clear invalid token.
+		}
+	}
+
+	// Try various token file locations.
+	paths := []string{
+		"rtm_token.json",
+		".rtm_token.json",
+		"rtm_test_token.json",
+		".rtm_test_token.json",
+	}
+
+	// Add home directory paths.
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		paths = append(paths,
+			filepath.Join(homeDir, ".rtm_token.json"),
+			filepath.Join(homeDir, ".rtm_test_token.json"),
+			filepath.Join(homeDir, ".config", "cowgnition", "rtm_token.json"))
+	}
+
+	for _, path := range paths {
+		if _, err := os.Stat(path); err == nil {
+			t.Logf("  Found token file: %s.", path)
+
+			data, err := os.ReadFile(path) // #nosec G304 - Path is from internal list/config.
+			if err != nil {
+				t.Logf("  Failed to read token file: %v.", err)
+				continue
+			}
+
+			var tokenData TokenData
+			if err := json.Unmarshal(data, &tokenData); err != nil {
+				t.Logf("  Failed to parse token data: %v.", err)
+				continue
+			}
+
+			if tokenData.Token == "" {
+				t.Logf("  Token file contains empty token.")
+				continue
+			}
+
+			// Try using the token.
+			service.SetAuthToken(tokenData.Token)
+			authState, err := service.GetAuthState(ctx)
+			if err == nil && authState != nil && authState.IsAuthenticated {
+				t.Logf("  File token valid - authenticated as %s.", authState.Username)
+				return true // Valid token found.
+			}
+
+			t.Logf("  Token from %s invalid: %v.", path, err)
+			service.SetAuthToken("") // Clear invalid token.
+		}
+	}
+
+	t.Log("  No valid existing tokens found.")
+	return false // No valid token found.
+}
+
+// saveTestToken saves a token for future test runs.
+// Note: This is currently not used in the main test but kept for potential future use.
+func saveTestToken(t *testing.T, token, username string) {
+	t.Helper()
+	if token == "" {
+		return
+	}
+
+	tokenData := TokenData{
+		Token:     token,
+		Username:  username,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	jsonData, err := json.MarshalIndent(tokenData, "", "  ")
+	if err != nil {
+		t.Logf("  Failed to marshal token data: %v.", err)
+		return
+	}
+
+	// Try multiple locations, succeed with first writable one.
+	paths := []string{
+		"rtm_test_token.json", // Current directory first.
+	}
+
+	// Add home directory location if possible.
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		configDir := filepath.Join(homeDir, ".config", "cowgnition")
+		paths = append(paths,
+			filepath.Join(configDir, "rtm_token.json"), // Also save to main path if possible.
+			filepath.Join(homeDir, ".rtm_test_token.json"))
+
+		// Create config directory if needed.
+		_ = os.MkdirAll(configDir, 0700) // Ignore error.
+	}
+
+	saved := false
+	for _, path := range paths {
+		dir := filepath.Dir(path)
+		if dir != "." && dir != "" { // Avoid trying to create current dir.
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				t.Logf("  Could not create directory %s: %v.", dir, err)
+				continue // Try next path.
+			}
+		}
+
+		if err := os.WriteFile(path, jsonData, 0600); err == nil { // #nosec G306 - secure permissions intended.
+			t.Logf("  Saved token to %s for future test runs.", path)
+			saved = true
+			// Maybe stop after first success, or save everywhere? Let's save everywhere.
+		} else {
+			t.Logf("  Failed to save token to %s: %v.", path, err)
+		}
+	}
+	if !saved {
+		t.Log("  Failed to save token to any location.")
+	}
+}
+
 // TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated tests the integration of RTM service with MCP tools.
-// Renamed function to follow ADR-008 convention.
-// NOTE: Keeping this name as it accurately describes a broad integration test.
-// The internal steps and checks align with testing behavior based on state (credentials, auth).
 // nolint:gocyclo // Integration test involves multiple sequential steps & checks.
 func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testing.T) {
 	if testing.Short() {
@@ -77,7 +214,7 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 	// --- Test State Variables ---
 	var apiKeyValid bool
 	var isAuthenticated bool
-	var authTestsSkipped bool // We'll determine this based on the outcome of the auth step
+	var authTestsSkipped bool // We'll determine this based on the outcome of the auth step.
 	var username string
 
 	// --- Banner and Setup ---
@@ -96,7 +233,7 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 
 	testLogger := newTestLogger(t) // Use our test logger.
 	rtmService := NewService(cfg, testLogger)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second) // Slightly longer timeout for auth manager.
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second) // Increased timeout for auth manager.
 	defer cancel()
 
 	// --- Step 1: Validate Credentials ---
@@ -113,7 +250,8 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 
 	// Evaluate results of individual checks.
 	for _, result := range diagResults {
-		t.Logf("  %s", formatDiagnosticResult(result)) // Use helper from diagnostics.go.
+		// Use the existing formatDiagnosticResult from diagnostics.go since it's in the same package.
+		t.Logf("  %s", formatDiagnosticResult(result))
 		if result.Name == "RTM API Echo Test" {
 			apiKeyValid = result.Success
 		}
@@ -132,74 +270,91 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 	// --- Step 2: Check Authentication Status ---
 	printSectionHeader(t, "Authentication Status")
 
-	// Instead of direct Initialize, use AuthManager to handle the flow.
-	authOptions := AuthManagerOptions{
-		Mode:             AuthModeTest, // Use test mode.
-		AutoCompleteAuth: true,         // Attempt auto-completion if possible.
-		TimeoutDuration:  30 * time.Second,
-	}
-
-	authManager := NewAuthManager(rtmService, authOptions, testLogger)
-	// FIX: Assign both return values from EnsureAuthenticated
-	_, authErr := authManager.EnsureAuthenticated(ctx) // Assign to _, authErr
-
-	// Check if authentication failed.
-	if authErr != nil {
-		// FIX: Removed ineffectual assignment
-		// authTestsSkipped = true // Marked tests as skipped.
-		printTestResult(t, "AUTHENTICATION STATUS", "FAILED", fmt.Sprintf("AuthManager failed: %v.", authErr))
-
-		// If running in CI, skip the test gracefully.
-		if os.Getenv("CI") != "" {
-			printTestFooter(t, "SKIPPED", "Skipping authentication-dependent test in CI environment.")
-			t.Skip("Skipping authentication-dependent test in CI environment.")
-			return
-		}
-
-		// Otherwise, show clear instructions and fail fatally.
-		t.Log("")
-		t.Log("  ╔════════════════════════════════════════════════════════════════╗")
-		t.Log("  ║  AUTHENTICATION REQUIRED - ACTION NEEDED                       ║")
-		t.Log("  ╠════════════════════════════════════════════════════════════════╣")
-		t.Log("  ║  Authentication failed. To manually authenticate:              ║")
-		t.Log("  ║  1. Run this command:                                          ║")
-		t.Log("  ║     go run ./cmd/rtm_connection_test                           ║")
-		t.Log("  ║  2. Follow the browser authorization steps.                    ║")
-		t.Log("  ║  3. Re-run the tests.                                          ║")
-		t.Log("  ╚════════════════════════════════════════════════════════════════╝")
-		t.Log("")
-		printTestFooter(t, "FAILED", fmt.Sprintf("Authentication required but failed: %v.", authErr))
-		t.Fatalf("Authentication required but failed: %v.", authErr) // Use Fatalf to include error.
-		return                                                       // Explicit return.
-	}
-
-	// Authentication succeeded, proceed.
-	isAuthenticated = rtmService.IsAuthenticated() // Check final state.
-	username = rtmService.GetUsername()
-	if username == "" {
-		username = "N/A" // Should not happen if EnsureAuthenticated succeeded.
-	}
-
+	// First, try existing tokens.
+	isAuthenticated = tryExistingTokens(ctx, t, rtmService) // Corrected parameter order.
 	if isAuthenticated {
+		username = rtmService.GetUsername()
 		printTestResult(t, "AUTHENTICATION STATUS", "AUTHENTICATED",
-			fmt.Sprintf("User: %s.", username))
-		authTestsSkipped = false // Authentication succeeded
+			fmt.Sprintf("User: %s (using existing token).", username))
+		authTestsSkipped = false // Found existing token.
 	} else {
-		// This block should ideally not be reached if EnsureAuthenticated succeeded without error.
-		// FIX: Removed ineffectual assignment
-		// authTestsSkipped = true // Authentication somehow failed despite no error
-		printTestResult(t, "AUTHENTICATION STATUS", "INCONSISTENT",
-			"AuthManager reported success but service state is not authenticated.")
-		printTestFooter(t, "FAILED", "Inconsistent authentication state after AuthManager.")
-		t.Fatal("Inconsistent authentication state.")
-		return
+		// If running in CI, skip interactive auth test.
+		if os.Getenv("CI") != "" {
+			authTestsSkipped = true
+			printTestResult(t, "AUTHENTICATION STATUS", "SKIPPED",
+				"Running in CI environment - auth tests skipped.")
+		} else {
+			// No existing token found or CI, proceed with AuthManager.
+			// Setup auth manager for dedicated test flow.
+			authOptions := AuthManagerOptions{
+				Mode:             AuthModeTest, // Use test mode which falls back to interactive if needed.
+				AutoCompleteAuth: true,         // Try auto-complete first.
+				TimeoutDuration:  60 * time.Second,
+				CallbackHost:     "localhost", // Ensure these match potential defaults.
+				CallbackPort:     8090,
+				RetryAttempts:    3, // Allow retries for auth completion.
+				AutoSaveToken:    true,
+			}
+
+			authManager := NewAuthManager(rtmService, authOptions, testLogger)
+			result, authErr := authManager.EnsureAuthenticated(ctx)
+
+			if authErr != nil || !result.Success {
+				errorDetail := "Unknown error"
+				if authErr != nil {
+					errorDetail = authErr.Error()
+				} else if result.Error != nil {
+					errorDetail = result.Error.Error()
+				}
+
+				printTestResult(t, "AUTHENTICATION STATUS", "FAILED",
+					fmt.Sprintf("Auth manager failed: %s", errorDetail))
+
+				// Display instructions for manual authentication.
+				t.Log("")
+				t.Log("  ╔════════════════════════════════════════════════════════════════╗")
+				t.Log("  ║  AUTHENTICATION REQUIRED - ACTION NEEDED                       ║")
+				t.Log("  ╠════════════════════════════════════════════════════════════════╣")
+
+				if result != nil && result.AuthURL != "" && result.Frob != "" {
+					t.Log("  ║  Authentication failed. To manually authenticate:              ║")
+					t.Log("  ║  1. Open this URL in your browser:                             ║")
+					t.Logf("  ║     %s", result.AuthURL)
+					t.Log("  ║  2. Follow the browser authorization steps.                    ║")
+					t.Log("  ║  3. Run the RTM connection test tool to complete auth:         ║")
+					t.Logf("  ║     go run ./cmd/rtm_connection_test --frob=%s", result.Frob)
+				} else {
+					// Fallback instructions if URL/Frob weren't obtained.
+					t.Log("  ║  Authentication failed. To manually authenticate:              ║")
+					t.Log("  ║  1. Run this command:                                          ║")
+					t.Log("  ║     go run ./cmd/rtm_connection_test                           ║")
+					t.Log("  ║  2. Follow the browser authorization steps.                    ║")
+				}
+
+				t.Log("  ╚════════════════════════════════════════════════════════════════╝")
+				t.Log("")
+
+				printTestFooter(t, "FAILED", fmt.Sprintf("Authentication required but failed: %s", errorDetail))
+				t.Fatalf("Authentication required but failed: %s", errorDetail)
+				return // Explicit return.
+			}
+
+			// Authentication succeeded via AuthManager.
+			// isAuthenticated = true // Removed ineffectual assignment.
+			username = result.Username
+			printTestResult(t, "AUTHENTICATION STATUS", "AUTHENTICATED",
+				fmt.Sprintf("User: %s.", username))
+			authTestsSkipped = false
+
+			// Save the token obtained via AuthManager for future runs.
+			saveTestToken(t, rtmService.GetAuthToken(), username)
+		}
 	}
 
 	// --- Step 3: Run Authenticated Operations ---
 	printSectionHeader(t, "Authenticated Operations")
 
 	if authTestsSkipped {
-		// This block should also ideally not be reached if logic above is correct.
 		printTestResult(t, "AUTHENTICATED TESTS", "SKIPPED",
 			"Cannot run authenticated tests without valid auth token.")
 	} else {
@@ -214,11 +369,15 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 		// This case should be caught by t.Fatal earlier, but included for completeness.
 		finalResult = "FAILED"
 		finalReason = "Invalid API credentials (Key/Secret)."
-	} else if authTestsSkipped { // Check if auth was skipped *because* it failed earlier
+	} else if authTestsSkipped { // Check if auth was skipped *because* it failed earlier or in CI.
 		finalResult = "INCOMPLETE"
-		finalReason = "Authentication required to run all operations, but failed."
-		// Mark test as failed if auth was skipped but expected implicitly by integration nature.
-		t.Errorf("Test incomplete: Authentication with RTM required but failed.")
+		finalReason = "Authentication required to run all operations, but was skipped."
+		// Mark test as skipped, not failed, if intentionally skipped (e.g., CI).
+		if os.Getenv("CI") != "" {
+			t.Skipf("Test incomplete: Authentication with RTM required but skipped in CI.")
+		} else {
+			t.Errorf("Test incomplete: Authentication with RTM required but failed/skipped.")
+		}
 	} else if t.Failed() {
 		finalResult = "FAILED"
 		finalReason = "One or more authenticated operations failed (check logs above)."
@@ -391,6 +550,3 @@ func truncateCredential(cred string) string {
 	}
 	return cred[:maxLength] + strings.Repeat("*", len(cred)-maxLength) // Show prefix, mask rest.
 }
-
-// Helper for formatting diagnostic results (if needed, otherwise remove).
-// func formatDiagnosticResult(result DiagnosticResult) string { ... }
