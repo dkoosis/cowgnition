@@ -210,8 +210,8 @@ func (s *Service) handleCompleteTask(ctx context.Context, args json.RawMessage) 
 	return s.successToolResult(fmt.Sprintf("Successfully completed task with ID: %s.", params.TaskID)), nil
 }
 
-func (s *Service) handleGetAuthStatus(ctx context.Context, _ json.RawMessage) (*mcp.CallToolResult, error) { // Use _ for unused args.
-	authState, err := s.GetAuthState(ctx) // Use service method to get cached/refreshed state.
+func (s *Service) handleGetAuthStatus(ctx context.Context, _ json.RawMessage) (*mcp.CallToolResult, error) { // Use _ for unused args
+	authState, err := s.GetAuthState(ctx) // Use service method to get cached/refreshed state
 	if err != nil {
 		return s.rtmAPIErrorResult("getting auth status", err), nil
 	}
@@ -224,15 +224,15 @@ func (s *Service) handleGetAuthStatus(ctx context.Context, _ json.RawMessage) (*
 		}
 		responseText += "."
 	} else {
-		// Get auth URL, but handle potential error from StartAuth.
-		authURL, frob, startAuthErr := s.StartAuth(ctx) // Use service method. // FIX: Expect 3 return values
+		// Call StartAuthFlow directly to get URL and Frob for the message
+		authURL, frob, startAuthErr := s.client.StartAuthFlow(ctx) // Get URL and Frob
 		if startAuthErr != nil {
-			responseText = fmt.Sprintf("Not authenticated. Failed to generate RTM auth URL: %v.", startAuthErr)
+			responseText = fmt.Sprintf("Not authenticated. Failed to generate RTM auth URL: %v", startAuthErr)
 		} else {
 			responseText = "Not authenticated with Remember The Milk.\n\n"
 			responseText += "To authenticate, please visit this URL:\n" + authURL + "\n\n"
 			responseText += "Then use the 'authenticate' tool with the 'frob' code from the URL.\n"
-			if frob != "" { // Use the frob returned from StartAuth
+			if frob != "" { // Use the frob obtained directly
 				responseText += fmt.Sprintf("Example: authenticate(frob: \"%s\")", frob)
 			}
 		}
@@ -244,7 +244,7 @@ func (s *Service) handleGetAuthStatus(ctx context.Context, _ json.RawMessage) (*
 func (s *Service) handleAuthenticate(ctx context.Context, args json.RawMessage) (*mcp.CallToolResult, error) {
 	var params struct {
 		Frob         string `json:"frob,omitempty"`
-		AutoComplete bool   `json:"autoComplete,omitempty"` // Allow client to specify preference.
+		AutoComplete bool   `json:"autoComplete,omitempty"` // Allow client to specify preference
 	}
 
 	if err := json.Unmarshal(args, &params); err != nil {
@@ -270,7 +270,7 @@ func (s *Service) handleAuthenticate(ctx context.Context, args json.RawMessage) 
 	// NOTE: AuthManager isn't fully used here as per the provided snippet.
 	// The snippet logic directly calls s.CompleteAuth or s.StartAuth.
 	// We retain this structure as requested.
-	// authManager := NewAuthManager(s, authOptions, s.logger).
+	// authManager := NewAuthManager(s, authOptions, s.logger)
 
 	if params.Frob != "" {
 		// Complete existing flow with provided frob.
@@ -291,8 +291,8 @@ func (s *Service) handleAuthenticate(ctx context.Context, args json.RawMessage) 
 
 	// Start new auth flow (no frob provided).
 	s.logger.Info("Starting new authentication flow.", "tool", "authenticate", "autoCompleteRequested", params.AutoComplete)
-	// FIX: Expect 3 return values from s.StartAuth
-	authURL, frob, err := s.StartAuth(ctx) // Use service method.
+	// CORRECTED: Call StartAuthFlow directly to get the frob needed for the response message.
+	authURL, frob, err := s.client.StartAuthFlow(ctx) // Changed from s.StartAuth
 	if err != nil {
 		return s.rtmAPIErrorResult("starting authentication", err), nil
 	}
@@ -302,7 +302,7 @@ func (s *Service) handleAuthenticate(ctx context.Context, args json.RawMessage) 
 	responseText += "1. Visit this URL: " + authURL + "\n\n"
 	responseText += "2. Authorize the application.\n\n"
 	responseText += "3. After authorizing, complete authentication using:\n"
-	responseText += fmt.Sprintf("   authenticate(frob: \"%s\")\n", frob)
+	responseText += fmt.Sprintf("   authenticate(frob: \"%s\")\n", frob) // Use frob directly
 
 	// Include a note about auto-complete if it was requested but requires user action.
 	if params.AutoComplete {

@@ -61,6 +61,9 @@
 │   ├── rtm/
 │   │   ├── auth.go
 │   │   ├── auth_manager.go
+│   │   ├── auth_manager_callback.go
+│   │   ├── auth_manager_helpers.go
+│   │   ├── auth_manager_modes.go
 │   │   ├── client.go
 │   │   ├── client_test.go
 │   │   ├── constants.go
@@ -105,4 +108,4 @@
 ├── log
 └── rtm-authentication.jpg
 
-17 directories, 89 files
+17 directories, 92 files

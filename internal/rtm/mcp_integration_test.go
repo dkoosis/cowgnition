@@ -77,7 +77,7 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 	// --- Test State Variables ---
 	var apiKeyValid bool
 	var isAuthenticated bool
-	var authTestsSkipped bool
+	var authTestsSkipped bool // We'll determine this based on the outcome of the auth step
 	var username string
 
 	// --- Banner and Setup ---
@@ -145,7 +145,8 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 
 	// Check if authentication failed.
 	if authErr != nil {
-		authTestsSkipped = true // Mark tests as skipped.
+		// FIX: Removed ineffectual assignment
+		// authTestsSkipped = true // Marked tests as skipped.
 		printTestResult(t, "AUTHENTICATION STATUS", "FAILED", fmt.Sprintf("AuthManager failed: %v.", authErr))
 
 		// If running in CI, skip the test gracefully.
@@ -182,9 +183,11 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 	if isAuthenticated {
 		printTestResult(t, "AUTHENTICATION STATUS", "AUTHENTICATED",
 			fmt.Sprintf("User: %s.", username))
+		authTestsSkipped = false // Authentication succeeded
 	} else {
 		// This block should ideally not be reached if EnsureAuthenticated succeeded without error.
-		authTestsSkipped = true
+		// FIX: Removed ineffectual assignment
+		// authTestsSkipped = true // Authentication somehow failed despite no error
 		printTestResult(t, "AUTHENTICATION STATUS", "INCONSISTENT",
 			"AuthManager reported success but service state is not authenticated.")
 		printTestFooter(t, "FAILED", "Inconsistent authentication state after AuthManager.")
@@ -211,11 +214,11 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 		// This case should be caught by t.Fatal earlier, but included for completeness.
 		finalResult = "FAILED"
 		finalReason = "Invalid API credentials (Key/Secret)."
-	} else if authTestsSkipped {
+	} else if authTestsSkipped { // Check if auth was skipped *because* it failed earlier
 		finalResult = "INCOMPLETE"
-		finalReason = "Authentication required to run all operations."
+		finalReason = "Authentication required to run all operations, but failed."
 		// Mark test as failed if auth was skipped but expected implicitly by integration nature.
-		t.Errorf("Test incomplete: Authentication with RTM required.")
+		t.Errorf("Test incomplete: Authentication with RTM required but failed.")
 	} else if t.Failed() {
 		finalResult = "FAILED"
 		finalReason = "One or more authenticated operations failed (check logs above)."
@@ -388,3 +391,6 @@ func truncateCredential(cred string) string {
 	}
 	return cred[:maxLength] + strings.Repeat("*", len(cred)-maxLength) // Show prefix, mask rest.
 }
+
+// Helper for formatting diagnostic results (if needed, otherwise remove).
+// func formatDiagnosticResult(result DiagnosticResult) string { ... }
