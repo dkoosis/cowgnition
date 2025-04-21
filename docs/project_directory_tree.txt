@@ -101,6 +101,7 @@
 ├── README.md
 ├── go.mod
 ├── go.sum
-└── log
+├── log
+└── rtm-authentication.jpg
 
-17 directories, 87 files
+17 directories, 88 files

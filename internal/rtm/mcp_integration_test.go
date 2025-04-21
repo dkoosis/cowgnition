@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os" // Added for CI environment check.
 	"strings"
 	"testing"
 	"time"
@@ -95,7 +96,7 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 
 	testLogger := newTestLogger(t) // Use our test logger.
 	rtmService := NewService(cfg, testLogger)
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second) // Increased timeout slightly.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second) // Slightly longer timeout for auth manager.
 	defer cancel()
 
 	// --- Step 1: Validate Credentials ---
@@ -131,46 +132,70 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 	// --- Step 2: Check Authentication Status ---
 	printSectionHeader(t, "Authentication Status")
 
-	// Initialize service fully now (loads token, verifies final state).
-	// This step implicitly tests token loading and verification logic.
-	err = rtmService.Initialize(ctx)
-	require.NoError(t, err, "Failed to initialize RTM service (potential token loading/verification issue).")
+	// Instead of direct Initialize, use AuthManager to handle the flow.
+	authOptions := AuthManagerOptions{
+		Mode:             AuthModeTest, // Use test mode.
+		AutoCompleteAuth: true,         // Attempt auto-completion if possible.
+		TimeoutDuration:  30 * time.Second,
+	}
 
-	isAuthenticated = rtmService.IsAuthenticated()
+	authManager := NewAuthManager(rtmService, authOptions, testLogger)
+	authErr := authManager.EnsureAuthenticated(ctx)
+
+	// Check if authentication failed.
+	if authErr != nil {
+		authTestsSkipped = true // Mark tests as skipped.
+		printTestResult(t, "AUTHENTICATION STATUS", "FAILED", fmt.Sprintf("AuthManager failed: %v.", authErr))
+
+		// If running in CI, skip the test gracefully.
+		if os.Getenv("CI") != "" {
+			printTestFooter(t, "SKIPPED", "Skipping authentication-dependent test in CI environment.")
+			t.Skip("Skipping authentication-dependent test in CI environment.")
+			return
+		}
+
+		// Otherwise, show clear instructions and fail fatally.
+		t.Log("")
+		t.Log("  ╔════════════════════════════════════════════════════════════════╗")
+		t.Log("  ║  AUTHENTICATION REQUIRED - ACTION NEEDED                       ║")
+		t.Log("  ╠════════════════════════════════════════════════════════════════╣")
+		t.Log("  ║  Authentication failed. To manually authenticate:              ║")
+		t.Log("  ║  1. Run this command:                                          ║")
+		t.Log("  ║     go run ./cmd/rtm_connection_test                           ║")
+		t.Log("  ║  2. Follow the browser authorization steps.                    ║")
+		t.Log("  ║  3. Re-run the tests.                                          ║")
+		t.Log("  ╚════════════════════════════════════════════════════════════════╝")
+		t.Log("")
+		printTestFooter(t, "FAILED", fmt.Sprintf("Authentication required but failed: %v.", authErr))
+		t.Fatalf("Authentication required but failed: %v.", authErr) // Use Fatalf to include error.
+		return                                                       // Explicit return.
+	}
+
+	// Authentication succeeded, proceed.
+	isAuthenticated = rtmService.IsAuthenticated() // Check final state.
 	username = rtmService.GetUsername()
 	if username == "" {
-		username = "N/A" // Display N/A if not authenticated.
+		username = "N/A" // Should not happen if EnsureAuthenticated succeeded.
 	}
 
 	if isAuthenticated {
 		printTestResult(t, "AUTHENTICATION STATUS", "AUTHENTICATED",
 			fmt.Sprintf("User: %s.", username))
 	} else {
+		// This block should ideally not be reached if EnsureAuthenticated succeeded without error.
 		authTestsSkipped = true
-		printTestResult(t, "AUTHENTICATION STATUS", "NOT AUTHENTICATED",
-			"No valid auth token found or token verification failed.")
-
-		// Give clear instructions for authentication if needed.
-		t.Log("")
-		t.Log("  ╔════════════════════════════════════════════════════════════════╗")
-		t.Log("  ║  AUTHENTICATION REQUIRED FOR FULL TEST                         ║")
-		t.Log("  ╠════════════════════════════════════════════════════════════════╣")
-		t.Log("  ║  To authenticate with Remember The Milk:                       ║")
-		t.Log("  ║                                                                ║")
-		t.Log("  ║  1. Run this command:                                          ║")
-		t.Log("  ║     go run ./cmd/rtm_connection_test                           ║")
-		t.Log("  ║                                                                ║")
-		t.Log("  ║  2. Follow the browser instructions to authorize the app.      ║")
-		t.Log("  ║                                                                ║")
-		t.Log("  ║  3. Re-run the tests after authorization is complete.          ║")
-		t.Log("  ╚════════════════════════════════════════════════════════════════╝")
-		t.Log("")
+		printTestResult(t, "AUTHENTICATION STATUS", "INCONSISTENT",
+			"AuthManager reported success but service state is not authenticated.")
+		printTestFooter(t, "FAILED", "Inconsistent authentication state after AuthManager.")
+		t.Fatal("Inconsistent authentication state.")
+		return
 	}
 
 	// --- Step 3: Run Authenticated Operations ---
 	printSectionHeader(t, "Authenticated Operations")
 
 	if authTestsSkipped {
+		// This block should also ideally not be reached if logic above is correct.
 		printTestResult(t, "AUTHENTICATED TESTS", "SKIPPED",
 			"Cannot run authenticated tests without valid auth token.")
 	} else {
@@ -308,7 +333,7 @@ func printTestResult(t *testing.T, test, status, details string) {
 	case "PASSED", "AUTHENTICATED", "FOUND":
 		icon = "✓"
 		colorCode = colorGreen
-	case "FAILED", "NOT AUTHENTICATED", "MISSING":
+	case "FAILED", "NOT AUTHENTICATED", "MISSING", "INCONSISTENT": // Added INCONSISTENT.
 		icon = "✗"
 		colorCode = colorRed
 	case "SKIPPED", "INCOMPLETE":

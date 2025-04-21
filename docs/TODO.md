@@ -14,6 +14,33 @@ This implementation will prioritize:
 
 ---
 
+## URGENT: Fix RTM Authentication Flow [HIGH PRIORITY]
+- **Issue**: Authentication flow with Remember The Milk API isn't completing properly after user authorization in browser
+- **Context**: Tests are failing with "No authentication token found in system keyring" even after successful web authorization
+- **Reproduction Steps**:
+  1. Run `go run ./cmd/rtm_connection_test`
+  2. Open authorization URL in browser
+  3. Complete authorization (see success message in browser)
+  4. Run `make test` - tests still fail with authentication error
+
+- **Debugging Steps**:
+  1. Review `cmd/rtm_connection_test/main.go` to identify how frob -> token exchange should work
+  2. Check if a callback server is needed to receive authorization completion
+  3. Verify token storage in system keyring implementation
+  4. Add better logging around token retrieval and storage
+  5. Consider whether a separate "complete authentication" command is needed
+
+- **Fix Requirements**:
+  - Solution should work in both test and production environments
+  - Ideally, provide clearer user guidance during authentication flow
+  - Ensure keyring storage is properly implemented for cross-platform use
+
+## JSON-RPC Validation Test Fix
+- Update test expectations in `validation_identify_test.go:203`
+- Test expects "missing method, result, or error" but actual error is "Invalid Request"
+- Either update test or adjust error message format in implementation
+
+
 ## Phase 8: Schema Validation Improvements
 
 **Status:** [ACTIVE - PARTIALLY COMPLETE]

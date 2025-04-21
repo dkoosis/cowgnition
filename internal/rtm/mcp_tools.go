@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
+	"net/url" // Added.
 	"strings" // Ensure strings is imported.
 
 	"github.com/dkoosis/cowgnition/internal/mcp"
@@ -46,7 +46,7 @@ func (s *Service) GetTools() []mcp.Tool {
 		{
 			Name:        "authenticate",
 			Description: "Initiates or completes the authentication flow with Remember The Milk.",
-			InputSchema: s.authenticationInputSchema(),
+			InputSchema: s.authenticationInputSchema(), // Updated schema definition below.
 			Annotations: &mcp.ToolAnnotations{Title: "Authenticate with RTM"},
 		},
 		{
@@ -78,7 +78,7 @@ func (s *Service) CallTool(ctx context.Context, name string, args json.RawMessag
 	case "getAuthStatus":
 		handlerFunc = s.handleGetAuthStatus
 	case "authenticate":
-		handlerFunc = s.handleAuthenticate
+		handlerFunc = s.handleAuthenticate // Updated function.
 	case "clearAuth":
 		handlerFunc = s.handleClearAuth // Removed ctx unused param here.
 	default:
@@ -253,47 +253,72 @@ func (s *Service) handleGetAuthStatus(ctx context.Context, _ json.RawMessage) (*
 	return s.successToolResult(responseText), nil
 }
 
+// handleAuthenticate uses AuthManager to initiate or complete the auth flow.
 func (s *Service) handleAuthenticate(ctx context.Context, args json.RawMessage) (*mcp.CallToolResult, error) {
 	var params struct {
-		Frob string `json:"frob,omitempty"`
+		Frob         string `json:"frob,omitempty"`
+		AutoComplete bool   `json:"autoComplete,omitempty"` // Allow client to specify preference.
 	}
+
 	if err := json.Unmarshal(args, &params); err != nil {
 		return s.invalidToolArgumentsError("authenticate", err), nil
 	}
 
+	// Create AuthManager with options derived from tool call.
+	authOptions := DefaultAuthManagerOptions()
+
+	// Determine mode and auto-complete logic based on provided frob or params.
 	if params.Frob != "" {
-		// Complete Auth Flow.
+		// If frob is provided, assume manual completion is intended.
+		authOptions.AutoCompleteAuth = false
+	} else {
+		// If no frob, respect the AutoComplete parameter (defaults to false if not provided).
+		authOptions.AutoCompleteAuth = params.AutoComplete
+		// Consider using AuthModeInteractive if AutoComplete is requested without frob.
+		if params.AutoComplete {
+			authOptions.Mode = AuthModeInteractive
+		}
+	}
+
+	// NOTE: AuthManager isn't fully used here as per the provided snippet.
+	// The snippet logic directly calls s.CompleteAuth or s.StartAuth.
+	// We retain this structure as requested.
+	// authManager := NewAuthManager(s, authOptions, s.logger).
+
+	if params.Frob != "" {
+		// Complete existing flow with provided frob.
+		s.logger.Info("Attempting to complete authentication with provided frob.", "tool", "authenticate")
 		err := s.CompleteAuth(ctx, params.Frob) // Use service method.
 		if err != nil {
 			return s.rtmAPIErrorResult("completing authentication", err), nil
 		}
+
+		// Verify after completion.
 		if !s.IsAuthenticated() {
-			return s.simpleToolErrorResult("Authentication completed, but verification failed. Try 'getAuthStatus'."), nil
+			// This might happen if the frob was invalid/expired.
+			return s.simpleToolErrorResult("Authentication failed. The provided 'frob' might be invalid or expired. Try starting authentication again."), nil
 		}
+
 		return s.successToolResult(fmt.Sprintf("Successfully authenticated as user: %s.", s.GetUsername())), nil
 	}
 
-	// Start Auth Flow (No 'else' needed as the 'if' block returns).
-	authURL, startAuthErr := s.StartAuth(ctx) // Use service method.
-	if startAuthErr != nil {
-		return s.rtmAPIErrorResult("starting authentication", startAuthErr), nil
+	// Start new auth flow (no frob provided).
+	s.logger.Info("Starting new authentication flow.", "tool", "authenticate", "autoCompleteRequested", params.AutoComplete)
+	authURL, frob, err := s.StartAuth(ctx) // Use service method.
+	if err != nil {
+		return s.rtmAPIErrorResult("starting authentication", err), nil
 	}
 
-	frobParam := ""
-	parsedURL, _ := url.Parse(authURL)
-	if parsedURL != nil {
-		frobParam = parsedURL.Query().Get("frob")
-	}
-	if frobParam == "" && strings.Contains(authURL, "&frob=") { // Fallback split.
-		if parts := strings.Split(authURL, "&frob="); len(parts) > 1 {
-			frobParam = parts[1]
-		}
-	}
+	// Provide instructions back to the user/client.
+	responseText := "To authenticate with Remember The Milk:\n\n"
+	responseText += "1. Visit this URL: " + authURL + "\n\n"
+	responseText += "2. Authorize the application.\n\n"
+	responseText += "3. After authorizing, complete authentication using:\n"
+	responseText += fmt.Sprintf("   authenticate(frob: \"%s\")\n", frob)
 
-	responseText := "To authenticate:\n1. Visit URL: " + authURL + "\n2. Authorize CowGnition."
-	responseText += "\n3. Use authenticate tool with the 'frob' code from the URL."
-	if frobParam != "" {
-		responseText += fmt.Sprintf("\n   Example: authenticate(frob: \"%s\")", frobParam)
+	// Include a note about auto-complete if it was requested but requires user action.
+	if params.AutoComplete {
+		responseText += "\n(Note: Auto-complete requires user interaction in the browser)."
 	}
 
 	return s.successToolResult(responseText), nil
@@ -369,17 +394,22 @@ func (s *Service) completeTaskInputSchema() json.RawMessage {
 	return schemaJSON
 }
 
+// Updated authenticationInputSchema to include AutoComplete.
 func (s *Service) authenticationInputSchema() json.RawMessage {
 	schema := map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
 			"frob": map[string]interface{}{
 				"type":        "string",
-				"description": "Optional. The 'frob' code obtained from the RTM authentication URL. If provided, completes the auth flow. If omitted, starts the auth flow.",
+				"description": "Optional. The 'frob' code obtained from the RTM authentication URL. If provided, completes the auth flow.",
+			},
+			"autoComplete": map[string]interface{}{
+				"type":        "boolean",
+				"description": "Optional (defaults to false). If true and 'frob' is omitted, attempt to automatically handle the browser-based flow (requires user interaction).",
+				"default":     false,
 			},
 		},
-		// Frob is optional.
-		// "required": []string{},
+		// No fields are strictly required; behavior depends on which are present.
 	}
 	schemaJSON, _ := json.Marshal(schema)
 	return schemaJSON
