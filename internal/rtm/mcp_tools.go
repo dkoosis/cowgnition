@@ -6,8 +6,7 @@ package rtm
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"net/url" // Added.
+	"fmt"     // Added.
 	"strings" // Ensure strings is imported.
 
 	"github.com/dkoosis/cowgnition/internal/mcp"
@@ -226,27 +225,15 @@ func (s *Service) handleGetAuthStatus(ctx context.Context, _ json.RawMessage) (*
 		responseText += "."
 	} else {
 		// Get auth URL, but handle potential error from StartAuth.
-		authURL, startAuthErr := s.StartAuth(ctx) // Use service method.
+		authURL, frob, startAuthErr := s.StartAuth(ctx) // Use service method. // FIX: Expect 3 return values
 		if startAuthErr != nil {
 			responseText = fmt.Sprintf("Not authenticated. Failed to generate RTM auth URL: %v.", startAuthErr)
 		} else {
-			// Extract frob from URL for user convenience (assuming StartAuth returns URL + frob).
-			frobParam := ""
-			parsedURL, _ := url.Parse(authURL) // Ignore error, simple split as fallback.
-			if parsedURL != nil {
-				frobParam = parsedURL.Query().Get("frob") // More robust way if StartAuth adds it to query.
-			}
-			if frobParam == "" && strings.Contains(authURL, "&frob=") { // Fallback split.
-				if parts := strings.Split(authURL, "&frob="); len(parts) > 1 {
-					frobParam = parts[1]
-				}
-			}
-
 			responseText = "Not authenticated with Remember The Milk.\n\n"
 			responseText += "To authenticate, please visit this URL:\n" + authURL + "\n\n"
 			responseText += "Then use the 'authenticate' tool with the 'frob' code from the URL.\n"
-			if frobParam != "" {
-				responseText += fmt.Sprintf("Example: authenticate(frob: \"%s\")", frobParam)
+			if frob != "" { // Use the frob returned from StartAuth
+				responseText += fmt.Sprintf("Example: authenticate(frob: \"%s\")", frob)
 			}
 		}
 	}
@@ -304,6 +291,7 @@ func (s *Service) handleAuthenticate(ctx context.Context, args json.RawMessage) 
 
 	// Start new auth flow (no frob provided).
 	s.logger.Info("Starting new authentication flow.", "tool", "authenticate", "autoCompleteRequested", params.AutoComplete)
+	// FIX: Expect 3 return values from s.StartAuth
 	authURL, frob, err := s.StartAuth(ctx) // Use service method.
 	if err != nil {
 		return s.rtmAPIErrorResult("starting authentication", err), nil

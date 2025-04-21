@@ -118,6 +118,7 @@ func generateStateToken() string {
 
 // EnsureAuthenticated makes sure the service is authenticated,
 // taking care of the complete flow if needed.
+// Returns (*AuthResult, error)
 func (m *AuthManager) EnsureAuthenticated(ctx context.Context) (*AuthResult, error) {
 	m.logger.Info("Checking authentication status...")
 
@@ -757,7 +758,8 @@ func (m *AuthManager) retryableOperationWithStrings(ctx context.Context, opName 
 	m.retryMutex.Unlock()
 
 	var lastErr error
-	var s1, s2 string
+	// FIX: Declare s1, s2 within the loop or assign fn results directly
+	var resultS1, resultS2 string // Use different names to avoid shadowing
 
 	for attempt := 0; attempt <= m.options.RetryAttempts; attempt++ {
 		// Add delay for retries
@@ -775,9 +777,16 @@ func (m *AuthManager) retryableOperationWithStrings(ctx context.Context, opName 
 		m.retryCount[opName] = attempt
 		m.retryMutex.Unlock()
 
-		s1, s2, err := fn(ctx)
+		// FIX: Assign results directly
+		var s1, s2 string     // Declare here for scope
+		var err error         // Declare here for scope
+		s1, s2, err = fn(ctx) // Assign results from the function call
+
 		if err == nil {
-			return s1, s2, nil
+			// Assign to outer scope variables on success before returning
+			resultS1 = s1
+			resultS2 = s2
+			return resultS1, resultS2, nil // Return the actual results
 		}
 
 		lastErr = err
@@ -787,6 +796,6 @@ func (m *AuthManager) retryableOperationWithStrings(ctx context.Context, opName 
 			"error", err)
 	}
 
-	return "", "", errors.Wrapf(lastErr, "operation %s failed after %d attempts",
+	return "", "", errors.Wrapf(lastErr, "operation %s failed after %d attempts", // Return empty strings on final failure
 		opName, m.options.RetryAttempts+1)
 }

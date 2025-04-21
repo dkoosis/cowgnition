@@ -140,7 +140,8 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 	}
 
 	authManager := NewAuthManager(rtmService, authOptions, testLogger)
-	authErr := authManager.EnsureAuthenticated(ctx)
+	// FIX: Assign both return values from EnsureAuthenticated
+	_, authErr := authManager.EnsureAuthenticated(ctx) // Assign to _, authErr
 
 	// Check if authentication failed.
 	if authErr != nil {
