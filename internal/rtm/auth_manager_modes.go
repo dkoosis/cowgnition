@@ -12,6 +12,7 @@ import (
 )
 
 // handleInteractiveAuth guides the user through the auth process.
+// This function should primarily be called by user-facing tools like `rtm_connection_test` or `cowgnition setup`.
 func (m *AuthManager) handleInteractiveAuth(ctx context.Context) (*AuthResult, error) {
 	// Start the auth flow to get a frob and URL.
 	authURL, frob, err := m.retryableOperationWithStrings(ctx, "StartAuthFlow", func(ctx context.Context) (string, string, error) {
@@ -42,7 +43,8 @@ func (m *AuthManager) handleInteractiveAuth(ctx context.Context) (*AuthResult, e
 	if !m.options.AutoCompleteAuth {
 		fmt.Printf("3. After authorizing, use the following to complete authentication:\n")
 		fmt.Printf("   Complete authentication with frob: %s\n\n", frob)
-		return result, nil // Not an error in this case, just instruction.
+		// Return success=false, but no Go error, just instructions.
+		return result, nil
 	}
 
 	// Try auto-complete with callback server.
@@ -64,8 +66,8 @@ func (m *AuthManager) handleInteractiveAuth(ctx context.Context) (*AuthResult, e
 					// Don't return error yet - try manual completion as fallback.
 				} else {
 					// Server completed successfully, check auth again.
-					authState, err := m.service.GetAuthState(ctx)
-					if err == nil && authState != nil && authState.IsAuthenticated {
+					authState, checkErr := m.service.GetAuthState(ctx)
+					if checkErr == nil && authState != nil && authState.IsAuthenticated {
 						m.logger.Info("Authentication successful via callback!.", "username", authState.Username)
 						result.Success = true
 						result.Username = authState.Username
@@ -73,10 +75,10 @@ func (m *AuthManager) handleInteractiveAuth(ctx context.Context) (*AuthResult, e
 						if m.options.AutoSaveToken {
 							m.saveTokenAfterSuccessfulAuth(authState)
 						}
-						return result, nil
-					} else if err != nil {
-						m.logger.Error("Failed to verify auth state after callback.", "error", err)
-						result.Error = err
+						return result, nil // Success!.
+					} else if checkErr != nil {
+						m.logger.Error("Failed to verify auth state after callback.", "error", checkErr)
+						result.Error = checkErr
 						// Don't return yet - try manual completion as fallback.
 					} else {
 						m.logger.Warn("Callback completed but user not authenticated - trying manual completion.")
@@ -85,6 +87,7 @@ func (m *AuthManager) handleInteractiveAuth(ctx context.Context) (*AuthResult, e
 			case <-ctx.Done():
 				m.stopCallbackServer()
 				m.logger.Warn("Authentication context cancelled.", "error", ctx.Err())
+				// Return the specific context error.
 				return result, ctx.Err()
 			case <-time.After(m.options.TimeoutDuration):
 				m.logger.Warn("Authentication callback timed out - trying manual completion.",
@@ -96,10 +99,15 @@ func (m *AuthManager) handleInteractiveAuth(ctx context.Context) (*AuthResult, e
 		}
 	}
 
-	// Fallback to manual input.
-	fmt.Printf("3. Automatic completion couldn't be established.\n")
+	// Fallback to manual confirmation *only if not automated*.
+	// This part should ideally not be reached if AutoCompleteAuth is true and callback server works.
+	fmt.Printf("3. Automatic completion couldn't be established or timed out.\n")
 	fmt.Printf("   Press Enter after you've completed authorization in your browser...\n")
-	_, _ = fmt.Scanln() // Assign error to blank identifier.
+	_, scanErr := fmt.Scanln() // Read user input.
+	if scanErr != nil {
+		m.logger.Warn("Failed to read user input for manual confirmation.", "error", scanErr)
+		// Proceed anyway, maybe auth happened but input failed.
+	}
 
 	// Added delay - RTM's auth process sometimes takes a moment to register.
 	// Wait a short time before trying to complete the flow.
@@ -116,17 +124,27 @@ func (m *AuthManager) handleInteractiveAuth(ctx context.Context) (*AuthResult, e
 		if attempt > 0 {
 			delay := time.Duration(500*attempt) * time.Millisecond
 			m.logger.Info("Retrying auth completion.", "attempt", attempt+1, "delay", delay.String())
-			time.Sleep(delay)
+			// Check context before sleeping.
+			select {
+			case <-ctx.Done():
+				return result, ctx.Err()
+			case <-time.After(delay):
+			}
 		}
 
-		authErr = m.service.CompleteAuth(ctx, frob)
-		if authErr == nil {
-			break // Success.
+		// Check context before making the call.
+		select {
+		case <-ctx.Done():
+			return result, ctx.Err()
+		default:
+			authErr = m.service.CompleteAuth(ctx, frob)
+			if authErr == nil {
+				break // Success.
+			}
+			m.logger.Warn("Auth completion attempt failed.",
+				"attempt", attempt+1,
+				"error", authErr.Error()) // Log error message.
 		}
-
-		m.logger.Warn("Auth completion attempt failed.",
-			"attempt", attempt+1,
-			"error", authErr.Error()) // Log error message.
 	}
 
 	if authErr != nil {
@@ -136,15 +154,15 @@ func (m *AuthManager) handleInteractiveAuth(ctx context.Context) (*AuthResult, e
 	}
 
 	// Verify authentication was successful.
-	authState, err := m.service.GetAuthState(ctx)
-	if err != nil || authState == nil || !authState.IsAuthenticated {
+	authState, verifyErr := m.service.GetAuthState(ctx)
+	if verifyErr != nil || authState == nil || !authState.IsAuthenticated {
 		m.logger.Error("Auth completion succeeded but failed verification.",
-			"error", err,
+			"error", verifyErr,
 			"authenticated", authState != nil && authState.IsAuthenticated)
 
-		if err != nil {
-			result.Error = err
-			return result, errors.Wrap(err, "authentication verification failed")
+		if verifyErr != nil {
+			result.Error = verifyErr
+			return result, errors.Wrap(verifyErr, "authentication verification failed")
 		}
 
 		result.Error = errors.New("authentication verification failed - not authenticated")
@@ -215,13 +233,36 @@ func (m *AuthManager) handleTestAuth(ctx context.Context) (*AuthResult, error) {
 		m.logger.Info("Running in CI environment, using mock authentication.")
 		// Set up mock auth state for testing.
 		// This would be environment-specific implementation.
+		// In a real scenario, might need to set a dummy token on the service here.
+		// For now, just return success.
 		return &AuthResult{
 			Success:  true,
 			Username: "ci_test_user",
 		}, nil
 	}
 
-	// Fall back to interactive if not CI and no existing token worked.
-	m.logger.Info("Test environment requires interactive authentication.")
-	return m.handleInteractiveAuth(ctx)
+	// --- MODIFICATION START ---
+	// If not CI and no existing token worked, *FAIL FAST* instead of starting interactive flow.
+	// Integration tests should not rely on interactive auth during the test run itself.
+	m.logger.Error("Test environment requires pre-authentication. No valid token found.")
+	// Generate auth details for the error message/instructions, but don't start callback server or wait for input.
+	authURL, frob, startErr := m.client.StartAuthFlow(ctx)
+	if startErr != nil {
+		// If even starting the flow fails, report that.
+		return &AuthResult{Success: false, Error: startErr},
+			errors.Wrap(startErr, "failed to start auth flow to get instructions")
+	}
+	// Return an error indicating manual intervention is needed outside the test.
+	testAuthErr := errors.New("Test authentication failed: No pre-existing valid token found. Run 'go run ./cmd/rtm_connection_test' manually to authenticate first.")
+	return &AuthResult{
+		Success: false,
+		AuthURL: authURL,
+		Frob:    frob,
+		Error:   testAuthErr,
+	}, testAuthErr
+	// --- MODIFICATION END ---
+
+	// Original fallback to interactive auth is removed:
+	// m.logger.Info("Test environment requires interactive authentication.")
+	// return m.handleInteractiveAuth(ctx).
 }
