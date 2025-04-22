@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/logging"
 	"github.com/dkoosis/cowgnition/internal/rtm" // Import rtm package.
@@ -335,7 +336,172 @@ func printResultsSummary(results []TestResult) {
 	}
 }
 
-// Other test functions remain largely the same, but replacing rtmClient with rtmService where needed
+// testInternetConnectivity checks if the internet is reachable.
+func testInternetConnectivity(ctx context.Context, client *http.Client, logger logging.Logger) TestResult {
+	start := time.Now()
+	logger.Debug("Testing internet connectivity...")
+
+	// Ensure ctx is passed
+	req, err := http.NewRequestWithContext(ctx, "HEAD", internetTestURL, nil)
+	if err != nil {
+		return TestResult{
+			Name:        "Internet Connectivity",
+			Success:     false,
+			Error:       errors.Wrap(err, "failed to create request"),
+			Description: "Failed to create request",
+			Duration:    time.Since(start),
+		}
+	}
+
+	resp, err := client.Do(req)
+	duration := time.Since(start)
+	if err != nil {
+		logger.Warn("Internet connectivity check failed.", "error", err)
+		return TestResult{
+			Name:        "Internet Connectivity",
+			Success:     false,
+			Error:       errors.Wrap(err, "HTTP HEAD request failed"),
+			Description: "Failed to connect to the internet",
+			Duration:    duration,
+		}
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= 400 {
+		logger.Warn("Internet connectivity check received non-success status.", "status_code", resp.StatusCode)
+		return TestResult{
+			Name:        "Internet Connectivity",
+			Success:     false,
+			Error:       errors.Errorf("HTTP status code: %d", resp.StatusCode),
+			Description: "Received error status code from internet test",
+			Duration:    duration,
+		}
+	}
+
+	logger.Debug("Internet connectivity check passed.", "status_code", resp.StatusCode)
+	return TestResult{
+		Name:        "Internet Connectivity",
+		Success:     true,
+		Error:       nil,
+		Description: fmt.Sprintf("Connected to %s (HTTP %d)", internetTestURL, resp.StatusCode),
+		Duration:    duration,
+	}
+}
+
+// testRTMAvailability checks if the RTM API endpoint is reachable.
+func testRTMAvailability(ctx context.Context, httpClient *http.Client, rtmClient *rtm.Client, logger logging.Logger) TestResult {
+	start := time.Now()
+	apiEndpoint := rtmClient.GetAPIEndpoint() // Get endpoint from the client
+	logger.Debug("Testing RTM API endpoint availability...", "endpoint", apiEndpoint)
+
+	// Ensure ctx is passed
+	req, err := http.NewRequestWithContext(ctx, "HEAD", apiEndpoint, nil)
+	if err != nil {
+		return TestResult{
+			Name:        "RTM API Availability",
+			Success:     false,
+			Error:       errors.Wrap(err, "failed to create request"),
+			Description: "Failed to create request",
+			Duration:    time.Since(start),
+		}
+	}
+
+	resp, err := httpClient.Do(req)
+	duration := time.Since(start)
+	if err != nil {
+		logger.Warn("RTM API availability check failed (network error).", "error", err)
+		return TestResult{
+			Name:        "RTM API Availability",
+			Success:     false,
+			Error:       errors.Wrap(err, "HTTP HEAD request failed"),
+			Description: "Failed to connect to RTM API endpoint",
+			Duration:    duration,
+		}
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	logger.Debug("RTM API availability check completed.", "status_code", resp.StatusCode)
+	return TestResult{
+		Name:        "RTM API Availability",
+		Success:     true,
+		Error:       nil,
+		Description: fmt.Sprintf("RTM API endpoint is reachable (HTTP %d)", resp.StatusCode),
+		Duration:    duration,
+	}
+}
+
+// testRTMEcho tests the rtm.test.echo method (doesn't require authentication).
+func testRTMEcho(ctx context.Context, client *rtm.Client, logger logging.Logger) TestResult {
+	start := time.Now()
+	logger.Debug("Testing RTM API echo...")
+
+	params := map[string]string{"test_param": "hello_rtm_conn_test"}
+	// Ensure ctx is passed
+	respBytes, err := client.CallMethod(ctx, "rtm.test.echo", params)
+	duration := time.Since(start)
+
+	if err != nil {
+		logger.Warn("RTM API echo test failed.", "error", err)
+		return TestResult{
+			Name:        "RTM API Echo Test",
+			Success:     false,
+			Error:       err,
+			Description: "Failed to call rtm.test.echo method - API key or secret may be invalid",
+			Duration:    duration,
+		}
+	}
+
+	respStr := string(respBytes)
+	if !strings.Contains(respStr, `"stat":"ok"`) || !strings.Contains(respStr, `"test_param":"hello_rtm_conn_test"`) {
+		logger.Warn("RTM API echo test received invalid response.", "response", respStr)
+		return TestResult{
+			Name:        "RTM API Echo Test",
+			Success:     false,
+			Error:       errors.New("response doesn't contain success status or echoed param"),
+			Description: "API returned an invalid response format",
+			Duration:    duration,
+		}
+	}
+
+	logger.Debug("RTM API echo test passed.")
+	return TestResult{
+		Name:        "RTM API Echo Test",
+		Success:     true,
+		Description: "Successfully verified API key and secret are valid",
+		Duration:    duration,
+	}
+}
+
+// startRTMAuth starts the RTM authentication flow.
+func startRTMAuth(ctx context.Context, client *rtm.Client, logger logging.Logger) TestResult {
+	start := time.Now()
+	logger.Debug("Starting RTM auth flow...")
+
+	// Ensure ctx is passed
+	authURL, _, err := client.StartAuthFlow(ctx)
+	duration := time.Since(start)
+
+	if err != nil {
+		logger.Warn("Starting RTM auth flow failed.", "error", err)
+		return TestResult{
+			Name:        "RTM Auth Flow Start",
+			Success:     false,
+			Error:       err,
+			Description: "Failed to start authentication flow",
+			Duration:    duration,
+		}
+	}
+
+	description := fmt.Sprintf("Auth flow started. Please visit this URL to authorize: %s", authURL)
+	logger.Debug("RTM Auth flow started successfully.")
+	return TestResult{
+		Name:        "RTM Auth Flow Start",
+		Success:     true,
+		Error:       nil,
+		Description: description,
+		Duration:    duration,
+	}
+}
 
 // completeRTMAuth completes the RTM authentication flow with a frob.
 func completeRTMAuth(ctx context.Context, service *rtm.Service, frob string, logger logging.Logger) TestResult {
@@ -374,10 +540,13 @@ func completeRTMAuth(ctx context.Context, service *rtm.Service, frob string, log
 	// Get storage information
 	storageMethod, storagePath, _ := service.GetTokenStorageInfo()
 	storageInfo := ""
-	if storageMethod == "secure" {
+	switch storageMethod {
+	case "secure":
 		storageInfo = " (Token saved to OS keychain)"
-	} else if storageMethod == "file" {
+	case "file":
 		storageInfo = fmt.Sprintf(" (Token saved to file: %s)", storagePath)
+	default:
+		storageInfo = ""
 	}
 
 	description := fmt.Sprintf("Successfully authenticated as %s%s", authState.Username, storageInfo)
@@ -453,5 +622,3 @@ func testRTMAuthenticated(ctx context.Context, service *rtm.Service, logger logg
 		StoragePath:   storagePath,
 	}
 }
-
-// Other test functions would be similarly updated but simplified here

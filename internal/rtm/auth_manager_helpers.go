@@ -137,6 +137,7 @@ func (m *AuthManager) readTokenFile(path string) (*TokenData, error) {
 // saveTokenToStorage updates the Service's token storage with the current token.
 // This replaces the previous direct file writing approach with a centralized method
 // that uses the TokenStorageInterface.
+// nolint: unused
 func (m *AuthManager) saveTokenToStorage(token, userID, username string) {
 	if token == "" {
 		m.logger.Warn("Cannot save empty token.")

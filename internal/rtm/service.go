@@ -363,9 +363,8 @@ func (s *Service) ClearAuth() error {
 		if err := s.tokenStorage.DeleteToken(); err != nil {
 			s.logger.Error("-> Failed to clear token from storage.", "error", err) // Log specific error
 			return errors.Wrap(err, "failed to delete token from storage")
-		} else {
-			s.logger.Info("-> Successfully deleted token from storage.")
 		}
+		s.logger.Info("-> Successfully deleted token from storage.")
 	}
 	s.logger.Info("-> Authentication cleared.")
 	return nil
