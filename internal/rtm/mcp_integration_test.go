@@ -82,6 +82,18 @@ func tryExistingTokens(ctx context.Context, t *testing.T, service *Service) bool
 			authState, err := service.GetAuthState(ctx)
 			if err == nil && authState != nil && authState.IsAuthenticated {
 				t.Logf("  Environment token valid - authenticated as %s.", authState.Username)
+
+				// Make sure the service is fully initialized
+				if !service.initialized {
+					t.Log("  Service found token but is not initialized. Calling Initialize...")
+					initErr := service.Initialize(ctx)
+					if initErr != nil {
+						t.Logf("  Failed to initialize service: %v", initErr)
+					} else {
+						t.Log("  Service successfully initialized.")
+					}
+				}
+
 				return true // Valid token found.
 			}
 			t.Logf("  Environment token invalid: %v.", err)
@@ -101,6 +113,18 @@ func tryExistingTokens(ctx context.Context, t *testing.T, service *Service) bool
 			authState, verifyErr := service.GetAuthState(ctx)
 			if verifyErr == nil && authState != nil && authState.IsAuthenticated {
 				t.Logf("  Token from configured storage valid - authenticated as %s.", authState.Username)
+
+				// Make sure the service is fully initialized
+				if !service.initialized {
+					t.Log("  Service found token but is not initialized. Calling Initialize...")
+					initErr := service.Initialize(ctx)
+					if initErr != nil {
+						t.Logf("  Failed to initialize service: %v", initErr)
+					} else {
+						t.Log("  Service successfully initialized.")
+					}
+				}
+
 				return true // Valid token found.
 			}
 			t.Logf("  Token from configured storage invalid: %v.", verifyErr)
@@ -154,6 +178,18 @@ func tryExistingTokens(ctx context.Context, t *testing.T, service *Service) bool
 			authState, err := service.GetAuthState(ctx)
 			if err == nil && authState != nil && authState.IsAuthenticated {
 				t.Logf("  File token valid - authenticated as %s.", authState.Username)
+
+				// Make sure the service is fully initialized
+				if !service.initialized {
+					t.Log("  Service found token but is not initialized. Calling Initialize...")
+					initErr := service.Initialize(ctx)
+					if initErr != nil {
+						t.Logf("  Failed to initialize service: %v", initErr)
+					} else {
+						t.Log("  Service successfully initialized.")
+					}
+				}
+
 				return true // Valid token found.
 			}
 

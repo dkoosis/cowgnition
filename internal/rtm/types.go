@@ -203,9 +203,7 @@ type rtmTaskSeries struct {
 	Tags struct {
 		Tag []string `json:"tag,omitempty"`
 	} `json:"tags"`
-	Notes struct {
-		Note []rtmNote `json:"note,omitempty"`
-	} `json:"notes"`
+	Notes        []rtmNote `json:"notes,omitempty"`
 	Task         []rtmTask `json:"task"`
 	LocationID   string    `json:"location_id,omitempty"`
 	LocationName string    `json:"location,omitempty"` // RTM uses 'location' for name

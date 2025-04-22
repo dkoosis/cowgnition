@@ -165,15 +165,61 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 		return nil, errors.Wrap(err, "failed to call getTasks method")
 	}
 
+	// Log the raw response for debugging
+	c.logger.Debug("Raw RTM getTasks response received", "responseBody", string(respBytes))
+
 	var result tasksRsp
 	if err := json.Unmarshal(respBytes, &result); err != nil {
+		c.logger.Error("Failed to parse getTasks response JSON",
+			"error", err,
+			"responseBody", string(respBytes))
 		return nil, errors.Wrap(err, "failed to parse getTasks response")
 	}
 
 	var tasks []Task
 	for _, list := range result.Rsp.Tasks.List {
 		for _, series := range list.Taskseries {
-			tasks = c.parseTasksFromSeries(series, list.ID, list.Name, tasks)
+			// --- Corrected Note Parsing ---
+			var taskNotes []Note // Use the public Note type
+			// Directly use the already parsed series.Notes slice
+			if len(series.Notes) > 0 {
+				taskNotes = c.parseRTMNotes(series.Notes) // Convert []rtmNote to []Note
+			} else {
+				taskNotes = nil // Ensure it's nil if no notes exist
+			}
+			// --- End Corrected Note Parsing ---
+
+			// Integrate the task parsing logic directly
+			for _, t := range series.Task {
+				if t.Deleted != "" { // Skip deleted tasks
+					continue
+				}
+
+				task := Task{
+					ID:           fmt.Sprintf("%s_%s", series.ID, t.ID),
+					Name:         series.Name,
+					URL:          series.URL,
+					LocationID:   series.LocationID,
+					LocationName: series.LocationName,
+					ListID:       list.ID,
+					ListName:     list.Name, // Assign list name
+					Estimate:     t.Estimate,
+					Notes:        taskNotes, // Assign the correctly parsed notes here
+				}
+
+				task.DueDate, _ = c.parseRTMTime(t.Due)
+				task.StartDate, _ = c.parseRTMTime(t.Added)
+				task.CompletedDate, _ = c.parseRTMTime(t.Completed)
+
+				task.Priority = c.parseRTMPriority(t.Priority)
+				task.Postponed = c.parseRTMPostponed(t.Postponed)
+
+				if len(series.Tags.Tag) > 0 {
+					task.Tags = series.Tags.Tag
+				}
+
+				tasks = append(tasks, task)
+			}
 		}
 	}
 
@@ -183,6 +229,7 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 // --- Helper functions for GetTasks ---
 
 // parseTasksFromSeries processes a task series and appends tasks to the list.
+// nolint: unused
 func (c *Client) parseTasksFromSeries(series rtmTaskSeries, listID, listName string, tasks []Task) []Task {
 	for _, t := range series.Task {
 		if t.Deleted != "" { // Skip deleted tasks
@@ -211,7 +258,7 @@ func (c *Client) parseTasksFromSeries(series rtmTaskSeries, listID, listName str
 			task.Tags = series.Tags.Tag
 		}
 
-		task.Notes = c.parseRTMNotes(series.Notes.Note)
+		task.Notes = c.parseRTMNotes(series.Notes)
 
 		tasks = append(tasks, task)
 	}

@@ -114,6 +114,26 @@ func (m *AuthManager) findExistingTokens(ctx context.Context) (string, string, e
 	return "", "", errors.New("no valid tokens found in standard locations")
 }
 
+// saveTokenToStorage saves a token to the service's token storage and optionally to standard file locations.
+func (m *AuthManager) saveTokenToStorage(token string, userID, username string) {
+	if token == "" {
+		m.logger.Warn("Cannot save empty token to storage.")
+		return
+	}
+
+	// Save to service's configured token storage
+	if m.service.tokenStorage != nil {
+		err := m.service.tokenStorage.SaveToken(token, userID, username)
+		if err != nil {
+			m.logger.Warn("Failed to save token to service token storage.", "error", err, "username", username)
+		} else {
+			m.logger.Info("Successfully saved token to service token storage.", "username", username)
+		}
+	} else {
+		m.logger.Warn("Service token storage not configured, can't save token there.")
+	}
+}
+
 // readTokenFile reads and parses a token file.
 func (m *AuthManager) readTokenFile(path string) (*TokenData, error) {
 	// #nosec G304 -- Path comes from internal list or config.
@@ -132,31 +152,6 @@ func (m *AuthManager) readTokenFile(path string) (*TokenData, error) {
 	}
 
 	return &tokenData, nil
-}
-
-// saveTokenToStorage updates the Service's token storage with the current token.
-// This replaces the previous direct file writing approach with a centralized method
-// that uses the TokenStorageInterface.
-// nolint: unused
-func (m *AuthManager) saveTokenToStorage(token, userID, username string) {
-	if token == "" {
-		m.logger.Warn("Cannot save empty token.")
-		return
-	}
-
-	// Use the service's tokenStorage to properly save the token
-	if m.service != nil && m.service.tokenStorage != nil {
-		err := m.service.tokenStorage.SaveToken(token, userID, username)
-		if err != nil {
-			m.logger.Error("Failed to save token to storage interface.", "error", err,
-				"username", username)
-		} else {
-			m.logger.Info("Successfully saved token via storage interface.",
-				"username", username)
-		}
-	} else {
-		m.logger.Warn("Cannot save token - service or token storage is nil.")
-	}
 }
 
 // retryableOperationWithStrings provides retry logic for operations returning strings.
