@@ -66,10 +66,11 @@ func (l *testLogger) Error(msg string, args ...any) {
 // tryExistingTokens searches for and validates tokens from multiple sources.
 // Returns true if a valid token was found and used.
 // Corrected: ctx is the first parameter.
+// MODIFIED: Now also attempts to load from service.tokenStorage.
 func tryExistingTokens(ctx context.Context, t *testing.T, service *Service) bool {
 	t.Helper()
 
-	// Check environment variables.
+	// --- Check 1: Environment Variables ---
 	envTokens := []string{"RTM_AUTH_TOKEN", "RTM_TEST_TOKEN"}
 	for _, envName := range envTokens {
 		token := os.Getenv(envName)
@@ -88,15 +89,37 @@ func tryExistingTokens(ctx context.Context, t *testing.T, service *Service) bool
 		}
 	}
 
-	// Try various token file locations.
+	// --- Check 2: Configured Token Storage (Secure Keyring / Fallback File) ---
+	if service.tokenStorage != nil {
+		t.Logf("  Checking configured token storage (type: %T).", service.tokenStorage)
+		token, err := service.tokenStorage.LoadToken()
+		if err != nil {
+			t.Logf("  Error loading from token storage: %v.", err)
+		} else if token != "" {
+			t.Logf("  Found token in configured storage.")
+			service.SetAuthToken(token)
+			authState, verifyErr := service.GetAuthState(ctx)
+			if verifyErr == nil && authState != nil && authState.IsAuthenticated {
+				t.Logf("  Token from configured storage valid - authenticated as %s.", authState.Username)
+				return true // Valid token found.
+			}
+			t.Logf("  Token from configured storage invalid: %v.", verifyErr)
+			service.SetAuthToken("") // Clear invalid token.
+		} else {
+			t.Logf("  No token found in configured storage.")
+		}
+	} else {
+		t.Logf("  Token storage is not configured in the service, skipping check.")
+	}
+
+	// --- Check 3: Specific Token Files (as fallback / alternative) ---
+	t.Logf("  Checking specific token file paths as fallback.")
 	paths := []string{
 		"rtm_token.json",
 		".rtm_token.json",
 		"rtm_test_token.json",
 		".rtm_test_token.json",
 	}
-
-	// Add home directory paths.
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
 		paths = append(paths,
@@ -139,7 +162,7 @@ func tryExistingTokens(ctx context.Context, t *testing.T, service *Service) bool
 		}
 	}
 
-	t.Log("  No valid existing tokens found.")
+	t.Log("  No valid existing tokens found in any location.")
 	return false // No valid token found.
 }
 
@@ -231,8 +254,8 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 
 	printTestResult(t, "CREDENTIALS CHECK", "FOUND", fmt.Sprintf("API Key: %s... (from environment).", truncateCredential(cfg.RTM.APIKey)))
 
-	testLogger := newTestLogger(t) // Use our test logger.
-	rtmService := NewService(cfg, testLogger)
+	testLogger := newTestLogger(t)                                           // Use our test logger.
+	rtmService := NewService(cfg, testLogger)                                // Service now initializes token storage.
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second) // Increased timeout for auth manager.
 	defer cancel()
 
@@ -240,17 +263,13 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 	printSectionHeader(t, "Credential Validation")
 	options := DefaultConnectivityCheckOptions()
 	options.RequireAuth = false // Don't require auth for this initial check.
-	// Explicitly enable checks needed for validation.
 	options.CheckInternet = true
 	options.CheckRTMAPI = true
 	options.CheckAPIKey = true
 	diagResults, err := rtmService.PerformConnectivityCheck(ctx, options)
-	// Check for fatal error during the connectivity check itself.
 	require.NoError(t, err, "Connectivity check shouldn't cause fatal error here (check internet/endpoint reachability).")
 
-	// Evaluate results of individual checks.
 	for _, result := range diagResults {
-		// Use the existing formatDiagnosticResult from diagnostics.go since it's in the same package.
 		t.Logf("  %s", formatDiagnosticResult(result))
 		if result.Name == "RTM API Echo Test" {
 			apiKeyValid = result.Success
@@ -260,9 +279,8 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 	if !apiKeyValid {
 		printTestResult(t, "CREDENTIAL VALIDATION", "FAILED", "API Key/Secret rejected by RTM API (rtm.test.echo failed).")
 		printTestFooter(t, "FAILED", "Invalid RTM credentials - Test cannot continue.")
-		// Use t.Fatal to stop immediately if credentials are bad.
 		t.Fatal("Cannot continue tests with invalid API credentials.")
-		return // Explicit return.
+		return
 	}
 
 	printTestResult(t, "CREDENTIAL VALIDATION", "PASSED", "API Key and Secret are accepted by RTM.")
@@ -270,13 +288,13 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 	// --- Step 2: Check Authentication Status ---
 	printSectionHeader(t, "Authentication Status")
 
-	// First, try existing tokens.
-	isAuthenticated = tryExistingTokens(ctx, t, rtmService) // Corrected parameter order.
+	// Try existing tokens using the modified helper.
+	isAuthenticated = tryExistingTokens(ctx, t, rtmService)
 	if isAuthenticated {
 		username = rtmService.GetUsername()
 		printTestResult(t, "AUTHENTICATION STATUS", "AUTHENTICATED",
 			fmt.Sprintf("User: %s (using existing token).", username))
-		authTestsSkipped = false // Found existing token.
+		authTestsSkipped = false
 	} else {
 		// If running in CI, skip interactive auth test.
 		if os.Getenv("CI") != "" {
@@ -284,21 +302,20 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 			printTestResult(t, "AUTHENTICATION STATUS", "SKIPPED",
 				"Running in CI environment - auth tests skipped.")
 		} else {
-			// No existing token found or CI, proceed with AuthManager.
-			// Setup auth manager for dedicated test flow.
+			// AuthManager setup (remains the same).
 			authOptions := AuthManagerOptions{
-				Mode:             AuthModeTest, // Use test mode which falls back to interactive if needed.
-				AutoCompleteAuth: true,         // Try auto-complete first.
+				Mode:             AuthModeTest,
+				AutoCompleteAuth: true,
 				TimeoutDuration:  60 * time.Second,
-				CallbackHost:     "localhost", // Ensure these match potential defaults.
+				CallbackHost:     "localhost",
 				CallbackPort:     8090,
-				RetryAttempts:    3, // Allow retries for auth completion.
+				RetryAttempts:    3,
 				AutoSaveToken:    true,
 			}
-
 			authManager := NewAuthManager(rtmService, authOptions, testLogger)
-			result, authErr := authManager.EnsureAuthenticated(ctx)
+			result, authErr := authManager.EnsureAuthenticated(ctx) // This will call handleTestAuth.
 
+			// Check the result (handleTestAuth now fails fast if no token).
 			if authErr != nil || !result.Success {
 				errorDetail := "Unknown error"
 				if authErr != nil {
@@ -310,12 +327,11 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 				printTestResult(t, "AUTHENTICATION STATUS", "FAILED",
 					fmt.Sprintf("Auth manager failed: %s", errorDetail))
 
-				// Display instructions for manual authentication.
+				// Display instructions for manual authentication (remains the same).
 				t.Log("")
 				t.Log("  ╔════════════════════════════════════════════════════════════════╗")
 				t.Log("  ║  AUTHENTICATION REQUIRED - ACTION NEEDED                       ║")
 				t.Log("  ╠════════════════════════════════════════════════════════════════╣")
-
 				if result != nil && result.AuthURL != "" && result.Frob != "" {
 					t.Log("  ║  Authentication failed. To manually authenticate:              ║")
 					t.Log("  ║  1. Open this URL in your browser:                             ║")
@@ -324,29 +340,25 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 					t.Log("  ║  3. Run the RTM connection test tool to complete auth:         ║")
 					t.Logf("  ║     go run ./cmd/rtm_connection_test --frob=%s", result.Frob)
 				} else {
-					// Fallback instructions if URL/Frob weren't obtained.
 					t.Log("  ║  Authentication failed. To manually authenticate:              ║")
 					t.Log("  ║  1. Run this command:                                          ║")
 					t.Log("  ║     go run ./cmd/rtm_connection_test                           ║")
 					t.Log("  ║  2. Follow the browser authorization steps.                    ║")
 				}
-
 				t.Log("  ╚════════════════════════════════════════════════════════════════╝")
 				t.Log("")
 
 				printTestFooter(t, "FAILED", fmt.Sprintf("Authentication required but failed: %s", errorDetail))
 				t.Fatalf("Authentication required but failed: %s", errorDetail)
-				return // Explicit return.
+				return
 			}
 
-			// Authentication succeeded via AuthManager.
-			// isAuthenticated = true // Removed ineffectual assignment.
+			// This part should not be reached if handleTestAuth fails fast correctly.
+			isAuthenticated = true
 			username = result.Username
 			printTestResult(t, "AUTHENTICATION STATUS", "AUTHENTICATED",
 				fmt.Sprintf("User: %s.", username))
 			authTestsSkipped = false
-
-			// Save the token obtained via AuthManager for future runs.
 			saveTestToken(t, rtmService.GetAuthToken(), username)
 		}
 	}
@@ -363,16 +375,13 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 	}
 
 	// --- Final Test Result ---
-	// Determine overall outcome based on previous steps.
 	var finalResult, finalReason string
 	if !apiKeyValid {
-		// This case should be caught by t.Fatal earlier, but included for completeness.
 		finalResult = "FAILED"
 		finalReason = "Invalid API credentials (Key/Secret)."
-	} else if authTestsSkipped { // Check if auth was skipped *because* it failed earlier or in CI.
+	} else if authTestsSkipped {
 		finalResult = "INCOMPLETE"
 		finalReason = "Authentication required to run all operations, but was skipped."
-		// Mark test as skipped, not failed, if intentionally skipped (e.g., CI).
 		if os.Getenv("CI") != "" {
 			t.Skipf("Test incomplete: Authentication with RTM required but skipped in CI.")
 		} else {

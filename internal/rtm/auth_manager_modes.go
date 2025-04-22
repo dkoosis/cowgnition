@@ -241,7 +241,6 @@ func (m *AuthManager) handleTestAuth(ctx context.Context) (*AuthResult, error) {
 		}, nil
 	}
 
-	// --- MODIFICATION START ---
 	// If not CI and no existing token worked, *FAIL FAST* instead of starting interactive flow.
 	// Integration tests should not rely on interactive auth during the test run itself.
 	m.logger.Error("Test environment requires pre-authentication. No valid token found.")
@@ -253,16 +252,12 @@ func (m *AuthManager) handleTestAuth(ctx context.Context) (*AuthResult, error) {
 			errors.Wrap(startErr, "failed to start auth flow to get instructions")
 	}
 	// Return an error indicating manual intervention is needed outside the test.
-	testAuthErr := errors.New("Test authentication failed: No pre-existing valid token found. Run 'go run ./cmd/rtm_connection_test' manually to authenticate first.")
+	// Corrected error string: lowercase, no ending punctuation.
+	testAuthErr := errors.New("test authentication failed: no pre-existing valid token found; run 'go run ./cmd/rtm_connection_test' manually to authenticate first")
 	return &AuthResult{
 		Success: false,
 		AuthURL: authURL,
 		Frob:    frob,
 		Error:   testAuthErr,
 	}, testAuthErr
-	// --- MODIFICATION END ---
-
-	// Original fallback to interactive auth is removed:
-	// m.logger.Info("Test environment requires interactive authentication.")
-	// return m.handleInteractiveAuth(ctx).
 }
