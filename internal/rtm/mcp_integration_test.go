@@ -354,7 +354,6 @@ func TestRTMService_HandlesToolCallsAndResourceReads_When_Authenticated(t *testi
 			}
 
 			// This part should not be reached if handleTestAuth fails fast correctly.
-			isAuthenticated = true
 			username = result.Username
 			printTestResult(t, "AUTHENTICATION STATUS", "AUTHENTICATED",
 				fmt.Sprintf("User: %s.", username))

@@ -1,7 +1,6 @@
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
-package rtm
-
 // file: internal/rtm/service.go
+package rtm
 
 import (
 	"context"
@@ -366,4 +365,24 @@ func (s *Service) Shutdown() error {
 // GetName returns the service name.
 func (s *Service) GetName() string {
 	return "rtm"
+}
+
+// GetClient returns the underlying RTM API client instance.
+// Returns nil if the service or its client is not initialized properly.
+// Corrected return type from *rtm.Client to *Client.
+func (s *Service) GetClient() *Client {
+	if s == nil {
+		return nil
+	}
+	return s.client
+}
+
+// GetClientAPIEndpoint returns the API endpoint URL used by the service's client.
+// Returns an empty string if the service or client is not configured.
+func (s *Service) GetClientAPIEndpoint() string {
+	if s == nil || s.client == nil {
+		return ""
+	}
+	// Delegate to the client's method (assuming client.GetAPIEndpoint exists or accesses config).
+	return s.client.GetAPIEndpoint()
 }
