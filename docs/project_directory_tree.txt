@@ -3,6 +3,8 @@
 │   ├── fix_comments/
 │   │   ├── main.go
 │   │   └── stub_test.go
+│   ├── keychain_diagnostic/
+│   │   └── main.go
 │   ├── rtm_connection_test/
 │   │   ├── main.go
 │   │   └── stub_test.go
@@ -70,6 +72,7 @@
 │   │   ├── diagnostics.go
 │   │   ├── factory.go
 │   │   ├── helpers.go
+│   │   ├── keychain_test_helpers.go
 │   │   ├── mcp_integration_test.go
 │   │   ├── mcp_resources.go
 │   │   ├── mcp_tools.go
@@ -108,4 +111,4 @@
 ├── log
 └── rtm-authentication.jpg
 
-17 directories, 92 files
+18 directories, 94 files
