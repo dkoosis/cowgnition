@@ -71,11 +71,7 @@ func (m *AuthManager) handleInteractiveAuth(ctx context.Context) (*AuthResult, e
 						m.logger.Info("Authentication successful via callback!.", "username", authState.Username)
 						result.Success = true
 						result.Username = authState.Username
-						// --- FIX: Explicitly save token after callback success ---
-						if m.options.AutoSaveToken {
-							m.saveTokenToStorage(m.service.GetAuthToken(), authState.UserID, authState.Username)
-						}
-						// --- END FIX ---
+						// Token is already saved by CompleteAuth called from the callback handler
 						return result, nil // Success!.
 					} else if checkErr != nil {
 						m.logger.Error("Failed to verify auth state after callback.", "error", checkErr)
@@ -176,16 +172,10 @@ func (m *AuthManager) handleInteractiveAuth(ctx context.Context) (*AuthResult, e
 	result.Success = true
 	result.Username = authState.Username
 
-	// --- FIX: Explicitly save token after manual success ---
-	if m.options.AutoSaveToken {
-		m.saveTokenToStorage(m.service.GetAuthToken(), authState.UserID, authState.Username)
-	}
-	// --- END FIX ---
+	// Token persistence is now handled by the Service.CompleteAuth method
 
 	return result, nil
 }
-
-// --- UNCHANGED: handleHeadlessAuth, handleTestAuth ---
 
 // handleHeadlessAuth attempts authentication without user interaction.
 func (m *AuthManager) handleHeadlessAuth(ctx context.Context) (*AuthResult, error) {

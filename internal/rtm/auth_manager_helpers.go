@@ -114,83 +114,6 @@ func (m *AuthManager) findExistingTokens(ctx context.Context) (string, string, e
 	return "", "", errors.New("no valid tokens found in standard locations")
 }
 
-// saveTokenToAllLocations attempts to save the token to multiple standard locations.
-func (m *AuthManager) saveTokenToAllLocations(token, username string) {
-	if token == "" {
-		m.logger.Warn("Cannot save empty token.")
-		return
-	}
-
-	// Create token data.
-	tokenData := &TokenData{
-		Token:     token,
-		Username:  username,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-
-	// Try to save in multiple locations to ensure at least one succeeds.
-	saveLocations := []string{
-		"rtm_token.json", // Current directory.
-	}
-
-	// Add home directory location if possible.
-	homeDir, err := os.UserHomeDir()
-	if err == nil {
-		configDir := filepath.Join(homeDir, ".config", "cowgnition")
-		saveLocations = append(saveLocations,
-			filepath.Join(configDir, "rtm_token.json"),
-			filepath.Join(homeDir, ".rtm_token.json"),
-			filepath.Join(homeDir, ".rtm_test_token.json")) // Save test token too.
-
-		// Create config directory if needed.
-		_ = os.MkdirAll(configDir, 0700) // Ignore error.
-	}
-
-	// Save to all locations.
-	saved := false
-	for _, path := range saveLocations {
-		// Use the helper function which IS used
-		err := m.saveTokenToFile(path, tokenData) // THIS LINE CALLS the function below
-		if err == nil {
-			m.logger.Info("Successfully saved token.", "path", path)
-			saved = true
-		} else {
-			m.logger.Warn("Failed to save token.", "path", path, "error", err)
-		}
-	}
-	if !saved {
-		m.logger.Error("Failed to save token to ANY standard location.")
-	}
-}
-
-// saveTokenAfterSuccessfulAuth saves the current auth token to standard locations.
-func (m *AuthManager) saveTokenAfterSuccessfulAuth(authState *AuthState) {
-	token := m.client.GetAuthToken()
-	if token == "" {
-		m.logger.Warn("Cannot save empty token.")
-		return
-	}
-
-	// Get or refresh auth state if needed.
-	var username string
-	if authState == nil || authState.Username == "" {
-		var err error
-		// Use a background context as this might happen after main context expires.
-		authState, err = m.service.GetAuthState(context.Background())
-		if err != nil {
-			m.logger.Warn("Failed to get auth state for token saving.", "error", err)
-			// Proceed without username, token is the important part.
-		}
-	}
-	if authState != nil {
-		username = authState.Username
-	}
-
-	// Save to all standard locations.
-	m.saveTokenToAllLocations(token, username)
-}
-
 // readTokenFile reads and parses a token file.
 func (m *AuthManager) readTokenFile(path string) (*TokenData, error) {
 	// #nosec G304 -- Path comes from internal list or config.
@@ -211,31 +134,28 @@ func (m *AuthManager) readTokenFile(path string) (*TokenData, error) {
 	return &tokenData, nil
 }
 
-// saveTokenToFile saves token data to a specific file path.
-//
-//nolint:unused // This function IS used by saveTokenToAllLocations, linter seems confused.
-func (m *AuthManager) saveTokenToFile(path string, tokenData *TokenData) error {
-	// Create directory if it doesn't exist.
-	dir := filepath.Dir(path)
-	if dir != "." && dir != "" { // Avoid trying to create current dir.
-		if err := os.MkdirAll(dir, 0700); err != nil {
-			return errors.Wrapf(err, "failed to create directory for token file: %s", dir)
+// saveTokenToStorage updates the Service's token storage with the current token.
+// This replaces the previous direct file writing approach with a centralized method
+// that uses the TokenStorageInterface.
+func (m *AuthManager) saveTokenToStorage(token, userID, username string) {
+	if token == "" {
+		m.logger.Warn("Cannot save empty token.")
+		return
+	}
+
+	// Use the service's tokenStorage to properly save the token
+	if m.service != nil && m.service.tokenStorage != nil {
+		err := m.service.tokenStorage.SaveToken(token, userID, username)
+		if err != nil {
+			m.logger.Error("Failed to save token to storage interface.", "error", err,
+				"username", username)
+		} else {
+			m.logger.Info("Successfully saved token via storage interface.",
+				"username", username)
 		}
+	} else {
+		m.logger.Warn("Cannot save token - service or token storage is nil.")
 	}
-
-	// Marshal to JSON.
-	data, err := json.MarshalIndent(tokenData, "", "  ")
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal token data to JSON")
-	}
-
-	// Write to file with secure permissions.
-	// #nosec G306 -- Permissions are intentionally 0600.
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return errors.Wrapf(err, "failed to write token file: %s", path)
-	}
-
-	return nil
 }
 
 // retryableOperationWithStrings provides retry logic for operations returning strings.
@@ -284,5 +204,3 @@ func (m *AuthManager) retryableOperationWithStrings(ctx context.Context, opName 
 	return "", "", errors.Wrapf(lastErr, "operation %s failed after %d attempts", // Return empty strings on final failure.
 		opName, m.options.RetryAttempts+1)
 }
-
-// Removed the unused retryableOperation function.

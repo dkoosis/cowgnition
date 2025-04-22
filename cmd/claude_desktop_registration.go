@@ -3,6 +3,7 @@ package main
 
 import (
 	"bufio" // Added import.
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,8 +11,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings" // Added import.
+	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dkoosis/cowgnition/internal/config"
+	"github.com/dkoosis/cowgnition/internal/logging"
+	"github.com/dkoosis/cowgnition/internal/rtm"
 )
 
 // ClaudeDesktopConfig represents the structure of Claude Desktop's configuration file.
@@ -40,6 +45,10 @@ type MCPServerConfig struct {
 //
 //	error: An error if setup fails, nil on success.
 func runSetup(configPath string) error {
+	// Set up logging
+	logging.SetupDefaultLogger("info")
+	logger := logging.GetLogger("setup")
+
 	// Get executable path.
 	exePath, err := os.Executable()
 	if err != nil {
@@ -66,6 +75,54 @@ func runSetup(configPath string) error {
 		return errors.Wrap(err, "failed to create default configuration")
 	}
 
+	// Load the configuration
+	cfg, loadCfgErr := config.LoadFromFile(configPath)
+	if loadCfgErr != nil {
+		logger.Warn("Could not load configuration, using defaults", "error", loadCfgErr)
+		cfg = config.DefaultConfig()
+	}
+
+	// Inject the provided credentials
+	cfg.RTM.APIKey = apiKey
+	cfg.RTM.SharedSecret = sharedSecret
+
+	// Create and initialize RTM service with these credentials
+	rtmService := rtm.NewService(cfg, logger)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	initErr := rtmService.Initialize(ctx)
+	if initErr != nil {
+		logger.Warn("Failed to initialize RTM service.", "error", initErr)
+		// Continue with setup, just might not have authentication yet
+	}
+
+	// If not authenticated, attempt to authenticate
+	var authSuccess bool
+	var username string
+	if !rtmService.IsAuthenticated() {
+		// Create auth manager for interactive authentication
+		authOptions := rtm.DefaultAuthManagerOptions()
+		authOptions.AutoCompleteAuth = true
+		authManager := rtm.NewAuthManager(rtmService, authOptions, logger)
+
+		// Attempt authentication
+		result, authErr := authManager.EnsureAuthenticated(ctx)
+		if authErr != nil || !result.Success {
+			logger.Warn("Could not complete authentication during setup.",
+				"error", authErr,
+				"authSuccess", result != nil && result.Success)
+			fmt.Println("\n⚠️ Authentication not completed during setup.")
+			fmt.Println("You can authenticate later by using Claude Desktop and asking to interact with RTM.")
+		} else {
+			authSuccess = true
+			username = result.Username
+		}
+	} else {
+		authSuccess = true
+		username = rtmService.GetUsername()
+	}
+
 	// Configure Claude Desktop.
 	err = configureClaudeDesktop(exePath, configPath, apiKey, sharedSecret)
 	if err != nil {
@@ -75,8 +132,37 @@ func runSetup(configPath string) error {
 	}
 
 	// Print success message.
-	fmt.Println("✅ CowGnition setup complete.")
-	fmt.Println("Next steps:")
+	fmt.Println("\n✅ CowGnition setup complete.")
+
+	// Get token storage information
+	storageMethod, storagePath, storageAvailable := rtmService.GetTokenStorageInfo()
+
+	// Show authentication status with token storage details
+	if authSuccess {
+		fmt.Printf("🔑 Authenticated with Remember The Milk as user: %s\n", username)
+
+		// Show token storage details
+		switch storageMethod {
+		case "secure":
+			if storageAvailable {
+				fmt.Println("✅ Authentication token saved securely in your OS keychain.")
+			} else {
+				fmt.Println("⚠️ Secure storage (keychain) reported as available but may not be functioning properly.")
+			}
+		case "file":
+			fmt.Printf("⚠️ Could not access secure OS storage.\n")
+			fmt.Printf("✅ Authentication token saved to file: %s\n", storagePath)
+			fmt.Printf("ℹ️ Please ensure this file is kept secure.\n")
+		case "none":
+			fmt.Println("⚠️ No token storage available. Your authentication will not persist between sessions.")
+		default:
+			fmt.Printf("ℹ️ Authentication token stored using: %s\n", storageMethod)
+		}
+	} else {
+		fmt.Println("⚠️ Not authenticated with Remember The Milk.")
+	}
+
+	fmt.Println("\nNext steps:")
 	fmt.Println("1. Run 'cowgnition serve' to start the server.")
 	fmt.Println("2. Open Claude Desktop to start using CowGnition.")
 	fmt.Println("3. Type 'What are my RTM tasks?' to test the connection.")

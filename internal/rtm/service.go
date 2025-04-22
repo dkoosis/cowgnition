@@ -160,6 +160,8 @@ func (s *Service) checkAndHandleInitialAuthState(ctx context.Context) error {
 			if s.tokenStorage != nil {
 				if delErr := s.tokenStorage.DeleteToken(); delErr != nil {
 					s.logger.Warn("Failed to delete invalid token from storage.", "error", delErr)
+				} else {
+					s.logger.Info("Successfully deleted invalid token from storage.")
 				}
 			}
 		}
@@ -179,6 +181,8 @@ func (s *Service) checkAndHandleInitialAuthState(ctx context.Context) error {
 			if s.tokenStorage != nil {
 				if delErr := s.tokenStorage.DeleteToken(); delErr != nil {
 					s.logger.Warn("Failed to delete unauthenticated token from storage.", "error", delErr)
+				} else {
+					s.logger.Info("Successfully deleted invalid token from storage.")
 				}
 			}
 		}
@@ -204,6 +208,8 @@ func (s *Service) storeVerifiedTokenIfNeeded() {
 		userID, username := s.getUserInfoFromState()
 		if saveErr := s.tokenStorage.SaveToken(currentToken, userID, username); saveErr != nil {
 			s.logger.Warn("-> Failed to save token.", "error", saveErr) // Log specific error
+		} else {
+			s.logger.Info("-> Token successfully saved to storage.")
 		}
 	} else {
 		s.logger.Info("-> Token already saved correctly.") // Clearer status
@@ -271,6 +277,7 @@ func (s *Service) StartAuth(ctx context.Context) (string, error) {
 }
 
 // CompleteAuth completes the authentication flow using the frob.
+// This is the centralized method that handles token persistence after successful authentication.
 func (s *Service) CompleteAuth(ctx context.Context, frob string) error {
 	s.logger.Info("Completing RTM authentication flow (exchanging code for token)...") // Clarified purpose
 	token, err := s.client.CompleteAuthFlow(ctx, frob)
@@ -295,7 +302,11 @@ func (s *Service) CompleteAuth(ctx context.Context, frob string) error {
 			userID, username := s.getUserInfoFromState()
 			if saveErr := s.tokenStorage.SaveToken(token, userID, username); saveErr != nil {
 				s.logger.Warn("-> Failed to save new token.", "error", saveErr)
+			} else {
+				s.logger.Info("-> Successfully saved token to secure storage.")
 			}
+		} else if token != "" {
+			s.logger.Warn("-> Token storage not available, cannot persist authentication.")
 		}
 	} else {
 		s.logger.Warn("-> Authentication flow seemed complete, but state verification failed.")
@@ -329,6 +340,8 @@ func (s *Service) SetAuthToken(token string) {
 			userID, username := s.getUserInfoFromState()
 			if saveErr := s.tokenStorage.SaveToken(token, userID, username); saveErr != nil {
 				s.logger.Warn("Failed to save manually set token.", "error", saveErr)
+			} else {
+				s.logger.Info("Successfully saved manually set token to storage.")
 			}
 		} else {
 			s.logger.Warn("Manually set token appears invalid after check, not saving.")
@@ -350,6 +363,8 @@ func (s *Service) ClearAuth() error {
 		if err := s.tokenStorage.DeleteToken(); err != nil {
 			s.logger.Error("-> Failed to clear token from storage.", "error", err) // Log specific error
 			return errors.Wrap(err, "failed to delete token from storage")
+		} else {
+			s.logger.Info("-> Successfully deleted token from storage.")
 		}
 	}
 	s.logger.Info("-> Authentication cleared.")
@@ -385,4 +400,25 @@ func (s *Service) GetClientAPIEndpoint() string {
 	}
 	// Delegate to the client's method (assuming client.GetAPIEndpoint exists or accesses config).
 	return s.client.GetAPIEndpoint()
+}
+
+// GetTokenStorageInfo returns information about the token storage method being used.
+// This helps diagnostic tools and setup provide better user feedback.
+func (s *Service) GetTokenStorageInfo() (method string, path string, available bool) {
+	if s.tokenStorage == nil {
+		return "none", "", false
+	}
+
+	// Check if it's the secure storage
+	if _, ok := s.tokenStorage.(*SecureTokenStorage); ok {
+		return "secure", "OS keychain/credentials manager", s.tokenStorage.IsAvailable()
+	}
+
+	// Check if it's file storage
+	if storage, ok := s.tokenStorage.(*FileTokenStorage); ok {
+		return "file", storage.path, true
+	}
+
+	// Unknown storage type
+	return "unknown", "", s.tokenStorage.IsAvailable()
 }
