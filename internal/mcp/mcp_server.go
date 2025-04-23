@@ -16,6 +16,7 @@ import (
 	"github.com/dkoosis/cowgnition/internal/logging"
 	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"
 	"github.com/dkoosis/cowgnition/internal/middleware"
+	"github.com/dkoosis/cowgnition/internal/rtm"
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
@@ -45,8 +46,9 @@ type Server struct {
 	transport       transport.Transport
 	logger          logging.Logger
 	startTime       time.Time
-	validator       schema.ValidatorInterface // Use interface from schema package.
+	validator       schema.ValidatorInterface
 	connectionState *ConnectionState
+	rtmService      *rtm.Service
 }
 
 // NewServer creates a new MCP server instance.
@@ -73,6 +75,11 @@ func NewServer(cfg *config.Config, opts ServerOptions, validator schema.Validato
 		validator:       validator, // Store the interface.
 		startTime:       startTime,
 		connectionState: connState,
+	}
+
+	// Connect metrics collector to RTM
+	if rtmService != nil {
+		rtm.SetMetricsCollector(mcp.GetMetricsCollector())
 	}
 
 	server.registerMethods() // Register methods provided by the handler.
@@ -230,3 +237,142 @@ func (s *Server) ReadResource(ctx context.Context, uri string) ([]interface{}, e
 
 // handleMessage is the final handler in the middleware chain, located in mcp_server_processing.go.
 // func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, error) { ... }
+// file: internal/mcp/mcp_server.go
+
+// GetServerResources returns server-specific resources without including service resources
+func (s *Server) GetServerResources() []Resource {
+	// Return server-specific resources
+	// These are resources that are directly provided by the server itself,
+	// not by integrated services like RTM
+	return []Resource{
+		{
+			Name:        "Server Status",
+			URI:         "cowgnition://server/status",
+			Description: "Information about the server status and metrics",
+			MimeType:    "application/json",
+		},
+		{
+			Name:        "Server Version",
+			URI:         "cowgnition://server/version",
+			Description: "Version information for the server and its components",
+			MimeType:    "application/json",
+		},
+		// Add any other server-specific resources
+	}
+}
+
+// ReadServerResource handles reading resources directly provided by the server
+func (s *Server) ReadServerResource(ctx context.Context, uri string) ([]interface{}, error) {
+	// Handle server-specific resource URIs
+	switch uri {
+	case "cowgnition://server/status":
+		return s.getServerStatusResource(), nil
+	case "cowgnition://server/version":
+		return s.getServerVersionResource(), nil
+	default:
+		return nil, errors.Newf("unknown server resource: %s", uri)
+	}
+}
+
+// getServerStatusResource returns the server status information as a resource
+func (s *Server) getServerStatusResource() []interface{} {
+	// Create a status object with relevant information
+	status := map[string]interface{}{
+		"uptime":      time.Since(s.startTime).String(),
+		"startTime":   s.startTime.Format(time.RFC3339),
+		"initialized": s.connectionState.IsInitialized(),
+	}
+
+	// Return as a text resource
+	return []interface{}{
+		TextResourceContents{
+			ResourceContents: ResourceContents{
+				URI:      "cowgnition://server/status",
+				MimeType: "application/json",
+			},
+			Text: mustMarshalJSON(status),
+		},
+	}
+}
+
+// getServerVersionResource returns version information as a resource
+func (s *Server) getServerVersionResource() []interface{} {
+	// Create a version info object
+	versionInfo := map[string]interface{}{
+		"serverName":      s.config.Server.Name,
+		"protocolVersion": s.connectionState.GetProtocolVersion(),
+		// Add other version information
+	}
+
+	// Return as a text resource
+	return []interface{}{
+		TextResourceContents{
+			ResourceContents: ResourceContents{
+				URI:      "cowgnition://server/version",
+				MimeType: "application/json",
+			},
+			Text: mustMarshalJSON(versionInfo),
+		},
+	}
+}
+
+// mustMarshalJSON marshals data to JSON and panics on error
+// Only used internally where we control the input values
+func mustMarshalJSON(v interface{}) string {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		panic(fmt.Sprintf("Failed to marshal JSON: %v", err))
+	}
+	return string(data)
+}
+
+// file: internal/mcp/mcp_server.go
+
+// Add these methods to the Server struct:
+
+// GetServerResources returns server-specific resources only
+func (s *Server) GetServerResources() []Resource {
+	// Server-specific resources
+	return []Resource{
+		{
+			Name:        "Server Status",
+			URI:         "cowgnition://server/status",
+			Description: "Information about the server status and metrics",
+			MimeType:    "application/json",
+		},
+		// Add other server resources as needed
+	}
+}
+
+// ReadServerResource handles reading resources directly provided by the server
+func (s *Server) ReadServerResource(ctx context.Context, uri string) ([]interface{}, error) {
+	switch uri {
+	case "cowgnition://server/status":
+		// Create server status resource
+		status := map[string]interface{}{
+			"uptime":     time.Since(s.startTime).String(),
+			"startTime":  s.startTime.Format(time.RFC3339),
+			"configured": s.config != nil,
+		}
+
+		// Convert to JSON
+		jsonData, err := json.MarshalIndent(status, "", "  ")
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal server status")
+		}
+
+		// Return as text resource
+		return []interface{}{
+			TextResourceContents{
+				ResourceContents: ResourceContents{
+					URI:      uri,
+					MimeType: "application/json",
+				},
+				Text: string(jsonData),
+			},
+		}, nil
+
+	default:
+		return nil, errors.Newf("unknown server resource: %s", uri)
+	}
+}
