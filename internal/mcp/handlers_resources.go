@@ -1,7 +1,6 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-package mcp
-
 // file: internal/mcp/handlers_resources.go.
+package mcp
 
 import (
 	"context"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors"
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Import the shared types package.
 	// Keep schema import for ValidatorInterface.
 )
 
@@ -29,7 +29,7 @@ func (h *Handler) handleResourcesList(_ context.Context, params json.RawMessage)
 	}
 
 	// Create resources that represent RTM data AND server health.
-	resources := []Resource{
+	resources := []mcptypes.Resource{ // Use mcptypes.Resource.
 		{
 			Name:        "RTM Authentication Status",
 			URI:         "auth://rtm",
@@ -65,7 +65,7 @@ func (h *Handler) handleResourcesList(_ context.Context, params json.RawMessage)
 		// TODO: Implement actual cursor logic if needed.
 	}
 
-	result := ListResourcesResult{
+	result := mcptypes.ListResourcesResult{ // Use mcptypes.ListResourcesResult.
 		Resources:  resources,
 		NextCursor: nextCursor,
 	}
@@ -82,13 +82,13 @@ func (h *Handler) handleResourcesList(_ context.Context, params json.RawMessage)
 // Official definition: Sent from the client to the server, to read a specific resource URI.
 // The server responds with the contents of the resource.
 func (h *Handler) handleResourcesRead(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
-	var req ReadResourceRequest
+	var req mcptypes.ReadResourceRequest // Use mcptypes.ReadResourceRequest.
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, errors.Wrap(err, "invalid params for resources/read")
 	}
 	h.logger.Info("Handling resources/read request.", "uri", req.URI)
 
-	var contents []interface{}
+	var contents []interface{} // Keep as interface{} to hold different content types.
 
 	switch req.URI {
 	case "auth://rtm":
@@ -105,9 +105,9 @@ func (h *Handler) handleResourcesRead(_ context.Context, params json.RawMessage)
 		}
 		authString := string(authBytes) // Convert bytes to string.
 
-		contents = append(contents, TextResourceContents{
-			ResourceContents: ResourceContents{URI: req.URI, MimeType: "application/json"},
-			Text:             authString, // *** FIX: Use the marshalled string ***.
+		contents = append(contents, mcptypes.TextResourceContents{ // Use mcptypes.TextResourceContents.
+			ResourceContents: mcptypes.ResourceContents{URI: req.URI, MimeType: "application/json"}, // Use mcptypes.ResourceContents.
+			Text:             authString,                                                            // *** FIX: Use the marshalled string ***.
 		})
 
 	case "rtm://lists":
@@ -124,9 +124,9 @@ func (h *Handler) handleResourcesRead(_ context.Context, params json.RawMessage)
 		}
 		listsString := string(listsBytes) // Convert bytes to string.
 
-		contents = append(contents, TextResourceContents{
-			ResourceContents: ResourceContents{URI: req.URI, MimeType: "application/json"},
-			Text:             listsString, // *** FIX: Use the marshalled string ***.
+		contents = append(contents, mcptypes.TextResourceContents{ // Use mcptypes.TextResourceContents.
+			ResourceContents: mcptypes.ResourceContents{URI: req.URI, MimeType: "application/json"}, // Use mcptypes.ResourceContents.
+			Text:             listsString,                                                           // *** FIX: Use the marshalled string ***.
 		})
 
 	case "rtm://tags":
@@ -143,9 +143,9 @@ func (h *Handler) handleResourcesRead(_ context.Context, params json.RawMessage)
 		}
 		tagsString := string(tagsBytes) // Convert bytes to string.
 
-		contents = append(contents, TextResourceContents{
-			ResourceContents: ResourceContents{URI: req.URI, MimeType: "application/json"},
-			Text:             tagsString, // *** FIX: Use the marshalled string ***.
+		contents = append(contents, mcptypes.TextResourceContents{ // Use mcptypes.TextResourceContents.
+			ResourceContents: mcptypes.ResourceContents{URI: req.URI, MimeType: "application/json"}, // Use mcptypes.ResourceContents.
+			Text:             tagsString,                                                            // *** FIX: Use the marshalled string ***.
 		})
 
 	case "cowgnition://health":
@@ -179,8 +179,8 @@ func (h *Handler) handleResourcesRead(_ context.Context, params json.RawMessage)
 		}
 		metricsString := string(metricsBytes) // Define metricsString.
 
-		contents = append(contents, TextResourceContents{
-			ResourceContents: ResourceContents{
+		contents = append(contents, mcptypes.TextResourceContents{ // Use mcptypes.TextResourceContents.
+			ResourceContents: mcptypes.ResourceContents{ // Use mcptypes.ResourceContents.
 				URI:      req.URI,
 				MimeType: "application/json",
 			},
@@ -190,11 +190,11 @@ func (h *Handler) handleResourcesRead(_ context.Context, params json.RawMessage)
 	default:
 		// Resource not found.
 		h.logger.Warn("Resource URI not found.", "uri", req.URI)
-		// <<< FIX: Added mcperrors.ErrResourceNotFound as the first argument >>>.
+		// Return resource not found error.
 		return nil, mcperrors.NewResourceError(mcperrors.ErrResourceNotFound, "Resource not found: "+req.URI, nil, map[string]interface{}{"uri": req.URI})
 	}
 
-	result := ReadResourceResult{
+	result := mcptypes.ReadResourceResult{ // Use mcptypes.ReadResourceResult.
 		Contents: contents,
 	}
 

@@ -1,5 +1,4 @@
 // file: internal/mcp/mcp_server_error_handling.go.
-
 package mcp
 
 import (
@@ -9,7 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/logging"
-	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors"
+	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors" // Import the shared types package.
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
 )
@@ -99,7 +98,7 @@ func (s *Server) mapErrorToJSONRPCComponents(logger logging.Logger, err error) (
 	}
 
 	// Enrich with URL context if present.
-	data = s.enrichWithURLContext(logger, err, data) // <<<< Call site remains commented out for clean build.
+	// data = s.enrichWithURLContext(logger, err, data) // <<<< Call site remains commented out for clean build.
 
 	// Clean up empty data maps.
 	data = cleanupEmptyDataMap(data)
@@ -191,7 +190,7 @@ func (s *Server) mapConnectionNotInitializedError(errStr string) (int, string, i
 	return code, message, dataMap
 }
 
-// --- REFACTORED FUNCTION ---
+// --- REFACTORED FUNCTION ---.
 // mapErrorByType maps errors by their type to JSON-RPC components.
 func (s *Server) mapErrorByType(logger logging.Logger, err error) (int, string, interface{}) {
 	var validationErr *schema.ValidationError
@@ -217,7 +216,7 @@ func (s *Server) mapErrorByType(logger logging.Logger, err error) (int, string, 
 	return code, message, make(map[string]interface{})
 }
 
-// --- END REFACTORED FUNCTION ---
+// --- END REFACTORED FUNCTION ---.
 
 // mapValidationErrorEx maps schema.ValidationError to JSON-RPC components.
 // Assumes mapValidationError never returns nil for the data map.
@@ -259,6 +258,7 @@ func mapTransportError(transportErr *transport.Error) (int, string, interface{})
 }
 
 // enrichWithURLContext attempts to add URL information from error context (REVISED).
+// nolint:unused // Currently commented out in the call site.
 func (s *Server) enrichWithURLContext(logger logging.Logger, err error, data interface{}) interface{} {
 	// Protect against nil inputs.
 	if err == nil {

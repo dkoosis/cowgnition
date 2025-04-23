@@ -1,13 +1,14 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
 package mcp
 
-// file: internal/mcp/handlers_prompts.go
+// file: internal/mcp/handlers_prompts.go.
 
 import (
 	"context"
 	"encoding/json"
 
 	"github.com/cockroachdb/errors"
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Import the shared types package.
 )
 
 // handlePromptsList handles the prompts/list request.
@@ -28,7 +29,7 @@ func (h *Handler) handlePromptsList(_ context.Context, params json.RawMessage) (
 	// For now, return an empty list of prompts.
 	// In the future, this would be populated with actual prompt templates
 	// from a configuration file or database.
-	prompts := []Prompt{}
+	prompts := []mcptypes.Prompt{} // Use mcptypes.Prompt.
 
 	// Handle pagination (if any prompts are added in the future).
 	var nextCursor string
@@ -37,7 +38,7 @@ func (h *Handler) handlePromptsList(_ context.Context, params json.RawMessage) (
 		nextCursor = ""
 	}
 
-	result := ListPromptsResult{
+	result := mcptypes.ListPromptsResult{ // Use mcptypes.ListPromptsResult.
 		Prompts:    prompts,
 		NextCursor: nextCursor,
 	}
@@ -77,7 +78,7 @@ func (h *Handler) handlePromptsGet(_ context.Context, params json.RawMessage) (j
 // that the list of prompts it offers has changed. This may be issued by servers without
 // any previous subscription from the client.
 //
-//nolint:unused,unparam
+//nolint:unused,unparam.
 func (h *Handler) handlePromptsListChanged(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Sending prompts list changed notification to client.")
 

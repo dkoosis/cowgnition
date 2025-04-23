@@ -7,53 +7,53 @@ package rtm
 import (
 	"context"
 	"encoding/json"
-	"fmt"     // Added.
+	"fmt"
 	"strings" // Ensure strings is imported.
 
-	"github.com/dkoosis/cowgnition/internal/mcp"
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Import the shared types package.
 )
 
 // GetTools returns the list of MCP Tool definitions provided by the RTM service.
 // These definitions inform MCP clients (like AI assistants) about the capabilities
 // offered, including descriptions and expected input schemas.
-func (s *Service) GetTools() []mcp.Tool {
+func (s *Service) GetTools() []mcptypes.Tool { // Use mcptypes.Tool.
 	// Tool definitions using helper methods for schemas.
-	return []mcp.Tool{
+	return []mcptypes.Tool{ // Use mcptypes.Tool.
 		{
 			Name:        "getTasks",
 			Description: "Retrieves tasks from Remember The Milk based on an optional filter.",
 			InputSchema: s.getTasksInputSchema(),
-			Annotations: &mcp.ToolAnnotations{Title: "Get RTM Tasks", ReadOnlyHint: true},
+			Annotations: &mcptypes.ToolAnnotations{Title: "Get RTM Tasks", ReadOnlyHint: true}, // Use mcptypes.ToolAnnotations.
 		},
 		{
 			Name:        "createTask",
 			Description: "Creates a new task in Remember The Milk using smart-add syntax.",
 			InputSchema: s.createTaskInputSchema(),
-			Annotations: &mcp.ToolAnnotations{Title: "Create RTM Task"}, // Default hints (not read-only, not idempotent).
+			Annotations: &mcptypes.ToolAnnotations{Title: "Create RTM Task"}, // Use mcptypes.ToolAnnotations. Default hints (not read-only, not idempotent).
 		},
 		{
 			Name:        "completeTask",
 			Description: "Marks a specific task as complete in Remember The Milk.",
 			InputSchema: s.completeTaskInputSchema(),
-			Annotations: &mcp.ToolAnnotations{Title: "Complete RTM Task", DestructiveHint: true, IdempotentHint: true},
+			Annotations: &mcptypes.ToolAnnotations{Title: "Complete RTM Task", DestructiveHint: true, IdempotentHint: true}, // Use mcptypes.ToolAnnotations.
 		},
 		{
 			Name:        "getAuthStatus",
 			Description: "Checks and returns the current authentication status with Remember The Milk.",
-			InputSchema: s.emptyInputSchema(), // No arguments needed.
-			Annotations: &mcp.ToolAnnotations{Title: "Check RTM Auth Status", ReadOnlyHint: true},
+			InputSchema: s.emptyInputSchema(),                                                          // No arguments needed.
+			Annotations: &mcptypes.ToolAnnotations{Title: "Check RTM Auth Status", ReadOnlyHint: true}, // Use mcptypes.ToolAnnotations.
 		},
 		{
 			Name:        "authenticate",
 			Description: "Initiates or completes the authentication flow with Remember The Milk.",
-			InputSchema: s.authenticationInputSchema(), // Schema defines optional 'frob' and 'autoComplete'.
-			Annotations: &mcp.ToolAnnotations{Title: "Authenticate with RTM"},
+			InputSchema: s.authenticationInputSchema(),                             // Schema defines optional 'frob' and 'autoComplete'.
+			Annotations: &mcptypes.ToolAnnotations{Title: "Authenticate with RTM"}, // Use mcptypes.ToolAnnotations.
 		},
 		{
 			Name:        "clearAuth",
 			Description: "Clears the stored Remember The Milk authentication token, effectively logging out.",
-			InputSchema: s.emptyInputSchema(), // No arguments needed.
-			Annotations: &mcp.ToolAnnotations{Title: "Clear RTM Authentication", DestructiveHint: true, IdempotentHint: true},
+			InputSchema: s.emptyInputSchema(),                                                                                      // No arguments needed.
+			Annotations: &mcptypes.ToolAnnotations{Title: "Clear RTM Authentication", DestructiveHint: true, IdempotentHint: true}, // Use mcptypes.ToolAnnotations.
 		},
 		// Add definitions for other implemented tools here (e.g., getLists, getTags).
 	}
@@ -64,7 +64,7 @@ func (s *Service) GetTools() []mcp.Tool {
 // internal handler function, and formats the result (or error) as an MCP CallToolResult.
 // Errors originating *within* the tool logic are returned in the CallToolResult.IsError field,
 // while errors during the handling process itself (e.g., parsing, internal state) return a Go error.
-func (s *Service) CallTool(ctx context.Context, name string, args json.RawMessage) (*mcp.CallToolResult, error) {
+func (s *Service) CallTool(ctx context.Context, name string, args json.RawMessage) (*mcptypes.CallToolResult, error) { // Use mcptypes.CallToolResult.
 	// Ensure the service has been initialized before handling tool calls.
 	if !s.initialized {
 		s.logger.Error("CallTool attempted before RTM service initialization.", "toolName", name)
@@ -74,7 +74,7 @@ func (s *Service) CallTool(ctx context.Context, name string, args json.RawMessag
 
 	s.logger.Info("Routing MCP tool call.", "toolName", name)
 
-	var handlerFunc func(context.Context, json.RawMessage) (*mcp.CallToolResult, error)
+	var handlerFunc func(context.Context, json.RawMessage) (*mcptypes.CallToolResult, error) // Use mcptypes.CallToolResult.
 
 	// Map tool name to the corresponding handler function.
 	switch name {
@@ -117,7 +117,7 @@ func (s *Service) CallTool(ctx context.Context, name string, args json.RawMessag
 // handleGetTasks implements the logic for the "getTasks" MCP tool.
 // It requires authentication, parses the optional filter argument, calls the RTM API,
 // and formats the returned tasks into a human-readable text response.
-func (s *Service) handleGetTasks(ctx context.Context, args json.RawMessage) (*mcp.CallToolResult, error) {
+func (s *Service) handleGetTasks(ctx context.Context, args json.RawMessage) (*mcptypes.CallToolResult, error) { // Use mcptypes.CallToolResult.
 	// Ensure user is authenticated before proceeding.
 	if !s.IsAuthenticated() {
 		return s.notAuthenticatedError(), nil // Return specific error result.
@@ -177,7 +177,7 @@ func (s *Service) handleGetTasks(ctx context.Context, args json.RawMessage) (*mc
 // handleCreateTask implements the logic for the "createTask" MCP tool.
 // It requires authentication, parses the task name (and optional list), finds the
 // target list ID if specified, calls the RTM API to create the task, and returns the result.
-func (s *Service) handleCreateTask(ctx context.Context, args json.RawMessage) (*mcp.CallToolResult, error) {
+func (s *Service) handleCreateTask(ctx context.Context, args json.RawMessage) (*mcptypes.CallToolResult, error) { // Use mcptypes.CallToolResult.
 	if !s.IsAuthenticated() {
 		return s.notAuthenticatedError(), nil
 	}
@@ -237,7 +237,7 @@ func (s *Service) handleCreateTask(ctx context.Context, args json.RawMessage) (*
 // handleCompleteTask implements the logic for the "completeTask" MCP tool.
 // It requires authentication, parses the list and task IDs, calls the RTM API
 // to mark the task complete, and returns a success message.
-func (s *Service) handleCompleteTask(ctx context.Context, args json.RawMessage) (*mcp.CallToolResult, error) {
+func (s *Service) handleCompleteTask(ctx context.Context, args json.RawMessage) (*mcptypes.CallToolResult, error) { // Use mcptypes.CallToolResult.
 	if !s.IsAuthenticated() {
 		return s.notAuthenticatedError(), nil
 	}
@@ -268,7 +268,7 @@ func (s *Service) handleCompleteTask(ctx context.Context, args json.RawMessage) 
 // handleGetAuthStatus implements the logic for the "getAuthStatus" MCP tool.
 // It checks the current authentication state using the service's cached/refreshed data
 // and returns a message indicating the status and username, or instructions on how to authenticate.
-func (s *Service) handleGetAuthStatus(ctx context.Context, _ json.RawMessage) (*mcp.CallToolResult, error) {
+func (s *Service) handleGetAuthStatus(ctx context.Context, _ json.RawMessage) (*mcptypes.CallToolResult, error) { // Use mcptypes.CallToolResult.
 	s.logger.Info("Executing RTM getAuthStatus tool.")
 	// Use the service's GetAuthState method which handles caching and verification.
 	authState, err := s.GetAuthState(ctx)
@@ -307,11 +307,11 @@ func (s *Service) handleGetAuthStatus(ctx context.Context, _ json.RawMessage) (*
 // handleAuthenticate implements the logic for the "authenticate" MCP tool.
 // It can either start a new authentication flow (returning instructions) or
 // complete an existing flow if a 'frob' code is provided.
-func (s *Service) handleAuthenticate(ctx context.Context, args json.RawMessage) (*mcp.CallToolResult, error) {
+func (s *Service) handleAuthenticate(ctx context.Context, args json.RawMessage) (*mcptypes.CallToolResult, error) { // Use mcptypes.CallToolResult.
 	var params struct {
 		Frob string `json:"frob,omitempty"`
 		// AutoComplete is currently unused in this implementation but kept for schema compatibility.
-		// AutoComplete bool   `json:"autoComplete,omitempty"`
+		// AutoComplete bool   `json:"autoComplete,omitempty"` .
 	}
 
 	if err := json.Unmarshal(args, &params); err != nil {
@@ -359,7 +359,7 @@ func (s *Service) handleAuthenticate(ctx context.Context, args json.RawMessage) 
 
 // handleClearAuth implements the logic for the "clearAuth" MCP tool.
 // It clears the stored authentication token and updates the service state.
-func (s *Service) handleClearAuth(_ context.Context, _ json.RawMessage) (*mcp.CallToolResult, error) {
+func (s *Service) handleClearAuth(_ context.Context, _ json.RawMessage) (*mcptypes.CallToolResult, error) { // Use mcptypes.CallToolResult.
 	s.logger.Info("Executing RTM clearAuth tool.")
 	if !s.IsAuthenticated() {
 		// If already not authenticated, it's still a success.
@@ -447,11 +447,11 @@ func (s *Service) authenticationInputSchema() json.RawMessage {
 				"description": "Optional. The 'frob' code obtained from the RTM authentication URL after user authorization. Providing this completes the authentication flow.",
 			},
 			// AutoComplete removed as it's not currently used in the handler logic.
-			// "autoComplete": map[string]interface{}{
-			// 	"type":        "boolean",
-			// 	"description": "Optional (defaults to false). If true and 'frob' is omitted, attempt to automatically handle the browser-based flow (requires user interaction).",
-			// 	"default":     false,
-			// },
+			// "autoComplete": map[string]interface{}{ .
+			// 	"type":        "boolean", .
+			// 	"description": "Optional (defaults to false). If true and 'frob' is omitted, attempt to automatically handle the browser-based flow (requires user interaction).", .
+			// 	"default":     false, .
+			// }, .
 		},
 		// No fields are strictly required; behavior depends on presence of 'frob'.
 	}

@@ -1,7 +1,8 @@
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
-package rtm
-
+// This file specifically handles the integration with the Model Context Protocol (MCP)
+// by defining the Resources provided by the RTM service and routing incoming resource read requests.
 // file: internal/rtm/mcp_resources.go.
+package rtm
 
 import (
 	"context"
@@ -11,13 +12,13 @@ import (
 	"strings" // Ensure strings is imported.
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/mcp"
 	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors"
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Import the shared types package.
 )
 
 // GetResources returns the MCP resources provided by this service.
-func (s *Service) GetResources() []mcp.Resource {
-	return []mcp.Resource{
+func (s *Service) GetResources() []mcptypes.Resource { // Use mcptypes.Resource.
+	return []mcptypes.Resource{ // Use mcptypes.Resource.
 		{
 			Name:        "RTM Authentication Status",
 			URI:         "rtm://auth",
@@ -74,7 +75,6 @@ func (s *Service) ReadResource(ctx context.Context, uri string) ([]interface{}, 
 		return s.readTasksResourceWithFilter(ctx, filter)
 	default:
 		// Return MCP resource not found error.
-		// <<< FIX: Added mcperrors.ErrResourceNotFound as the first argument >>>.
 		return nil, mcperrors.NewResourceError(mcperrors.ErrResourceNotFound,
 			fmt.Sprintf("Unknown RTM resource URI: %s", uri),
 			nil,
@@ -154,8 +154,8 @@ func (s *Service) createJSONResourceContent(uri string, data interface{}) ([]int
 		return nil, errors.Wrapf(err, "failed to marshal resource data for URI: %s", uri)
 	}
 	return []interface{}{
-		mcp.TextResourceContents{
-			ResourceContents: mcp.ResourceContents{
+		mcptypes.TextResourceContents{ // Use mcptypes.TextResourceContents.
+			ResourceContents: mcptypes.ResourceContents{ // Use mcptypes.ResourceContents.
 				URI:      uri,
 				MimeType: "application/json",
 			},

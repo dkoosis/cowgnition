@@ -1,7 +1,7 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
 package mcp
 
-// file: internal/mcp/handlers_tools.go
+// file: internal/mcp/handlers_tools.go.
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"fmt" // For placeholder formatting.
 
 	"github.com/cockroachdb/errors"
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Import the shared types package.
 )
 
 // handleToolsList handles the tools/list request.
@@ -18,7 +19,7 @@ func (h *Handler) handleToolsList(_ context.Context, _ json.RawMessage) (json.Ra
 	h.logger.Info("Handling tools/list request.")
 
 	// Define RTM tools.
-	tools := []Tool{
+	tools := []mcptypes.Tool{ // Use mcptypes.Tool.
 		// Tool: getTasks.
 		{
 			Name:        "getTasks",
@@ -34,7 +35,7 @@ func (h *Handler) handleToolsList(_ context.Context, _ json.RawMessage) (json.Ra
 				"required": []string{"filter"},
 			}),
 			// Optional annotations to provide additional information to clients.
-			Annotations: &ToolAnnotations{
+			Annotations: &mcptypes.ToolAnnotations{ // Use mcptypes.ToolAnnotations.
 				Title:        "Get RTM Tasks",
 				ReadOnlyHint: true, // This tool doesn't modify any data.
 			},
@@ -57,7 +58,7 @@ func (h *Handler) handleToolsList(_ context.Context, _ json.RawMessage) (json.Ra
 				},
 				"required": []string{"name"},
 			}),
-			Annotations: &ToolAnnotations{
+			Annotations: &mcptypes.ToolAnnotations{ // Use mcptypes.ToolAnnotations.
 				Title:           "Create RTM Task",
 				ReadOnlyHint:    false, // This tool modifies data.
 				DestructiveHint: false, // It's not destructive, just additive.
@@ -78,7 +79,7 @@ func (h *Handler) handleToolsList(_ context.Context, _ json.RawMessage) (json.Ra
 				},
 				"required": []string{"taskId"},
 			}),
-			Annotations: &ToolAnnotations{
+			Annotations: &mcptypes.ToolAnnotations{ // Use mcptypes.ToolAnnotations.
 				Title:           "Complete RTM Task",
 				ReadOnlyHint:    false, // This tool modifies data.
 				DestructiveHint: true,  // It changes the state of a task.
@@ -88,7 +89,7 @@ func (h *Handler) handleToolsList(_ context.Context, _ json.RawMessage) (json.Ra
 	}
 
 	// Create the result containing the tool list.
-	result := ListToolsResult{
+	result := mcptypes.ListToolsResult{ // Use mcptypes.ListToolsResult.
 		Tools: tools,
 		// NextCursor can be added here for pagination if needed.
 	}
@@ -110,7 +111,7 @@ func (h *Handler) handleToolsList(_ context.Context, _ json.RawMessage) (json.Ra
 // the result. If a tool execution fails, it should be reflected in the isError field
 // of the result, not as a protocol-level error.
 func (h *Handler) handleToolCall(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
-	var req CallToolRequest
+	var req mcptypes.CallToolRequest // Use mcptypes.CallToolRequest.
 	if err := json.Unmarshal(params, &req); err != nil {
 		// Error parsing the request itself (should have been caught by validation).
 		return nil, errors.Wrap(err, "invalid params structure for tools/call")
@@ -118,7 +119,7 @@ func (h *Handler) handleToolCall(ctx context.Context, params json.RawMessage) (j
 
 	h.logger.Info("Handling tool/call request.", "toolName", req.Name)
 
-	var callResult CallToolResult // Only need one variable now.
+	var callResult mcptypes.CallToolResult // Only need one variable now. Use mcptypes.CallToolResult.
 
 	// Route the call to the specific tool implementation placeholder.
 	switch req.Name {
@@ -133,10 +134,10 @@ func (h *Handler) handleToolCall(ctx context.Context, params json.RawMessage) (j
 	default:
 		// Tool name sent by client is not recognized by the server.
 		h.logger.Warn("Tool not found during tool/call.", "toolName", req.Name)
-		callResult = CallToolResult{
+		callResult = mcptypes.CallToolResult{ // Use mcptypes.CallToolResult.
 			IsError: true,
-			Content: []Content{
-				TextContent{Type: "text", Text: "Error: Tool not found: " + req.Name},
+			Content: []mcptypes.Content{ // Use mcptypes.Content.
+				mcptypes.TextContent{Type: "text", Text: "Error: Tool not found: " + req.Name}, // Use mcptypes.TextContent.
 			},
 		}
 	}
@@ -158,7 +159,7 @@ func (h *Handler) handleToolCall(ctx context.Context, params json.RawMessage) (j
 // Official definition: An optional notification from the server to the client, informing
 // it that the list of tools it offers has changed. This may be issued by servers
 // without any previous subscription from the client.
-// nolint:unused,unparam
+// nolint:unused,unparam.
 func (h *Handler) handleToolListChanged(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Sending tool list changed notification to client.")
 	// NOTE: This would typically be sent from the server to the client, not handled by the server.
@@ -166,18 +167,18 @@ func (h *Handler) handleToolListChanged(_ context.Context, _ json.RawMessage) (j
 	return nil, nil
 }
 
-// ------ TOOL EXECUTION LOGIC PLACEHOLDERS ------
+// ------ TOOL EXECUTION LOGIC PLACEHOLDERS ------.
 
 // executeRTMGetTasksPlaceholder handles the getTasks tool call (enhanced placeholder).
-func (h *Handler) executeRTMGetTasksPlaceholder(_ context.Context, args json.RawMessage) CallToolResult {
+func (h *Handler) executeRTMGetTasksPlaceholder(_ context.Context, args json.RawMessage) mcptypes.CallToolResult { // Use mcptypes.CallToolResult.
 	var toolArgs struct {
 		Filter string `json:"filter"`
 	}
 	if err := json.Unmarshal(args, &toolArgs); err != nil {
 		h.logger.Warn("Invalid arguments received for getTasks tool.", "error", err, "args", string(args))
-		return CallToolResult{
+		return mcptypes.CallToolResult{ // Use mcptypes.CallToolResult.
 			IsError: true,
-			Content: []Content{TextContent{Type: "text", Text: "Error calling getTasks: Invalid arguments: " + err.Error()}},
+			Content: []mcptypes.Content{mcptypes.TextContent{Type: "text", Text: "Error calling getTasks: Invalid arguments: " + err.Error()}}, // Use mcptypes.Content, mcptypes.TextContent.
 		}
 	}
 
@@ -185,26 +186,26 @@ func (h *Handler) executeRTMGetTasksPlaceholder(_ context.Context, args json.Raw
 
 	// TODO: Replace with actual RTM API call using h.rtmClient.
 	// Return a more realistic mock response with fake tasks that match the filter.
-	return CallToolResult{
+	return mcptypes.CallToolResult{ // Use mcptypes.CallToolResult.
 		IsError: false,
-		Content: []Content{
-			TextContent{Type: "text", Text: fmt.Sprintf("Successfully retrieved tasks matching filter: '%s'.", toolArgs.Filter)},
-			TextContent{Type: "text", Text: "Tasks:\n1. Write documentation for CowGnition (due: tomorrow, priority: 1)\n2. Test MCP integration (due: today, priority: 1)\n3. Implement RTM API client (due: next week, priority: 2)."}, // Placeholder data.
+		Content: []mcptypes.Content{ // Use mcptypes.Content.
+			mcptypes.TextContent{Type: "text", Text: fmt.Sprintf("Successfully retrieved tasks matching filter: '%s'.", toolArgs.Filter)},                                                                                                         // Use mcptypes.TextContent.
+			mcptypes.TextContent{Type: "text", Text: "Tasks:\n1. Write documentation for CowGnition (due: tomorrow, priority: 1)\n2. Test MCP integration (due: today, priority: 1)\n3. Implement RTM API client (due: next week, priority: 2)."}, // Placeholder data. Use mcptypes.TextContent.
 		},
 	}
 }
 
 // executeRTMCreateTaskPlaceholder handles the createTask tool call (enhanced placeholder).
-func (h *Handler) executeRTMCreateTaskPlaceholder(_ context.Context, args json.RawMessage) CallToolResult {
+func (h *Handler) executeRTMCreateTaskPlaceholder(_ context.Context, args json.RawMessage) mcptypes.CallToolResult { // Use mcptypes.CallToolResult.
 	var toolArgs struct {
 		Name string `json:"name"`
 		List string `json:"list,omitempty"`
 	}
 	if err := json.Unmarshal(args, &toolArgs); err != nil {
 		h.logger.Warn("Invalid arguments received for createTask tool.", "error", err, "args", string(args))
-		return CallToolResult{
+		return mcptypes.CallToolResult{ // Use mcptypes.CallToolResult.
 			IsError: true,
-			Content: []Content{TextContent{Type: "text", Text: "Error calling createTask: Invalid arguments: " + err.Error()}},
+			Content: []mcptypes.Content{mcptypes.TextContent{Type: "text", Text: "Error calling createTask: Invalid arguments: " + err.Error()}}, // Use mcptypes.Content, mcptypes.TextContent.
 		}
 	}
 
@@ -217,25 +218,25 @@ func (h *Handler) executeRTMCreateTaskPlaceholder(_ context.Context, args json.R
 
 	// TODO: Replace with actual RTM API call using h.rtmClient.
 	// Return a more realistic mock response pretending the task was created.
-	return CallToolResult{
+	return mcptypes.CallToolResult{ // Use mcptypes.CallToolResult.
 		IsError: false,
-		Content: []Content{
-			TextContent{Type: "text", Text: fmt.Sprintf("Successfully created task: '%s' in list '%s'.", toolArgs.Name, list)},
-			TextContent{Type: "text", Text: "Task Details:\nID: task_12345\nAdded: Just now\nURL: https://www.rememberthemilk.com/app/#list/inbox/task_12345."}, // Placeholder data.
+		Content: []mcptypes.Content{ // Use mcptypes.Content.
+			mcptypes.TextContent{Type: "text", Text: fmt.Sprintf("Successfully created task: '%s' in list '%s'.", toolArgs.Name, list)},                                  // Use mcptypes.TextContent.
+			mcptypes.TextContent{Type: "text", Text: "Task Details:\nID: task_12345\nAdded: Just now\nURL: https://www.rememberthemilk.com/app/#list/inbox/task_12345."}, // Placeholder data. Use mcptypes.TextContent.
 		},
 	}
 }
 
 // executeRTMCompleteTaskPlaceholder handles the completeTask tool call.
-func (h *Handler) executeRTMCompleteTaskPlaceholder(_ context.Context, args json.RawMessage) CallToolResult {
+func (h *Handler) executeRTMCompleteTaskPlaceholder(_ context.Context, args json.RawMessage) mcptypes.CallToolResult { // Use mcptypes.CallToolResult.
 	var toolArgs struct {
 		TaskID string `json:"taskId"`
 	}
 	if err := json.Unmarshal(args, &toolArgs); err != nil {
 		h.logger.Warn("Invalid arguments received for completeTask tool.", "error", err, "args", string(args))
-		return CallToolResult{
+		return mcptypes.CallToolResult{ // Use mcptypes.CallToolResult.
 			IsError: true,
-			Content: []Content{TextContent{Type: "text", Text: "Error calling completeTask: Invalid arguments: " + err.Error()}},
+			Content: []mcptypes.Content{mcptypes.TextContent{Type: "text", Text: "Error calling completeTask: Invalid arguments: " + err.Error()}}, // Use mcptypes.Content, mcptypes.TextContent.
 		}
 	}
 
@@ -243,10 +244,10 @@ func (h *Handler) executeRTMCompleteTaskPlaceholder(_ context.Context, args json
 
 	// TODO: Replace with actual RTM API call.
 	// Return a mock response for completing the task.
-	return CallToolResult{
+	return mcptypes.CallToolResult{ // Use mcptypes.CallToolResult.
 		IsError: false,
-		Content: []Content{
-			TextContent{Type: "text", Text: fmt.Sprintf("Successfully completed task with ID: %s.", toolArgs.TaskID)},
+		Content: []mcptypes.Content{ // Use mcptypes.Content.
+			mcptypes.TextContent{Type: "text", Text: fmt.Sprintf("Successfully completed task with ID: %s.", toolArgs.TaskID)}, // Use mcptypes.TextContent.
 		},
 	}
 }

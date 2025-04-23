@@ -1,25 +1,26 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
+// file: internal/mcp/handlers_notifications.go.
 package mcp
-
-// file: internal/mcp/handlers_notifications.go
 
 import (
 	"context"
 	"encoding/json"
 	"fmt" // Import fmt for formatting.
+
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Import the shared types package.
 )
 
 // handleNotificationsInitialized handles the notifications/initialized notification.
 // Official definition: This notification is sent from the client to the server after
 // initialization has finished. It signals that the client has successfully processed
 // the server's initialization response and is ready for further communication.
-// nolint:unused,unparam
+// nolint:unused,unparam.
 func (h *Handler) handleNotificationsInitialized(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Received 'notifications/initialized' from client.")
 
 	// Extract client capabilities if available.
 	var notifParams struct {
-		ClientCapabilities *ClientCapabilities `json:"clientCapabilities,omitempty"`
+		ClientCapabilities *mcptypes.ClientCapabilities `json:"clientCapabilities,omitempty"` // Use mcptypes.ClientCapabilities.
 	}
 	if err := json.Unmarshal(params, &notifParams); err != nil {
 		// It's okay if we can't unmarshal, the params might be empty.
@@ -40,7 +41,7 @@ func (h *Handler) handleNotificationsInitialized(_ context.Context, params json.
 // cancelling a previously-issued request. The request SHOULD still be in-flight, but due to
 // communication latency, it is always possible that this notification MAY arrive after
 // the request has already finished.
-// nolint:unused,unparam
+// nolint:unused,unparam.
 func (h *Handler) handleNotificationsCancelled(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	var cancelParams struct {
 		RequestID interface{} `json:"requestId"`
@@ -65,7 +66,7 @@ func (h *Handler) handleNotificationsCancelled(_ context.Context, params json.Ra
 // handleNotificationsProgress handles the notifications/progress notification.
 // Official definition: An out-of-band notification used to inform the receiver of a
 // progress update for a long-running request.
-// nolint:unused,unparam
+// nolint:unused,unparam.
 func (h *Handler) handleNotificationsProgress(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	var progressParams struct {
 		ProgressToken interface{} `json:"progressToken"`

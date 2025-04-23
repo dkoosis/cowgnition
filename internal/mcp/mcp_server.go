@@ -1,7 +1,6 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
+// file: internal/mcp/mcp_server.go.
 package mcp
-
-// file: internal/mcp/mcp_server.go
 
 import (
 	"context"
@@ -14,8 +13,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/logging"
-	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"
-	"github.com/dkoosis/cowgnition/internal/middleware"
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Import the shared types package.
+	"github.com/dkoosis/cowgnition/internal/middleware"         // Import middleware.
 	"github.com/dkoosis/cowgnition/internal/rtm"
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/transport"
@@ -77,9 +76,18 @@ func NewServer(cfg *config.Config, opts ServerOptions, validator schema.Validato
 		connectionState: connState,
 	}
 
-	// Connect metrics collector to RTM
-	if rtmService != nil {
-		rtm.SetMetricsCollector(mcp.GetMetricsCollector())
+	// Initialize metrics collector if not already done (assuming InitializeMetricsCollector is idempotent).
+	InitializeMetricsCollector()                                                                 // Ensure collector exists.
+	rtmService, rtmErr := rtm.NewServiceFactory(cfg, logger).CreateService(context.Background()) // Create RTM service. // TODO: Use proper context if available.
+	if rtmErr != nil {
+		logger.Error("Failed to create RTM service during MCP server creation.", "error", rtmErr)
+		// Decide if this is fatal. For now, log and continue, RTM features will fail.
+		server.rtmService = nil
+	} else {
+		server.rtmService = rtmService
+		// Connect metrics collector to RTM service.
+		rtm.SetMetricsCollector(GetMetricsCollector())
+		logger.Info("RTM Service created and metrics collector connected.")
 	}
 
 	server.registerMethods() // Register methods provided by the handler.
@@ -120,18 +128,18 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 	s.transport = transport.NewNDJSONTransport(os.Stdin, os.Stdout, os.Stdin, s.logger)
 
 	// Setup validation middleware using internal/middleware package.
-	validationOpts := middleware.DefaultValidationOptions()
-	validationOpts.StrictMode = true       // Incoming messages must be valid.
-	validationOpts.ValidateOutgoing = true // Enable validation for outgoing messages.
+	validationOpts := middleware.DefaultValidationOptions() // Use middleware.DefaultValidationOptions.
+	validationOpts.StrictMode = true                        // Incoming messages must be valid.
+	validationOpts.ValidateOutgoing = true                  // Enable validation for outgoing messages.
 
-	// --- Interim Fix Consideration ---
+	// --- Interim Fix Consideration ---.
 	// We keep StrictOutgoing=false in normal operation because the server's outgoing
 	// 'initialize' response currently triggers a known validation warning (due to
 	// schema/struct mismatch during validation step, even if final JSON is ok).
 	// Setting this to false logs the warning but allows the connection to proceed.
 	// Ideally, the underlying validation logic or schema would be fixed.
-	// Ref: https://github.com/modelcontextprotocol/modelcontextprotocol/issues/394
-	// ---------------------------------
+	// Ref: https://github.com/modelcontextprotocol/modelcontextprotocol/issues/394 .
+	// ---------------------------------.
 	if s.options.Debug {
 		// In debug mode, we might want stricter outgoing validation to surface issues,
 		// even if it breaks the connection due to the known 'initialize' warning.
@@ -142,12 +150,12 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 		validationOpts.StrictOutgoing = false // Make outgoing errors non-fatal in normal builds.
 		s.logger.Info("Non-debug mode: outgoing validation is NON-STRICT (logs warnings).")
 	}
-	// --- End Interim Fix Consideration ---
+	// --- End Interim Fix Consideration ---.
 
 	// Pass the validator (which implements schema.ValidatorInterface).
 	validationMiddleware := middleware.NewValidationMiddleware(
 		s.validator,
-		validationOpts,
+		validationOpts, // Pass the options struct.
 		s.logger.WithField("subcomponent", "validation_mw"),
 	)
 
@@ -174,14 +182,21 @@ func (s *Server) Shutdown(_ context.Context) error {
 	if s.transport != nil {
 		if err := s.transport.Close(); err != nil {
 			s.logger.Error("Failed to close transport during shutdown.", "error", fmt.Sprintf("%+v", err))
-			// Don't return error here, allow shutdown to continue if possible
+			// Don't return error here, allow shutdown to continue if possible.
 		} else {
 			s.logger.Debug("Transport closed successfully.")
 		}
 	} else {
 		s.logger.Warn("Shutdown called but transport was nil.")
 	}
-	// TODO: Add shutdown hooks for services (like RTM) if needed.
+	// Shutdown RTM service if it exists.
+	if s.rtmService != nil {
+		if err := s.rtmService.Shutdown(); err != nil {
+			s.logger.Error("Error shutting down RTM service.", "error", err)
+		} else {
+			s.logger.Debug("RTM service shut down.")
+		}
+	}
 	s.logger.Info("Server shutdown sequence completed.")
 	return nil
 }
@@ -193,13 +208,11 @@ func (s *Server) serve(ctx context.Context, handlerFunc mcptypes.MessageHandler)
 	return s.serverProcessing(ctx, handlerFunc)
 }
 
-// file: internal/mcp/mcp_server.go (partial update)
+// GetResources returns all available MCP resources from all providers.
+func (s *Server) GetResources() []mcptypes.Resource { // Use mcptypes.Resource.
+	resources := s.GetServerResources() // Add server resources.
 
-// GetResources returns all available MCP resources from all providers
-func (s *Server) GetResources() []Resource {
-	resources := s.GetServerResources() // Add server resources
-
-	// Add RTM resources if available
+	// Add RTM resources if available.
 	if s.rtmService != nil {
 		resources = append(resources, s.rtmService.GetResources()...)
 	}
@@ -207,13 +220,13 @@ func (s *Server) GetResources() []Resource {
 	return resources
 }
 
-// ReadResource handles resource read requests
+// ReadResource handles resource read requests.
 func (s *Server) ReadResource(ctx context.Context, uri string) ([]interface{}, error) {
 	startTime := time.Now()
 	var result []interface{}
 	var err error
 
-	// Route based on URI prefix
+	// Route based on URI prefix.
 	if strings.HasPrefix(uri, "rtm://") {
 		if s.rtmService != nil {
 			result, err = s.rtmService.ReadResource(ctx, uri)
@@ -226,145 +239,47 @@ func (s *Server) ReadResource(ctx context.Context, uri string) ([]interface{}, e
 		err = errors.Newf("unknown resource URI scheme: %s", uri)
 	}
 
-	// Record request metrics
+	// Record request metrics.
 	s.RecordRequestMetrics("ReadResource:"+uri, startTime, err)
 
 	return result, err
 }
 
-// serverProcessing is the actual implementation, located in mcp_server_processing.go.
-// func (s *Server) serverProcessing(ctx context.Context, handlerFunc mcptypes.MessageHandler) error { ... }
-
-// handleMessage is the final handler in the middleware chain, located in mcp_server_processing.go.
-// func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, error) { ... }
-// file: internal/mcp/mcp_server.go
-
-// GetServerResources returns server-specific resources without including service resources
-func (s *Server) GetServerResources() []Resource {
-	// Return server-specific resources
-	// These are resources that are directly provided by the server itself,
-	// not by integrated services like RTM
-	return []Resource{
+// GetServerResources returns server-specific resources only.
+func (s *Server) GetServerResources() []mcptypes.Resource { // Use mcptypes.Resource.
+	// Server-specific resources.
+	return []mcptypes.Resource{ // Use mcptypes.Resource.
 		{
 			Name:        "Server Status",
 			URI:         "cowgnition://server/status",
 			Description: "Information about the server status and metrics",
 			MimeType:    "application/json",
 		},
-		{
-			Name:        "Server Version",
-			URI:         "cowgnition://server/version",
-			Description: "Version information for the server and its components",
-			MimeType:    "application/json",
-		},
-		// Add any other server-specific resources
+		// Add other server resources as needed.
 	}
 }
 
-// ReadServerResource handles reading resources directly provided by the server
-func (s *Server) ReadServerResource(ctx context.Context, uri string) ([]interface{}, error) {
-	// Handle server-specific resource URIs
+// ReadServerResource handles reading resources directly provided by the server.
+func (s *Server) ReadServerResource(_ context.Context, uri string) ([]interface{}, error) { // Removed ctx.
 	switch uri {
 	case "cowgnition://server/status":
-		return s.getServerStatusResource(), nil
-	case "cowgnition://server/version":
-		return s.getServerVersionResource(), nil
-	default:
-		return nil, errors.Newf("unknown server resource: %s", uri)
-	}
-}
-
-// getServerStatusResource returns the server status information as a resource
-func (s *Server) getServerStatusResource() []interface{} {
-	// Create a status object with relevant information
-	status := map[string]interface{}{
-		"uptime":      time.Since(s.startTime).String(),
-		"startTime":   s.startTime.Format(time.RFC3339),
-		"initialized": s.connectionState.IsInitialized(),
-	}
-
-	// Return as a text resource
-	return []interface{}{
-		TextResourceContents{
-			ResourceContents: ResourceContents{
-				URI:      "cowgnition://server/status",
-				MimeType: "application/json",
-			},
-			Text: mustMarshalJSON(status),
-		},
-	}
-}
-
-// getServerVersionResource returns version information as a resource
-func (s *Server) getServerVersionResource() []interface{} {
-	// Create a version info object
-	versionInfo := map[string]interface{}{
-		"serverName":      s.config.Server.Name,
-		"protocolVersion": s.connectionState.GetProtocolVersion(),
-		// Add other version information
-	}
-
-	// Return as a text resource
-	return []interface{}{
-		TextResourceContents{
-			ResourceContents: ResourceContents{
-				URI:      "cowgnition://server/version",
-				MimeType: "application/json",
-			},
-			Text: mustMarshalJSON(versionInfo),
-		},
-	}
-}
-
-// mustMarshalJSON marshals data to JSON and panics on error
-// Only used internally where we control the input values
-func mustMarshalJSON(v interface{}) string {
-	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		panic(fmt.Sprintf("Failed to marshal JSON: %v", err))
-	}
-	return string(data)
-}
-
-// file: internal/mcp/mcp_server.go
-
-// Add these methods to the Server struct:
-
-// GetServerResources returns server-specific resources only
-func (s *Server) GetServerResources() []Resource {
-	// Server-specific resources
-	return []Resource{
-		{
-			Name:        "Server Status",
-			URI:         "cowgnition://server/status",
-			Description: "Information about the server status and metrics",
-			MimeType:    "application/json",
-		},
-		// Add other server resources as needed
-	}
-}
-
-// ReadServerResource handles reading resources directly provided by the server
-func (s *Server) ReadServerResource(ctx context.Context, uri string) ([]interface{}, error) {
-	switch uri {
-	case "cowgnition://server/status":
-		// Create server status resource
+		// Create server status resource.
 		status := map[string]interface{}{
 			"uptime":     time.Since(s.startTime).String(),
 			"startTime":  s.startTime.Format(time.RFC3339),
 			"configured": s.config != nil,
 		}
 
-		// Convert to JSON
+		// Convert to JSON.
 		jsonData, err := json.MarshalIndent(status, "", "  ")
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to marshal server status")
 		}
 
-		// Return as text resource
+		// Return as text resource.
 		return []interface{}{
-			TextResourceContents{
-				ResourceContents: ResourceContents{
+			mcptypes.TextResourceContents{ // Use mcptypes.TextResourceContents.
+				ResourceContents: mcptypes.ResourceContents{ // Use mcptypes.ResourceContents.
 					URI:      uri,
 					MimeType: "application/json",
 				},
