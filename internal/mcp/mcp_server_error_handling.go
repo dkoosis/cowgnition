@@ -10,8 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/logging"
 	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors" // Import the mcperrors package.
-	"github.com/dkoosis/cowgnition/internal/schema"
-	"github.com/dkoosis/cowgnition/internal/transport"
+	// Removed schema import as mapValidationError* helpers are gone.
 )
 
 // createErrorResponse creates the byte representation of a JSON-RPC error response.
@@ -78,76 +77,16 @@ func extractRequestID(logger logging.Logger, msgBytes []byte) json.RawMessage {
 func (s *Server) mapErrorToJSONRPCComponents(logger logging.Logger, err error) (code int, message string, data interface{}) {
 	// ... implementation removed ...
 }
-*/ // <-- Removed the extra period here.
+*/
 
-// getErrorString extracts a string representation from an error.
-// This might be moved to mcperrors if generally useful there.
-func getErrorString(err error) string {
-	rootErr := errors.Cause(err)
-	if rootErr != nil {
-		return rootErr.Error()
-	} else if err != nil {
-		return err.Error()
-	}
-	return ""
-}
+// --- getErrorString (REMOVED as unused) ---.
+// func getErrorString(err error) string { ... }
 
-// mapValidationErrorEx maps schema.ValidationError to JSON-RPC components.
-// Assumes mapValidationError never returns nil for the data map.
-// This might be moved to mcperrors if generally useful there.
-func mapValidationErrorEx(validationErr *schema.ValidationError) (int, string, interface{}) {
-	code, message, validationData := mapValidationError(validationErr)
-	// Ensure we never return nil data.
-	if validationData == nil {
-		return code, message, make(map[string]interface{})
-	}
-	return code, message, validationData
-}
+// --- mapValidationErrorEx (REMOVED as unused) ---.
+// func mapValidationErrorEx(validationErr *schema.ValidationError) (int, string, interface{}) { ... }
 
-// mapValidationError maps schema.ValidationError to JSON-RPC components.
-// This might be moved to mcperrors if generally useful there.
-func mapValidationError(validationErr *schema.ValidationError) (int, string, map[string]interface{}) {
-	data := make(map[string]interface{}) // Initialize data map.
-	var code int
-	var message string
-
-	// Use specific MCP error codes defined in mcperrors package.
-	if validationErr.Code == schema.ErrInvalidJSONFormat {
-		code = transport.JSONRPCParseError // -32700.
-		message = "Parse error."
-		data["detail"] = "The received message is not valid JSON."
-	} else if validationErr.InstancePath != "" && (strings.HasPrefix(validationErr.InstancePath, "/params") || strings.HasPrefix(validationErr.InstancePath, "params")) {
-		code = transport.JSONRPCInvalidParams // -32602.
-		message = "Invalid params."
-	} else {
-		code = transport.JSONRPCInvalidRequest // -32600.
-		message = "Invalid Request."
-	}
-
-	// Add common validation details to the map.
-	data["validationPath"] = validationErr.InstancePath
-	// Use original message from validation error for more specific detail.
-	data["validationError"] = validationErr.Message // Use the Message field directly.
-	if validationErr.SchemaPath != "" {
-		data["schemaPath"] = validationErr.SchemaPath
-	}
-
-	// Merge context from validation error if present.
-	if validationErr.Context != nil {
-		for k, v := range validationErr.Context {
-			// Add context key-values, potentially prefixing to avoid collisions if needed.
-			contextKey := "context_" + k // Example prefixing.
-			if _, exists := data[contextKey]; !exists {
-				data[contextKey] = v
-			}
-			// Handle suggestion specifically if present.
-			if k == "suggestion" {
-				data["suggestion"] = v // Overwrite if needed, or use the prefixed version.
-			}
-		}
-	}
-	return code, message, data
-}
+// --- mapValidationError (REMOVED as unused) ---.
+// func mapValidationError(validationErr *schema.ValidationError) (int, string, map[string]interface{}) { ... }
 
 // logErrorDetails logs detailed error information server-side.
 func (s *Server) logErrorDetails(code int, message string, requestID json.RawMessage, data interface{}, err error) {

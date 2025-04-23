@@ -1,6 +1,7 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-// File: internal/mcp/mcp_server_processing.go.
 package mcp
+
+// file: internal/mcp/mcp_server_processing.go.
 
 import (
 	"context"
@@ -17,9 +18,11 @@ import (
 func (s *Server) serverProcessing(ctx context.Context, handlerFunc mcptypes.MessageHandler) error {
 	s.logger.Info("Server processing loop started.")
 	if handlerFunc == nil {
+		// Corrected: lowercase, no period.
 		return errors.New("serve called with nil handler function")
 	}
 	if s.transport == nil {
+		// Corrected: lowercase, no period.
 		return errors.New("serve called but server transport is nil")
 	}
 
@@ -38,7 +41,7 @@ func (s *Server) serverProcessing(ctx context.Context, handlerFunc mcptypes.Mess
 					return err // Propagate terminal error to stop serve.
 				}
 				// Log non-terminal errors but continue the loop.
-				s.logger.Error("Non-terminal error processing message", "error", fmt.Sprintf("%+v", err))
+				s.logger.Error("Non-terminal error processing message.", "error", fmt.Sprintf("%+v", err))
 				// Optionally, implement retry logic or specific error handling here.
 			}
 		}
@@ -70,6 +73,7 @@ func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.Me
 		writeErr := s.handleProcessingError(ctx, msgBytes, method, idStr, handleErr)
 		if writeErr != nil {
 			// If we can't even write the error response, it might be a terminal transport issue.
+			// Corrected: lowercase, no period.
 			return errors.Wrap(writeErr, "failed to write error response after processing error")
 		}
 		// If handleProcessingError succeeded in sending an error response,
@@ -81,17 +85,15 @@ func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.Me
 
 	// 6. Write Successful Response (if one was generated).
 	//    Notifications will have respBytes == nil here.
-	//    Notifications will have respBytes == nil here.
-	//    Notifications will have respBytes == nil here.
 	if respBytes != nil {
 		if writeErr := s.writeResponse(ctx, respBytes, method, idStr); writeErr != nil {
 			// If writing the success response fails, return the error.
+			// Corrected: lowercase, no period.
 			return errors.Wrap(writeErr, "failed to write successful response")
 		}
 	} else {
 		// Log if it was a request that resulted in no response bytes (shouldn't happen unless it was a notification).
-		// Apply De Morgan's Law here:
-		if idStr != "null" && idStr != "unknown" { // <--- CORRECTED CONDITION.
+		if idStr != "null" && idStr != "unknown" { // De Morgan's Law applied.
 			s.logger.Warn("Handler returned nil response bytes for a non-notification request.", "method", method, "id", idStr)
 		}
 	}
@@ -99,32 +101,7 @@ func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.Me
 	return nil
 }
 
-// handleMessage is the final handler in the middleware chain.
-// DEPRECATED: Routing logic has moved to mcp_server.go:routeMessage.
-// This function remains temporarily but should ideally be removed or repurposed.
-func (s *Server) handleMessage(_ context.Context, msgBytes []byte) ([]byte, error) {
-	var request struct {
-		JSONRPC string          `json:"jsonrpc"`
-		ID      json.RawMessage `json:"id,omitempty"`
-		Method  string          `json:"method"`
-		Params  json.RawMessage `json:"params"` // Keep as RawMessage for handler.
-	}
-
-	// This log confirms if this obsolete function is ever called, indicating a potential issue.
-	// in the middleware chain setup in ServeSTDIO.
-	s.logger.Error("Obsolete handleMessage function called! Routing should occur in routeMessage.", "method", request.Method)
-
-	if err := json.Unmarshal(msgBytes, &request); err != nil {
-		// This indicates an internal issue, as middleware should have caught parse errors.
-		return nil, errors.Wrap(err, "internal error: failed to parse validated message in obsolete handleMessage")
-	}
-
-	// Do NOT attempt to look up methods using s.methods.
-	// handler, ok := s.methods[request.Method] // REMOVED.
-
-	// Return an internal error indicating this path is wrong.
-	return nil, errors.Newf("Internal Error: Obsolete handleMessage function executed for method '%s'. Routing failed or middleware chain incorrect.", request.Method)
-} // end of handleMessage.
+// --- handleMessage REMOVED (unused) ---
 
 // handleTransportReadError decides if a read error is terminal.
 func (s *Server) handleTransportReadError(readErr error) error {
@@ -144,7 +121,7 @@ func (s *Server) handleTransportReadError(readErr error) error {
 
 	// Other read errors (e.g., temporary network glitch, invalid NDJSON framing handled by transport).
 	// are logged but might not be terminal. Return nil to allow the loop to continue.
-	s.logger.Error("Non-terminal error reading message from transport", "error", fmt.Sprintf("%+v", readErr))
+	s.logger.Error("Non-terminal error reading message from transport.", "error", fmt.Sprintf("%+v", readErr))
 	return nil // Indicate loop should continue.
 }
 
@@ -188,6 +165,7 @@ func (s *Server) handleProcessingError(ctx context.Context, msgBytes []byte, met
 func (s *Server) writeResponse(ctx context.Context, respBytes []byte, method, id string) error {
 	if s.transport == nil {
 		s.logger.Error("Attempted to write response but transport is nil.", "method", method, "requestID", id)
+		// Corrected: lowercase, no period.
 		return errors.New("cannot write response: transport is nil")
 	}
 	if writeErr := s.transport.WriteMessage(ctx, respBytes); writeErr != nil {
