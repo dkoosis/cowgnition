@@ -447,35 +447,52 @@ func runAuthenticatedTests(ctx context.Context, t *testing.T, rtmService *Servic
 		t.Fail() // Mark test as failed but continue other checks.
 	}
 
-	// Test CallTool (getTasks) - Basic check for success.
-	// More specific task content checks could be added if needed.
-	args := map[string]interface{}{"filter": "status:incomplete"} // Example filter.
+	// Test CallTool (getTasks) - Filtered for high priority tasks from the last month.
+	filterString := `priority:1 AND addedWithin:"1 month of today"`    // Define the specific filter
+	t.Logf("Testing CallTool(getTasks) with filter: %s", filterString) // Log the filter being used
+	args := map[string]interface{}{"filter": filterString}             // Use the filter string
 	argsBytes, err := json.Marshal(args)
-	require.NoError(t, err, "Failed to marshal args for getTasks.") // Use require for setup errors.
+	require.NoError(t, err, "Failed to marshal args for filtered getTasks.") // Use require for setup errors.
 
 	result, callErr := rtmService.CallTool(ctx, "getTasks", argsBytes)
+
+	// --- Assertions for the filtered getTasks call ---
+	// Declare errorDetail without initial assignment.
+	var errorDetail string
 	if callErr == nil && result != nil && !result.IsError {
-		printTestResult(t, "CallTool(getTasks)", "PASSED", "Successfully retrieved tasks.")
+		printTestResult(t, "CallTool(getTasks - Filtered)", "PASSED", "Successfully retrieved filtered tasks.")
 		// Optionally log content preview using the helper from helpers.go.
 		if len(result.Content) > 0 {
 			// Use mcp.TextContent type defined in internal/mcp/types.go.
 			if tc, ok := result.Content[0].(mcp.TextContent); ok {
-				t.Logf("     → Tasks Result Preview: %s...", truncateString(tc.Text, 80)) // Uses helper from helpers.go.
+				t.Logf("     → Filtered Tasks Preview: %s...", truncateString(tc.Text, 80)) // Uses helper from helpers.go.
+			} else {
+				t.Logf("     → Filtered Tasks Result Content was not TextContent.")
 			}
+		} else {
+			t.Logf("     → Filtered Tasks Result Content was empty.")
 		}
 	} else {
-		errorDetail := "Unknown tool error."
+		// Determine the error detail for logging/reporting.
+		// The initial assignment "Unknown tool error." has been removed.
 		if callErr != nil {
 			errorDetail = fmt.Sprintf("Internal Error: %v.", callErr)
 		} else if result != nil && result.IsError && len(result.Content) > 0 {
 			// Use mcp.TextContent type defined in internal/mcp/types.go.
 			if tc, ok := result.Content[0].(mcp.TextContent); ok {
 				errorDetail = fmt.Sprintf("Tool Error: %s.", tc.Text)
+			} else {
+				errorDetail = "Tool Error: Content block was not TextContent."
 			}
+		} else if result != nil && result.IsError {
+			errorDetail = "Tool Error: No content provided with error."
+		} else {
+			errorDetail = "CallTool returned nil result without error, or result was nil."
 		}
-		printTestResult(t, "CallTool(getTasks)", "FAILED", errorDetail)
+		printTestResult(t, "CallTool(getTasks - Filtered)", "FAILED", errorDetail)
 		t.Fail() // Mark test as failed.
 	}
+	// --- End Assertions for filtered getTasks ---
 
 	// Test GetResources returns a non-empty list.
 	resources := rtmService.GetResources()
@@ -494,16 +511,36 @@ func runAuthenticatedTests(ctx context.Context, t *testing.T, rtmService *Servic
 		// Use mcp.TextResourceContents type defined in internal/mcp/types.go.
 		if tc, ok := resourceContents[0].(mcp.TextResourceContents); ok {
 			t.Logf("     → Auth Resource Preview: %s...", truncateString(tc.Text, 80)) // Uses helper from helpers.go.
+		} else {
+			t.Logf("     → Auth Resource Content was not TextResourceContents.")
 		}
 	} else {
 		printTestResult(t, "ReadResource(rtm://auth)", "FAILED", fmt.Sprintf("Error reading resource: %v.", readErr))
 		t.Fail()
 	}
 
-	// Add more calls to other authenticated tools/resources as needed.
+	// Add more calls to other authenticated tools/resources as needed here.
 	// e.g., Test CallTool(createTask), ReadResource(rtm://lists) etc.
 }
 
+// --- Helper functions used by runAuthenticatedTests (ensure these are defined elsewhere in the file or package) ---
+
+// printTestResult prints a clearly formatted test result with color codes.
+// (Definition assumed to be present as before)
+// func printTestResult(t *testing.T, test, status, details string) { ... }
+
+// truncateString safely truncates a string for previews.
+// (Definition assumed to be present as before)
+// func truncateString(s string, maxLen int) string { ... }
+// --- Helper functions used by runAuthenticatedTests (ensure these are defined elsewhere in the file or package) ---
+
+// printTestResult prints a clearly formatted test result with color codes.
+// (Definition assumed to be present as before)
+// func printTestResult(t *testing.T, test, status, details string) { ... }
+
+// truncateString safely truncates a string for previews.
+// (Definition assumed to be present as before)
+// func truncateString(s string, maxLen int) string { ... }
 // --- Test Output Formatting Helpers ---
 
 // printTestHeader prints a nicely formatted test header.

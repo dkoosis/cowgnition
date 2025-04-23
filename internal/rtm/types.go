@@ -4,6 +4,7 @@ package rtm
 // file: internal/rtm/types.go
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 )
@@ -203,12 +204,11 @@ type rtmTaskSeries struct {
 	Tags struct {
 		Tag []string `json:"tag,omitempty"`
 	} `json:"tags"`
-	Notes        []rtmNote `json:"notes,omitempty"`
-	Task         []rtmTask `json:"task"`
-	LocationID   string    `json:"location_id,omitempty"`
-	LocationName string    `json:"location,omitempty"` // RTM uses 'location' for name
+	Notes        json.RawMessage `json:"notes,omitempty"`
+	Task         []rtmTask       `json:"task"`
+	LocationID   string          `json:"location_id,omitempty"`
+	LocationName string          `json:"location,omitempty"`
 }
-
 type rtmTask struct {
 	ID        string `json:"id"`
 	Due       string `json:"due,omitempty"`       // ISO 8601 Timestamp
