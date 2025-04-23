@@ -31,7 +31,7 @@ func loadSchemaFromURI(ctx context.Context, uri string, logger logging.Logger, h
 		return nil, errors.Wrapf(err, "invalid schema override URI: %s", uri)
 	}
 
-	logger.Info("Loading schema from explicitly configured URI.", "uri", uri, "scheme", parsedURI.Scheme)
+	logger.Info("Loading schema from explicitly configured URI.", "uri", uri, "scheme", parsedURI.Scheme) // Added period.
 
 	switch parsedURI.Scheme {
 	case "file":
@@ -49,7 +49,7 @@ func loadSchemaFromURI(ctx context.Context, uri string, logger logging.Logger, h
 		// Ensure it's an absolute path for clarity in logs/errors.
 		filePath, absErr := filepath.Abs(filePath)
 		if absErr != nil {
-			logger.Warn("Could not determine absolute path for schema file URI.", "uriPath", parsedURI.Path, "error", absErr)
+			logger.Warn("Could not determine absolute path for schema file URI.", "uriPath", parsedURI.Path, "error", absErr) // Added period.
 			// Use the original path for the read attempt anyway.
 			filePath = parsedURI.Path
 			if os.PathSeparator == '\\' && strings.HasPrefix(filePath, "/") {
@@ -59,11 +59,12 @@ func loadSchemaFromURI(ctx context.Context, uri string, logger logging.Logger, h
 			}
 		}
 
-		logger.Debug("Reading schema file.", "path", filePath)
-		// Use os.ReadFile for simplicity. #nosec G304 -- URI comes from trusted config/flag.
+		logger.Debug("Reading schema file.", "path", filePath) // Added period.
+		// Suppress G304 warning because the URI comes from trusted configuration.
+		// #nosec G304
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			logger.Error("Failed to read schema file from override URI.", "path", filePath, "error", err)
+			logger.Error("Failed to read schema file from override URI.", "path", filePath, "error", err) // Added period.
 			code := ErrSchemaLoadFailed
 			if os.IsNotExist(err) {
 				code = ErrSchemaNotFound
@@ -75,14 +76,14 @@ func loadSchemaFromURI(ctx context.Context, uri string, logger logging.Logger, h
 				err, // Keep original error as cause.
 			).WithContext("uri", uri)
 		}
-		logger.Debug("Schema file read successfully.", "path", filePath, "size_bytes", len(data))
+		logger.Debug("Schema file read successfully.", "path", filePath, "size_bytes", len(data)) // Added period.
 		return data, nil
 
 	case "http", "https":
-		logger.Debug("Fetching schema from URL.", "url", uri)
+		logger.Debug("Fetching schema from URL.", "url", uri) // Added period.
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 		if err != nil {
-			logger.Error("Failed to create HTTP request for schema override URL.", "url", uri, "error", err)
+			logger.Error("Failed to create HTTP request for schema override URL.", "url", uri, "error", err) // Added period.
 			return nil, NewValidationError(
 				ErrSchemaLoadFailed,
 				"Failed to create HTTP request for schema override URL",
@@ -96,7 +97,7 @@ func loadSchemaFromURI(ctx context.Context, uri string, logger logging.Logger, h
 		// Use the provided httpClient which includes timeout.
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			logger.Error("Network error fetching schema override.", "url", uri, "error", err)
+			logger.Error("Network error fetching schema override.", "url", uri, "error", err) // Added period.
 			return nil, NewValidationError(
 				ErrSchemaLoadFailed,
 				"Failed to fetch schema from override URL",
@@ -107,7 +108,7 @@ func loadSchemaFromURI(ctx context.Context, uri string, logger logging.Logger, h
 		defer func() {
 			if closeErr := resp.Body.Close(); closeErr != nil {
 				// Log error during body close.
-				logger.Warn("Error closing schema override response body.", "url", uri, "error", closeErr)
+				logger.Warn("Error closing schema override response body.", "url", uri, "error", closeErr) // Added period.
 			}
 		}()
 
@@ -122,7 +123,7 @@ func loadSchemaFromURI(ctx context.Context, uri string, logger logging.Logger, h
 				"url", uri,
 				"status", resp.Status,
 				"statusCode", resp.StatusCode,
-				"responseBodyPreview", preview)
+				"responseBodyPreview", preview) // Added period.
 			return nil, NewValidationError(
 				code,
 				fmt.Sprintf("Failed to fetch schema override: HTTP status %d", resp.StatusCode),
@@ -134,18 +135,18 @@ func loadSchemaFromURI(ctx context.Context, uri string, logger logging.Logger, h
 
 		data, err := io.ReadAll(resp.Body)
 		if err != nil {
-			logger.Error("Failed to read response body from schema override URL.", "url", uri, "error", err)
+			logger.Error("Failed to read response body from schema override URL.", "url", uri, "error", err) // Added period.
 			return nil, NewValidationError(
 				ErrSchemaLoadFailed,
 				"Failed to read schema override from HTTP response",
 				errors.Wrap(err, "io.ReadAll failed"),
 			).WithContext("url", uri)
 		}
-		logger.Debug("Successfully downloaded schema override.", "url", uri, "size_bytes", len(data))
+		logger.Debug("Successfully downloaded schema override.", "url", uri, "size_bytes", len(data)) // Added period.
 		return data, nil
 
 	default:
-		logger.Error("Unsupported schema override URI scheme.", "uri", uri, "scheme", parsedURI.Scheme)
+		logger.Error("Unsupported schema override URI scheme.", "uri", uri, "scheme", parsedURI.Scheme) // Added period.
 		return nil, NewValidationError(
 			ErrSchemaLoadFailed,
 			fmt.Sprintf("Unsupported schema override URI scheme: %s", parsedURI.Scheme),

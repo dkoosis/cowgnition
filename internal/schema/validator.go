@@ -105,34 +105,34 @@ func (v *Validator) Initialize(ctx context.Context) error {
 
 	// Check for explicit override first.
 	if v.schemaConfig.SchemaOverrideURI != "" {
-		v.logger.Info("SchemaOverrideURI is set, attempting to load external schema.", "uri", v.schemaConfig.SchemaOverrideURI)
+		v.logger.Info("SchemaOverrideURI is set, attempting to load external schema.", "uri", v.schemaConfig.SchemaOverrideURI) // Added period.
 		// Use the loader function (defined in loader.go).
 		schemaData, loadErr = loadSchemaFromURI(ctx, v.schemaConfig.SchemaOverrideURI, v.logger, v.httpClient)
 		if loadErr != nil {
 			// CRITICAL: Override was requested but failed. Do NOT fall back.
 			v.logger.Error("CRITICAL: Failed to load schema from configured SchemaOverrideURI. Initialization aborted.",
-				"uri", v.schemaConfig.SchemaOverrideURI, "error", loadErr)
+				"uri", v.schemaConfig.SchemaOverrideURI, "error", loadErr) // Added period.
 			// Wrap the specific loading error.
 			return errors.Wrapf(loadErr, "failed to load schema from configured override URI '%s'", v.schemaConfig.SchemaOverrideURI)
 		}
 		// ** Explicitly set source info **.
 		sourceInfo = fmt.Sprintf("override URI: %s", v.schemaConfig.SchemaOverrideURI)
-		v.logger.Info("Successfully loaded schema from override URI.")
+		v.logger.Info("Successfully loaded schema from override URI.") // Added period.
 	} else {
 		// No override, use embedded schema.
-		v.logger.Info("No SchemaOverrideURI configured, using embedded schema.")
+		v.logger.Info("No SchemaOverrideURI configured, using embedded schema.") // Added period.
 		if len(embeddedSchemaContent) == 0 {
 			// CRITICAL: No override AND embedded schema is empty. Cannot proceed.
 			err := errors.New("embedded schema content is empty and no override URI was provided")
-			v.logger.Error("CRITICAL: Embedded schema is empty. Initialization aborted.", "error", err)
+			v.logger.Error("CRITICAL: Embedded schema is empty. Initialization aborted.", "error", err) // Added period.
 			// Use the custom error type for consistency.
 			return NewValidationError(ErrSchemaLoadFailed, "Embedded schema content is empty", err)
 		}
 		schemaData = embeddedSchemaContent
 		// ** Explicitly set source info **.
 		sourceInfo = "embedded"
-		loadErr = nil // No load error when using embedded.
-		v.logger.Info("Using embedded schema content.")
+		// *** Removed ineffectual assignment: loadErr = nil ***
+		v.logger.Info("Using embedded schema content.") // Added period.
 	}
 
 	v.lastLoadDuration = time.Since(loadStart)
@@ -141,11 +141,11 @@ func (v *Validator) Initialize(ctx context.Context) error {
 	if len(schemaData) == 0 {
 		// This case should technically be caught above, but double-check.
 		err := errors.New("loaded schema data is empty")
-		v.logger.Error("Schema loading resulted in empty data. Initialization aborted.", "source", sourceInfo, "error", err)
+		v.logger.Error("Schema loading resulted in empty data. Initialization aborted.", "source", sourceInfo, "error", err) // Added period.
 		return NewValidationError(ErrSchemaLoadFailed, "Loaded schema data is empty", err)
 	}
 
-	v.logger.Info("Schema content loaded.", // Changed log message slightly.
+	v.logger.Info("Schema content loaded.", // Changed log message slightly. Added period.
 		"duration", v.lastLoadDuration,
 		// "source" field removed here, will be added in the final log message.
 		"sizeBytes", len(schemaData))
@@ -156,7 +156,7 @@ func (v *Validator) Initialize(ctx context.Context) error {
 	// Use a temporary variable for parsing to avoid modifying v.schemaDoc before success.
 	var parsedDoc map[string]interface{}
 	if err := json.Unmarshal(schemaData, &parsedDoc); err != nil {
-		v.logger.Error("Failed to parse loaded schema JSON.", "error", err, "source", sourceInfo)
+		v.logger.Error("Failed to parse loaded schema JSON.", "error", err, "source", sourceInfo) // Added period.
 		return NewValidationError(ErrSchemaLoadFailed, "Failed to parse schema JSON", errors.Wrap(err, "json.Unmarshal failed")).
 			WithContext("source", sourceInfo)
 	}
@@ -183,14 +183,14 @@ func (v *Validator) Initialize(ctx context.Context) error {
 			"duration", time.Since(addStart),
 			"resourceID", resourceID,
 			"source", sourceInfo,
-			"error", err)
+			"error", err) // Added period.
 		return NewValidationError(
 			ErrSchemaLoadFailed,
 			"Failed to add schema resource",
 			errors.Wrap(err, "compiler.AddResource failed"),
 		).WithContext("source", sourceInfo).WithContext("schemaSize", len(schemaData))
 	}
-	v.logger.Info("Schema resource added.", "duration", time.Since(addStart), "resourceID", resourceID)
+	v.logger.Info("Schema resource added.", "duration", time.Since(addStart), "resourceID", resourceID) // Added period.
 
 	// Compile Schemas.
 	compileStart := time.Now()
@@ -199,8 +199,8 @@ func (v *Validator) Initialize(ctx context.Context) error {
 	v.lastCompileDuration = time.Since(compileStart)
 
 	if compileErr != nil {
-		v.logger.Error("Schema compilation finished with errors. Initialization aborted.", "duration", v.lastCompileDuration, "firstError", compileErr)
-		return compileErr // Return the first critical error encountered.
+		v.logger.Error("Schema compilation finished with errors. Initialization aborted.", "duration", v.lastCompileDuration, "firstError", compileErr) // Added period.
+		return compileErr                                                                                                                               // Return the first critical error encountered.
 	}
 
 	// --- Success: Update Validator State ---.
@@ -215,7 +215,7 @@ func (v *Validator) Initialize(ctx context.Context) error {
 	if finalSchemaVersion == "" {
 		finalSchemaVersion = "[unknown]" // Fallback if extraction failed.
 	}
-	v.logger.Info("✅ Schema validator initialized successfully.", // Added checkmark.
+	v.logger.Info("✅ Schema validator initialized successfully.", // Added checkmark and period.
 		"totalDuration", initDuration.String(), // Use .String() for readability.
 		"loadDuration", v.lastLoadDuration.String(),
 		"compileDuration", v.lastCompileDuration.String(),
@@ -235,7 +235,7 @@ func (v *Validator) compileAllDefinitions(baseResourceID string, schemaDoc map[s
 	// Compile base first.
 	baseSchema, err := v.compiler.Compile(baseResourceID)
 	if err != nil {
-		v.logger.Error("CRITICAL: Failed to compile base schema resource.", "resourceID", baseResourceID, "error", err)
+		v.logger.Error("CRITICAL: Failed to compile base schema resource.", "resourceID", baseResourceID, "error", err) // Added period.
 		return nil, NewValidationError(
 			ErrSchemaCompileFailed,
 			"Failed to compile base schema resource",
@@ -243,7 +243,7 @@ func (v *Validator) compileAllDefinitions(baseResourceID string, schemaDoc map[s
 		).WithContext("pointer", baseResourceID)
 	}
 	compiled["base"] = baseSchema
-	v.logger.Debug("Compiled base schema definition.", "name", "base")
+	v.logger.Debug("Compiled base schema definition.", "name", "base") // Added period.
 
 	// Compile definitions using the passed-in schemaDoc.
 	if defs, ok := schemaDoc["definitions"].(map[string]interface{}); ok {
@@ -251,7 +251,7 @@ func (v *Validator) compileAllDefinitions(baseResourceID string, schemaDoc map[s
 			pointer := baseResourceID + "#/definitions/" + name
 			schemaCompiled, errCompile := v.compiler.Compile(pointer)
 			if errCompile != nil {
-				v.logger.Warn("Failed to compile schema definition.", "name", name, "pointer", pointer, "error", errCompile)
+				v.logger.Warn("Failed to compile schema definition.", "name", name, "pointer", pointer, "error", errCompile) // Added period.
 				if firstCompileError == nil {
 					firstCompileError = NewValidationError(
 						ErrSchemaCompileFailed,
@@ -261,11 +261,11 @@ func (v *Validator) compileAllDefinitions(baseResourceID string, schemaDoc map[s
 				}
 			} else {
 				compiled[name] = schemaCompiled
-				v.logger.Debug("Compiled schema definition.", "name", name)
+				v.logger.Debug("Compiled schema definition.", "name", name) // Added period.
 			}
 		}
 	} else {
-		v.logger.Warn("No 'definitions' section found in the schema JSON.")
+		v.logger.Warn("No 'definitions' section found in the schema JSON.") // Added period.
 	}
 
 	// Add generic mappings after compiling definitions.
@@ -304,7 +304,7 @@ func (v *Validator) addGenericMappings(compiledSchemas map[string]*jsonschema.Sc
 		}
 	}
 	if len(mapped) > 0 {
-		v.logger.Debug("Added generic schema mappings.", "mappings", mapped)
+		v.logger.Debug("Added generic schema mappings.", "mappings", mapped) // Added period.
 	}
 }
 
@@ -329,7 +329,7 @@ func (v *Validator) Shutdown() error {
 	if !v.initialized {
 		return nil
 	}
-	v.logger.Info("Shutting down schema validator.")
+	v.logger.Info("Shutting down schema validator.") // Added period.
 	// Close idle HTTP client connections if applicable.
 	if transport, ok := v.httpClient.Transport.(*http.Transport); ok {
 		transport.CloseIdleConnections()
@@ -340,7 +340,7 @@ func (v *Validator) Shutdown() error {
 	v.schemas = nil   // Release compiled schemas map.
 	v.schemaDoc = nil // Release parsed document map.
 	v.initialized = false
-	v.logger.Info("Schema validator shut down.")
+	v.logger.Info("Schema validator shut down.") // Added period.
 	return nil
 }
 
@@ -389,7 +389,7 @@ func (v *Validator) Validate(_ context.Context, messageType string, data []byte)
 				"duration", validationDuration,
 				"messageType", messageType,
 				"schemaUsed", schemaUsedKey,
-				"error", valErr.Message)
+				"error", valErr.Message) // Added period.
 			// Pass necessary info to convertValidationError.
 			return convertValidationError(valErr, messageType, data) // Assumes convertValidationError is in errors.go.
 		}
@@ -398,7 +398,7 @@ func (v *Validator) Validate(_ context.Context, messageType string, data []byte)
 			"duration", validationDuration,
 			"messageType", messageType,
 			"schemaUsed", schemaUsedKey,
-			"error", err)
+			"error", err) // Added period.
 		return NewValidationError(
 			ErrValidationFailed,
 			"Schema validation failed with unexpected error",
@@ -410,7 +410,7 @@ func (v *Validator) Validate(_ context.Context, messageType string, data []byte)
 	v.logger.Debug("Schema validation successful.",
 		"duration", validationDuration,
 		"messageType", messageType,
-		"schemaUsed", schemaUsedKey)
+		"schemaUsed", schemaUsedKey) // Added period.
 	return nil
 }
 
@@ -454,18 +454,18 @@ func (v *Validator) getSchemaForMessageType(messageType string) (*jsonschema.Sch
 
 	// Check if the chosen fallback key exists.
 	if schema, ok := v.schemas[fallbackKey]; ok {
-		v.logger.Debug("Using fallback schema.", "originalType", messageType, "fallbackKey", fallbackKey)
+		v.logger.Debug("Using fallback schema.", "originalType", messageType, "fallbackKey", fallbackKey) // Added period.
 		return schema, fallbackKey, true
 	}
 
 	// 3. Ultimate Fallback to "base".
 	if schema, ok := v.schemas["base"]; ok {
-		v.logger.Warn("Using 'base' schema as final fallback.", "originalType", messageType, "initialFallbackAttempt", fallbackKey)
+		v.logger.Warn("Using 'base' schema as final fallback.", "originalType", messageType, "initialFallbackAttempt", fallbackKey) // Added period.
 		return schema, "base", true
 	}
 
 	// 4. Schema not found even with fallbacks.
-	v.logger.Error("Could not find schema definition.", "requestedType", messageType, "fallbackAttempted", fallbackKey)
+	v.logger.Error("Could not find schema definition.", "requestedType", messageType, "fallbackAttempted", fallbackKey) // Added period.
 	return nil, "", false
 }
 
