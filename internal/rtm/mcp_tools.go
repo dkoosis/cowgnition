@@ -1,6 +1,6 @@
-// file: internal/rtm/mcp_tools.go
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
-// This file contains the internal handler functions (handleGetTasks, handleCreateTask, etc.)
+// file: internal/rtm/mcp_tools.go
+// This file contains the internal handler functions (handleGetTasks, handleCreateTask, etc.).
 // called by the service's CallTool method.
 package rtm
 
@@ -12,15 +12,15 @@ import (
 
 	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"
 	// Keep time import for date formatting.
-	// --- FIX: Ensure correct import ---
+	// --- FIX: Ensure correct import ---.
 	// Use mcptypes alias.
 )
 
-// --- Tool Handler Implementations ---
+// --- Tool Handler Implementations ---.
 // These functions are called internally by the rtm.Service.CallTool method.
 
 // handleGetTasks implements the logic for the "getTasks" MCP tool.
-// --- FIX: Use mcptypes prefix ---
+// --- FIX: Use mcptypes prefix ---.
 func (s *Service) handleGetTasks(ctx context.Context, args json.RawMessage) (*mcptypes.CallToolResult, error) {
 	if !s.IsAuthenticated() {
 		return s.notAuthenticatedError(), nil // Calls helper in helpers.go.
@@ -68,7 +68,7 @@ func (s *Service) handleGetTasks(ctx context.Context, args json.RawMessage) (*mc
 }
 
 // handleCreateTask implements the logic for the "createTask" tool.
-// --- FIX: Use mcptypes prefix ---
+// --- FIX: Use mcptypes prefix ---.
 func (s *Service) handleCreateTask(ctx context.Context, args json.RawMessage) (*mcptypes.CallToolResult, error) {
 	if !s.IsAuthenticated() {
 		return s.notAuthenticatedError(), nil // Calls helper in helpers.go.
@@ -115,23 +115,23 @@ func (s *Service) handleCreateTask(ctx context.Context, args json.RawMessage) (*
 }
 
 // handleCompleteTask implements the logic for the "completeTask" tool.
-// --- FIX: Use mcptypes prefix ---
+// --- FIX: Use mcptypes prefix ---.
 func (s *Service) handleCompleteTask(ctx context.Context, args json.RawMessage) (*mcptypes.CallToolResult, error) {
 	if !s.IsAuthenticated() {
 		return s.notAuthenticatedError(), nil // Calls helper in helpers.go.
 	}
 	var params struct {
 		TaskID string `json:"taskId"`
-		ListID string `json:"listId"` // RTM API requires listId for completion
+		ListID string `json:"listId"` // RTM API requires listId for completion.
 	}
 	if err := json.Unmarshal(args, &params); err != nil {
 		return s.invalidToolArgumentsError("completeTask", err), nil // Calls helper in helpers.go.
 	}
-	// --- FIX: Validate required params ---
+	// --- FIX: Validate required params ---.
 	if params.TaskID == "" || params.ListID == "" {
 		return s.simpleToolErrorResult("Both taskId and listId are required to complete a task."), nil // Calls helper in helpers.go.
 	}
-	// --- END FIX ---
+	// --- END FIX ---.
 	s.logger.Info("Executing RTM completeTask tool.", "taskId", params.TaskID, "listId", params.ListID)
 	err := s.client.CompleteTask(ctx, params.ListID, params.TaskID)
 	if err != nil {
@@ -141,7 +141,7 @@ func (s *Service) handleCompleteTask(ctx context.Context, args json.RawMessage) 
 }
 
 // handleGetAuthStatus implements the logic for the "getAuthStatus" tool.
-// --- FIX: Use mcptypes prefix ---
+// --- FIX: Use mcptypes prefix ---.
 func (s *Service) handleGetAuthStatus(ctx context.Context, _ json.RawMessage) (*mcptypes.CallToolResult, error) {
 	s.logger.Info("Executing RTM getAuthStatus tool.")
 	authState, err := s.GetAuthState(ctx)
@@ -162,19 +162,19 @@ func (s *Service) handleGetAuthStatus(ctx context.Context, _ json.RawMessage) (*
 		} else {
 			responseText = "Not authenticated with Remember The Milk.\n\n"
 			responseText += "To authenticate, please visit this URL:\n" + authURL + "\n\n"
-			// --- FIX: Use prefixed tool name ---
+			// --- FIX: Use prefixed tool name ---.
 			responseText += "After authorizing in the browser, use the 'rtm_authenticate' tool with the 'frob' code found in the URL's query parameters.\n"
 			if frob != "" {
 				responseText += fmt.Sprintf("Example: rtm_authenticate(frob: \"%s\")", frob)
 			}
-			// --- END FIX ---
+			// --- END FIX ---.
 		}
 	}
 	return s.successToolResult(responseText), nil // Calls helper in helpers.go.
 }
 
 // handleAuthenticate implements the logic for the "authenticate" tool.
-// --- FIX: Use mcptypes prefix ---
+// --- FIX: Use mcptypes prefix ---.
 func (s *Service) handleAuthenticate(ctx context.Context, args json.RawMessage) (*mcptypes.CallToolResult, error) {
 	var params struct {
 		Frob string `json:"frob,omitempty"`
@@ -201,15 +201,15 @@ func (s *Service) handleAuthenticate(ctx context.Context, args json.RawMessage) 
 	responseText := "To authenticate with Remember The Milk:\n\n"
 	responseText += "1. Visit this URL in your browser: " + authURL + "\n\n"
 	responseText += "2. Click 'Allow Access' or 'OK, I'll Allow It' to grant permission.\n\n"
-	// --- FIX: Use prefixed tool name ---
+	// --- FIX: Use prefixed tool name ---.
 	responseText += "3. After authorizing, complete the authentication by calling this tool again with the 'frob' parameter found in the URL you visited.\n"
 	responseText += fmt.Sprintf("   Example: rtm_authenticate(frob: \"%s\")\n", frob)
-	// --- END FIX ---
+	// --- END FIX ---.
 	return s.successToolResult(responseText), nil // Calls helper in helpers.go.
 }
 
 // handleClearAuth implements the logic for the "clearAuth" tool.
-// --- FIX: Use mcptypes prefix ---
+// --- FIX: Use mcptypes prefix ---.
 func (s *Service) handleClearAuth(_ context.Context, _ json.RawMessage) (*mcptypes.CallToolResult, error) {
 	s.logger.Info("Executing RTM clearAuth tool.")
 	if !s.IsAuthenticated() {

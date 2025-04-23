@@ -1,5 +1,5 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-// file: internal/mcp/mcp_server_metrics.go.
+// File: internal/mcp/mcp_server_metrics.go.
 package mcp
 
 import (
@@ -12,6 +12,8 @@ import (
 	"github.com/cockroachdb/errors"
 	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Import the shared types package.
 	"github.com/dkoosis/cowgnition/internal/metrics"
+	"github.com/dkoosis/cowgnition/internal/rtm" // Import rtm package to check type.
+	// Needed for Service interface.
 )
 
 // Global metrics collector instance.
@@ -35,32 +37,44 @@ func GetMetricsCollector() *metrics.Collector { // FIX: Use renamed type 'Collec
 // ReadServerHealthMetrics retrieves the current server health metrics.
 func (s *Server) ReadServerHealthMetrics(_ context.Context) ([]interface{}, error) { // Removed ctx.
 	collector := GetMetricsCollector()
-	currentMetrics := collector.GetCurrentMetrics() // Use this when metrics collector is fully implemented.
+	// Ensure metrics are up-to-date before adding service-specific info.
+	currentMetrics := collector.GetCurrentMetrics() // Get potentially stale metrics first.
 
 	// Enrich with RTM-specific information if available.
-	if s.rtmService != nil {
-		// FIX: Ignore the unused 'available' variable using '_'.
-		method, path, _ := s.rtmService.GetTokenStorageInfo()
-		collector.UpdateRTMAuthStatus(
-			s.rtmService.IsAuthenticated(),
-			s.rtmService.GetUsername(),
-			method,
-			path,
-		)
-		// Update the metrics struct fields directly (GetAuthStatus does this now)
-		// No need to add separate map entries as they are part of the ServerMetrics struct.
+	rtmSvcRaw, found := s.GetService("rtm") // Use registry lookup.
+	if found {
+		// Attempt to type-assert to the concrete RTM service type.
+		rtmSvc, ok := rtmSvcRaw.(*rtm.Service) // Use concrete type from rtm package.
+		if ok && rtmSvc != nil {
+			method, path, _ := rtmSvc.GetTokenStorageInfo()
+			// Update the collector directly; GetCurrentMetrics called later will reflect this.
+			collector.UpdateRTMAuthStatus(
+				rtmSvc.IsAuthenticated(),
+				rtmSvc.GetUsername(), // Get username from the service.
+				method,
+				path,
+			)
+			s.logger.Debug("Enriched metrics collector with RTM auth status.")
+			// Refresh metrics AFTER updating collector state.
+			currentMetrics = collector.GetCurrentMetrics()
+		} else {
+			s.logger.Warn("Found 'rtm' service in registry, but it has an unexpected type.")
+		}
+	} else {
+		s.logger.Debug("RTM service not found in registry, skipping RTM auth status in metrics.")
 	}
 
-	// Marshal the metrics to JSON and return as resource.
+	// Marshal the potentially updated metrics to JSON and return as resource.
 	jsonData, err := json.MarshalIndent(currentMetrics, "", "  ")
 	if err != nil {
+		s.logger.Error("Failed to marshal server health metrics.", "error", err)
 		return nil, errors.Wrap(err, "failed to marshal server health metrics")
 	}
 
 	return []interface{}{
-		mcptypes.TextResourceContents{ // Use mcptypes.TextResourceContents.
-			ResourceContents: mcptypes.ResourceContents{ // Use mcptypes.ResourceContents.
-				URI:      "cowgnition://server/health", // Correct URI. // Changed from server/status to server/health
+		mcptypes.TextResourceContents{
+			ResourceContents: mcptypes.ResourceContents{
+				URI:      "cowgnition://health", // Use consistent health URI.
 				MimeType: "application/json",
 			},
 			Text: string(jsonData),

@@ -1,9 +1,9 @@
-// file: internal/mcp_types/interfaces.go
 // Package mcptypes defines shared types and interfaces for the MCP (Model Context Protocol)
 // server and middleware components. It acts as a neutral package that can be imported by
 // both mcp and middleware packages, preventing circular dependencies between them.
 // This file focuses solely on INTERFACE definitions needed by multiple MCP-related packages.
 // Core data STRUCTURES are defined in types.go within this package.
+// file: internal/mcp_types/interfaces.go
 package mcptypes
 
 import (
@@ -17,15 +17,15 @@ import (
 type MessageHandler func(ctx context.Context, message []byte) ([]byte, error)
 
 // MiddlewareFunc defines the signature for middleware functions.
-// A middleware function takes the next MessageHandler in the chain and returns
-// a new MessageHandler that typically performs some action before or after
+// A middleware function takes the next MessageHandler in the chain and returns.
+// a new MessageHandler that typically performs some action before or after.
 // calling the next handler. This allows for composing layers of functionality.
 type MiddlewareFunc func(handler MessageHandler) MessageHandler
 
-// Chain defines an interface for building and managing a sequence of middleware functions
+// Chain defines an interface for building and managing a sequence of middleware functions.
 // that culminate in a final MessageHandler.
 type Chain interface {
-	// Use adds a MiddlewareFunc to the chain. Middlewares are typically executed
+	// Use adds a MiddlewareFunc to the chain. Middlewares are typically executed.
 	// in the reverse order they are added.
 	Use(middleware MiddlewareFunc) Chain
 
@@ -40,35 +40,35 @@ type Chain interface {
 type ValidationOptions struct {
 	// Enabled controls whether validation is performed at all. Defaults to true.
 	Enabled bool
-	// StrictMode, if true, causes validation failures to immediately return a
+	// StrictMode, if true, causes validation failures to immediately return a.
 	// JSON-RPC error response. If false, errors are logged, but processing may continue.
 	StrictMode bool
 	// ValidateOutgoing determines whether responses sent by the server should be validated.
 	ValidateOutgoing bool
-	// StrictOutgoing, if true, causes invalid outgoing messages to be replaced
+	// StrictOutgoing, if true, causes invalid outgoing messages to be replaced.
 	// with an internal server error response. If false, errors are logged,
 	// but the potentially invalid message is still sent.
 	StrictOutgoing bool
 	// MeasurePerformance enables logging of validation duration for performance analysis.
 	MeasurePerformance bool
-	// SkipTypes maps message method names (e.g., "ping") to true if incoming
+	// SkipTypes maps message method names (e.g., "ping") to true if incoming.
 	// validation should be skipped for that specific method.
 	SkipTypes map[string]bool
 }
 
-// ValidatorInterface defines the core methods required for validating messages
-// against a loaded schema. This allows different schema validation implementations
+// ValidatorInterface defines the core methods required for validating messages.
+// against a loaded schema. This allows different schema validation implementations.
 // to be used interchangeably by the middleware.
 type ValidatorInterface interface {
-	// Validate checks if the provided data conforms to the schema definition
+	// Validate checks if the provided data conforms to the schema definition.
 	// associated with the given messageType (e.g., MCP method name).
 	Validate(ctx context.Context, messageType string, data []byte) error
 	// HasSchema checks if a compiled schema definition exists for the given name.
 	HasSchema(name string) bool
-	// IsInitialized returns true if the validator has successfully loaded and
+	// IsInitialized returns true if the validator has successfully loaded and.
 	// compiled the necessary schema definitions.
 	IsInitialized() bool
 }
 
-// --- Type definitions like Tool, Resource, CallToolResult etc. have been REMOVED ---
-// --- They now reside solely in internal/mcp_types/types.go ---
+// --- Type definitions like Tool, Resource, CallToolResult etc. have been REMOVED ---.
+// --- They now reside solely in internal/mcp_types/types.go ---.

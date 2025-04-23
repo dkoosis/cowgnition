@@ -1,5 +1,5 @@
-// file: internal/rtm/service.go
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
+// file: internal/rtm/service.go
 // This file defines the rtm.Service struct and makes it implement the services.Service interface,
 // coordinating authentication, API calls, and MCP interactions.
 package rtm
@@ -20,8 +20,10 @@ import (
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/logging"
 	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors"
-	"github.com/dkoosis/cowgnition/internal/mcp_types" // Use mcp_types.
-	"github.com/dkoosis/cowgnition/internal/services"  // Use services interface.
+
+	// Use mcptypes alias defined below.
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"
+	"github.com/dkoosis/cowgnition/internal/services" // Use services interface.
 )
 
 // Service provides Remember The Milk functionality.
@@ -40,7 +42,7 @@ var _ services.Service = (*Service)(nil)
 
 // NewService creates a new RTM service instance.
 func NewService(cfg *config.Config, logger logging.Logger) *Service {
-	// (Constructor logic remains the same as previous version...)
+	// (Constructor logic remains the same as previous version...).
 	if logger == nil {
 		logger = logging.GetNoopLogger()
 	}
@@ -81,7 +83,7 @@ func NewService(cfg *config.Config, logger logging.Logger) *Service {
 
 // Initialize prepares the RTM service for use.
 func (s *Service) Initialize(ctx context.Context) error {
-	// (Initialize logic remains the same as previous version...)
+	// (Initialize logic remains the same as previous version...).
 	if s.initialized {
 		s.logger.Info("RTM Service already initialized.")
 		return nil
@@ -109,60 +111,61 @@ func (s *Service) Initialize(ctx context.Context) error {
 	return nil
 }
 
-// --- services.Service Interface Implementation ---
+// --- services.Service Interface Implementation ---.
 
+// GetName returns the unique identifier for the service ("rtm").
 func (s *Service) GetName() string {
 	return "rtm"
 }
 
 // GetTools returns the list of MCP Tool definitions provided by the RTM service.
 // Tool names are prefixed with "rtm_".
-func (s *Service) GetTools() []mcp_types.Tool {
+func (s *Service) GetTools() []mcptypes.Tool { // <--- CORRECTED: Added mcptypes. prefix.
 	// Tool definitions moved here from mcp_tools.go GetTools.
-	return []mcp_types.Tool{
+	return []mcptypes.Tool{ // <--- CORRECTED: Added mcptypes. prefix.
 		{
 			Name:        "rtm_getTasks",
 			Description: "Retrieves tasks from Remember The Milk based on an optional filter.",
-			InputSchema: s.getTasksInputSchema(), // Calls helper in helpers.go.
-			Annotations: &mcp_types.ToolAnnotations{Title: "Get RTM Tasks", ReadOnlyHint: true},
+			InputSchema: s.getTasksInputSchema(),                                               // Calls helper in helpers.go.
+			Annotations: &mcptypes.ToolAnnotations{Title: "Get RTM Tasks", ReadOnlyHint: true}, // <--- CORRECTED: Added mcptypes. prefix.
 		},
 		{
 			Name:        "rtm_createTask",
 			Description: "Creates a new task in Remember The Milk using smart-add syntax.",
-			InputSchema: s.createTaskInputSchema(), // Calls helper in helpers.go.
-			Annotations: &mcp_types.ToolAnnotations{Title: "Create RTM Task"},
+			InputSchema: s.createTaskInputSchema(),                           // Calls helper in helpers.go.
+			Annotations: &mcptypes.ToolAnnotations{Title: "Create RTM Task"}, // <--- CORRECTED: Added mcptypes. prefix.
 		},
 		{
 			Name:        "rtm_completeTask",
 			Description: "Marks a specific task as complete in Remember The Milk.",
-			InputSchema: s.completeTaskInputSchema(), // Calls helper in helpers.go.
-			Annotations: &mcp_types.ToolAnnotations{Title: "Complete RTM Task", DestructiveHint: true, IdempotentHint: true},
+			InputSchema: s.completeTaskInputSchema(),                                                                        // Calls helper in helpers.go.
+			Annotations: &mcptypes.ToolAnnotations{Title: "Complete RTM Task", DestructiveHint: true, IdempotentHint: true}, // <--- CORRECTED: Added mcptypes. prefix.
 		},
 		{
 			Name:        "rtm_getAuthStatus",
 			Description: "Checks and returns the current authentication status with Remember The Milk.",
-			InputSchema: s.emptyInputSchema(), // Calls helper in helpers.go.
-			Annotations: &mcp_types.ToolAnnotations{Title: "Check RTM Auth Status", ReadOnlyHint: true},
+			InputSchema: s.emptyInputSchema(),                                                          // Calls helper in helpers.go.
+			Annotations: &mcptypes.ToolAnnotations{Title: "Check RTM Auth Status", ReadOnlyHint: true}, // <--- CORRECTED: Added mcptypes. prefix.
 		},
 		{
 			Name:        "rtm_authenticate",
 			Description: "Initiates or completes the authentication flow with Remember The Milk.",
-			InputSchema: s.authenticationInputSchema(), // Calls helper in helpers.go.
-			Annotations: &mcp_types.ToolAnnotations{Title: "Authenticate with RTM"},
+			InputSchema: s.authenticationInputSchema(),                             // Calls helper in helpers.go.
+			Annotations: &mcptypes.ToolAnnotations{Title: "Authenticate with RTM"}, // <--- CORRECTED: Added mcptypes. prefix.
 		},
 		{
 			Name:        "rtm_clearAuth",
 			Description: "Clears the stored Remember The Milk authentication token, effectively logging out.",
-			InputSchema: s.emptyInputSchema(), // Calls helper in helpers.go.
-			Annotations: &mcp_types.ToolAnnotations{Title: "Clear RTM Authentication", DestructiveHint: true, IdempotentHint: true},
+			InputSchema: s.emptyInputSchema(),                                                                                      // Calls helper in helpers.go.
+			Annotations: &mcptypes.ToolAnnotations{Title: "Clear RTM Authentication", DestructiveHint: true, IdempotentHint: true}, // <--- CORRECTED: Added mcptypes. prefix.
 		},
 	}
 }
 
 // GetResources returns the MCP resources provided by this service.
-func (s *Service) GetResources() []mcp_types.Resource {
+func (s *Service) GetResources() []mcptypes.Resource { // <--- CORRECTED: Added mcptypes. prefix.
 	// Resource definitions moved here from mcp_resources.go GetResources.
-	return []mcp_types.Resource{
+	return []mcptypes.Resource{ // <--- CORRECTED: Added mcptypes. prefix.
 		{
 			Name:        "RTM Authentication Status",
 			URI:         "rtm://auth",
@@ -247,7 +250,7 @@ func (s *Service) ReadResource(ctx context.Context, uri string) ([]interface{}, 
 
 // CallTool handles incoming MCP tool execution requests directed at the RTM service.
 // Delegates to specific handler functions defined in mcp_tools.go.
-func (s *Service) CallTool(ctx context.Context, name string, args json.RawMessage) (*mcp_types.CallToolResult, error) {
+func (s *Service) CallTool(ctx context.Context, name string, args json.RawMessage) (*mcptypes.CallToolResult, error) { // <--- CORRECTED: Added mcptypes. prefix.
 	if !s.initialized {
 		s.logger.Error("CallTool attempted before RTM service initialization.", "toolName", name)
 		return s.serviceNotInitializedError(), nil // Calls helper in helpers.go.
@@ -260,7 +263,7 @@ func (s *Service) CallTool(ctx context.Context, name string, args json.RawMessag
 	baseToolName := strings.TrimPrefix(name, "rtm_")
 	s.logger.Info("Routing RTM tool call.", "fullToolName", name, "baseToolName", baseToolName)
 
-	var handlerFunc func(context.Context, json.RawMessage) (*mcp_types.CallToolResult, error)
+	var handlerFunc func(context.Context, json.RawMessage) (*mcptypes.CallToolResult, error) // <--- CORRECTED: Added mcptypes. prefix.
 
 	// Route based on the base tool name, mapping to handlers in mcp_tools.go.
 	switch baseToolName {
@@ -293,18 +296,20 @@ func (s *Service) CallTool(ctx context.Context, name string, args json.RawMessag
 	return result, nil
 }
 
+// Shutdown performs cleanup tasks for the RTM service.
 func (s *Service) Shutdown() error {
 	s.logger.Info("Shutting down RTM service.")
 	return nil
 }
 
+// IsAuthenticated returns true if the service currently has valid authentication.
 func (s *Service) IsAuthenticated() bool {
 	s.authMutex.RLock()
 	defer s.authMutex.RUnlock()
 	return s.authState != nil && s.authState.IsAuthenticated
 }
 
-// --- Internal Helper Functions ---
+// --- Internal Helper Functions ---.
 // (Only keep helpers directly used by the interface methods above if they weren't moved).
 
 // readTasksResourceWithFilter fetches tasks based on filter. (Internal helper for ReadResource).
@@ -328,7 +333,7 @@ func extractFilterFromURI(uriString string) (string, error) {
 	return parsedURL.Query().Get("filter"), nil
 }
 
-// --- Auth State and Lifecycle Helpers ---
+// --- Auth State and Lifecycle Helpers ---.
 // (Keep these as they are internal to the service's operation).
 func (s *Service) checkPrerequisites() error { /* ... as before ... */
 	s.logger.Info("Checking configuration (API Key/Secret)...")
@@ -399,7 +404,7 @@ func (s *Service) storeVerifiedTokenIfNeeded() { /* ... as before ... */
 		if saveErr := s.tokenStorage.SaveToken(currentToken, userID, username); saveErr != nil {
 			s.logger.Warn("-> Failed to save token.", "error", saveErr)
 		} else {
-			s.logger.Info("-> Token successfully saved to storage.")
+			s.logger.Info("-> Successfully saved token to storage.")
 		}
 	} else {
 		s.logger.Info("-> Token already saved correctly.")
@@ -418,6 +423,8 @@ func (s *Service) clearTokenFromClientAndStorage(reason string) { /* ... as befo
 		}
 	}
 }
+
+// GetUsername returns the RTM username if authenticated, otherwise an empty string.
 func (s *Service) GetUsername() string { /* ... as before ... */
 	s.authMutex.RLock()
 	defer s.authMutex.RUnlock()
@@ -426,6 +433,8 @@ func (s *Service) GetUsername() string { /* ... as before ... */
 	}
 	return s.authState.Username
 }
+
+// GetAuthState checks the current token's validity and returns the auth state.
 func (s *Service) GetAuthState(ctx context.Context) (*AuthState, error) { /* ... as before ... */
 	authState, err := s.client.GetAuthState(ctx)
 	if err != nil {
@@ -452,6 +461,8 @@ func (s *Service) getUserInfoFromState() (userID, username string) { /* ... as b
 	}
 	return "", ""
 }
+
+// StartAuth initiates the RTM authentication flow and returns the authorization URL.
 func (s *Service) StartAuth(ctx context.Context) (string, error) { /* ... as before ... */
 	s.logger.Info("Starting RTM authentication flow (getting auth URL)...")
 	authURL, _, err := s.client.StartAuthFlow(ctx)
@@ -462,6 +473,8 @@ func (s *Service) StartAuth(ctx context.Context) (string, error) { /* ... as bef
 	s.logger.Info("-> Auth URL generated.")
 	return authURL, nil
 }
+
+// CompleteAuth exchanges the provided 'frob' for an authentication token.
 func (s *Service) CompleteAuth(ctx context.Context, frob string) error { /* ... as before ... */
 	s.logger.Info("Completing RTM authentication flow (exchanging code for token)...")
 	token, err := s.client.CompleteAuthFlow(ctx, frob)
@@ -495,6 +508,8 @@ func (s *Service) CompleteAuth(ctx context.Context, frob string) error { /* ... 
 	}
 	return nil
 }
+
+// SetAuthToken manually sets an authentication token and verifies it.
 func (s *Service) SetAuthToken(token string) { /* ... as before ... */
 	s.logger.Info("Explicitly setting RTM auth token.")
 	s.client.SetAuthToken(token)
@@ -528,9 +543,13 @@ func (s *Service) SetAuthToken(token string) { /* ... as before ... */
 		s.logger.Warn("-> Manually set token appears invalid after check, not saving.")
 	}
 }
+
+// GetAuthToken returns the current authentication token stored in the client.
 func (s *Service) GetAuthToken() string { /* ... as before ... */
 	return s.client.GetAuthToken()
 }
+
+// ClearAuth clears the stored RTM authentication token.
 func (s *Service) ClearAuth() error { /* ... as before ... */
 	s.logger.Info("Clearing RTM authentication...")
 	s.client.SetAuthToken("")
@@ -550,19 +569,25 @@ func (s *Service) ClearAuth() error { /* ... as before ... */
 	return nil
 }
 
-// --- Other Public Service Methods ---
+// --- Other Public Service Methods ---.
+
+// GetClient returns the underlying RTM API client instance.
 func (s *Service) GetClient() *Client { /* ... as before ... */
 	if s == nil {
 		return nil
 	}
 	return s.client
 }
+
+// GetClientAPIEndpoint returns the API endpoint URL used by the client.
 func (s *Service) GetClientAPIEndpoint() string { /* ... as before ... */
 	if s == nil || s.client == nil {
 		return ""
 	}
 	return s.client.GetAPIEndpoint()
 }
+
+// GetTokenStorageInfo returns details about the token storage mechanism being used.
 func (s *Service) GetTokenStorageInfo() (method string, path string, available bool) { /* ... as before ... */
 	if s.tokenStorage == nil {
 		return "none", "", false
@@ -577,9 +602,9 @@ func (s *Service) GetTokenStorageInfo() (method string, path string, available b
 	}
 }
 
-// NOTE: Tool handler implementations (handleGetTasks, etc.) are expected
+// NOTE: Tool handler implementations (handleGetTasks, etc.) are expected.
 // to be in mcp_tools.go.
-// NOTE: Helper functions (successToolResult, etc.) are expected
+// NOTE: Helper functions (successToolResult, etc.) are expected.
 // to be in helpers.go.
-// NOTE: Input schema helpers (getTasksInputSchema, etc.) are expected
+// NOTE: Input schema helpers (getTasksInputSchema, etc.) are expected.
 // to be in helpers.go.

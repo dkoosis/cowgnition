@@ -1,5 +1,5 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-// file: internal/mcp/mcp_server_processing.go.
+// File: internal/mcp/mcp_server_processing.go.
 package mcp
 
 import (
@@ -46,7 +46,7 @@ func (s *Server) serverProcessing(ctx context.Context, handlerFunc mcptypes.Mess
 }
 
 // processNextMessage handles reading, processing, and responding to a single message.
-// It returns non-nil error only for terminal conditions. Other processing errors are handled internally
+// It returns non-nil error only for terminal conditions. Other processing errors are handled internally.
 // by sending a JSON-RPC error response.
 func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.MessageHandler) error {
 	// 1. Read Message.
@@ -60,7 +60,7 @@ func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.Me
 	method, idStr := s.extractMessageInfo(msgBytes)
 	ctxWithState := context.WithValue(ctx, connectionStateKey, s.connectionState) // Add connection state.
 
-	// 3. Handle Message via Middleware Chain / Final Handler.
+	// 3. Handle Message via Middleware Chain / Final Handler (which should be s.routeMessage).
 	respBytes, handleErr := handlerFunc(ctxWithState, msgBytes)
 
 	// 4. Handle Processing Error (if any).
@@ -77,43 +77,32 @@ func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.Me
 		return nil
 	}
 
-	// 5. Handle State Update for Initialize Success.
-	// Check if the successful response was for an "initialize" method.
-	if method == "initialize" && respBytes != nil {
-		var respObj struct {
-			Error *json.RawMessage `json:"error"` // Only check if 'error' field exists.
-		}
-		// Check if the response indicates success (no 'error' field).
-		if err := json.Unmarshal(respBytes, &respObj); err == nil && respObj.Error == nil {
-			s.logger.Info("Initialize request successful, marking connection as initialized.")
-			// Safely update connection state (assuming connectionState is thread-safe or accessed serially).
-			if s.connectionState != nil {
-				s.connectionState.SetInitialized()
-			} else {
-				s.logger.Warn("Connection state is nil, cannot mark as initialized.")
-			}
-		} else if err != nil {
-			// Log if parsing the response fails, but don't prevent sending it.
-			s.logger.Warn("Failed to parse successful response during initialize state check.", "error", err)
-		}
-		// No state change if the initialize response contained an error.
-	}
+	// 5. State Update for Initialize Success is handled within routeMessage now.
 
 	// 6. Write Successful Response (if one was generated).
+	//    Notifications will have respBytes == nil here.
+	//    Notifications will have respBytes == nil here.
+	//    Notifications will have respBytes == nil here.
 	if respBytes != nil {
 		if writeErr := s.writeResponse(ctx, respBytes, method, idStr); writeErr != nil {
 			// If writing the success response fails, return the error.
 			return errors.Wrap(writeErr, "failed to write successful response")
 		}
+	} else {
+		// Log if it was a request that resulted in no response bytes (shouldn't happen unless it was a notification).
+		// Apply De Morgan's Law here:
+		if idStr != "null" && idStr != "unknown" { // <--- CORRECTED CONDITION.
+			s.logger.Warn("Handler returned nil response bytes for a non-notification request.", "method", method, "id", idStr)
+		}
 	}
-
 	// Successfully processed the message.
 	return nil
 }
 
 // handleMessage is the final handler in the middleware chain.
-// It routes validated messages to the appropriate method handler.
-func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, error) {
+// DEPRECATED: Routing logic has moved to mcp_server.go:routeMessage.
+// This function remains temporarily but should ideally be removed or repurposed.
+func (s *Server) handleMessage(_ context.Context, msgBytes []byte) ([]byte, error) {
 	var request struct {
 		JSONRPC string          `json:"jsonrpc"`
 		ID      json.RawMessage `json:"id,omitempty"`
@@ -121,66 +110,21 @@ func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, er
 		Params  json.RawMessage `json:"params"` // Keep as RawMessage for handler.
 	}
 
-	// We assume the message has already passed basic JSON validation and schema checks
-	// by the time it reaches this handler via the middleware chain.
+	// This log confirms if this obsolete function is ever called, indicating a potential issue.
+	// in the middleware chain setup in ServeSTDIO.
+	s.logger.Error("Obsolete handleMessage function called! Routing should occur in routeMessage.", "method", request.Method)
+
 	if err := json.Unmarshal(msgBytes, &request); err != nil {
 		// This indicates an internal issue, as middleware should have caught parse errors.
-		return nil, errors.Wrap(err, "internal error: failed to parse validated message in handleMessage")
+		return nil, errors.Wrap(err, "internal error: failed to parse validated message in obsolete handleMessage")
 	}
 
-	// Double-check method sequence against connection state (safety net).
-	// Middleware should ideally handle this, but check again here.
-	if s.connectionState != nil {
-		if err := s.connectionState.ValidateMethodSequence(request.Method); err != nil {
-			// Map this specific error type for JSON-RPC response creation.
-			return nil, errors.Wrapf(err, "method sequence validation failed")
-		}
-	} else {
-		s.logger.Error("Connection state is nil in handleMessage, cannot validate sequence.")
-		// Potentially return an internal error here if state is critical.
-		// For now, allow proceeding but log loudly.
-	}
+	// Do NOT attempt to look up methods using s.methods.
+	// handler, ok := s.methods[request.Method] // REMOVED.
 
-	// Find the registered handler for the method.
-	handler, ok := s.methods[request.Method]
-	if !ok {
-		// Return a specific error that mapErrorToJSONRPCComponents can recognize.
-		return nil, errors.Newf("Method not found: %s", request.Method)
-	}
-
-	// Execute the specific method handler.
-	resultBytes, handlerErr := handler(ctx, request.Params)
-	if handlerErr != nil {
-		// Wrap the error from the handler for context.
-		return nil, errors.Wrapf(handlerErr, "error executing method '%s'", request.Method)
-	}
-
-	// If it was a notification (no ID), we don't send a response.
-	if request.ID == nil || string(request.ID) == "null" {
-		s.logger.Debug("Processed notification, no response needed.", "method", request.Method)
-		return nil, nil // Success, but no response bytes.
-	}
-
-	// Construct the success response object for requests with IDs.
-	responseObj := struct {
-		JSONRPC string          `json:"jsonrpc"`
-		ID      json.RawMessage `json:"id"`
-		Result  json.RawMessage `json:"result"` // Result is expected to be already marshalled JSON.
-	}{
-		JSONRPC: "2.0",
-		ID:      request.ID,
-		Result:  resultBytes, // Assign the raw JSON bytes from the handler.
-	}
-
-	// Marshal the final success response.
-	respBytes, marshalErr := json.Marshal(responseObj)
-	if marshalErr != nil {
-		// This is an internal server error.
-		return nil, errors.Wrap(marshalErr, "internal error: failed to marshal success response")
-	}
-
-	return respBytes, nil // Return marshalled success response bytes.
-}
+	// Return an internal error indicating this path is wrong.
+	return nil, errors.Newf("Internal Error: Obsolete handleMessage function executed for method '%s'. Routing failed or middleware chain incorrect.", request.Method)
+} // end of handleMessage.
 
 // handleTransportReadError decides if a read error is terminal.
 func (s *Server) handleTransportReadError(readErr error) error {

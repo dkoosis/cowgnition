@@ -1,7 +1,7 @@
-// file: internal/rtm/mcp_resources.go
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
+// file: internal/rtm/mcp_resources.go
 // This file previously defined the GetResources list and ReadResource handler for MCP.
-// This logic has now been moved into internal/rtm/service.go as part of the
+// This logic has now been moved into internal/rtm/service.go as part of the.
 // services.Service interface implementation.
 package rtm
 

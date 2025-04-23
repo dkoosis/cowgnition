@@ -1,28 +1,28 @@
-// file: internal/mcp_types/types.go
 // Package mcptypes defines shared types and interfaces for the MCP
 // server and middleware components. This file contains core data structures
 // used across different packages to prevent import cycles.
+// file: internal/mcp_types/types.go
 package mcptypes
 
 import (
 	"encoding/json"
 )
 
-// --- Core MCP Data Structures ---
+// --- Core MCP Data Structures ---.
 
 // Implementation describes the name and version of an MCP client or server.
-// Matches definition in schema.json: Implementation
+// Matches definition in schema.json: Implementation.
 type Implementation struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 }
 
 // ClientCapabilities describes features supported by the client.
-// Matches definition in schema.json: ClientCapabilities
+// Matches definition in schema.json: ClientCapabilities.
 type ClientCapabilities struct {
 	Roots    *RootsCapability    `json:"roots,omitempty"`
 	Sampling *SamplingCapability `json:"sampling,omitempty"`
-	// Add experimental or other capabilities if needed
+	// Add experimental or other capabilities if needed.
 }
 
 // RootsCapability indicates client support for filesystem roots.
@@ -32,17 +32,17 @@ type RootsCapability struct {
 
 // SamplingCapability indicates client support for LLM sampling requests.
 type SamplingCapability struct {
-	// Add specific sampling capability fields if defined by the schema/protocol
+	// Add specific sampling capability fields if defined by the schema/protocol.
 }
 
 // ServerCapabilities describes features supported by the server.
-// Matches definition in schema.json: ServerCapabilities
+// Matches definition in schema.json: ServerCapabilities.
 type ServerCapabilities struct {
 	Tools     *ToolsCapability     `json:"tools,omitempty"`
 	Resources *ResourcesCapability `json:"resources,omitempty"`
 	Prompts   *PromptsCapability   `json:"prompts,omitempty"`
 	Logging   *LoggingCapability   `json:"logging,omitempty"`
-	// Add experimental or other capabilities if needed
+	// Add experimental or other capabilities if needed.
 }
 
 // ToolsCapability indicates server support for tools.
@@ -63,11 +63,11 @@ type PromptsCapability struct {
 
 // LoggingCapability indicates server support for logging.
 type LoggingCapability struct {
-	// Add specific logging capability fields if defined
+	// Add specific logging capability fields if defined.
 }
 
 // InitializeRequest represents the parameters for the 'initialize' request.
-// Matches definition in schema.json: InitializeRequest
+// Matches definition in schema.json: InitializeRequest.
 type InitializeRequest struct {
 	ProtocolVersion string             `json:"protocolVersion"`
 	ClientInfo      Implementation     `json:"clientInfo"`
@@ -75,10 +75,10 @@ type InitializeRequest struct {
 }
 
 // InitializeResult represents the successful result of an 'initialize' request.
-// Matches definition in schema.json: InitializeResult
+// Matches definition in schema.json: InitializeResult.
 type InitializeResult struct {
 	ProtocolVersion string             `json:"protocolVersion"`
-	ServerInfo      *Implementation    `json:"serverInfo"` // Pointer based on handler_core usage
+	ServerInfo      *Implementation    `json:"serverInfo"` // Pointer based on handler_core usage.
 	Capabilities    ServerCapabilities `json:"capabilities"`
 	Instructions    string             `json:"instructions,omitempty"`
 }
@@ -103,17 +103,17 @@ type ToolAnnotations struct {
 }
 
 // ListToolsResult represents the successful result of a 'tools/list' request.
-// Matches definition in schema.json: ListToolsResult
+// Matches definition in schema.json: ListToolsResult.
 type ListToolsResult struct {
 	Tools      []Tool `json:"tools"`
 	NextCursor string `json:"nextCursor,omitempty"`
 }
 
 // CallToolRequest represents the parameters for the 'tools/call' request.
-// Matches definition in schema.json: CallToolRequest
+// Matches definition in schema.json: CallToolRequest.
 type CallToolRequest struct {
 	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"` // Keep as RawMessage, specific args parsed by tool handler
+	Arguments json.RawMessage `json:"arguments"` // Keep as RawMessage, specific args parsed by tool handler.
 }
 
 // CallToolResult represents the result of a tool call.
@@ -134,20 +134,20 @@ type Resource struct {
 }
 
 // ListResourcesResult represents the successful result of a 'resources/list' request.
-// Matches definition in schema.json: ListResourcesResult
+// Matches definition in schema.json: ListResourcesResult.
 type ListResourcesResult struct {
 	Resources  []Resource `json:"resources"`
 	NextCursor string     `json:"nextCursor,omitempty"`
 }
 
 // ReadResourceRequest represents the parameters for the 'resources/read' request.
-// Matches definition in schema.json: ReadResourceRequest
+// Matches definition in schema.json: ReadResourceRequest.
 type ReadResourceRequest struct {
 	URI string `json:"uri"`
 }
 
 // ReadResourceResult represents the successful result of a 'resources/read' request.
-// Matches definition in schema.json: ReadResourceResult
+// Matches definition in schema.json: ReadResourceResult.
 type ReadResourceResult struct {
 	Contents []interface{} `json:"contents"` // Can contain TextResourceContents, BlobResourceContents, etc.
 }
@@ -174,7 +174,7 @@ type BlobResourceContents struct {
 }
 
 // PromptArgument describes an argument for a prompt template.
-// Matches definition in schema.json: PromptArgument
+// Matches definition in schema.json: PromptArgument.
 type PromptArgument struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
@@ -182,7 +182,7 @@ type PromptArgument struct {
 }
 
 // Prompt represents a prompt template offered by the server.
-// Matches definition in schema.json: Prompt
+// Matches definition in schema.json: Prompt.
 type Prompt struct {
 	Name        string           `json:"name"`
 	Description string           `json:"description,omitempty"`
@@ -190,13 +190,13 @@ type Prompt struct {
 }
 
 // ListPromptsResult represents the successful result of a 'prompts/list' request.
-// Matches definition in schema.json: ListPromptsResult
+// Matches definition in schema.json: ListPromptsResult.
 type ListPromptsResult struct {
 	Prompts    []Prompt `json:"prompts"`
 	NextCursor string   `json:"nextCursor,omitempty"`
 }
 
-// --- Content Types ---
+// --- Content Types ---.
 
 // Content represents a content item in a message.
 // This is an interface fulfilled by specific content types like TextContent.
@@ -217,8 +217,8 @@ func (t TextContent) GetType() string {
 	return "text"
 }
 
-// NOTE: Other content types like ImageContent, EmbeddedResource would also go here
-// if they were directly used by CallToolResult or other shared types. Add them
+// NOTE: Other content types like ImageContent, EmbeddedResource would also go here.
+// if they were directly used by CallToolResult or other shared types. Add them.
 // as needed based on schema requirements and usage. Example:
 
 /*

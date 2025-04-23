@@ -1,62 +1,54 @@
 // Package errors defines domain-specific error types and codes for the MCP (Model Context Protocol) layer.
-// These errors provide more context than standard Go errors and help in mapping internal issues
-// to appropriate JSON-RPC error responses or handling them specifically within the application.
 // file: internal/mcp/mcp_errors/errors.go.
+// These errors provide more context than standard Go errors and help in mapping internal issues.
+// to appropriate JSON-RPC error responses or handling them specifically within the application.
 package errors
 
 import (
 	"fmt"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dkoosis/cowgnition/internal/transport" // Import transport for JSON-RPC codes.
 )
+
+// ErrorCode defines domain-specific error codes for the MCP layer.
+type ErrorCode int
 
 // Domain-specific error codes for the MCP layer.
 const (
 	// --- Auth Errors (1000-1999) ---.
-
-	// ErrAuthFailure indicates a general authentication or authorization failure.
-	ErrAuthFailure = iota + 1000
-	// ErrAuthExpired indicates the provided credentials or token have expired.
+	ErrAuthFailure ErrorCode = 1000 + iota
 	ErrAuthExpired
-	// ErrAuthInvalid indicates the provided credentials or token are invalid or malformed.
 	ErrAuthInvalid
-	// ErrAuthMissing indicates required credentials or token were not provided.
 	ErrAuthMissing
 
 	// --- RTM API Errors (2000-2999) ---.
-
-	// ErrRTMAPIFailure indicates a general failure during interaction with the RTM API.
-	// This could be due to network issues, unexpected responses, or specific RTM error codes not handled individually.
-	ErrRTMAPIFailure = iota + 1000 // Start RTM codes from 2000.
-	// ErrRTMInvalidResponse indicates the RTM API returned a response that could not be parsed or was unexpected.
+	ErrRTMAPIFailure ErrorCode = 2000 + iota
 	ErrRTMInvalidResponse
-	// ErrRTMServiceUnavailable indicates the RTM API service is temporarily unavailable.
 	ErrRTMServiceUnavailable
-	// ErrRTMPermissionDenied indicates the authenticated RTM user does not have permission for the requested action.
 	ErrRTMPermissionDenied
 
 	// --- Resource Errors (3000-3999) ---.
-
-	// ErrResourceNotFound indicates a requested MCP resource (identified by URI) could not be found.
-	ErrResourceNotFound = iota + 1000 // Start Resource codes from 3000.
-	// ErrResourceForbidden indicates access to the requested MCP resource is denied.
+	ErrResourceNotFound ErrorCode = 3000 + iota
 	ErrResourceForbidden
-	// ErrResourceInvalid indicates the requested MCP resource URI or associated data is invalid.
 	ErrResourceInvalid
 
 	// --- Protocol Errors (4000-4999) ---.
-
-	// ErrProtocolInvalid indicates a violation of the MCP protocol rules (e.g., invalid sequence, unexpected message).
-	ErrProtocolInvalid = iota + 1000 // Start Protocol codes from 4000.
-	// ErrProtocolUnsupported indicates a requested feature or capability is not supported by this server implementation.
+	ErrProtocolInvalid ErrorCode = 4000 + iota
 	ErrProtocolUnsupported
+	ErrMethodNotFound  // NEW: For JSON-RPC -32601 equivalent.
+	ErrInvalidParams   // NEW: For JSON-RPC -32602 equivalent.
+	ErrServiceNotFound // NEW: Specific internal error when routing fails.
+	ErrInternalError   // NEW: Generic internal error.
+	ErrParseError      // NEW: For JSON-RPC -32700.
+	ErrInvalidRequest  // NEW: For JSON-RPC -32600.
 )
 
 // BaseError is the common base for custom MCP error types.
 // It embeds the standard error interface and adds structured context like codes and key-value details.
 type BaseError struct {
 	// Code is a numeric error code for categorization (using constants defined above).
-	Code int
+	Code ErrorCode
 	// Message is a human-readable error message intended primarily for logging and debugging.
 	Message string
 	// Cause is the underlying error that led to this error, allowing error chain traversal.
@@ -90,14 +82,63 @@ func (e *BaseError) WithContext(key string, value interface{}) *BaseError {
 	return e
 }
 
+// --- Specific Error Type Structs ---.
+
 // AuthError represents an authentication or authorization error within the MCP layer or related services.
 type AuthError struct {
 	BaseError // Embeds Code, Message, Cause, Context.
 }
 
+// RTMError represents an error specifically related to interactions with the Remember The Milk API.
+type RTMError struct {
+	BaseError // Embeds Code, Message, Cause, Context.
+}
+
+// ResourceError represents an error related to accessing or manipulating an MCP resource (identified by URI).
+type ResourceError struct {
+	BaseError // Embeds Code, Message, Cause, Context.
+}
+
+// ProtocolError represents a violation of the MCP protocol rules or structure.
+type ProtocolError struct {
+	BaseError // Embeds Code, Message, Cause, Context.
+}
+
+// InvalidParamsError represents an error due to invalid method parameters.
+type InvalidParamsError struct {
+	BaseError // Embeds Code, Message, Cause, Context.
+}
+
+// MethodNotFoundError represents an error when a requested method is not found.
+type MethodNotFoundError struct {
+	BaseError // Embeds Code, Message, Cause, Context.
+}
+
+// ServiceNotFoundError represents an error when a requested service cannot be found in the registry.
+type ServiceNotFoundError struct {
+	BaseError
+}
+
+// InternalError represents a generic internal server error.
+type InternalError struct {
+	BaseError
+}
+
+// ParseError represents a JSON parsing error.
+type ParseError struct {
+	BaseError
+}
+
+// InvalidRequestError represents an invalid JSON-RPC request structure error.
+type InvalidRequestError struct {
+	BaseError
+}
+
+// --- Constructor Functions ---.
+
 // NewAuthError creates a new authentication error, ensuring the cause is wrapped for stack trace.
 // Use constants like ErrAuthFailure, ErrAuthExpired, ErrAuthInvalid, ErrAuthMissing for the code.
-func NewAuthError(code int, message string, cause error, context map[string]interface{}) error {
+func NewAuthError(code ErrorCode, message string, cause error, context map[string]interface{}) error {
 	// Default to general auth failure if code is invalid or not provided.
 	if code < 1000 || code > 1999 {
 		code = ErrAuthFailure
@@ -113,25 +154,9 @@ func NewAuthError(code int, message string, cause error, context map[string]inte
 	return err
 }
 
-// IsAuthError checks if an error is specifically an AuthError with a matching message.
-// Deprecated: Prefer using errors.As and checking the Code field for more robust type checking.
-func IsAuthError(err error, message string) bool {
-	var authErr *AuthError
-	if errors.As(err, &authErr) {
-		// Note: Matching solely on message string is brittle. Checking Code is better.
-		return authErr.Message == message
-	}
-	return false
-}
-
-// RTMError represents an error specifically related to interactions with the Remember The Milk API.
-type RTMError struct {
-	BaseError // Embeds Code, Message, Cause, Context.
-}
-
 // NewRTMError creates a new RTM API error, ensuring the cause is wrapped for stack trace.
 // Use constants like ErrRTMAPIFailure, ErrRTMInvalidResponse etc. for the code.
-func NewRTMError(code int, message string, cause error, context map[string]interface{}) error {
+func NewRTMError(code ErrorCode, message string, cause error, context map[string]interface{}) error {
 	// Default to general RTM API failure if code is invalid or not provided.
 	if code < 2000 || code > 2999 {
 		code = ErrRTMAPIFailure
@@ -147,14 +172,9 @@ func NewRTMError(code int, message string, cause error, context map[string]inter
 	return err
 }
 
-// ResourceError represents an error related to accessing or manipulating an MCP resource (identified by URI).
-type ResourceError struct {
-	BaseError // Embeds Code, Message, Cause, Context.
-}
-
 // NewResourceError creates a new resource error, ensuring the cause is wrapped for stack trace.
 // Use constants like ErrResourceNotFound, ErrResourceForbidden, ErrResourceInvalid for the code.
-func NewResourceError(code int, message string, cause error, context map[string]interface{}) error {
+func NewResourceError(code ErrorCode, message string, cause error, context map[string]interface{}) error {
 	// Default to resource not found if code is invalid or not provided.
 	if code < 3000 || code > 3999 {
 		code = ErrResourceNotFound
@@ -170,4 +190,206 @@ func NewResourceError(code int, message string, cause error, context map[string]
 	return err
 }
 
-// Note: ProtocolError type could be added similarly if needed, using codes ErrProtocolInvalid, ErrProtocolUnsupported.
+// NewProtocolError creates a new protocol error.
+func NewProtocolError(code ErrorCode, message string, cause error, context map[string]interface{}) error {
+	// Default code if needed.
+	if code < 4000 || code > 4999 {
+		code = ErrProtocolInvalid
+	}
+	err := &ProtocolError{
+		BaseError: BaseError{
+			Code:    code,
+			Message: message,
+			Cause:   errors.WithStack(cause),
+			Context: context,
+		},
+	}
+	return err
+}
+
+// NewInvalidParamsError creates an error for invalid parameters (maps to -32602).
+func NewInvalidParamsError(message string, cause error, context map[string]interface{}) error {
+	err := &InvalidParamsError{
+		BaseError: BaseError{
+			Code:    ErrInvalidParams,
+			Message: message,
+			Cause:   errors.WithStack(cause),
+			Context: context,
+		},
+	}
+	return err
+}
+
+// NewMethodNotFoundError creates an error for method not found (maps to -32601).
+func NewMethodNotFoundError(message string, cause error, context map[string]interface{}) error {
+	err := &MethodNotFoundError{
+		BaseError: BaseError{
+			Code:    ErrMethodNotFound,
+			Message: message,
+			Cause:   errors.WithStack(cause),
+			Context: context,
+		},
+	}
+	return err
+}
+
+// NewServiceNotFoundError creates an error when a service lookup fails.
+func NewServiceNotFoundError(message string, cause error, context map[string]interface{}) error {
+	err := &ServiceNotFoundError{
+		BaseError: BaseError{
+			Code:    ErrServiceNotFound,
+			Message: message,
+			Cause:   errors.WithStack(cause),
+			Context: context,
+		},
+	}
+	return err
+}
+
+// NewInternalError creates a generic internal server error (maps to -32603).
+func NewInternalError(message string, cause error, context map[string]interface{}) error {
+	err := &InternalError{
+		BaseError: BaseError{
+			Code:    ErrInternalError,
+			Message: message,
+			Cause:   errors.WithStack(cause),
+			Context: context,
+		},
+	}
+	return err
+}
+
+// NewParseError creates a JSON parse error (maps to -32700).
+func NewParseError(message string, cause error, context map[string]interface{}) error {
+	err := &ParseError{
+		BaseError: BaseError{
+			Code:    ErrParseError,
+			Message: message,
+			Cause:   errors.WithStack(cause),
+			Context: context,
+		},
+	}
+	return err
+}
+
+// NewInvalidRequestError creates an invalid request structure error (maps to -32600).
+func NewInvalidRequestError(message string, cause error, context map[string]interface{}) error {
+	err := &InvalidRequestError{
+		BaseError: BaseError{
+			Code:    ErrInvalidRequest,
+			Message: message,
+			Cause:   errors.WithStack(cause),
+			Context: context,
+		},
+	}
+	return err
+}
+
+// --- JSON-RPC Error Mapping ---.
+
+// MapMCPErrorToJSONRPC translates an MCP error (or any error) into JSON-RPC components.
+func MapMCPErrorToJSONRPC(err error) (code int, message string, data map[string]interface{}) {
+	// Initialize data map.
+	data = make(map[string]interface{})
+
+	var baseErr *BaseError
+	if !errors.As(err, &baseErr) {
+		// Not one of our specific MCP errors, treat as generic internal.
+		code = transport.JSONRPCInternalError // -32603.
+		message = "An internal server error occurred."
+		data["goErrorType"] = fmt.Sprintf("%T", err)
+		data["detail"] = err.Error() // Include original error message in data.
+		return code, message, data
+	}
+
+	// Map based on the MCP error code.
+	switch baseErr.Code {
+	// JSON-RPC Standard Codes.
+	case ErrParseError:
+		code = transport.JSONRPCParseError // -32700.
+		message = "Parse error."
+		data["detail"] = baseErr.Message
+	case ErrInvalidRequest:
+		code = transport.JSONRPCInvalidRequest // -32600.
+		message = "Invalid Request."
+		data["detail"] = baseErr.Message
+	case ErrMethodNotFound:
+		code = transport.JSONRPCMethodNotFound // -32601.
+		message = "Method not found."
+		data["detail"] = baseErr.Message
+	case ErrInvalidParams:
+		code = transport.JSONRPCInvalidParams // -32602.
+		message = "Invalid params."
+		data["detail"] = baseErr.Message
+	case ErrInternalError:
+		code = transport.JSONRPCInternalError // -32603.
+		message = "Internal error."
+		data["detail"] = baseErr.Message
+
+	// Implementation-Defined Server Errors (-32000 to -32099).
+	// Assign specific codes within this range for application errors.
+	case ErrServiceNotFound:
+		code = -32000
+		message = "Service unavailable." // User-friendly message.
+		data["detail"] = baseErr.Message // Internal detail.
+	case ErrResourceNotFound:
+		code = -32001
+		message = "Resource not found."
+		data["detail"] = baseErr.Message
+	case ErrResourceInvalid:
+		code = -32002
+		message = "Invalid resource identifier."
+		data["detail"] = baseErr.Message
+	case ErrAuthFailure, ErrAuthInvalid, ErrAuthExpired, ErrAuthMissing:
+		code = -32010
+		message = "Authentication required or failed."
+		data["detail"] = baseErr.Message
+		// Avoid leaking specific auth failure reasons unless intended.
+	case ErrRTMAPIFailure, ErrRTMInvalidResponse, ErrRTMServiceUnavailable:
+		code = -32020
+		message = "Could not communicate with external service (RTM)."
+		data["detail"] = baseErr.Message
+	case ErrRTMPermissionDenied:
+		code = -32021
+		message = "Permission denied by external service (RTM)."
+		data["detail"] = baseErr.Message
+	case ErrProtocolInvalid:
+		code = -32030
+		message = "Protocol error." // Generic protocol error for client.
+		data["detail"] = baseErr.Message
+	case ErrProtocolUnsupported:
+		code = -32031
+		message = "Unsupported operation."
+		data["detail"] = baseErr.Message
+
+	// Fallback for any other MCP error codes.
+	default:
+		code = transport.JSONRPCInternalError // -32603.
+		message = "An unspecified internal error occurred."
+		data["detail"] = baseErr.Message
+		data["internalCode"] = baseErr.Code
+	}
+
+	// Merge context from the BaseError, avoiding sensitive info.
+	if baseErr.Context != nil {
+		for k, v := range baseErr.Context {
+			// Only include context fields deemed safe for client exposure.
+			// Example: Allow 'uri', 'toolName', 'method' but not internal details.
+			switch k {
+			case "uri", "toolName", "method", "service": // Add more safe keys as needed.
+				if _, exists := data[k]; !exists { // Avoid overwriting standard fields like 'method'.
+					data[k] = v
+				}
+			default:
+				// Potentially log unsafe context keys server-side but don't add to client response data.
+			}
+		}
+	}
+
+	// Remove data field if empty after filtering.
+	if len(data) == 0 {
+		data = nil
+	}
+
+	return code, message, data
+}
