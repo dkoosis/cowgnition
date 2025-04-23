@@ -10,47 +10,68 @@ import (
 	"github.com/cockroachdb/errors" // Using cockroachdb/errors for wrapping.
 )
 
-// Use constant for the supported protocol version.
-const supportedMCPVersion = "2025-03-26" // Match the bundled schema version
-
 // handleInitialize handles the initialize request.
 // Official definition: This request is sent from the client to the server when it first connects,
 // asking it to begin initialization. The server responds with information about its capabilities,
 // supported protocol version, and other metadata.
+//
+// NOTE (Interim Fix): This handler currently FORCES the protocol version to "2024-11-05"
+// in the response. This is an interim solution to ensure compatibility with clients
+// requesting that specific version, because the official schema.json file currently lacks
+// a standard version identifier (like $id) for automatic detection.
+// See: https://github.com/modelcontextprotocol/modelcontextprotocol/issues/394
+// The automatic detection logic remains in internal/schema/validator.go but is bypassed here
+// for setting the response version. Ideally, the schema file should be updated, and this
+// handler should revert to using h.validator.GetSchemaVersion().
 func (h *Handler) handleInitialize(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	var req InitializeRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, errors.Wrap(err, "invalid params for initialize")
 	}
-	h.logger.Info("Handling initialize request.", "clientVersion", req.ProtocolVersion, "clientName", req.ClientInfo.Name)
 
-	// Enable capabilities based on what we support.
+	// --- START INTERIM FIX ---
+	// Force the protocol version to the one expected by the client (e.g., Claude Desktop),
+	// regardless of what the schema file might contain or what the validator detects.
+	const forcedProtocolVersion = "2024-11-05"
+
+	// Log client request and the version this server will respond with.
+	h.logger.Info("Handling initialize request.",
+		"clientRequestedVersion", req.ProtocolVersion,
+		"serverForcingVersion", forcedProtocolVersion, // Log the version we are forcing
+		"clientName", req.ClientInfo.Name,
+	)
+
+	// Log a warning if the client requested something different than what we are forcing.
+	// This helps debug connections with other clients in the future.
+	if req.ProtocolVersion != forcedProtocolVersion {
+		h.logger.Warn("MCP Protocol Version Mismatch Detected!",
+			"clientRequested", req.ProtocolVersion,
+			"serverRespondingWith", forcedProtocolVersion, // Log the forced version
+			"action", "Proceeding with forced server version (client MAY disconnect if it doesn't match its request, per MCP spec).")
+	}
+	// --- END INTERIM FIX ---
+
+	// Enable capabilities based on what this server supports.
+	// Ensure these are appropriate for the forced 2024-11-05 spec version if needed.
 	caps := ServerCapabilities{
-		// Tools capability.
-		Tools: &ToolsCapability{ListChanged: false},
-
-		// Resources capability.
+		Tools:     &ToolsCapability{ListChanged: false},
 		Resources: &ResourcesCapability{ListChanged: false, Subscribe: false},
-
-		// Prompts capability.
-		Prompts: &PromptsCapability{ListChanged: false},
-
-		// Logging capability - enables the client to receive structured logs.
-		Logging: map[string]interface{}{},
-
-		// Experimental capabilities can be added here.
-		// Experimental: map[string]json.RawMessage{},
+		Prompts:   &PromptsCapability{ListChanged: false},
+		Logging:   map[string]interface{}{},
 	}
 
 	appVersion := "0.1.0-dev" // TODO: Get from build flags.
 	serverInfo := Implementation{Name: h.config.Server.Name, Version: appVersion}
-	// In the InitializeResult creation:
+
+	// --- Use the forced version in the response ---
 	res := InitializeResult{
 		ServerInfo:      serverInfo,
-		ProtocolVersion: supportedMCPVersion, // Use the constant
+		ProtocolVersion: forcedProtocolVersion, // Use the forced constant here
 		Capabilities:    caps,
 		Instructions:    "You can use CowGnition to manage your Remember The Milk tasks. Use RTM tools to create, view, and complete tasks.",
 	}
+	// -------------------------------------------
+
 	resultBytes, err := json.Marshal(res)
 	if err != nil {
 		h.logger.Error("Failed to marshal InitializeResult.", "error", err)

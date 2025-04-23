@@ -112,21 +112,31 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 	s.transport = transport.NewNDJSONTransport(os.Stdin, os.Stdout, os.Stdin, s.logger)
 
 	// Setup validation middleware using internal/middleware package.
-	// Use DefaultValidationOptions from middleware which returns mcptypes.ValidationOptions.
 	validationOpts := middleware.DefaultValidationOptions()
-	validationOpts.StrictMode = true
-	validationOpts.ValidateOutgoing = true
+	validationOpts.StrictMode = true       // Incoming messages must be valid.
+	validationOpts.ValidateOutgoing = true // Enable validation for outgoing messages.
 
+	// --- Interim Fix Consideration ---
+	// We keep StrictOutgoing=false in normal operation because the server's outgoing
+	// 'initialize' response currently triggers a known validation warning (due to
+	// schema/struct mismatch during validation step, even if final JSON is ok).
+	// Setting this to false logs the warning but allows the connection to proceed.
+	// Ideally, the underlying validation logic or schema would be fixed.
+	// Ref: https://github.com/modelcontextprotocol/modelcontextprotocol/issues/394
+	// ---------------------------------
 	if s.options.Debug {
-		validationOpts.StrictOutgoing = true
+		// In debug mode, we might want stricter outgoing validation to surface issues,
+		// even if it breaks the connection due to the known 'initialize' warning.
+		validationOpts.StrictOutgoing = true // Make outgoing errors fatal in debug builds.
 		validationOpts.MeasurePerformance = true
-		s.logger.Info("Debug mode enabled: using strict validation for incoming and outgoing messages.")
+		s.logger.Info("Debug mode enabled: outgoing validation is STRICT.")
 	} else {
-		validationOpts.StrictOutgoing = false
+		validationOpts.StrictOutgoing = false // Make outgoing errors non-fatal in normal builds.
+		s.logger.Info("Non-debug mode: outgoing validation is NON-STRICT (logs warnings).")
 	}
+	// --- End Interim Fix Consideration ---
 
 	// Pass the validator (which implements schema.ValidatorInterface).
-	// Ensure the validator implements the mcptypes.ValidatorInterface as well (assumed true).
 	validationMiddleware := middleware.NewValidationMiddleware(
 		s.validator,
 		validationOpts,
@@ -134,11 +144,10 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 	)
 
 	// Build middleware chain using mcptypes interfaces.
-	// NewChain takes mcptypes.MessageHandler, s.handleMessage matches this signature.
-	chain := middleware.NewChain(s.handleMessage)
-	chain.Use(validationMiddleware)
+	chain := middleware.NewChain(s.handleMessage) // s.handleMessage is the final destination.
+	chain.Use(validationMiddleware)               // Apply validation middleware first.
 
-	// Handler() returns mcptypes.MessageHandler.
+	// Handler() returns the composed mcptypes.MessageHandler.
 	serveHandler := chain.Handler()
 
 	// Pass the composed handler to the serve loop.
@@ -157,12 +166,14 @@ func (s *Server) Shutdown(_ context.Context) error {
 	if s.transport != nil {
 		if err := s.transport.Close(); err != nil {
 			s.logger.Error("Failed to close transport during shutdown.", "error", fmt.Sprintf("%+v", err))
+			// Don't return error here, allow shutdown to continue if possible
 		} else {
 			s.logger.Debug("Transport closed successfully.")
 		}
 	} else {
 		s.logger.Warn("Shutdown called but transport was nil.")
 	}
+	// TODO: Add shutdown hooks for services (like RTM) if needed.
 	s.logger.Info("Server shutdown sequence completed.")
 	return nil
 }
@@ -171,15 +182,11 @@ func (s *Server) Shutdown(_ context.Context) error {
 // Now accepts mcptypes.MessageHandler.
 func (s *Server) serve(ctx context.Context, handlerFunc mcptypes.MessageHandler) error {
 	// This function's implementation is in mcp_server_processing.go.
-	// Ensure its signature matches this call.
-	// The previous implementation in mcp_server_processing.go matches this.
-	return s.serverProcessing(ctx, handlerFunc) // Internal call to avoid redefinition.
+	return s.serverProcessing(ctx, handlerFunc)
 }
 
-// serverProcessing is the actual implementation, renamed to avoid conflict.
-// Located in mcp_server_processing.go.
+// serverProcessing is the actual implementation, located in mcp_server_processing.go.
 // func (s *Server) serverProcessing(ctx context.Context, handlerFunc mcptypes.MessageHandler) error { ... }
 
-// handleMessage is the final handler in the middleware chain.
-// Its implementation is in mcp_server_processing.go.
+// handleMessage is the final handler in the middleware chain, located in mcp_server_processing.go.
 // func (s *Server) handleMessage(ctx context.Context, msgBytes []byte) ([]byte, error) { ... }
