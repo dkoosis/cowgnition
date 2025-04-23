@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Added import
 )
 
 // ConnectionState tracks the protocol state of an MCP connection.
@@ -19,6 +21,11 @@ type ConnectionState struct {
 
 	// currentState represents the current named protocol state.
 	currentState string
+
+	// --- FIX: Add fields to store client info ---
+	clientInfo         *mcptypes.Implementation
+	clientCapabilities *mcptypes.ClientCapabilities
+	// --- END FIX ---
 
 	// allowedMethods contains methods that are valid in the current state.
 	allowedMethods map[string]bool
@@ -90,7 +97,9 @@ func (s *ConnectionState) SetInitialized() {
 	// After initialization, most methods are allowed
 	s.allowedMethods = map[string]bool{
 		// Core methods
-		"ping": true,
+		"ping":     true,
+		"shutdown": true, // Allow shutdown after init
+		"exit":     true, // Allow exit after init
 
 		// Tool methods
 		"tools/list": true,
@@ -126,6 +135,26 @@ func (s *ConnectionState) SetInitialized() {
 
 	// Initialize is no longer allowed after successful initialization
 	delete(s.allowedMethods, "initialize")
+}
+
+// SetUninitialized resets the connection state to uninitialized.
+// Used primarily for the shutdown process or resetting.
+func (s *ConnectionState) SetUninitialized() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.initialized = false
+	s.currentState = StateUninitialized
+	s.allowedMethods = map[string]bool{
+		"initialize":                true,
+		"notifications/initialized": true,
+		"notifications/cancelled":   true,
+		"notifications/progress":    true,
+		"ping":                      true,
+	}
+	// Clear client info on reset
+	s.clientInfo = nil
+	s.clientCapabilities = nil
 }
 
 // ValidateMethodSequence validates if a method is allowed in the current state.
@@ -172,3 +201,27 @@ func formatMethodList(methods []string) string {
 func isNotification(method string) bool {
 	return len(method) >= 13 && method[:13] == "notifications/"
 }
+
+// --- FIX: Add missing Set* methods ---
+
+// SetClientInfo stores the client's implementation details.
+func (s *ConnectionState) SetClientInfo(info mcptypes.Implementation) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.clientInfo = &info
+}
+
+// SetClientCapabilities stores the client's declared capabilities.
+func (s *ConnectionState) SetClientCapabilities(caps mcptypes.ClientCapabilities) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.clientCapabilities = &caps
+}
+
+// SetShutdown marks the connection as shutting down (though doesn't change allowed methods currently).
+func (s *ConnectionState) SetShutdown() {
+	// Currently, just marks initialized=false to block further calls, could refine state later.
+	s.SetUninitialized() // Re-use existing method to block further non-init calls
+}
+
+// --- END FIX ---

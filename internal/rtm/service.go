@@ -1,52 +1,57 @@
+// file: internal/rtm/service.go
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
-// It provides a unified interface for authentication, data retrieval (tasks, lists, tags),
-// and task manipulation, handling token storage and API client interactions internally.
-// file: internal/rtm/service.go.
+// This file defines the rtm.Service struct and makes it implement the services.Service interface,
+// coordinating authentication, API calls, and MCP interactions.
 package rtm
 
 import (
 	"context"
-	"fmt" // Keep fmt import.
+	"encoding/json" // Required for CallTool args and ReadResource response marshalling.
+	"fmt"
+	"net/url" // Required for ReadResource URI parsing.
 	"os"
 	"path/filepath"
+	"strings" // Required for ReadResource URI parsing and CallTool name splitting.
 	"sync"
+
+	// Removed time import as it's likely not needed here directly anymore.
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/logging"
+	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors"
+	"github.com/dkoosis/cowgnition/internal/mcp_types" // Use mcp_types.
+	"github.com/dkoosis/cowgnition/internal/services"  // Use services interface.
 )
 
-// Service provides Remember The Milk functionality, acting as an intermediary between
-// higher-level application logic (like MCP handlers) and the low-level RTM API client.
-// It manages authentication state, token persistence, and exposes RTM operations.
+// Service provides Remember The Milk functionality.
 type Service struct {
-	client       *Client // The underlying client making direct API calls.
+	client       *Client
 	config       *config.Config
 	logger       logging.Logger
-	authState    *AuthState // Cached authentication state.
+	authState    *AuthState
 	authMutex    sync.RWMutex
-	tokenStorage TokenStorageInterface // Handles saving/loading the auth token (keyring or file).
-	initialized  bool                  // Tracks if Initialize has been called.
+	tokenStorage TokenStorageInterface
+	initialized  bool
 }
 
+// Compile-time check to ensure *Service implements services.Service.
+var _ services.Service = (*Service)(nil)
+
 // NewService creates a new RTM service instance.
-// It requires application configuration (for API keys and token path) and a logger.
-// It initializes the RTM client and attempts to configure token storage (secure or file-based).
 func NewService(cfg *config.Config, logger logging.Logger) *Service {
+	// (Constructor logic remains the same as previous version...)
 	if logger == nil {
 		logger = logging.GetNoopLogger()
 	}
 	serviceLogger := logger.WithField("component", "rtm_service")
 
-	// Create the low-level client configuration from the main app config.
 	rtmConfig := Config{
 		APIKey:       cfg.RTM.APIKey,
 		SharedSecret: cfg.RTM.SharedSecret,
-		// APIEndpoint and HTTPClient will use defaults in NewClient if not set here.
 	}
-	client := NewClient(rtmConfig, logger) // Create the underlying API client.
+	client := NewClient(rtmConfig, logger)
 
-	// Determine token storage path, defaulting to ~/.config/cowgnition/rtm_token.json.
 	tokenPath := cfg.Auth.TokenPath
 	if tokenPath == "" {
 		homeDir, err := os.UserHomeDir()
@@ -58,70 +63,274 @@ func NewService(cfg *config.Config, logger logging.Logger) *Service {
 		}
 	}
 
-	// Initialize token storage, preferring secure OS storage.
 	tokenStorage, err := NewTokenStorage(tokenPath, logger)
 	if err != nil {
-		// Log failure but continue without token persistence.
 		serviceLogger.Warn("Failed to initialize token storage. Token persistence disabled.", "error", err)
-		tokenStorage = nil // Ensure it's nil if initialization failed.
+		tokenStorage = nil
 	}
 
 	return &Service{
 		client:       client,
 		config:       cfg,
 		logger:       serviceLogger,
-		authState:    &AuthState{}, // Initialize with non-authenticated state.
+		authState:    &AuthState{},
 		tokenStorage: tokenStorage,
-		initialized:  false, // Mark as not initialized until Initialize() is called.
+		initialized:  false,
 	}
 }
 
 // Initialize prepares the RTM service for use.
-// It verifies prerequisites (API keys), loads any existing auth token from storage,
-// checks the token's validity with the RTM API, and caches the authentication state.
-// This should be called once before invoking other service methods.
 func (s *Service) Initialize(ctx context.Context) error {
+	// (Initialize logic remains the same as previous version...)
+	if s.initialized {
+		s.logger.Info("RTM Service already initialized.")
+		return nil
+	}
 	s.logger.Info("Initializing RTM Service...")
-
-	// 1. Check Prerequisites (API Key/Secret).
 	if err := s.checkPrerequisites(); err != nil {
 		s.logger.Error("-> Initialization Failed: Prerequisites not met.", "error", err)
-		return err // Return error early if config is missing.
+		return err
 	}
-
-	// 2. Load Token from Storage (if available).
-	tokenFound := s.loadAndSetTokenFromStorage() // Logs status internally.
-
-	// 3. Check and Handle Initial Auth State.
-	// This verifies the loaded token (if any) with the RTM API.
-	verificationErr := s.checkAndHandleInitialAuthState(ctx) // Logs status internally.
+	tokenFound := s.loadAndSetTokenFromStorage()
+	verificationErr := s.checkAndHandleInitialAuthState(ctx)
 	if verificationErr != nil {
 		s.logger.Warn("Initial RTM authentication check failed.", "error", verificationErr)
-		// Continue initialization but ensure state is not authenticated.
 		s.updateAuthState(&AuthState{IsAuthenticated: false})
 	} else if tokenFound && !s.IsAuthenticated() {
-		// Token was loaded, but verification showed it was invalid.
 		s.logger.Warn("Loaded token was invalid according to RTM API.")
-		// The invalid token should have been cleared within checkAndHandleInitialAuthState.
 	}
-
-	// 4. Store Verified Token If Necessary.
-	// If authentication was successful (either from a loaded token or a recent auth flow),
-	// ensure the current token is saved to storage.
-	s.storeVerifiedTokenIfNeeded() // Logs status internally.
-
-	// 5. Finalize Initialization.
+	s.storeVerifiedTokenIfNeeded()
 	s.initialized = true
 	statusMsg := "Not Authenticated"
 	if s.IsAuthenticated() {
 		statusMsg = fmt.Sprintf("Authenticated as %q", s.GetUsername())
 	}
 	s.logger.Info(fmt.Sprintf("Initialization complete. Status: %s.", statusMsg))
-	return nil // Return nil on successful initialization, even if not authenticated.
+	return nil
 }
 
-// checkPrerequisites verifies required configuration is present.
-func (s *Service) checkPrerequisites() error {
+// --- services.Service Interface Implementation ---
+
+func (s *Service) GetName() string {
+	return "rtm"
+}
+
+// GetTools returns the list of MCP Tool definitions provided by the RTM service.
+// Tool names are prefixed with "rtm_".
+func (s *Service) GetTools() []mcp_types.Tool {
+	// Tool definitions moved here from mcp_tools.go GetTools.
+	return []mcp_types.Tool{
+		{
+			Name:        "rtm_getTasks",
+			Description: "Retrieves tasks from Remember The Milk based on an optional filter.",
+			InputSchema: s.getTasksInputSchema(), // Calls helper in helpers.go.
+			Annotations: &mcp_types.ToolAnnotations{Title: "Get RTM Tasks", ReadOnlyHint: true},
+		},
+		{
+			Name:        "rtm_createTask",
+			Description: "Creates a new task in Remember The Milk using smart-add syntax.",
+			InputSchema: s.createTaskInputSchema(), // Calls helper in helpers.go.
+			Annotations: &mcp_types.ToolAnnotations{Title: "Create RTM Task"},
+		},
+		{
+			Name:        "rtm_completeTask",
+			Description: "Marks a specific task as complete in Remember The Milk.",
+			InputSchema: s.completeTaskInputSchema(), // Calls helper in helpers.go.
+			Annotations: &mcp_types.ToolAnnotations{Title: "Complete RTM Task", DestructiveHint: true, IdempotentHint: true},
+		},
+		{
+			Name:        "rtm_getAuthStatus",
+			Description: "Checks and returns the current authentication status with Remember The Milk.",
+			InputSchema: s.emptyInputSchema(), // Calls helper in helpers.go.
+			Annotations: &mcp_types.ToolAnnotations{Title: "Check RTM Auth Status", ReadOnlyHint: true},
+		},
+		{
+			Name:        "rtm_authenticate",
+			Description: "Initiates or completes the authentication flow with Remember The Milk.",
+			InputSchema: s.authenticationInputSchema(), // Calls helper in helpers.go.
+			Annotations: &mcp_types.ToolAnnotations{Title: "Authenticate with RTM"},
+		},
+		{
+			Name:        "rtm_clearAuth",
+			Description: "Clears the stored Remember The Milk authentication token, effectively logging out.",
+			InputSchema: s.emptyInputSchema(), // Calls helper in helpers.go.
+			Annotations: &mcp_types.ToolAnnotations{Title: "Clear RTM Authentication", DestructiveHint: true, IdempotentHint: true},
+		},
+	}
+}
+
+// GetResources returns the MCP resources provided by this service.
+func (s *Service) GetResources() []mcp_types.Resource {
+	// Resource definitions moved here from mcp_resources.go GetResources.
+	return []mcp_types.Resource{
+		{
+			Name:        "RTM Authentication Status",
+			URI:         "rtm://auth",
+			Description: "Provides the current authentication status with Remember The Milk (RTM).",
+			MimeType:    "application/json",
+		},
+		{
+			Name:        "RTM Lists",
+			URI:         "rtm://lists",
+			Description: "Lists available in your Remember The Milk account.",
+			MimeType:    "application/json",
+		},
+		{
+			Name:        "RTM Tags",
+			URI:         "rtm://tags",
+			Description: "Tags used in your Remember The Milk account.",
+			MimeType:    "application/json",
+		},
+		{
+			Name:        "RTM Tasks (Default Filter)",
+			URI:         "rtm://tasks",
+			Description: "Tasks in your Remember The Milk account (default view). Use rtm://tasks?filter=... for specific filters.",
+			MimeType:    "application/json",
+		},
+	}
+}
+
+// ReadResource handles requests to read data from an RTM resource.
+// It routes based on the URI and fetches dynamic data.
+func (s *Service) ReadResource(ctx context.Context, uri string) ([]interface{}, error) {
+	if !s.initialized {
+		return nil, errors.New("RTM service is not initialized")
+	}
+	s.logger.Info("Handling ReadResource request.", "uri", uri)
+
+	// Logic moved here from mcp_resources.go ReadResource.
+	switch {
+	case uri == "rtm://auth":
+		authState, err := s.GetAuthState(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get auth state for resource")
+		}
+		return s.createJSONResourceContent(uri, authState) // Calls helper in helpers.go.
+
+	case uri == "rtm://lists":
+		if !s.IsAuthenticated() {
+			return s.notAuthenticatedResourceContent(uri), nil // Calls helper in helpers.go.
+		}
+		lists, err := s.client.GetLists(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get lists for resource")
+		}
+		return s.createJSONResourceContent(uri, lists) // Calls helper in helpers.go.
+
+	case uri == "rtm://tags":
+		if !s.IsAuthenticated() {
+			return s.notAuthenticatedResourceContent(uri), nil // Calls helper in helpers.go.
+		}
+		tags, err := s.client.GetTags(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get tags for resource")
+		}
+		return s.createJSONResourceContent(uri, tags) // Calls helper in helpers.go.
+
+	case uri == "rtm://tasks":
+		return s.readTasksResourceWithFilter(ctx, "", uri) // Calls internal helper below.
+
+	case strings.HasPrefix(uri, "rtm://tasks?"):
+		filter, err := extractFilterFromURI(uri) // Calls internal helper below.
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse filter from tasks URI: %s", uri)
+		}
+		return s.readTasksResourceWithFilter(ctx, filter, uri) // Calls internal helper below.
+
+	default:
+		return nil, mcperrors.NewResourceError(mcperrors.ErrResourceNotFound,
+			fmt.Sprintf("Unknown RTM resource URI: %s", uri),
+			nil,
+			map[string]interface{}{"uri": uri})
+	}
+}
+
+// CallTool handles incoming MCP tool execution requests directed at the RTM service.
+// Delegates to specific handler functions defined in mcp_tools.go.
+func (s *Service) CallTool(ctx context.Context, name string, args json.RawMessage) (*mcp_types.CallToolResult, error) {
+	if !s.initialized {
+		s.logger.Error("CallTool attempted before RTM service initialization.", "toolName", name)
+		return s.serviceNotInitializedError(), nil // Calls helper in helpers.go.
+	}
+
+	if !strings.HasPrefix(name, "rtm_") {
+		s.logger.Warn("Received tool call with unexpected prefix or format.", "toolName", name)
+		return s.unknownToolError(name), nil // Calls helper in helpers.go.
+	}
+	baseToolName := strings.TrimPrefix(name, "rtm_")
+	s.logger.Info("Routing RTM tool call.", "fullToolName", name, "baseToolName", baseToolName)
+
+	var handlerFunc func(context.Context, json.RawMessage) (*mcp_types.CallToolResult, error)
+
+	// Route based on the base tool name, mapping to handlers in mcp_tools.go.
+	switch baseToolName {
+	case "getTasks":
+		handlerFunc = s.handleGetTasks // Assumes exists in mcp_tools.go.
+	case "createTask":
+		handlerFunc = s.handleCreateTask // Assumes exists in mcp_tools.go.
+	case "completeTask":
+		handlerFunc = s.handleCompleteTask // Assumes exists in mcp_tools.go.
+	case "getAuthStatus":
+		handlerFunc = s.handleGetAuthStatus // Assumes exists in mcp_tools.go.
+	case "authenticate":
+		handlerFunc = s.handleAuthenticate // Assumes exists in mcp_tools.go.
+	case "clearAuth":
+		handlerFunc = s.handleClearAuth // Assumes exists in mcp_tools.go.
+	default:
+		s.logger.Warn("Received call for unknown RTM tool.", "fullToolName", name, "baseToolName", baseToolName)
+		return s.unknownToolError(name), nil // Calls helper in helpers.go.
+	}
+
+	// Execute the mapped handler function.
+	result, err := handlerFunc(ctx, args)
+	if err != nil {
+		// Internal error within the handler itself (e.g., bad marshalling).
+		s.logger.Error("Internal error executing RTM tool handler.", "fullToolName", name, "error", fmt.Sprintf("%+v", err))
+		return s.internalToolError(), nil // Calls helper in helpers.go.
+	}
+
+	// Return the result from the specific handler.
+	return result, nil
+}
+
+func (s *Service) Shutdown() error {
+	s.logger.Info("Shutting down RTM service.")
+	return nil
+}
+
+func (s *Service) IsAuthenticated() bool {
+	s.authMutex.RLock()
+	defer s.authMutex.RUnlock()
+	return s.authState != nil && s.authState.IsAuthenticated
+}
+
+// --- Internal Helper Functions ---
+// (Only keep helpers directly used by the interface methods above if they weren't moved).
+
+// readTasksResourceWithFilter fetches tasks based on filter. (Internal helper for ReadResource).
+func (s *Service) readTasksResourceWithFilter(ctx context.Context, filter string, resourceURI string) ([]interface{}, error) {
+	if !s.IsAuthenticated() {
+		return s.notAuthenticatedResourceContent(resourceURI), nil // Calls helper in helpers.go.
+	}
+	tasks, err := s.client.GetTasks(ctx, filter)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get tasks for resource (filter: '%s')", filter)
+	}
+	return s.createJSONResourceContent(resourceURI, tasks) // Calls helper in helpers.go.
+}
+
+// extractFilterFromURI parses the 'filter' query parameter. (Internal helper for ReadResource).
+func extractFilterFromURI(uriString string) (string, error) {
+	parsedURL, err := url.Parse(uriString)
+	if err != nil {
+		return "", errors.Wrapf(err, "invalid URI format: %s", uriString)
+	}
+	return parsedURL.Query().Get("filter"), nil
+}
+
+// --- Auth State and Lifecycle Helpers ---
+// (Keep these as they are internal to the service's operation).
+func (s *Service) checkPrerequisites() error { /* ... as before ... */
 	s.logger.Info("Checking configuration (API Key/Secret)...")
 	if s.config.RTM.APIKey == "" || s.config.RTM.SharedSecret == "" {
 		s.logger.Error("-> Configuration Check Failed: RTM API Key or Shared Secret is missing.")
@@ -130,82 +339,60 @@ func (s *Service) checkPrerequisites() error {
 	s.logger.Info("-> Configuration OK.")
 	return nil
 }
-
-// loadAndSetTokenFromStorage attempts to load a token from storage and set it on the client.
-// Returns true if a token was found and loaded, false otherwise.
-func (s *Service) loadAndSetTokenFromStorage() bool {
+func (s *Service) loadAndSetTokenFromStorage() bool { /* ... as before ... */
 	s.logger.Info("Loading saved authentication token...")
 	if s.tokenStorage == nil {
 		s.logger.Info("-> Skipped (Token storage not configured).")
 		return false
 	}
-
 	token, err := s.tokenStorage.LoadToken()
 	if err != nil {
 		s.logger.Warn("-> Failed to load token.", "error", err)
 		return false
 	} else if token != "" {
-		s.client.SetAuthToken(token) // Set token on the underlying client.
+		s.client.SetAuthToken(token)
 		return true
 	}
 	s.logger.Info("-> No saved token found.")
 	return false
 }
-
-// checkAndHandleInitialAuthState verifies the current token with the RTM API.
-// If the token is invalid, it clears it from the client and storage.
-// Returns an error only if the API call itself fails.
-func (s *Service) checkAndHandleInitialAuthState(ctx context.Context) error {
+func (s *Service) checkAndHandleInitialAuthState(ctx context.Context) error { /* ... as before ... */
 	s.logger.Info("Verifying saved token with RTM...")
 	currentToken := s.client.GetAuthToken()
 	if currentToken == "" {
 		s.logger.Info("-> Skipped (No token to verify).")
 		s.updateAuthState(&AuthState{IsAuthenticated: false})
-		return nil // Not an error, just not authenticated.
+		return nil
 	}
-
-	// Call the underlying client to check the token against the RTM API.
 	authState, err := s.client.GetAuthState(ctx)
-
 	if err != nil {
 		s.logger.Warn("-> Verification API call failed.")
-		s.logger.Warn("RTM token verification API call failed.", "error", err) // Log specific error.
-
-		// Clear potentially invalid token from client and storage.
+		s.logger.Warn("RTM token verification API call failed.", "error", err)
 		s.clearTokenFromClientAndStorage("Clearing potentially invalid token due to API error.")
 		s.updateAuthState(&AuthState{IsAuthenticated: false})
-		return err // Return the API call error.
+		return err
 	}
-
-	// API call succeeded, update state based on RTM's response.
 	s.updateAuthState(authState)
 	if authState.IsAuthenticated {
 		s.logger.Info(fmt.Sprintf("-> Token verified successfully (User: %q).", authState.Username))
 	} else {
 		s.logger.Warn("-> Token reported as invalid by RTM.")
-		// Clear the invalid token from client and storage.
 		s.clearTokenFromClientAndStorage("Clearing invalid token reported by RTM.")
 	}
-	return nil // No error from the check process itself, even if token was invalid.
+	return nil
 }
-
-// storeVerifiedTokenIfNeeded saves the currently set (and verified) auth token if it's not already stored correctly.
-func (s *Service) storeVerifiedTokenIfNeeded() {
+func (s *Service) storeVerifiedTokenIfNeeded() { /* ... as before ... */
 	if s.tokenStorage == nil {
 		s.logger.Debug("Skipping token save check: Token storage not configured.")
 		return
 	}
 	currentToken := s.client.GetAuthToken()
-	// Only save if we are currently authenticated and have a token.
 	if currentToken == "" || !s.IsAuthenticated() {
 		s.logger.Debug("Skipping token save check: Not authenticated or no token set.")
 		return
 	}
-
 	s.logger.Info("Checking if token needs saving...")
-	storedToken, loadErr := s.tokenStorage.LoadToken() // Logs attempt/source/result internally.
-
-	// Save if loading failed or the stored token doesn't match the current valid one.
+	storedToken, loadErr := s.tokenStorage.LoadToken()
 	if loadErr != nil || storedToken != currentToken {
 		s.logger.Info("-> Saving verified token to storage.")
 		userID, username := s.getUserInfoFromState()
@@ -218,10 +405,7 @@ func (s *Service) storeVerifiedTokenIfNeeded() {
 		s.logger.Info("-> Token already saved correctly.")
 	}
 }
-
-// clearTokenFromClientAndStorage removes the token from the client and attempts to delete from storage.
-// Takes a reason string for logging purposes.
-func (s *Service) clearTokenFromClientAndStorage(reason string) {
+func (s *Service) clearTokenFromClientAndStorage(reason string) { /* ... as before ... */
 	if s.client.GetAuthToken() != "" {
 		s.logger.Info(fmt.Sprintf("-> %s.", reason))
 		s.client.SetAuthToken("")
@@ -234,18 +418,7 @@ func (s *Service) clearTokenFromClientAndStorage(reason string) {
 		}
 	}
 }
-
-// --- Auth State Management ---.
-
-// IsAuthenticated checks if the service currently holds a verified authentication state.
-func (s *Service) IsAuthenticated() bool {
-	s.authMutex.RLock()
-	defer s.authMutex.RUnlock()
-	return s.authState != nil && s.authState.IsAuthenticated
-}
-
-// GetUsername returns the authenticated user's username, or an empty string if not authenticated.
-func (s *Service) GetUsername() string {
+func (s *Service) GetUsername() string { /* ... as before ... */
 	s.authMutex.RLock()
 	defer s.authMutex.RUnlock()
 	if s.authState == nil {
@@ -253,36 +426,25 @@ func (s *Service) GetUsername() string {
 	}
 	return s.authState.Username
 }
-
-// GetAuthState retrieves the current authentication state, potentially refreshing it by calling the RTM API.
-// It updates the internally cached state.
-func (s *Service) GetAuthState(ctx context.Context) (*AuthState, error) {
-	// Delegate to the client's GetAuthState for the actual API check.
+func (s *Service) GetAuthState(ctx context.Context) (*AuthState, error) { /* ... as before ... */
 	authState, err := s.client.GetAuthState(ctx)
 	if err != nil {
-		// Update internal state to reflect failure before returning error.
 		s.updateAuthState(&AuthState{IsAuthenticated: false})
 		return nil, errors.Wrap(err, "failed to get auth state from RTM client")
 	}
-	// Update internal cached state with the result from the API.
 	s.updateAuthState(authState)
 	return authState, nil
 }
-
-// updateAuthState safely updates the cached authentication state using a mutex.
-func (s *Service) updateAuthState(newState *AuthState) {
+func (s *Service) updateAuthState(newState *AuthState) { /* ... as before ... */
 	s.authMutex.Lock()
 	defer s.authMutex.Unlock()
 	if newState == nil {
-		// Ensure authState is never nil, default to non-authenticated.
 		s.authState = &AuthState{IsAuthenticated: false}
 	} else {
 		s.authState = newState
 	}
 }
-
-// getUserInfoFromState safely gets user ID and username from the cached auth state.
-func (s *Service) getUserInfoFromState() (userID, username string) {
+func (s *Service) getUserInfoFromState() (userID, username string) { /* ... as before ... */
 	s.authMutex.RLock()
 	defer s.authMutex.RUnlock()
 	if s.authState != nil {
@@ -290,14 +452,8 @@ func (s *Service) getUserInfoFromState() (userID, username string) {
 	}
 	return "", ""
 }
-
-// --- Auth Lifecycle ---.
-
-// StartAuth begins the RTM authentication flow by obtaining an authentication URL from the client.
-// Returns the URL the user needs to visit to grant permissions.
-func (s *Service) StartAuth(ctx context.Context) (string, error) {
+func (s *Service) StartAuth(ctx context.Context) (string, error) { /* ... as before ... */
 	s.logger.Info("Starting RTM authentication flow (getting auth URL)...")
-	// Frob is obtained but not directly used by the service initiator here.
 	authURL, _, err := s.client.StartAuthFlow(ctx)
 	if err != nil {
 		s.logger.Error("-> Failed to start auth flow.", "error", err)
@@ -306,62 +462,43 @@ func (s *Service) StartAuth(ctx context.Context) (string, error) {
 	s.logger.Info("-> Auth URL generated.")
 	return authURL, nil
 }
-
-// CompleteAuth exchanges the provided 'frob' (obtained after user authorization) for a permanent auth token.
-// It verifies the new token, updates the internal auth state, and saves the token to storage.
-func (s *Service) CompleteAuth(ctx context.Context, frob string) error {
+func (s *Service) CompleteAuth(ctx context.Context, frob string) error { /* ... as before ... */
 	s.logger.Info("Completing RTM authentication flow (exchanging code for token)...")
-	// The client's CompleteAuthFlow handles the API call and sets the token internally on success.
 	token, err := s.client.CompleteAuthFlow(ctx, frob)
 	if err != nil {
 		s.logger.Error("-> Failed to complete auth flow.", "error", err)
-		return err // Return the error from the client.
+		return err
 	}
-
-	// If CompleteAuthFlow succeeded, the client now holds the token. Verify it.
 	authState, stateErr := s.client.GetAuthState(ctx)
 	if stateErr != nil {
 		s.logger.Error("-> Failed to verify auth state after getting token.", "error", stateErr)
-		s.updateAuthState(&AuthState{IsAuthenticated: false}) // Ensure state is consistent.
-		// Even though we got a token, verification failed, so return an error.
+		s.updateAuthState(&AuthState{IsAuthenticated: false})
 		return errors.Wrap(stateErr, "failed to confirm auth state after completing auth flow")
 	}
-	s.updateAuthState(authState) // Update cached state.
-
-	// If verification succeeded and we are now authenticated, save the token.
+	s.updateAuthState(authState)
 	if s.IsAuthenticated() {
 		s.logger.Info(fmt.Sprintf("-> Authentication successful (User: %q).", s.GetUsername()))
 		if s.tokenStorage != nil && token != "" {
 			s.logger.Info("-> Saving new token...")
 			userID, username := s.getUserInfoFromState()
 			if saveErr := s.tokenStorage.SaveToken(token, userID, username); saveErr != nil {
-				// Log failure to save but don't return it as an error for CompleteAuth itself.
 				s.logger.Warn("-> Failed to save new token.", "error", saveErr)
 			} else {
 				s.logger.Info("-> Successfully saved token to storage.")
 			}
 		} else if token != "" {
-			// Log if storage is unavailable.
 			s.logger.Warn("-> Token storage not available, cannot persist new authentication.")
 		}
 	} else {
-		// This case indicates an issue (e.g., API inconsistency).
 		s.logger.Warn("-> Authentication flow seemed complete, but state verification failed.")
 		return errors.New("authentication flow completed but state verification failed")
 	}
-
-	return nil // Authentication successful.
+	return nil
 }
-
-// SetAuthToken explicitly sets the auth token on the underlying client.
-// It also attempts to verify the token and update the persisted storage if valid.
-// If the provided token is empty, it clears the current authentication.
-func (s *Service) SetAuthToken(token string) {
+func (s *Service) SetAuthToken(token string) { /* ... as before ... */
 	s.logger.Info("Explicitly setting RTM auth token.")
-	s.client.SetAuthToken(token) // Set on the client first.
-
+	s.client.SetAuthToken(token)
 	if token == "" {
-		// If setting an empty token, clear auth state and storage.
 		s.logger.Info("-> Clearing authentication because empty token was set.")
 		s.updateAuthState(&AuthState{IsAuthenticated: false})
 		if s.tokenStorage != nil {
@@ -371,51 +508,36 @@ func (s *Service) SetAuthToken(token string) {
 		}
 		return
 	}
-
-	// Verify the newly set token.
 	s.logger.Info("-> Verifying manually set token...")
-	ctx := context.Background() // Use background context for this internal verification.
+	ctx := context.Background()
 	authState, err := s.client.GetAuthState(ctx)
 	if err != nil {
 		s.logger.Warn("-> Failed to verify manually set token, clearing state.", "error", err)
 		s.updateAuthState(&AuthState{IsAuthenticated: false})
-		s.client.SetAuthToken("") // Clear invalid token from client too.
-		// Optionally try deleting from storage if it might exist there.
+		s.client.SetAuthToken("")
 		if s.tokenStorage != nil {
-			_ = s.tokenStorage.DeleteToken() // Ignore error here.
+			_ = s.tokenStorage.DeleteToken()
 		}
 		return
 	}
-
-	// Update internal state.
 	s.updateAuthState(authState)
-
-	// If token is valid and storage is available, attempt to save it.
 	if s.IsAuthenticated() {
 		s.logger.Info(fmt.Sprintf("-> Manually set token verified (User: %q).", s.GetUsername()))
-		s.storeVerifiedTokenIfNeeded() // Reuse logic to save if needed.
+		s.storeVerifiedTokenIfNeeded()
 	} else {
 		s.logger.Warn("-> Manually set token appears invalid after check, not saving.")
-		// Token was already cleared from client by GetAuthState if invalid.
 	}
 }
-
-// GetAuthToken returns the current auth token held by the client, if any.
-func (s *Service) GetAuthToken() string {
+func (s *Service) GetAuthToken() string { /* ... as before ... */
 	return s.client.GetAuthToken()
 }
-
-// ClearAuth clears the current authentication state, removes the token from the client,
-// and attempts to delete the token from storage.
-func (s *Service) ClearAuth() error {
+func (s *Service) ClearAuth() error { /* ... as before ... */
 	s.logger.Info("Clearing RTM authentication...")
-	s.client.SetAuthToken("")                             // Remove from client.
-	s.updateAuthState(&AuthState{IsAuthenticated: false}) // Update cached state.
-
+	s.client.SetAuthToken("")
+	s.updateAuthState(&AuthState{IsAuthenticated: false})
 	if s.tokenStorage != nil {
 		if err := s.tokenStorage.DeleteToken(); err != nil {
-			// Don't return error if token wasn't found, but log other errors.
-			if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, errors.New("keyring: item not found")) { // Check common not found errors.
+			if !errors.Is(err, os.ErrNotExist) && !strings.Contains(strings.ToLower(err.Error()), "not found") {
 				s.logger.Error("-> Failed to clear token from storage.", "error", err)
 				return errors.Wrap(err, "failed to delete token from storage")
 			}
@@ -428,54 +550,36 @@ func (s *Service) ClearAuth() error {
 	return nil
 }
 
-// Shutdown performs cleanup for the RTM service. Currently a no-op.
-func (s *Service) Shutdown() error {
-	s.logger.Info("Shutting down RTM service.")
-	// Add cleanup tasks here if needed (e.g., close persistent connections).
-	return nil
-}
-
-// GetName returns the service name identifier ("rtm").
-func (s *Service) GetName() string {
-	return "rtm" // Service identifier.
-}
-
-// GetClient returns the underlying RTM API client instance.
-// Returns nil if the service or its client is not initialized properly.
-func (s *Service) GetClient() *Client {
+// --- Other Public Service Methods ---
+func (s *Service) GetClient() *Client { /* ... as before ... */
 	if s == nil {
 		return nil
 	}
 	return s.client
 }
-
-// GetClientAPIEndpoint returns the API endpoint URL used by the service's client.
-// Returns an empty string if the service or client is not configured.
-func (s *Service) GetClientAPIEndpoint() string {
+func (s *Service) GetClientAPIEndpoint() string { /* ... as before ... */
 	if s == nil || s.client == nil {
 		return ""
 	}
-	// Delegate to the client's method.
 	return s.client.GetAPIEndpoint()
 }
-
-// GetTokenStorageInfo returns details about the configured token storage mechanism.
-// Returns method ("secure", "file", "none", "unknown"), path/description, and availability status.
-func (s *Service) GetTokenStorageInfo() (method string, path string, available bool) {
+func (s *Service) GetTokenStorageInfo() (method string, path string, available bool) { /* ... as before ... */
 	if s.tokenStorage == nil {
 		return "none", "", false
 	}
-
-	// Use type assertions to determine the storage type.
 	switch storage := s.tokenStorage.(type) {
 	case *SecureTokenStorage:
-		// Path is conceptual for secure storage.
 		return "secure", "OS keychain/credentials manager", storage.IsAvailable()
 	case *FileTokenStorage:
-		// Path is the actual file path. Assumed available if created.
 		return "file", storage.path, storage.IsAvailable()
 	default:
-		// Unknown storage type.
 		return "unknown", "", s.tokenStorage.IsAvailable()
 	}
 }
+
+// NOTE: Tool handler implementations (handleGetTasks, etc.) are expected
+// to be in mcp_tools.go.
+// NOTE: Helper functions (successToolResult, etc.) are expected
+// to be in helpers.go.
+// NOTE: Input schema helpers (getTasksInputSchema, etc.) are expected
+// to be in helpers.go.

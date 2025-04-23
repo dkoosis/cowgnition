@@ -45,7 +45,8 @@
 │   │   ├── mcp_server_processing.go
 │   │   └── types.go
 │   ├── mcp_types/
-│   │   └── interfaces.go
+│   │   ├── interfaces.go
+│   │   └── types.go
 │   ├── metrics/
 │   │   └── server_metrics.go
 │   ├── middleware/
@@ -93,6 +94,8 @@
 │   │   ├── validator.go
 │   │   ├── validator_test.go
 │   │   └── version.go
+│   ├── services/
+│   │   └── service.go
 │   └── transport/
 │       ├── in_memory_transport.go
 │       ├── stub_test.go
@@ -110,4 +113,4 @@
 ├── go.sum
 └── rtm-authentication.jpg
 
-19 directories, 92 files
+20 directories, 94 files
