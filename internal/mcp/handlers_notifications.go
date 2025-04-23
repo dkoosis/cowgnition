@@ -14,7 +14,7 @@ import (
 // Official definition: This notification is sent from the client to the server after
 // initialization has finished. It signals that the client has successfully processed
 // the server's initialization response and is ready for further communication.
-// nolint:unused,unparam.
+// nolint:unused,unparam // Keeping function signature as-is, suppressing linter.
 func (h *Handler) handleNotificationsInitialized(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Received 'notifications/initialized' from client.")
 
@@ -41,7 +41,7 @@ func (h *Handler) handleNotificationsInitialized(_ context.Context, params json.
 // cancelling a previously-issued request. The request SHOULD still be in-flight, but due to
 // communication latency, it is always possible that this notification MAY arrive after
 // the request has already finished.
-// nolint:unused,unparam.
+// nolint:unused,unparam // Keeping function signature as-is, suppressing linter.
 func (h *Handler) handleNotificationsCancelled(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	var cancelParams struct {
 		RequestID interface{} `json:"requestId"`
@@ -66,7 +66,7 @@ func (h *Handler) handleNotificationsCancelled(_ context.Context, params json.Ra
 // handleNotificationsProgress handles the notifications/progress notification.
 // Official definition: An out-of-band notification used to inform the receiver of a
 // progress update for a long-running request.
-// nolint:unused,unparam.
+// nolint:unused,unparam // Keeping function signature as-is, suppressing linter.
 func (h *Handler) handleNotificationsProgress(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 	var progressParams struct {
 		ProgressToken interface{} `json:"progressToken"`

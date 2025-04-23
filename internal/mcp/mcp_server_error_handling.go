@@ -1,3 +1,4 @@
+// Package mcp implements the Model Context Protocol server logic, including handlers and types.
 // file: internal/mcp/mcp_server_error_handling.go.
 package mcp
 

@@ -92,6 +92,7 @@ func (s *Service) PerformConnectivityCheck(ctx context.Context, options Connecti
 }
 
 // formatDiagnosticResult formats a diagnostic result string.
+// nolint:unused // Keeping function as requested, suppressing unused warning.
 func formatDiagnosticResult(result DiagnosticResult) string {
 	status := "PASS"
 	icon := "✅"

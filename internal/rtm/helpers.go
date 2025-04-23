@@ -95,6 +95,7 @@ func (s *Service) notAuthenticatedResourceContent(uri string) []interface{} {
 
 // truncateString truncates a string to a max length for previews.
 // Defined ONCE here.
+// nolint:unused // Keeping function as requested, suppressing unused warning.
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

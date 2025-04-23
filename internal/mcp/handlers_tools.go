@@ -159,7 +159,7 @@ func (h *Handler) handleToolCall(ctx context.Context, params json.RawMessage) (j
 // Official definition: An optional notification from the server to the client, informing
 // it that the list of tools it offers has changed. This may be issued by servers
 // without any previous subscription from the client.
-// nolint:unused,unparam.
+// nolint:unused,unparam // Keeping function signature as-is, suppressing linter.
 func (h *Handler) handleToolListChanged(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Sending tool list changed notification to client.")
 	// NOTE: This would typically be sent from the server to the client, not handled by the server.

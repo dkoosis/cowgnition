@@ -1,3 +1,4 @@
+// Package mcp implements the Model Context Protocol server logic, including handlers and types.
 // file: internal/mcp/mcp_server_metrics.go.
 package mcp
 
@@ -14,17 +15,17 @@ import (
 )
 
 // Global metrics collector instance.
-var globalMetricsCollector *metrics.MetricsCollector
+var globalMetricsCollector *metrics.Collector // FIX: Use renamed type 'Collector'.
 
 // InitializeMetricsCollector sets up the global metrics collector.
 func InitializeMetricsCollector() {
 	if globalMetricsCollector == nil {
-		globalMetricsCollector = metrics.NewMetricsCollector(20) // Keep last 20 errors.
+		globalMetricsCollector = metrics.NewMetricsCollector(20) // Keep last 20 errors. FIX: Use renamed type 'Collector'.
 	}
 }
 
 // GetMetricsCollector returns the global metrics collector instance.
-func GetMetricsCollector() *metrics.MetricsCollector {
+func GetMetricsCollector() *metrics.Collector { // FIX: Use renamed type 'Collector'.
 	if globalMetricsCollector == nil {
 		InitializeMetricsCollector()
 	}
@@ -34,24 +35,20 @@ func GetMetricsCollector() *metrics.MetricsCollector {
 // ReadServerHealthMetrics retrieves the current server health metrics.
 func (s *Server) ReadServerHealthMetrics(_ context.Context) ([]interface{}, error) { // Removed ctx.
 	collector := GetMetricsCollector()
-	// currentMetrics := collector.GetCurrentMetrics() // Use this when metrics collector is fully implemented.
-	currentMetrics := map[string]interface{}{"status": "placeholder_metrics"} // Placeholder.
+	currentMetrics := collector.GetCurrentMetrics() // Use this when metrics collector is fully implemented.
 
 	// Enrich with RTM-specific information if available.
 	if s.rtmService != nil {
-		method, path, available := s.rtmService.GetTokenStorageInfo()
+		// FIX: Ignore the unused 'available' variable using '_'.
+		method, path, _ := s.rtmService.GetTokenStorageInfo()
 		collector.UpdateRTMAuthStatus(
 			s.rtmService.IsAuthenticated(),
 			s.rtmService.GetUsername(),
 			method,
 			path,
 		)
-		// Add RTM info to the response payload if needed.
-		currentMetrics["rtm_authenticated"] = s.rtmService.IsAuthenticated()
-		currentMetrics["rtm_username"] = s.rtmService.GetUsername()
-		currentMetrics["rtm_token_storage_method"] = method
-		currentMetrics["rtm_token_storage_path"] = path
-		currentMetrics["rtm_token_storage_available"] = available // Use the 'available' variable.
+		// Update the metrics struct fields directly (GetAuthStatus does this now)
+		// No need to add separate map entries as they are part of the ServerMetrics struct.
 	}
 
 	// Marshal the metrics to JSON and return as resource.
@@ -63,7 +60,7 @@ func (s *Server) ReadServerHealthMetrics(_ context.Context) ([]interface{}, erro
 	return []interface{}{
 		mcptypes.TextResourceContents{ // Use mcptypes.TextResourceContents.
 			ResourceContents: mcptypes.ResourceContents{ // Use mcptypes.ResourceContents.
-				URI:      "cowgnition://server/health", // Correct URI.
+				URI:      "cowgnition://server/health", // Correct URI. // Changed from server/status to server/health
 				MimeType: "application/json",
 			},
 			Text: string(jsonData),

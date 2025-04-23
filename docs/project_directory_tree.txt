@@ -43,7 +43,6 @@
 │   │   ├── mcp_server_error_handling.go
 │   │   ├── mcp_server_metrics.go
 │   │   ├── mcp_server_processing.go
-│   │   ├── mcp_server_test.go
 │   │   └── types.go
 │   ├── mcp_types/
 │   │   └── interfaces.go
@@ -75,7 +74,6 @@
 │   │   ├── factory.go
 │   │   ├── helpers.go
 │   │   ├── keychain_test_helpers.go
-│   │   ├── mcp_integration_test.go
 │   │   ├── mcp_resources.go
 │   │   ├── mcp_tools.go
 │   │   ├── methods.go
@@ -112,4 +110,4 @@
 ├── go.sum
 └── rtm-authentication.jpg
 
-19 directories, 94 files
+19 directories, 92 files

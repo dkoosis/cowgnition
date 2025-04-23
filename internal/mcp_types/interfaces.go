@@ -1,3 +1,5 @@
+// Package mcptypes defines shared interfaces and types for the MCP implementation.
+// This prevents import cycles between packages like 'mcp' and 'middleware'.
 package mcptypes
 
 import (

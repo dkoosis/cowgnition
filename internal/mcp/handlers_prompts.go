@@ -1,7 +1,6 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-package mcp
-
 // file: internal/mcp/handlers_prompts.go.
+package mcp
 
 import (
 	"context"
@@ -77,8 +76,7 @@ func (h *Handler) handlePromptsGet(_ context.Context, params json.RawMessage) (j
 // Official definition: An optional notification from the server to the client, informing it
 // that the list of prompts it offers has changed. This may be issued by servers without
 // any previous subscription from the client.
-//
-//nolint:unused,unparam.
+// nolint:unused,unparam // Keeping function signature as-is, suppressing linter.
 func (h *Handler) handlePromptsListChanged(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 	h.logger.Info("Sending prompts list changed notification to client.")
 
