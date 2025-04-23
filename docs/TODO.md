@@ -1,61 +1,80 @@
 # CowGnition MCP Implementation Roadmap: Clean Architecture Approach
 
-**Status:** Active Development
+**Status:** Active Development (with Interim Fixes Applied)
 
 ## Project Philosophy
 
 This implementation will prioritize:
 
 - Idiomatic Go code using the standard library where suitable
-- Strict adherence to the MCP specification via schema validation
+- Strict adherence to the MCP specification via schema validation (with known interim exceptions)
 - Clear error handling and robust message processing
 - Testability built into the design from the start
 - Simple but maintainable architecture with clear separation of concerns
 
 ---
 
-## URGENT: Fix RTM Authentication Flow [HIGH PRIORITY]
-- **Issue**: Authentication flow with Remember The Milk API isn't completing properly after user authorization in browser
-- **Context**: Tests are failing with "No authentication token found in system keyring" even after successful web authorization
-- **Reproduction Steps**:
-  1. Run `go run ./cmd/rtm_connection_test`
-  2. Open authorization URL in browser
-  3. Complete authorization (see success message in browser)
-  4. Run `make test` - tests still fail with authentication error
+## ONGOING / RECENTLY ADDRESSED
 
-- **Debugging Steps**:
-  1. Review `cmd/rtm_connection_test/main.go` to identify how frob -> token exchange should work
-  2. Check if a callback server is needed to receive authorization completion
-  3. Verify token storage in system keyring implementation
-  4. Add better logging around token retrieval and storage
-  5. Consider whether a separate "complete authentication" command is needed
+### MCP Connection & Protocol Version Handling [Interim Fix Applied]
 
-- **Fix Requirements**:
-  - Solution should work in both test and production environments
-  - Ideally, provide clearer user guidance during authentication flow
-  - Ensure keyring storage is properly implemented for cross-platform use
+- **Issue**: Client (Claude Desktop) disconnects immediately after server's `initialize` response due to protocol version mismatch (`client=2024-11-05`, `server=2025-03-26`). Root cause traced to `schema.json` lacking a standard version identifier (`$id` or `title`), preventing reliable automatic detection by `internal/schema/validator.go`. See [MCP GitHub Issue #394](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/394).
+- **Interim Solution Implemented**:
+  - `internal/mcp/handlers_core.go`: Modified `handleInitialize` to **force** reporting `protocolVersion: "2024-11-05"` in the response, bypassing schema detection for this field to ensure client compatibility.
+  - Added explicit logging of client requested vs. server forced versions.
+  - `internal/mcp/mcp_server.go`: Ensured `StrictOutgoing: false` is used in non-debug builds for validation middleware, allowing the known outgoing validation warning for the `initialize` response (due to schema/struct mismatch) to be logged without blocking the connection.
+- **Status:** Connection should now establish. Requires testing.
+- **Next Steps (Long Term):**
+  - Advocate for adding version identifiers to the official `schema.json`.
+  - Revert forced versioning in `handlers_core.go` once schema detection is reliable.
+  - Investigate and fix the root cause of the outgoing schema validation warning for `initialize`.
 
-## JSON-RPC Validation Test Fix
-- Update test expectations in `validation_identify_test.go:203`
-- Test expects "missing method, result, or error" but actual error is "Invalid Request"
-- Either update test or adjust error message format in implementation
+### RTM Authentication Flow [Needs Verification]
 
+- **Issue**: Previous reports indicated potential issues with the RTM auth flow completion (frob -> token).
+- **Status**: Requires re-testing after recent changes, especially with `cmd/rtm_connection_test`. Ensure secure token storage (`internal/rtm/token_storage_secure.go`) works correctly.
+
+### JSON-RPC Validation Test Fix [Needs Verification]
+
+- **Issue**: Test `validation_identify_test.go:203` expectations might mismatch actual error messages.
+- **Status**: Needs re-running tests (`make test`) to check if recent error handling changes resolved this.
+
+---
+
+## Phase 7: Security & Robustness
+
+**Status:** [PARTIALLY ADDRESSED - NEW ITEM ADDED]
+
+- [NEW] **Store RTM API Key/Secret Securely in OS Keychain:**
+    - **Context:** Currently, `cowgnition setup` stores the RTM API Key/Secret in the `claude_desktop_config.json` `env` block, which is insecure if the host exposes environment variables. ADR 005 recommends using the OS keychain for *all* secrets.
+    - **Action:**
+        1. Modify `cowgnition setup` (`cmd/claude_desktop_registration.go`) to save the Key/Secret to the OS keychain (using `keyring` library) instead of writing them to the `env` block.
+        2. Modify server startup (`internal/rtm/service.go` or `cmd/server/server_runner.go`) to load the Key/Secret *from* the OS keychain when initializing the RTM service/client.
+        3. Deprecate/remove reliance on `RTM_API_KEY`/`RTM_SHARED_SECRET` environment variables set via `claude_desktop_config.json`.
+    - **Reference:** [ADR 005](docs/adr/005_secret_management.md)
+    - **Status:** `[PENDING]`
+- [PENDING] Add comprehensive input validation beyond schema validation
+- [PENDING] Implement rate limiting for RTM API calls
+- [COMPLETE] Implement secure token storage for RTM *Auth Token* (using OS keychain/keyring via `internal/rtm/token_storage_secure.go`)
+- [PENDING] Implement proper error sanitization to avoid leaking sensitive information
+- [PENDING] Add telemetry for security events
+
+---
 
 ## Phase 8: Schema Validation Improvements
 
-**Status:** [ACTIVE - PARTIALLY COMPLETE]
+**Status:** [PARTIALLY COMPLETE - INTERIM FIXES APPLIED]
 
 ### Background
 
-The current validation architecture primarily focuses on incoming messages but lacks comprehensive validation for outgoing responses. Recent client validation revealed tool naming pattern issues that our server-side validation didn't catch. We need to enhance our validation approach to ensure complete MCP specification compliance.
+Focuses on ensuring MCP compliance through robust schema validation. An interim fix is currently applied for protocol versioning due to limitations in the official schema file.
 
 ### Objectives
 
-- Improve schema validation coverage to include outgoing messages
-- Optimize schema compilation performance for faster startup
-- Add early validation for static content (tools, resources)
-- Establish metrics to measure validation performance
-- Enable configurable validation approaches for different environments
+- Improve schema validation coverage (incoming/outgoing)
+- Optimize schema compilation performance
+- Establish metrics for validation performance
+- Enable configurable validation modes
 
 ### Implementation Steps
 
@@ -63,137 +82,122 @@ The current validation architecture primarily focuses on incoming messages but l
 
 - [PENDING] Add schema checksum generation and verification
 - [PENDING] Implement schema metadata caching to skip recompilation when unchanged
-- [COMPLETE] Add compile-time metrics and logging (Durations logged in debug) [cite: 1]
-- [COMPLETE] Update schema source configuration to prioritize official URL sources [cite: 1]
+- [COMPLETE] Add compile-time metrics and logging (Durations logged in debug)
+- [PENDING] Update schema source configuration to prioritize official URL sources (Currently uses embedded or file URI override)
 
 #### Step 2: Outgoing Message Validation
 
-- [COMPLETE] Add validation for outgoing responses [cite: 2]
-- [COMPLETE] Create environment-specific validation modes (strict vs. performance) [cite: 2]
-- [COMPLETE] Implement specific schema type selection based on message method [cite: 2]
-- [COMPLETE] Add detailed logging for validation failures [cite: 2]
+- [COMPLETE] Add validation for outgoing responses
+- [COMPLETE] Create environment-specific validation modes (`StrictOutgoing`: `false` in normal mode, `true` in debug) - **Note:** Currently necessary to keep `false` in normal mode due to known `initialize` response warning.
+- [COMPLETE] Implement specific schema type selection based on message method (with fallback logic)
+- [COMPLETE] Add detailed logging for validation failures
 
 #### Step 3: Static Content Pre-validation
 
-- [DEFERRED] Add startup validation for tool definitions (See Deferred Item below) [cite: 3]
-- [DEFERRED] Add startup validation for resource definitions (See Deferred Item below) [cite: 3]
-- [DEFERRED] Add startup validation for prompt definitions (See Deferred Item below) [cite: 3]
-- [DEFERRED] Implement early warning/failure for invalid definitions (See Deferred Item below) [cite: 3]
+- [DEFERRED] Add startup validation for tool definitions (See Deferred Item below)
+- [DEFERRED] Add startup validation for resource definitions (See Deferred Item below)
+- [DEFERRED] Add startup validation for prompt definitions (See Deferred Item below)
+- [DEFERRED] Implement early warning/failure for invalid definitions (See Deferred Item below)
 
 #### Step 4: Validation Architecture Improvements
 
-- [COMPLETE] Create helper functions to generate schema-compliant names
-- [PENDING] Add schema versioning to track supported MCP versions
-- [PENDING] Create comprehensive schema validation test suite (Basic tests exist, but not comprehensive suite)
-- [PARTIAL] Add validation metrics and monitoring (Durations logged in debug, full metrics TBD) [cite: 2]
-- [NEW] **Improve Schema Path Discovery:** Refactor logic in `cmd/server/server_runner.go` to find the local schema file more robustly (e.g., relative to executable/config, embedding) instead of relying on fragile relative path checks.
-- [NEW] **Make Schema URL Configurable:** Modify configuration (`internal/config/config.go`) and schema loading (`internal/schema/loader.go`) to allow overriding the primary schema URL via config file or environment variable, instead of being hardcoded in `cmd/server/server_runner.go`.
+- [COMPLETE] Create helper functions to generate schema-compliant names (`internal/schema/name_rules.go`)
+- [PARTIAL] Add schema versioning detection (`internal/schema/validator.go` - detects from `$id`/`title` if present) - **Note:** Currently bypassed for `initialize` response via interim fix.
+- [PENDING] Create comprehensive schema validation test suite (Basic tests exist)
+- [PARTIAL] Add validation metrics and monitoring (Durations logged in debug, full metrics TBD)
+- [PENDING] **Improve Schema Path Discovery:** Refactor logic to find local `schema.json` more robustly.
+- [PENDING] **Make Schema URL Configurable:** Allow overriding schema source URL via config/env var.
 
 #### Step 5: Developer Experience Enhancements
 
-- [PARTIAL] Improve error messages with actionable guidance (Messages exist, ongoing improvement) [cite: 2]
-- [PARTIAL] Add debug mode for detailed validation feedback (Debug flag influences options) [cite: 2]
+- [PARTIAL] Improve error messages with actionable guidance (Messages exist, ongoing improvement)
+- [COMPLETE] Add debug mode for detailed validation feedback (Debug flag influences validation options)
 - [PENDING] Create documentation with common MCP patterns and constraints
 - [PENDING] Implement automated compliance checking in CI pipeline
+- [PENDING] **Add Richer Validation Error Details:** Extract more detail (e.g., expected type) from `jsonschema.ValidationError` into JSON-RPC error data.
+- [PENDING] **Implement "Dry Run" Validation CLI Command:** Add `validate-message <file>` command.
+
+---
 
 ## Phase 9: Developer Experience & Extensibility
 
-**Status:** [NEW PHASE]
+**Status:** [PENDING]
 
-- [ ] **Document Schema Validation Implementation:**
-    - **Context:** Explain the _how_ and _why_ of the schema validation approach for better developer understanding (Ref: ADR 002).
-    - **Action:** Create a new markdown file (e.g., `docs/schema_validation_details.md`) detailing the `SchemaValidator` component, the `ValidationMiddleware`, schema loading logic, error mapping, and relationship to ADR 002.
-- [ ] **Improve Visibility of Validation Rules:**
-    - **Context:** Make it easier for developers to see which schema and which naming rules are being enforced (Ref: ADR 002).
-    - **Action:** Explicitly document the configuration options for the MCP schema source (file/URL). Expose the `DumpAllRules` function from `internal/schema/name_rules.go` via a CLI flag (e.g., `./cowgnition dump-naming-rules`) to show active naming constraints.
-- [ ] **Add Optional Raw MCP Message Logging:**
-    - **Context:** Provide a dedicated log for raw JSON-RPC messages to aid protocol-level debugging.
-    - **Action:** Implement an optional logging mechanism (enabled by config/env var, e.g., `MCP_TRACE_LOG=mcp_trace.log`) that writes incoming/outgoing message bytes to a file. Add hooks in `internal/mcp/mcp_server.go` or the `Transport` layer.
-- [ ] **Enhance Error Diagnostics with Fix Suggestions:**
-    - **Context:** Improve developer experience by making errors more actionable (Ref: ADR 001).
-    - **Action:** Identify common, diagnosable errors (e.g., `mcperrors.ErrRTMAuthFailure`). Modify the error creation logic (e.g., within `internal/rtm/`, `internal/mcp/mcp_errors/`) to add a specific `"suggestion"` key to the error's context map with a helpful hint (e.g., "Check RTM API Key/Secret"). Update `internal/mcp/mcp_server.go`'s `logErrorDetails` to display this suggestion in server logs.
-- [ ] **Implement Defensive Precondition Checks:**
-    - **Context:** Prevent errors proactively by adding checks before performing operations (Ref: ADR 001). This enhances robustness beyond schema validation (ADR 002).
-    - **Action:** Review key handlers and service methods (e.g., RTM API call sites in `internal/rtm/`). Add checks for necessary preconditions (e.g., client initialized, user authenticated, required arguments non-nil). Return specific, diagnosable internal errors (e.g., `mcperrors.ErrRTMClientNotReady`) if preconditions fail, rather than letting the operation proceed and potentially cause a less specific downstream error.
-- [ ] **Adopt Modular Service Architecture for Extensibility:**
-    - **Context:** Make it easier for developers (including potential future contributors) to add support for new services beyond RTM (Ref: ADR 006 - Draft). The current structure makes adding services difficult.
-    - **Action:** Refactor the application based on the principles outlined in ADR 006. Define a standard `Service` interface. Move RTM logic into a dedicated package implementing this interface. Implement a service registry in the server runner/MCP server. Modify core MCP handlers (`internal/mcp/handlers_*.go`) to use the registry for dispatching calls (e.g., `tools/call`, `resources/read`) to the appropriate service implementation. _(Note: ADR 006 is currently Draft and may need refinement before full implementation)_.
-- [ ] **Enhance Schema Loading Feedback:**
-    - **Context:** Improve developer visibility during server startup regarding schema validation setup.
-    - **Action:** Modify `internal/schema/validator.go` and its usage in `cmd/server/server_runner.go` to log which schema source (embedded, file path, URL) was successfully loaded, log compilation time more prominently, and potentially add a startup "sanity check" validation against a known-good sample message[cite: 1].
-- [ ] **Add Richer Validation Error Details:**
-    - **Context:** Provide more specific information when schema validation fails, aiding developers in fixing malformed messages (Ref: ADR 002).
-    - **Action:** Enhance `convertValidationError` in `internal/schema/validator.go` to extract more details from the underlying `jsonschema.ValidationError` (e.g., expected type/format) and add this information to the `data` field of the resulting JSON-RPC error response and server logs[cite: 1].
-- [ ] **Implement "Dry Run" Validation CLI Command:**
-    - **Context:** Allow developers to quickly check JSON message validity without running the full server.
-    - **Action:** Add a new subcommand to `cmd/main.go` (e.g., `validate-message`) that takes a file path argument, reads the JSON content, initializes the `SchemaValidator`, and runs validation, printing success or detailed errors.
-- [NEW] **Refactor `RunServer` Complexity:** Break down the `RunServer` function in `cmd/server/server_runner.go` into smaller, more focused helper functions to improve readability and reduce its cyclomatic complexity.
+- [PENDING] **Document Schema Validation Implementation:** Create `docs/schema_validation_details.md`.
+- [PENDING] **Improve Visibility of Validation Rules:** Document schema source config, add CLI flag to dump naming rules.
+- [PENDING] **Add Optional Raw MCP Message Logging:** Implement `MCP_TRACE_LOG=file` option.
+- [PENDING] **Enhance Error Diagnostics with Fix Suggestions:** Add `"suggestion"` context to key internal errors.
+- [PENDING] **Implement Defensive Precondition Checks:** Add checks (auth, init state) before operations in handlers/services.
+- [PENDING] **Adopt Modular Service Architecture for Extensibility:** Refactor based on ADR 006 (Draft).
+- [PENDING] **Enhance Schema Loading Feedback:** Log loaded source, add startup sanity check.
+- [PENDING] **Refactor `RunServer` Complexity:** Break down `cmd/server/server_runner.go:RunServer`.
+
+---
 
 ## Phase 10: Feature Enhancements
 
-**Status:** [NEW PHASE]
+**Status:** [PENDING]
 
-- [NEW] **Implement HTTP Transport:** Complete the implementation for the HTTP transport option in `cmd/server/server_runner.go` and `internal/mcp/mcp_server.go`, potentially using SSE (Server-Sent Events) as per MCP recommendations.
+- [PENDING] **Implement RTM Write Operations:** Add tools for `createTask`, `completeTask`, etc., including actual API calls in `internal/rtm/methods.go`.
+- [PENDING] **Implement HTTP Transport:** Complete HTTP/SSE transport option.
+- [PENDING] **Implement Resource Subscriptions:** Add actual subscribe/unsubscribe logic for `rtm://*` resources.
+
+---
 
 ## Phase 5: Testing Framework
 
 **Status:** [INCOMPLETE]
 
 - [PENDING] Create comprehensive test suite:
-  - [PENDING] Unit tests for components
+  - [PENDING] Unit tests for components (Some exist, need more coverage)
   - [PENDING] Schema compliance tests
-  - [PARTIAL] Integration tests using `net.Pipe` (In-memory transport test exists)
+  - [COMPLETE] Integration tests using in-memory transport (`internal/mcp/mcp_server_test.go`)
   - [PENDING] Fuzzing tests for robustness
   - [PENDING] Benchmark tests for performance
+
+---
 
 ## Phase 6: Observability
 
 **Status:** [PARTIALLY COMPLETE]
 
-- [PARTIAL] Include connection ID and request ID in all logs (Some request IDs logged, not all)
+- [PARTIAL] Include connection ID and request ID in logs (Some request IDs logged, not consistently everywhere)
 - [PENDING] Add metrics:
   - [PENDING] Request counts and latencies
   - [PENDING] Error rates by type
   - [PENDING] Active connections
   - [PENDING] Schema validation failures
-  - [PENDING] Create exportable metrics
-
-## Phase 7: Security & Robustness
-
-**Status:** [NEW PHASE]
-
-- [PENDING] Add comprehensive input validation beyond schema validation
-- [PENDING] Implement rate limiting for API calls
-- [PENDING] Add secure token storage for RTM API credentials (See ADR 005)
-- [PENDING] Implement proper error sanitization to avoid leaking sensitive information
-- [PENDING] Add telemetry for security events
+  - [PENDING] Create exportable metrics (e.g., Prometheus)
 
 ---
 
 ## Deferred Items
 
-### Static Capability Pre-validation (Deferred from Phase 8, Step 3)
+_(These items are important but deferred to focus on core functionality and stability)_
+
+### Static Capability Pre-validation (Deferred from Phase 8)
 
 **Status:** [DEFERRED]
-**Goal:** Ensure the server's own definitions for the Tools, Resources, and Prompts it exposes are compliant with the official MCP schema (`internal/schema/schema.json`) before the server starts accepting connections.
-**Problem:** Currently, definitions (like tools in `internal/mcp/handlers_tools.go`) are used at runtime but are not validated against the loaded MCP schema during startup.
-**Proposed Solution (Deferred):** During server initialization (e.g., in `cmd/server/http_server.go`), after loading the MCP schema via `internal/schema/validator.go`[cite: 1], iterate through the server's defined capabilities. For each definition, marshal it to JSON and use `validator.Validate()` with the appropriate schema type. If any definition fails validation, log a critical error and prevent the server from starting.
-**Reason for Deferral:** Focus first on core request/response handling and basic validation architecture.
+**Goal:** Validate the server's own Tool/Resource/Prompt definitions against the loaded MCP schema at startup.
+**Reason for Deferral:** Focus first on request/response handling and core validation.
 
-### Explicit Schema Naming for Outgoing Validation (Deferred Refinement of Phase 8, Step 2)
+### Explicit Schema Naming for Outgoing Validation (Deferred Refinement of Phase 8)
 
 **Status:** [DEFERRED]
-**Goal:** Ensure the `ValidationMiddleware` uses the exact, most specific schema definition (`schema.json`) when validating outgoing server responses, rather than relying on heuristics.
-**Problem:** The current middleware receives marshalled response bytes without knowing precisely which schema definition it should conform to. The `determineSchemaType` function guesses based on naming conventions[cite: 2].
-**Proposed Solution (Deferred):** Modify the architecture to allow the component generating the response (e.g., `handleToolsList`) to explicitly specify the schema definition name alongside the response data. This involves changing the `transport.MessageHandler` signature and middleware interfaces (`internal/middleware/chain.go`). Update handlers and error helpers to return the specific `SchemaType`. The `ValidationMiddleware` would then use this explicit type.
-**Reason for Deferral:** Involves significant refactoring across handlers, middleware, and the server loop. Proceeding with other tasks first, relying on the existing heuristic and eventual static pre-validation.
+**Goal:** Have handlers explicitly specify the schema name for their responses, avoiding heuristics in the validation middleware.
+**Reason for Deferral:** Requires significant refactoring of handler/middleware signatures. Relying on current heuristic and non-strict outgoing validation for now.
 
 ---
 
 ## Completed Work
 
-_(Consider moving fully completed Phase items here if the list gets too long)_
+_(Moved from previous phases)_
 
-- Phase 8, Step 2: Outgoing Message Validation [cite: 2]
-- Phase 8, Step 4: Helper functions for schema-compliant names
-- Phase 8, Step 1: Partial compile-time metrics/logging & Schema source configuration [cite: 1]
+- Basic NDJSON Transport Implementation
+- Initial MCP Handler Structure
+- Basic RTM Client Scaffolding (Auth flow, GetLists)
+- Initial Schema Validation Middleware (Incoming)
+- Secure Token Storage for RTM Auth Token (Keychain/File)
+- In-Memory Transport for Testing
+- Addition of Outgoing Validation (with non-strict default)
+- Forcing Protocol Version in `initialize` (Interim Fix)

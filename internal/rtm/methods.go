@@ -139,7 +139,8 @@ func (c *Client) CompleteTask(ctx context.Context, listID, taskID string) error 
 	}
 	// List ID is mandatory for completing a task.
 	if listID == "" {
-		return mcperrors.NewResourceError("listID is required to complete a task", nil, map[string]interface{}{"taskID": taskID})
+		// <<< FIX: Added mcperrors.ErrResourceInvalid as the first argument >>>.
+		return mcperrors.NewResourceError(mcperrors.ErrResourceInvalid, "listID is required to complete a task", nil, map[string]interface{}{"taskID": taskID})
 	}
 
 	timeline, err := c.createTimeline(ctx)
@@ -192,7 +193,7 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 	for _, list := range result.Rsp.Tasks.List {
 		// Iterate through task series within each list.
 		for _, series := range list.Taskseries {
-			// --- Robust Note Parsing ---
+			// --- Robust Note Parsing ---.
 			// This section handles the fact that RTM returns notes sometimes
 			// as {"note": [...]} and sometimes as just [...].
 			var taskNotes []Note         // Final public Note slice.
@@ -236,7 +237,7 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 			} else {
 				taskNotes = nil
 			}
-			// --- End Robust Note Parsing ---
+			// --- End Robust Note Parsing ---.
 
 			// Iterate through individual task instances within the series.
 			for _, t := range series.Task {
@@ -278,7 +279,7 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 	return tasks, nil
 }
 
-// --- Helper functions ---
+// --- Helper functions ---.
 
 // parseRTMTime safely parses RTM's ISO 8601 time format (UTC).
 func (c *Client) parseRTMTime(timeStr string) (time.Time, error) {
@@ -346,7 +347,8 @@ func (c *Client) splitRTMTaskID(combinedID string) (string, string, error) {
 	parts := strings.Split(combinedID, "_")
 	// Ensure exactly two non-empty parts exist.
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", mcperrors.NewResourceError(
+		// <<< FIX: Added mcperrors.ErrResourceInvalid as the first argument >>>.
+		return "", "", mcperrors.NewResourceError(mcperrors.ErrResourceInvalid,
 			fmt.Sprintf("invalid task ID format: %s, expected seriesID_taskID", combinedID),
 			nil,
 			map[string]interface{}{"taskID": combinedID})

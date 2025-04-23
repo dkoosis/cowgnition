@@ -190,7 +190,8 @@ func (h *Handler) handleResourcesRead(_ context.Context, params json.RawMessage)
 	default:
 		// Resource not found.
 		h.logger.Warn("Resource URI not found.", "uri", req.URI)
-		return nil, mcperrors.NewResourceError("Resource not found: "+req.URI, nil, map[string]interface{}{"uri": req.URI})
+		// <<< FIX: Added mcperrors.ErrResourceNotFound as the first argument >>>.
+		return nil, mcperrors.NewResourceError(mcperrors.ErrResourceNotFound, "Resource not found: "+req.URI, nil, map[string]interface{}{"uri": req.URI})
 	}
 
 	result := ReadResourceResult{

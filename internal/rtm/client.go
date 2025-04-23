@@ -58,7 +58,7 @@ func (c *Client) GetAuthToken() string {
 // It handles parameter preparation, signing, HTTP request execution,
 // and basic response/error checking.
 func (c *Client) callMethod(ctx context.Context, method string, params map[string]string) (json.RawMessage, error) {
-	// --- 1. Prepare Request ---
+	// --- 1. Prepare Request ---.
 	fullParams := c.prepareParameters(method, params)
 	apiURL, err := c.buildRequestURL(fullParams)
 	if err != nil {
@@ -71,8 +71,8 @@ func (c *Client) callMethod(ctx context.Context, method string, params map[strin
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("User-Agent", "CowGnition/0.1.0") // TODO: Version from build flags.
 
-	// --- 2. Execute Request ---
-	// c.logger.Debug("Making RTM API call.", "method", method, "endpoint", c.config.APIEndpoint) // Commented out
+	// --- 2. Execute Request ---.
+	// c.logger.Debug("Making RTM API call.", "method", method, "endpoint", c.config.APIEndpoint). // Commented out.
 	resp, err := c.config.HTTPClient.Do(req)
 	if err != nil {
 		// Wrap HTTP client errors.
@@ -85,18 +85,18 @@ func (c *Client) callMethod(ctx context.Context, method string, params map[strin
 		}
 	}()
 
-	// --- 3. Read Response Body ---
+	// --- 3. Read Response Body ---.
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read RTM response body")
 	}
 
-	// --- 4. Check HTTP Status ---
+	// --- 4. Check HTTP Status ---.
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.handleHTTPError(resp.StatusCode, resp.Status, body, method)
 	}
 
-	// --- 5. Check RTM API Status ---
+	// --- 5. Check RTM API Status ---.
 	var baseResult struct {
 		Rsp baseRsp `json:"rsp"`
 	}
@@ -108,7 +108,7 @@ func (c *Client) callMethod(ctx context.Context, method string, params map[strin
 		return nil, c.handleRTMError(baseResult.Rsp, method)
 	}
 
-	// --- 6. Return Raw Body on Success ---
+	// --- 6. Return Raw Body on Success ---.
 	return body, nil
 }
 
@@ -186,7 +186,8 @@ func (c *Client) handleRTMError(rsp baseRsp, method string) error {
 		}
 
 		if rtmErrCode == rtmErrCodeInvalidAuthToken {
-			authErr := mcperrors.NewAuthError( // Create error first.
+			// <<< FIX: Added mcperrors.ErrAuthFailure as the first argument >>>.
+			authErr := mcperrors.NewAuthError(mcperrors.ErrAuthFailure,
 				fmt.Sprintf("RTM API Error: %s (Invalid Auth Token)", rsp.Err.Msg),
 				nil,
 				errCtx,
@@ -228,23 +229,23 @@ func (c *Client) generateSignature(params map[string]string) string {
 	var builder strings.Builder
 	builder.WriteString(c.config.SharedSecret)
 
-	// sensitiveKeys := map[string]bool{"api_key": true, "auth_token": true} // Keep track if needed for logging
-	// loggedParams := []string{} // Keep track if needed for logging
+	// sensitiveKeys := map[string]bool{"api_key": true, "auth_token": true}. // Keep track if needed for logging.
+	// loggedParams := []string{}. // Keep track if needed for logging.
 
 	for _, k := range keys {
 		value := params[k]
 		builder.WriteString(k)
 		builder.WriteString(value)
-		// if !sensitiveKeys[k] { // Conditional logging if needed
-		// 	loggedParams = append(loggedParams, k)
-		// }
+		// if !sensitiveKeys[k] { // Conditional logging if needed.
+		// 	loggedParams = append(loggedParams, k).
+		// }.
 	}
 	rawString := builder.String()
 
-	// c.logger.Debug("Generating API signature", // Commented out
+	// c.logger.Debug("Generating API signature", // Commented out.
 	// 	"rawStringLength", len(rawString),
 	// 	"paramCount", len(params),
-	// 	"nonSensitiveParamKeys", strings.Join(loggedParams, ","))
+	// 	"nonSensitiveParamKeys", strings.Join(loggedParams, ",")).
 
 	hasher := md5.New() // nolint:gosec
 	hasher.Write([]byte(rawString))

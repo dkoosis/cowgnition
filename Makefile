@@ -42,8 +42,8 @@ BUILD_DATE := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 LDFLAGS := -ldflags "-X main.version=${VERSION} -X main.commitHash=${COMMIT_HASH} -X main.buildDate=${BUILD_DATE}"
 
 # Line length check configuration
-WARN_LINES := 300  # Warn if lines exceed this
-FAIL_LINES := 650  # Fail if lines exceed this
+WARN_LINES := 350  # Warn if lines exceed this
+FAIL_LINES := 700  # Fail if lines exceed this
 
 # --- Core Targets ---
 

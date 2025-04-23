@@ -1,7 +1,7 @@
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
 package rtm
 
-// file: internal/rtm/mcp_resources.go
+// file: internal/rtm/mcp_resources.go.
 
 import (
 	"context"
@@ -74,14 +74,15 @@ func (s *Service) ReadResource(ctx context.Context, uri string) ([]interface{}, 
 		return s.readTasksResourceWithFilter(ctx, filter)
 	default:
 		// Return MCP resource not found error.
-		return nil, mcperrors.NewResourceError(
+		// <<< FIX: Added mcperrors.ErrResourceNotFound as the first argument >>>.
+		return nil, mcperrors.NewResourceError(mcperrors.ErrResourceNotFound,
 			fmt.Sprintf("Unknown RTM resource URI: %s", uri),
 			nil,
 			map[string]interface{}{"uri": uri})
 	}
 }
 
-// --- Resource Readers ---
+// --- Resource Readers ---.
 
 func (s *Service) readAuthResource(ctx context.Context) ([]interface{}, error) {
 	authState, err := s.GetAuthState(ctx) // Use service method.
@@ -133,7 +134,7 @@ func (s *Service) readTasksResourceWithFilter(ctx context.Context, filter string
 	return s.createJSONResourceContent(resourceURI, tasks) // Use helper.
 }
 
-// --- Resource Helpers ---
+// --- Resource Helpers ---.
 
 // extractFilterFromURI parses the 'filter' query parameter.
 func extractFilterFromURI(uriString string) (string, error) {

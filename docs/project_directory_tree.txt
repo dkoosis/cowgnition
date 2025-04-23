@@ -45,8 +45,7 @@
 │   │   ├── mcp_server_test.go
 │   │   └── types.go
 │   ├── mcp_types/
-│   │   ├── interfaces.go
-│   │   └── middleware.bak
+│   │   └── interfaces.go
 │   ├── middleware/
 │   │   ├── chain.go
 │   │   ├── validation.go
@@ -78,7 +77,6 @@
 │   │   ├── mcp_tools.go
 │   │   ├── methods.go
 │   │   ├── service.go
-│   │   ├── service_mock_test.bak
 │   │   ├── token_storage.go
 │   │   ├── token_storage_interface.go
 │   │   ├── token_storage_secure.go
@@ -108,7 +106,6 @@
 ├── README.md
 ├── go.mod
 ├── go.sum
-├── log
 └── rtm-authentication.jpg
 
-18 directories, 94 files
+18 directories, 91 files
