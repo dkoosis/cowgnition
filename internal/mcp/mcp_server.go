@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -183,6 +184,45 @@ func (s *Server) Shutdown(_ context.Context) error {
 func (s *Server) serve(ctx context.Context, handlerFunc mcptypes.MessageHandler) error {
 	// This function's implementation is in mcp_server_processing.go.
 	return s.serverProcessing(ctx, handlerFunc)
+}
+
+// file: internal/mcp/mcp_server.go (partial update)
+
+// GetResources returns all available MCP resources from all providers
+func (s *Server) GetResources() []Resource {
+	resources := s.GetServerResources() // Add server resources
+
+	// Add RTM resources if available
+	if s.rtmService != nil {
+		resources = append(resources, s.rtmService.GetResources()...)
+	}
+
+	return resources
+}
+
+// ReadResource handles resource read requests
+func (s *Server) ReadResource(ctx context.Context, uri string) ([]interface{}, error) {
+	startTime := time.Now()
+	var result []interface{}
+	var err error
+
+	// Route based on URI prefix
+	if strings.HasPrefix(uri, "rtm://") {
+		if s.rtmService != nil {
+			result, err = s.rtmService.ReadResource(ctx, uri)
+		} else {
+			err = errors.New("RTM service not available")
+		}
+	} else if strings.HasPrefix(uri, "cowgnition://server/") {
+		result, err = s.ReadServerResource(ctx, uri)
+	} else {
+		err = errors.Newf("unknown resource URI scheme: %s", uri)
+	}
+
+	// Record request metrics
+	s.RecordRequestMetrics("ReadResource:"+uri, startTime, err)
+
+	return result, err
 }
 
 // serverProcessing is the actual implementation, located in mcp_server_processing.go.
