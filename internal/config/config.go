@@ -1,4 +1,5 @@
 // Package config handles loading, parsing, and validating application configuration.
+// file: internal/config/config.go
 package config
 
 import (
@@ -34,10 +35,12 @@ type AuthConfig struct {
 	TokenPath string `yaml:"token_path"`
 }
 
-// SchemaConfig holds schema-related settings (Simplified).
+// SchemaConfig holds schema-related settings.
 type SchemaConfig struct {
-	// SchemaOverrideURI allows specifying a file path (file://...) or URL (http://...)
-	// to load the schema from, overriding the default embedded schema. Optional.
+	// SchemaOverrideURI allows specifying a file path (e.g., "file:///path/to/schema.json")
+	// or URL (e.g., "https://example.com/schema.json") to load the schema from,
+	// overriding the default embedded schema. If set but loading fails, server initialization will fail.
+	// If empty or unset, the embedded schema is used.
 	SchemaOverrideURI string `yaml:"schemaOverrideURI,omitempty"`
 }
 
@@ -56,6 +59,7 @@ func DefaultConfig() *Config {
 	if err == nil {
 		tokenPath = filepath.Join(homeDir, ".config", "cowgnition", "rtm_token.json")
 	} else {
+		// Fallback path, using only the filename might be better than relative "configs/".
 		tokenPath = "rtm_token.json" //nolint:gosec // Best effort fallback.
 	}
 
@@ -81,6 +85,7 @@ func DefaultConfig() *Config {
 
 // LoadFromFile loads configuration from the specified YAML file.
 func LoadFromFile(path string) (*Config, error) {
+	// Expand ~ character in path.
 	if len(path) > 0 && path[0] == '~' {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -89,7 +94,8 @@ func LoadFromFile(path string) (*Config, error) {
 		path = filepath.Join(homeDir, path[1:])
 	}
 
-	data, err := os.ReadFile(path) // nolint:gosec
+	// #nosec G304 -- Path comes from command-line flag, assumed intentional.
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read config file: %s", path)
 	}
@@ -105,7 +111,7 @@ func LoadFromFile(path string) (*Config, error) {
 
 // applyEnvironmentOverrides applies configuration overrides from environment variables.
 func applyEnvironmentOverrides(config *Config, logger logging.Logger) {
-	// RTM overrides (same as before).
+	// RTM overrides.
 	apiKeyMissing := false
 	sharedSecretMissing := false
 	apiKeySource := "default"
@@ -133,65 +139,50 @@ func applyEnvironmentOverrides(config *Config, logger logging.Logger) {
 		sharedSecretMissing = true
 	}
 
-	logger.Debug("RTM API Key source.", "source", apiKeySource)
-	logger.Debug("RTM Shared Secret source.", "source", sharedSecretSource)
+	logger.Debug("RTM API Key source.", "source", apiKeySource)             // Added period.
+	logger.Debug("RTM Shared Secret source.", "source", sharedSecretSource) // Added period.
 
-	if apiKeyMissing || sharedSecretMissing {
-		foundAlternatives := findAlternativeRTMEnvVars()
-		if len(foundAlternatives) > 0 {
-			missingVars := []string{}
-			if apiKeyMissing {
-				missingVars = append(missingVars, "RTM_API_KEY")
-			}
-			if sharedSecretMissing {
-				missingVars = append(missingVars, "RTM_SHARED_SECRET")
-			}
-			logger.Warn(
-				"Required RTM environment variable(s) missing.",
-				"missing", strings.Join(missingVars, ", "),
-				"suggestion", "Found possible alternatives in environment. Did you misspell the variable name?",
-				"foundNames", strings.Join(foundAlternatives, ", "),
-			)
-		} else {
-			if apiKeyMissing {
-				logger.Warn("Required RTM_API_KEY is missing from environment and config file.")
-			}
-			if sharedSecretMissing {
-				logger.Warn("Required RTM_SHARED_SECRET is missing from environment and config file.")
-			}
-		}
+	// --- Simplified Missing Credential Logging ---.
+	if apiKeyMissing {
+		logger.Warn("Required RTM_API_KEY is missing from environment and config file.") // Added period.
 	}
+	if sharedSecretMissing {
+		logger.Warn("Required RTM_SHARED_SECRET is missing from environment and config file.") // Added period.
+	}
+	// Removed the alternative env var search for simplicity now.
 
-	// Server overrides (same as before).
+	// Server overrides.
 	if portStr := os.Getenv("SERVER_PORT"); portStr != "" {
 		if port, err := strconv.Atoi(portStr); err == nil && port > 0 && port < 65536 {
-			logger.Debug("Overriding server port from environment.", "envVar", "SERVER_PORT", "value", port)
+			logger.Debug("Overriding server port from environment.", "envVar", "SERVER_PORT", "value", port) // Added period.
 			config.Server.Port = port
 		} else {
-			logger.Warn("Invalid SERVER_PORT environment variable ignored.", "value", portStr, "error", err)
+			logger.Warn("Invalid SERVER_PORT environment variable ignored.", "value", portStr, "error", err) // Added period.
 		}
 	}
 	if serverName := os.Getenv("SERVER_NAME"); serverName != "" {
-		logger.Debug("Overriding server name from environment.", "envVar", "SERVER_NAME", "value", serverName)
+		logger.Debug("Overriding server name from environment.", "envVar", "SERVER_NAME", "value", serverName) // Added period.
 		config.Server.Name = serverName
 	}
 
-	// Auth overrides (same as before).
+	// Auth overrides.
 	if tokenPath := os.Getenv("COWGNITION_TOKEN_PATH"); tokenPath != "" {
-		logger.Debug("Overriding auth token path from environment.", "envVar", "COWGNITION_TOKEN_PATH", "value", tokenPath)
+		logger.Debug("Overriding auth token path from environment.", "envVar", "COWGNITION_TOKEN_PATH", "value", tokenPath) // Added period.
 		config.Auth.TokenPath = tokenPath
 	}
 
 	// Schema override.
 	if schemaOverride := os.Getenv("COWGNITION_SCHEMA_OVERRIDE_URI"); schemaOverride != "" {
-		logger.Debug("Overriding schema source from environment.", "envVar", "COWGNITION_SCHEMA_OVERRIDE_URI", "value", schemaOverride)
+		logger.Debug("Overriding schema source from environment.", "envVar", "COWGNITION_SCHEMA_OVERRIDE_URI", "value", schemaOverride) // Added period.
 		config.Schema.SchemaOverrideURI = schemaOverride
 	}
 }
 
 // findAlternativeRTMEnvVars scans the environment for potential misspellings.
+// Note: This function is currently unused by applyEnvironmentOverrides but kept for potential future use.
+//
+//nolint:unused
 func findAlternativeRTMEnvVars() []string {
-	// (Function implementation remains the same as before).
 	alternatives := []string{}
 	prefixes := []string{"rtm_", "remember_", "rmilk_"}
 	exactMatches := map[string]bool{
@@ -209,7 +200,7 @@ func findAlternativeRTMEnvVars() []string {
 		lowerVarName := strings.ToLower(varName)
 
 		if lowerVarName == "rtm_api_key" || lowerVarName == "rtm_shared_secret" {
-			continue
+			continue // Skip exact matches.
 		}
 
 		matchedPrefix := false

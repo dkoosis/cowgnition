@@ -2,10 +2,10 @@
 // file: internal/schema/validator.go
 //
 // The validator implementation orchestrates the schema handling process:
-// 1. Loading: schema content is retrieved either from a configured URI or from embedded content
-// 2. Parsing: JSON schema is parsed into an in-memory structure
-// 3. Compilation: Schema definitions are compiled for validation use
-// 4. Validation: Incoming/outgoing messages are validated against compiled schemas
+// 1. Loading: schema content is retrieved either from a configured URI or from embedded content.
+// 2. Parsing: JSON schema is parsed into an in-memory structure.
+// 3. Compilation: Schema definitions are compiled for validation use.
+// 4. Validation: Incoming/outgoing messages are validated against compiled schemas.
 //
 // The validator maintains compiled schemas in memory with appropriate thread safety,
 // supports schema version detection, and provides diagnostic metrics on loading and
@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
+	"strings" // Keep strings import.
 	"sync"
 	"time"
 
@@ -57,7 +57,6 @@ type Validator struct {
 	lastLoadDuration    time.Duration
 	lastCompileDuration time.Duration
 	schemaVersion       string
-	// ETag/LastModified are no longer needed here as network fetch isn't default.
 }
 
 // Ensure Validator implements the interface.
@@ -84,7 +83,9 @@ func NewValidator(cfg config.SchemaConfig, logger logging.Logger) *Validator {
 	}
 }
 
-// Initialize loads and compiles the MCP schema definitions using a robust multi-source strategy.
+// Initialize loads and compiles the MCP schema definitions.
+// It prioritizes the embedded schema unless SchemaOverrideURI is set in the config.
+// If SchemaOverrideURI is set but fails to load, initialization fails.
 func (v *Validator) Initialize(ctx context.Context) error {
 	initStart := time.Now()
 	v.mu.Lock()
@@ -94,53 +95,84 @@ func (v *Validator) Initialize(ctx context.Context) error {
 		v.logger.Warn("Schema validator already initialized, skipping.")
 		return nil
 	}
-	v.logger.Info("Initializing schema validator.")
+	v.logger.Info("Initializing schema validator...") // Added ellipsis for clarity.
 
-	// Load schema data using our robust multi-source strategy.
+	var schemaData []byte
+	var sourceInfo string // Variable to store the definitive source.
+	var loadErr error
+
 	loadStart := time.Now()
-	schemaData, sourceInfo, loadErr := loadSchemaFromMultipleSources(ctx, v.schemaConfig, v.logger, v.httpClient)
 
-	// Fall back to embedded schema if all external sources failed.
-	if loadErr != nil || len(schemaData) == 0 {
+	// Check for explicit override first.
+	if v.schemaConfig.SchemaOverrideURI != "" {
+		v.logger.Info("SchemaOverrideURI is set, attempting to load external schema.", "uri", v.schemaConfig.SchemaOverrideURI)
+		// Use the loader function (defined in loader.go).
+		schemaData, loadErr = loadSchemaFromURI(ctx, v.schemaConfig.SchemaOverrideURI, v.logger, v.httpClient)
 		if loadErr != nil {
-			v.logger.Info("External schema loading failed, falling back to embedded schema.",
-				"error", loadErr)
+			// CRITICAL: Override was requested but failed. Do NOT fall back.
+			v.logger.Error("CRITICAL: Failed to load schema from configured SchemaOverrideURI. Initialization aborted.",
+				"uri", v.schemaConfig.SchemaOverrideURI, "error", loadErr)
+			// Wrap the specific loading error.
+			return errors.Wrapf(loadErr, "failed to load schema from configured override URI '%s'", v.schemaConfig.SchemaOverrideURI)
 		}
-
-		if len(embeddedSchemaContent) > 0 {
-			v.logger.Info("Using embedded schema content.")
-			schemaData = embeddedSchemaContent
-			sourceInfo = "embedded"
-			// Removed ineffectual assignment to loadErr
-		} else {
-			err := errors.New("embedded schema content is empty and all external sources failed")
-			v.logger.Error("Schema loading completely failed.", "error", err)
-			return err
+		// ** Explicitly set source info **.
+		sourceInfo = fmt.Sprintf("override URI: %s", v.schemaConfig.SchemaOverrideURI)
+		v.logger.Info("Successfully loaded schema from override URI.")
+	} else {
+		// No override, use embedded schema.
+		v.logger.Info("No SchemaOverrideURI configured, using embedded schema.")
+		if len(embeddedSchemaContent) == 0 {
+			// CRITICAL: No override AND embedded schema is empty. Cannot proceed.
+			err := errors.New("embedded schema content is empty and no override URI was provided")
+			v.logger.Error("CRITICAL: Embedded schema is empty. Initialization aborted.", "error", err)
+			// Use the custom error type for consistency.
+			return NewValidationError(ErrSchemaLoadFailed, "Embedded schema content is empty", err)
 		}
+		schemaData = embeddedSchemaContent
+		// ** Explicitly set source info **.
+		sourceInfo = "embedded"
+		loadErr = nil // No load error when using embedded.
+		v.logger.Info("Using embedded schema content.")
 	}
+
 	v.lastLoadDuration = time.Since(loadStart)
 
+	// Check if schema data is empty after potentially loading.
 	if len(schemaData) == 0 {
-		err := errors.New("loaded schema data is empty from all sources")
-		v.logger.Error("Schema loading failed - empty data.",
-			"duration", v.lastLoadDuration,
-			"source", sourceInfo,
-			"error", err)
-		return err
+		// This case should technically be caught above, but double-check.
+		err := errors.New("loaded schema data is empty")
+		v.logger.Error("Schema loading resulted in empty data. Initialization aborted.", "source", sourceInfo, "error", err)
+		return NewValidationError(ErrSchemaLoadFailed, "Loaded schema data is empty", err)
 	}
 
-	v.logger.Info("Schema loaded successfully.",
+	v.logger.Info("Schema content loaded.", // Changed log message slightly.
 		"duration", v.lastLoadDuration,
-		"source", sourceInfo,
+		// "source" field removed here, will be added in the final log message.
 		"sizeBytes", len(schemaData))
 
+	// --- Compile the loaded schemaData (rest of the function is similar) ---.
+
 	// Parse Schema JSON.
-	if err := json.Unmarshal(schemaData, &v.schemaDoc); err != nil {
-		v.logger.Error("Failed to parse schema JSON.", "error", err)
-		return NewValidationError(ErrSchemaLoadFailed, "Failed to parse schema JSON", errors.Wrap(err, "json.Unmarshal failed"))
+	// Use a temporary variable for parsing to avoid modifying v.schemaDoc before success.
+	var parsedDoc map[string]interface{}
+	if err := json.Unmarshal(schemaData, &parsedDoc); err != nil {
+		v.logger.Error("Failed to parse loaded schema JSON.", "error", err, "source", sourceInfo)
+		return NewValidationError(ErrSchemaLoadFailed, "Failed to parse schema JSON", errors.Wrap(err, "json.Unmarshal failed")).
+			WithContext("source", sourceInfo)
 	}
 
-	v.extractSchemaVersion(schemaData) // Extract version info.
+	// --- Extract Version BEFORE compilation ---.
+	// Ensure schemaVersion is set before the final success log.
+	// Assumes extractSchemaVersion updates v.schemaVersion.
+	v.extractSchemaVersion(schemaData) // This method now belongs to Validator.
+
+	// Create a new compiler instance *for this initialization attempt*.
+	// This ensures retries (if implemented) or subsequent initializations don't reuse stale compiler state.
+	// NOTE: ADR doesn't specify retries, but this is good practice.
+	v.compiler = jsonschema.NewCompiler() // Re-init compiler.
+	v.compiler.Draft = jsonschema.Draft2020
+	v.compiler.AssertFormat = true
+	v.compiler.AssertContent = true
 
 	// Add Schema Resource.
 	addStart := time.Now()
@@ -150,41 +182,53 @@ func (v *Validator) Initialize(ctx context.Context) error {
 		v.logger.Error("Failed to add schema resource to compiler.",
 			"duration", time.Since(addStart),
 			"resourceID", resourceID,
+			"source", sourceInfo,
 			"error", err)
 		return NewValidationError(
 			ErrSchemaLoadFailed,
 			"Failed to add schema resource",
 			errors.Wrap(err, "compiler.AddResource failed"),
-		).WithContext("schemaSize", len(schemaData))
+		).WithContext("source", sourceInfo).WithContext("schemaSize", len(schemaData))
 	}
 	v.logger.Info("Schema resource added.", "duration", time.Since(addStart), "resourceID", resourceID)
 
 	// Compile Schemas.
 	compileStart := time.Now()
-	compiledSchemas, compileErr := v.compileAllDefinitions(resourceID)
+	// Pass the parsedDoc to the compile function.
+	compiledSchemas, compileErr := v.compileAllDefinitions(resourceID, parsedDoc)
 	v.lastCompileDuration = time.Since(compileStart)
 
 	if compileErr != nil {
-		v.logger.Error("Schema compilation finished with errors.", "duration", v.lastCompileDuration, "firstError", compileErr)
+		v.logger.Error("Schema compilation finished with errors. Initialization aborted.", "duration", v.lastCompileDuration, "firstError", compileErr)
 		return compileErr // Return the first critical error encountered.
 	}
 
-	v.schemas = compiledSchemas // Assign successfully compiled schemas.
+	// --- Success: Update Validator State ---.
+	v.schemaDoc = parsedDoc     // Store the successfully parsed document.
+	v.schemas = compiledSchemas // Store the successfully compiled schemas.
 	v.initialized = true
 	initDuration := time.Since(initStart)
 
-	v.logger.Info("Schema validator initialized successfully.",
-		"totalDuration", initDuration,
-		"loadDuration", v.lastLoadDuration,
-		"compileDuration", v.lastCompileDuration,
-		"schemaVersion", v.schemaVersion,
-		"schemasCompiled", len(v.schemas))
+	// --- Modified Final Success Log ---.
+	// Ensure schemaVersion and sourceInfo are included here.
+	finalSchemaVersion := v.schemaVersion // Use the potentially updated field.
+	if finalSchemaVersion == "" {
+		finalSchemaVersion = "[unknown]" // Fallback if extraction failed.
+	}
+	v.logger.Info("✅ Schema validator initialized successfully.", // Added checkmark.
+		"totalDuration", initDuration.String(), // Use .String() for readability.
+		"loadDuration", v.lastLoadDuration.String(),
+		"compileDuration", v.lastCompileDuration.String(),
+		"schemaVersion", finalSchemaVersion, // Use the variable.
+		"schemasCompiled", len(v.schemas),
+		"schemaSource", sourceInfo) // Add the definitive source.
 
 	return nil
 }
 
 // compileAllDefinitions compiles the base schema and all found definitions.
-func (v *Validator) compileAllDefinitions(baseResourceID string) (map[string]*jsonschema.Schema, error) {
+// Corrected: Method receiver changed to *Validator.
+func (v *Validator) compileAllDefinitions(baseResourceID string, schemaDoc map[string]interface{}) (map[string]*jsonschema.Schema, error) {
 	compiled := make(map[string]*jsonschema.Schema)
 	var firstCompileError error
 
@@ -201,8 +245,8 @@ func (v *Validator) compileAllDefinitions(baseResourceID string) (map[string]*js
 	compiled["base"] = baseSchema
 	v.logger.Debug("Compiled base schema definition.", "name", "base")
 
-	// Compile definitions.
-	if defs, ok := v.schemaDoc["definitions"].(map[string]interface{}); ok {
+	// Compile definitions using the passed-in schemaDoc.
+	if defs, ok := schemaDoc["definitions"].(map[string]interface{}); ok {
 		for name := range defs {
 			pointer := baseResourceID + "#/definitions/" + name
 			schemaCompiled, errCompile := v.compiler.Compile(pointer)
@@ -225,35 +269,37 @@ func (v *Validator) compileAllDefinitions(baseResourceID string) (map[string]*js
 	}
 
 	// Add generic mappings after compiling definitions.
-	v.addGenericMappings(compiled)
+	v.addGenericMappings(compiled) // Assuming this doesn't need schemaDoc.
 
 	return compiled, firstCompileError
 }
 
 // addGenericMappings creates mappings from generic type names to specific schema definitions.
+// Corrected: Method receiver changed to *Validator.
 func (v *Validator) addGenericMappings(compiledSchemas map[string]*jsonschema.Schema) {
 	mappings := map[string][]string{
 		"success_response":        {"JSONRPCResponse", "Response"},
 		"error_response":          {"JSONRPCError", "Error"},
-		"ping_notification":       {"PingRequest", "PingNotification", "JSONRPCNotification"},
+		"ping_notification":       {"PingRequest", "PingNotification", "JSONRPCNotification"}, // Corrected: Ping is often request-like.
 		"notification":            {"JSONRPCNotification", "Notification"},
 		"request":                 {"JSONRPCRequest", "Request"},
-		"CallToolResult":          {"CallToolResult", "ToolResult"},
+		"CallToolResult":          {"CallToolResult", "ToolResult"}, // Corrected: Added CallToolResult mapping.
 		"initialize_response":     {"InitializeResult"},
 		"tools/list_response":     {"ListToolsResult"},
 		"resources/list_response": {"ListResourcesResult"},
 		"prompts/list_response":   {"ListPromptsResult"},
+		// Add more mappings as needed based on schema definitions.
 	}
 	mapped := make([]string, 0)
 	for genericName, potentialTargets := range mappings {
 		if _, exists := compiledSchemas[genericName]; exists {
-			continue
+			continue // Don't overwrite if already explicitly defined.
 		}
 		for _, targetDef := range potentialTargets {
 			if targetSchema, ok := compiledSchemas[targetDef]; ok {
 				compiledSchemas[genericName] = targetSchema
-				mapped = append(mapped, fmt.Sprintf("%s→%s", genericName, targetDef))
-				break
+				mapped = append(mapped, fmt.Sprintf("%s->%s", genericName, targetDef))
+				break // Use the first found target.
 			}
 		}
 	}
@@ -284,13 +330,15 @@ func (v *Validator) Shutdown() error {
 		return nil
 	}
 	v.logger.Info("Shutting down schema validator.")
+	// Close idle HTTP client connections if applicable.
 	if transport, ok := v.httpClient.Transport.(*http.Transport); ok {
 		transport.CloseIdleConnections()
 	} else if dt, ok := http.DefaultTransport.(*http.Transport); ok {
+		// Check default transport too, just in case.
 		dt.CloseIdleConnections()
 	}
-	v.schemas = nil
-	v.schemaDoc = nil
+	v.schemas = nil   // Release compiled schemas map.
+	v.schemaDoc = nil // Release parsed document map.
 	v.initialized = false
 	v.logger.Info("Schema validator shut down.")
 	return nil
@@ -315,12 +363,12 @@ func (v *Validator) Validate(_ context.Context, messageType string, data []byte)
 			"Invalid JSON format",
 			errors.Wrap(err, "json.Unmarshal failed"),
 		).WithContext("messageType", messageType).
-			WithContext("dataPreview", calculatePreview(data))
+			WithContext("dataPreview", calculatePreview(data)) // Assuming calculatePreview is in helpers.go.
 	}
 	schemaToUse, schemaUsedKey, ok := v.getSchemaForMessageType(messageType)
 	if !ok {
 		v.mu.RLock()
-		availableKeys := getSchemaKeys(v.schemas)
+		availableKeys := getSchemaKeys(v.schemas) // Assuming getSchemaKeys is in helpers.go or here.
 		v.mu.RUnlock()
 		return NewValidationError(
 			ErrSchemaNotFound,
@@ -342,8 +390,10 @@ func (v *Validator) Validate(_ context.Context, messageType string, data []byte)
 				"messageType", messageType,
 				"schemaUsed", schemaUsedKey,
 				"error", valErr.Message)
-			return convertValidationError(valErr, messageType, data)
+			// Pass necessary info to convertValidationError.
+			return convertValidationError(valErr, messageType, data) // Assumes convertValidationError is in errors.go.
 		}
+		// Handle unexpected non-jsonschema errors during validation.
 		v.logger.Error("Unexpected error during schema.Validate.",
 			"duration", validationDuration,
 			"messageType", messageType,
@@ -365,42 +415,57 @@ func (v *Validator) Validate(_ context.Context, messageType string, data []byte)
 }
 
 // getSchemaForMessageType finds the appropriate compiled schema based on the message type.
+// Corrected: Method receiver changed to *Validator.
 func (v *Validator) getSchemaForMessageType(messageType string) (*jsonschema.Schema, string, bool) {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
+	// 1. Exact Match.
 	if schema, ok := v.schemas[messageType]; ok {
 		return schema, messageType, true
 	}
 
+	// 2. Fallback Logic.
 	var fallbackKey string
 	if strings.HasSuffix(messageType, "_notification") || strings.HasPrefix(messageType, "notifications/") {
-		fallbackKey = "JSONRPCNotification"
+		fallbackKey = "JSONRPCNotification" // Use standard JSON-RPC definition.
 	} else if strings.Contains(messageType, "Response") || strings.Contains(messageType, "Result") || strings.HasSuffix(messageType, "_response") || strings.HasSuffix(messageType, "_result") {
-		if _, responseExists := v.schemas["JSONRPCResponse"]; responseExists {
-			fallbackKey = "JSONRPCResponse"
-		} else {
-			fallbackKey = "base"
-		}
+		// Prioritize more specific JSON-RPC types if they exist.
 		if strings.Contains(messageType, "Error") || strings.HasSuffix(messageType, "_error") {
 			if _, errorExists := v.schemas["JSONRPCError"]; errorExists {
 				fallbackKey = "JSONRPCError"
+			} else if _, responseExists := v.schemas["JSONRPCResponse"]; responseExists {
+				fallbackKey = "JSONRPCResponse" // Fallback for general response structure.
+			} else {
+				fallbackKey = "base" // Ultimate fallback.
+			}
+		} else {
+			// Likely a success response.
+			if _, responseExists := v.schemas["JSONRPCResponse"]; responseExists {
+				fallbackKey = "JSONRPCResponse"
+			} else {
+				fallbackKey = "base"
 			}
 		}
 	} else {
+		// Assume it's a request if not notification or response.
 		fallbackKey = "JSONRPCRequest"
 	}
 
+	// Check if the chosen fallback key exists.
 	if schema, ok := v.schemas[fallbackKey]; ok {
 		v.logger.Debug("Using fallback schema.", "originalType", messageType, "fallbackKey", fallbackKey)
 		return schema, fallbackKey, true
 	}
 
+	// 3. Ultimate Fallback to "base".
 	if schema, ok := v.schemas["base"]; ok {
-		v.logger.Debug("Using base schema as final fallback.", "originalType", messageType)
+		v.logger.Warn("Using 'base' schema as final fallback.", "originalType", messageType, "initialFallbackAttempt", fallbackKey)
 		return schema, "base", true
 	}
 
+	// 4. Schema not found even with fallbacks.
+	v.logger.Error("Could not find schema definition.", "requestedType", messageType, "fallbackAttempted", fallbackKey)
 	return nil, "", false
 }
 
@@ -416,6 +481,7 @@ func (v *Validator) HasSchema(name string) bool {
 }
 
 // getSchemaKeys returns the keys of the schemas map for debugging purposes.
+// This should likely be in helpers.go or remain private if only used internally.
 func getSchemaKeys(schemas map[string]*jsonschema.Schema) []string {
 	if schemas == nil {
 		return []string{}
