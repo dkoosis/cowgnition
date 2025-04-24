@@ -338,6 +338,8 @@ func (c *Client) parseRTMNotes(notesData []rtmNote) []Note { // Returns exported
 	return notes
 }
 
+// file: internal/rtm/methods.go (partial update - only adding the GetSettings function)
+
 // GetSettings retrieves the user's RTM settings.
 func (c *Client) GetSettings(ctx context.Context) (*Settings, error) {
 	params := map[string]string{}
@@ -346,8 +348,14 @@ func (c *Client) GetSettings(ctx context.Context) (*Settings, error) {
 		return nil, errors.Wrap(err, "failed to call getSettings method")
 	}
 
+	// Log raw response for debugging
+	c.logger.Debug("Raw RTM getSettings response received.", "responseBody", string(respBytes))
+
 	var result settingsRsp
 	if err := json.Unmarshal(respBytes, &result); err != nil {
+		c.logger.Error("Failed to parse getSettings response JSON.",
+			"error", err,
+			"responseBody", string(respBytes))
 		return nil, errors.Wrap(err, "failed to parse getSettings response")
 	}
 
@@ -362,6 +370,10 @@ func (c *Client) GetSettings(ctx context.Context) (*Settings, error) {
 		DefaultDueDate: rawSettings.DefaultDueDate,
 		IsProAccount:   rawSettings.Pro == "1",
 	}
+
+	c.logger.Debug("Successfully parsed settings from RTM response.",
+		"timezone", settings.Timezone,
+		"defaultListId", settings.DefaultListID)
 
 	return settings, nil
 }

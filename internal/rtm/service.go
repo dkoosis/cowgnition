@@ -164,6 +164,8 @@ func (s *Service) GetTools() []mcptypes.Tool { // <--- CORRECTED: Added mcptypes
 	}
 }
 
+// file: internal/rtm/service.go (partial update - only the GetResources function)
+
 // GetResources returns the MCP resources provided by this service.
 func (s *Service) GetResources() []mcptypes.Resource {
 	return []mcptypes.Resource{
@@ -199,6 +201,8 @@ func (s *Service) GetResources() []mcptypes.Resource {
 		},
 	}
 }
+
+// file: internal/rtm/service.go (partial update - only the ReadResource function)
 
 // ReadResource handles requests to read data from an RTM resource.
 func (s *Service) ReadResource(ctx context.Context, uri string) ([]interface{}, error) {

@@ -17,16 +17,16 @@ type rtmTags []string
 
 // UnmarshalJSON implements the json.Unmarshaler interface for rtmTags.
 func (rt *rtmTags) UnmarshalJSON(data []byte) error {
-	// Handles {"tag": ["tag1", "tag2"]}
+	// First try: Handles {"tag": ["tag1", "tag2"]}
 	var tagObj struct {
 		Tag []string `json:"tag"`
 	}
-	if err := json.Unmarshal(data, &tagObj); err == nil {
+	if err := json.Unmarshal(data, &tagObj); err == nil && len(tagObj.Tag) > 0 {
 		*rt = tagObj.Tag
 		return nil
 	}
 
-	// Handles ["tag1", "tag2"] or [] or null
+	// Second try: Handles ["tag1", "tag2"] or [] or null
 	var tagArr []string
 	if err := json.Unmarshal(data, &tagArr); err == nil {
 		*rt = tagArr
@@ -36,7 +36,21 @@ func (rt *rtmTags) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	// Return a generic error if neither format matches
+	// Third try: Handles array of objects with name property: [{"name":"tag1"},{"name":"tag2"}]
+	var tagObjArr []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(data, &tagObjArr); err == nil {
+		// Extract just the names into our string slice
+		names := make([]string, len(tagObjArr))
+		for i, obj := range tagObjArr {
+			names[i] = obj.Name
+		}
+		*rt = names
+		return nil
+	}
+
+	// Return a generic error if none of the formats match
 	return fmt.Errorf("failed to unmarshal rtmTags as object or array: %s", string(data))
 }
 
@@ -357,7 +371,10 @@ type Task struct {
 	Modified      time.Time `json:"modified"`
 }
 
+// --- Other API Response Structures --- END
+
 // Config holds configuration settings specific to the RTM client.
+// It contains API credentials, authentication token, and HTTP configuration.
 type Config struct {
 	APIKey       string
 	SharedSecret string
@@ -366,6 +383,7 @@ type Config struct {
 	HTTPClient   *http.Client // Optional: Defaults if nil.
 }
 
+// --- Helper Types --- START
 // timelineRsp holds the response from rtm.timelines.create (needed by methods.go).
 type timelineRsp struct {
 	Rsp struct {
