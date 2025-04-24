@@ -12,7 +12,7 @@ const (
 // API response format.
 const responseFormat = "json"
 
-// RTM API method names.
+// RTM API method names. See: https://www.rememberthemilk.com/services/api/methods.rtm .
 const (
 	methodGetFrob        = "rtm.auth.getFrob"
 	methodGetToken       = "rtm.auth.getToken"   // nolint:gosec // Keep existing nolint.

@@ -1,5 +1,4 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-// MODIFIED: routeMessage updated to handle notifications/initialized.
 package mcp
 
 // file: internal/mcp/mcp_server.go
@@ -24,7 +23,6 @@ import (
 	"github.com/dkoosis/cowgnition/internal/services"
 	"github.com/dkoosis/cowgnition/internal/transport"
 	// Assuming core handler definitions are in this package or imported.
-	// Adjust import if Handler is defined elsewhere now e.g., "github.com/dkoosis/cowgnition/internal/mcp/handlers/core".
 )
 
 // contextKey is a type for context keys to avoid collisions.
@@ -55,15 +53,11 @@ type Server struct {
 
 	connectionState *ConnectionState
 
-	// Handler Instances (Assuming handlers are instantiated and passed to NewServer or set later)
-	// These might need to be properly initialized based on your server setup logic.
-	// For this example, we assume s.coreHandler is populated somehow.
+	// Handler Instances
 	coreHandler *Handler // Pointer to the core handler instance (defined in handlers_core.go)
-	// Add other handlers like notificationHandler, resourceHandler etc. if needed
 }
 
 // NewServer creates a new MCP server instance.
-// It now initializes an empty service registry.
 func NewServer(cfg *config.Config, opts ServerOptions, validator schema.ValidatorInterface,
 	startTime time.Time, logger logging.Logger) (*Server, error) {
 	if logger == nil {
@@ -83,9 +77,7 @@ func NewServer(cfg *config.Config, opts ServerOptions, validator schema.Validato
 		startTime:       startTime,
 		connectionState: connState,
 		services:        make(map[string]services.Service), // Initialize the service registry.
-		// Instantiate or assign handlers here based on application setup
-		// Example: coreHandler: NewHandler(...),
-		coreHandler: NewHandler(cfg, validator, startTime, connState, logger), // Example instantiation
+		coreHandler:     NewHandler(cfg, validator, startTime, connState, logger),
 	}
 
 	server.logger.Info("MCP Server instance created (services need registration).")
@@ -142,7 +134,6 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 	validationOpts.StrictMode = true
 	validationOpts.ValidateOutgoing = true // Keep true.
 
-	// Interim Fix Note: StrictOutgoing=false needed for now due to initialize response warning.
 	if s.options.Debug {
 		validationOpts.StrictOutgoing = true // Be strict in debug.
 		validationOpts.MeasurePerformance = true
@@ -154,10 +145,10 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 
 	// Add SkipTypes for core notifications that don't need schema validation.
 	validationOpts.SkipTypes = map[string]bool{
-		"notifications/initialized": true, // This specific notification is handled correctly now
-		"notifications/cancelled":   true,
+		"notifications/initialized": true,
+		"notifications/cancelled":   true, // Skip validation for this now handled notification
 		"notifications/progress":    true,
-		"exit":                      true, // Exit is a notification.
+		"exit":                      true,
 	}
 
 	validationMiddleware := middleware.NewValidationMiddleware(
@@ -173,6 +164,7 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 	serveHandler := chain.Handler()
 
 	// Start the processing loop.
+	// Ensure serverProcessing is defined in mcp_server_processing.go
 	return s.serverProcessing(ctx, serveHandler)
 }
 
@@ -186,7 +178,6 @@ func (s *Server) ServeHTTP(_ context.Context, _ string) error {
 func (s *Server) Shutdown(_ context.Context) error {
 	s.logger.Info("Shutting down MCP server.")
 
-	// Shutdown registered services.
 	s.serviceLock.RLock()
 	servicesToShutdown := make([]services.Service, 0, len(s.services))
 	for name, service := range s.services {
@@ -205,7 +196,6 @@ func (s *Server) Shutdown(_ context.Context) error {
 		}
 	}
 
-	// Close transport.
 	if s.transport != nil {
 		s.logger.Debug("Closing transport...")
 		if err := s.transport.Close(); err != nil {
@@ -231,67 +221,57 @@ func (s *Server) routeMessage(ctx context.Context, msgBytes []byte) ([]byte, err
 		Params  json.RawMessage `json:"params,omitempty"` // Use RawMessage.
 	}
 
-	// We assume the message passed schema validation in middleware.
 	if err := json.Unmarshal(msgBytes, &request); err != nil {
 		s.logger.Error("Internal error: Failed to unmarshal validated message in routeMessage.", "error", err)
-		reqID := extractRequestID(s.logger, msgBytes)
-		// --- REFINED FIX for ineffassign ---
+		reqID := extractRequestID(s.logger, msgBytes) // Ensure extractRequestID is defined in error_handling file
 		idToUseInResponse := reqID
 		if idToUseInResponse == nil || string(idToUseInResponse) == "null" {
 			idToUseInResponse = json.RawMessage("0")
 		}
+		// Ensure createErrorResponse is defined in error_handling file
 		return s.createErrorResponse(msgBytes, errors.Wrap(err, "internal error: failed to parse validated message"), idToUseInResponse)
-		// --- END REFINED FIX ---
 	}
 
-	// Add connection state validation (safety net).
 	if s.connectionState == nil {
 		s.logger.Error("Internal error: connectionState is nil in routeMessage.")
-		reqID := extractRequestID(s.logger, msgBytes)
-		// --- REFINED FIX for ineffassign ---
+		reqID := extractRequestID(s.logger, msgBytes) // Ensure extractRequestID is defined in error_handling file
 		idToUseInResponse := reqID
 		if idToUseInResponse == nil || string(idToUseInResponse) == "null" {
 			idToUseInResponse = json.RawMessage("0")
 		}
+		// Ensure createErrorResponse is defined in error_handling file
 		return s.createErrorResponse(msgBytes, errors.New("internal server error: connection state missing"), idToUseInResponse)
-		// --- END REFINED FIX ---
 	}
 
-	// Validate sequence *before* routing.
 	if err := s.connectionState.ValidateMethodSequence(request.Method); err != nil {
 		s.logger.Warn("Method sequence validation failed.", "method", request.Method, "state", s.connectionState.CurrentState(), "error", err)
-		// Error is returned directly here.
-		// ID handling (substituting "0" if needed) will happen in handleProcessingError.
-		return nil, err
+		return nil, err // Error is returned to be handled by handleProcessingError
 	}
 
 	isNotification := (request.ID == nil || string(request.ID) == "null")
 	s.logger.Debug("Routing message.", "method", request.Method, "id", string(request.ID), "isNotification", isNotification)
 
-	// --- Route Based on Method ---
 	var resultBytes json.RawMessage
 	var handlerErr error
 
-	// Ensure coreHandler is initialized before accessing methods.
 	if s.coreHandler == nil {
 		s.logger.Error("Internal error: s.coreHandler is nil in routeMessage.")
 		handlerErr = errors.New("internal server error: core handler not available")
 	} else {
-		// Proceed with routing only if coreHandler is valid.
-		params := request.Params // Extract params for handlers.
+		params := request.Params
 
 		switch request.Method {
+		// --- Core Handlers ---
 		case "ping":
 			resultBytes, handlerErr = s.coreHandler.handlePing(ctx, params)
 		case "initialize":
 			resultBytes, handlerErr = s.coreHandler.handleInitialize(ctx, params)
-			// State update handled internally by handleInitialize.
 		case "notifications/initialized":
 			handlerErr = s.coreHandler.handleNotificationsInitialized(ctx, params)
-			resultBytes = nil // Explicitly nil for notifications.
+			resultBytes = nil
 		case "shutdown":
 			if s.connectionState != nil {
-				s.connectionState.SetShutdown() // Mark state first.
+				s.connectionState.SetShutdown()
 			}
 			resultBytes, handlerErr = s.coreHandler.handleShutdown(ctx, params)
 		case "exit":
@@ -300,54 +280,48 @@ func (s *Server) routeMessage(ctx context.Context, msgBytes []byte) ([]byte, err
 		case "$/cancelRequest":
 			handlerErr = s.coreHandler.handleCancelRequest(ctx, params)
 			resultBytes = nil
+		// --- Added case for notifications/cancelled ---
+		case "notifications/cancelled":
+			s.logger.Info("Received (but ignoring) notifications/cancelled.")
+			// TODO: Implement actual cancellation logic if needed by looking up request ID etc.
+			handlerErr = nil // It's a notification, successful handling is nil error
+			resultBytes = nil
 
-		// Tool-related Methods.
+		// --- Aggregation Handlers ---
 		case "tools/list":
 			resultBytes, handlerErr = s.handleListTools(ctx)
-		case "tools/call":
-			resultBytes, handlerErr = s.handleServiceDelegation(ctx, request.Method, params)
-
-		// Resource-related Methods.
 		case "resources/list":
 			resultBytes, handlerErr = s.handleListResources(ctx)
-		case "resources/read":
-			resultBytes, handlerErr = s.handleServiceDelegation(ctx, request.Method, params)
-		// TODO: Add resources/subscribe, resources/unsubscribe.
-
-		// Prompt-related Methods.
 		case "prompts/list":
 			resultBytes, handlerErr = s.handleListPrompts(ctx)
-		case "prompts/get":
+
+		// --- Delegation Handlers ---
+		case "tools/call", "resources/read", "prompts/get": // Group delegation cases
 			resultBytes, handlerErr = s.handleServiceDelegation(ctx, request.Method, params)
 
-		// Other methods.
+		// --- Other Methods ---
 		// TODO: Add handlers for logging/setLevel, completion/complete etc.
 
 		default:
 			s.logger.Warn("Method not found during routing.", "method", request.Method)
 			handlerErr = mcperrors.NewProtocolError(mcperrors.ErrMethodNotFound, fmt.Sprintf("Method not found: %s", request.Method), nil, nil)
-		} // end switch
-	} // end else (coreHandler check)
-
-	// --- Handle Handler Errors ---
-	if handlerErr != nil {
-		s.logger.Warn("Error returned from routed handler.", "method", request.Method, "error", fmt.Sprintf("%+v", handlerErr))
-		// Propagate error to processNextMessage/handleProcessingError.
-		return nil, handlerErr
+		}
 	}
 
-	// --- Handle Notifications ---
+	if handlerErr != nil {
+		s.logger.Warn("Error returned from routed handler.", "method", request.Method, "error", fmt.Sprintf("%+v", handlerErr))
+		return nil, handlerErr // Propagate error
+	}
+
 	if isNotification {
 		s.logger.Debug("Processed notification, no response needed.", "method", request.Method)
 		if resultBytes != nil {
 			s.logger.Warn("Handler for notification returned non-nil response bytes, discarding.", "method", request.Method)
 		}
-		return nil, nil // Correctly return nil, nil for notifications.
+		return nil, nil
 	}
 
-	// --- Construct and Marshal Success Response (Only for Requests) ---
 	if resultBytes == nil {
-		// If handler succeeded but returned nil bytes for a non-notification request, use JSON null.
 		s.logger.Debug("Handler returned nil result bytes for request, using JSON null.", "method", request.Method, "id", string(request.ID))
 		resultBytes = json.RawMessage("null")
 	}
@@ -358,14 +332,13 @@ func (s *Server) routeMessage(ctx context.Context, msgBytes []byte) ([]byte, err
 		Result  json.RawMessage `json:"result"`
 	}{
 		JSONRPC: "2.0",
-		ID:      request.ID, // Use the original non-null request ID.
+		ID:      request.ID,
 		Result:  resultBytes,
 	}
 
 	respBytes, marshalErr := json.Marshal(responseObj)
 	if marshalErr != nil {
 		s.logger.Error("Internal error: Failed to marshal successful response.", "method", request.Method, "id", string(request.ID), "error", marshalErr)
-		// Return marshalling error to be handled by main loop.
 		return nil, errors.Wrap(marshalErr, "internal error: failed to marshal success response")
 	}
 
@@ -398,7 +371,7 @@ func (s *Server) handleListResources(_ context.Context) (json.RawMessage, error)
 	s.serviceLock.RUnlock()
 
 	result := mcptypes.ListResourcesResult{
-		Resources: allResources,
+		Resources: allResources, // Ensure `json:"resources"` tag exists in mcptypes.ListResourcesResult
 	}
 	return json.Marshal(result)
 }
@@ -408,13 +381,10 @@ func (s *Server) handleListPrompts(_ context.Context) (json.RawMessage, error) {
 	allPrompts := []mcptypes.Prompt{}
 	s.serviceLock.RLock()
 	for _, service := range s.services {
-		// Assuming GetPrompts exists on the service interface
-		// If not, this needs implementation or removal
-		// allPrompts = append(allPrompts, service.GetPrompts()...)
 		_ = service // Avoid unused error if GetPrompts is missing.
 	}
 	s.serviceLock.RUnlock()
-	if len(s.services) > 0 && len(allPrompts) == 0 { // Only warn if services exist but no prompts found.
+	if len(s.services) > 0 && len(allPrompts) == 0 {
 		s.logger.Warn("Prompts/list called, but GetPrompts not implemented or returned no prompts from services.")
 	}
 
@@ -429,9 +399,10 @@ func (s *Server) handleServiceDelegation(ctx context.Context, method string, par
 	var serviceName string
 	var specificArgs interface{} // To hold parsed args/URI.
 
+	// --- Determine Service and Parse Args ---
 	switch method {
 	case "tools/call":
-		var req mcptypes.CallToolRequest // Use type from mcptypes.
+		var req mcptypes.CallToolRequest
 		if err := json.Unmarshal(params, &req); err != nil {
 			return nil, mcperrors.NewInvalidParamsError("invalid params structure for tools/call", err, nil)
 		}
@@ -440,9 +411,9 @@ func (s *Server) handleServiceDelegation(ctx context.Context, method string, par
 			return nil, mcperrors.NewMethodNotFoundError(fmt.Sprintf("Invalid tool name format: %s. Expected 'serviceName_toolAction'", req.Name), nil, map[string]interface{}{"toolName": req.Name})
 		}
 		serviceName = parts[0]
-		specificArgs = req // Pass the whole request struct.
+		specificArgs = req
 	case "resources/read":
-		var req mcptypes.ReadResourceRequest // Use type from mcptypes.
+		var req mcptypes.ReadResourceRequest
 		if err := json.Unmarshal(params, &req); err != nil {
 			return nil, mcperrors.NewInvalidParamsError("invalid params structure for resources/read", err, nil)
 		}
@@ -451,63 +422,74 @@ func (s *Server) handleServiceDelegation(ctx context.Context, method string, par
 			return nil, mcperrors.NewResourceError(mcperrors.ErrResourceInvalid, fmt.Sprintf("Invalid or missing scheme in resource URI: %s", req.URI), err, map[string]interface{}{"uri": req.URI})
 		}
 		serviceName = parsedURI.Scheme
-		specificArgs = req.URI // Pass only the URI string.
-	// Add cases for prompts/get, etc. if needed.
+		specificArgs = req.URI
 	case "prompts/get":
-		var req mcptypes.GetPromptRequest // Use type from mcptypes.
+		var req mcptypes.GetPromptRequest
 		if err := json.Unmarshal(params, &req); err != nil {
 			return nil, mcperrors.NewInvalidParamsError("invalid params structure for prompts/get", err, nil)
 		}
-		// Determine service name based on prompt name convention or default.
-		// Example: assume all prompts handled by a single default service or parse name.
 		parts := strings.SplitN(req.Name, "_", 2)
-		if len(parts) >= 2 && parts[0] != "" { // Convention: service_promptName.
+		if len(parts) >= 2 && parts[0] != "" {
 			serviceName = parts[0]
 		} else {
-			// Fallback: maybe a default 'prompt' service or error if convention is strict.
-			// For now, let's assume an error if no prefix.
 			return nil, mcperrors.NewMethodNotFoundError(fmt.Sprintf("Invalid prompt name format: %s. Expected 'serviceName_promptAction'", req.Name), nil, map[string]interface{}{"promptName": req.Name})
-			// Or assign a default service: serviceName = "promptService".
 		}
-		specificArgs = req // Pass the whole request struct.
-
+		specificArgs = req
 	default:
 		return nil, mcperrors.NewMethodNotFoundError(fmt.Sprintf("Unsupported method for service delegation: %s", method), nil, map[string]interface{}{"method": method})
 	}
 
-	// Find and call the service.
+	// --- Find and Call Service ---
 	service, found := s.GetService(serviceName)
 	if !found {
-		// Distinguish between service not found and method not found on service.
 		return nil, mcperrors.NewMethodNotFoundError(fmt.Sprintf("Service '%s' not found to handle method '%s'", serviceName, method), nil, map[string]interface{}{"service": serviceName})
 	}
 
-	var result interface{}
+	var resultData interface{} // Use generic interface for service result
 	var callErr error
 
-	// Delegate based on method.
+	// --- Delegate Call ---
 	switch method {
 	case "tools/call":
-		toolReq := specificArgs.(mcptypes.CallToolRequest) // Type assertion.
-		// CallTool should return interface{} for result, error.
-		result, callErr = service.CallTool(ctx, toolReq.Name, toolReq.Arguments)
+		toolReq := specificArgs.(mcptypes.CallToolRequest)
+		resultData, callErr = service.CallTool(ctx, toolReq.Name, toolReq.Arguments)
 	case "resources/read":
-		uri := specificArgs.(string) // Type assertion.
-		// ReadResource should return interface{} for result, error.
-		result, callErr = service.ReadResource(ctx, uri)
+		uri := specificArgs.(string)
+		resultData, callErr = service.ReadResource(ctx, uri)
 	case "prompts/get":
-		promptReq := specificArgs.(mcptypes.GetPromptRequest) // Type assertion.
-		// GetPrompt should return interface{} for result, error.
-		result, callErr = service.GetPrompt(ctx, promptReq.Name, promptReq.Arguments)
-
-		// Add cases for prompts/get, resources/subscribe etc.
+		promptReq := specificArgs.(mcptypes.GetPromptRequest)
+		resultData, callErr = service.GetPrompt(ctx, promptReq.Name, promptReq.Arguments)
 	}
 
 	if callErr != nil {
-		// Errors from the service call should be returned here.
-		return nil, callErr
+		return nil, callErr // Propagate errors from the service call
 	}
 
-	// Marshal the successful result from the service.
-	return json.Marshal(result)
+	// --- CORRECTED: Wrap result in appropriate MCP type before marshalling ---
+	var finalResult interface{}
+	switch method {
+	case "tools/call":
+		// CallTool should return the correct *mcptypes.CallToolResult struct already
+		finalResult = resultData
+	case "resources/read":
+		// ReadResource returns []interface{}, wrap it in ReadResourceResult
+		contents, ok := resultData.([]interface{})
+		if !ok {
+			s.logger.Error("Internal error: ReadResource returned non-slice type unexpectedly.", "type", fmt.Sprintf("%T", resultData))
+			return nil, mcperrors.NewInternalError("internal error processing resource data", nil, nil)
+		}
+		finalResult = mcptypes.ReadResourceResult{Contents: contents} // Wrap the slice
+	case "prompts/get":
+		// GetPrompt should return the correct *mcptypes.GetPromptResult struct already
+		finalResult = resultData
+	default:
+		finalResult = resultData // Pass through if type unknown (should not happen)
+	}
+
+	// Marshal the final wrapped result struct
+	return json.Marshal(finalResult)
 }
+
+// --- Helper functions like serverProcessing, processNextMessage, createErrorResponse, etc. ---
+// --- are intentionally REMOVED from this file as they should exist in ---
+// --- mcp_server_processing.go and mcp_server_error_handling.go respectively. ---

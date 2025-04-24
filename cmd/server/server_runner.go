@@ -49,7 +49,7 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	// Service Initialization.
 	// Use blank identifier "_" for rtmService to fix unused variable error.
 	// Corrected: Use ValidatorInterface.
-	validator, _, err := initializeServices(ctx, cfg, logger)
+	validator, rtmService, err := initializeServices(ctx, cfg, logger) // <-- rtmService is returned here
 	if err != nil {
 		return err // Errors already logged within initializeServices.
 	}
@@ -62,10 +62,25 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 
 	// MCP Server Creation.
 	// Corrected: Pass ValidatorInterface.
-	server, err := createMCPServer(cfg, requestTimeout, shutdownTimeout, debug, validator, startTime, logger)
+	server, err := createMCPServer(cfg, requestTimeout, shutdownTimeout, debug, validator, startTime, logger) // <-- server is created here
 	if err != nil {
 		return err // Error already logged.
 	}
+
+	// ---> ADD THIS BLOCK HERE <---
+	if rtmService != nil { // Check if RTM service initialization succeeded
+		logger.Info("🔧 Registering RTM service with MCP server.") // Add logging
+		if err := server.RegisterService(rtmService); err != nil {
+			// Handle registration error appropriately
+			logger.Error("❌ Failed to register RTM service.", "error", err)
+			// Decide if this should be fatal, returning the error might be best:
+			return errors.Wrap(err, "failed to register RTM service")
+		}
+	} else {
+		// This case shouldn't happen if initializeServices succeeded without error, but good practice.
+		logger.Warn("⚠️ RTM Service instance was nil after initialization, cannot register.")
+	}
+	// ---> END BLOCK TO ADD <---
 
 	// Start Server Transport.
 	if err := startServerTransport(ctx, transportType, cfg, server, cancel, logger); err != nil {
@@ -231,6 +246,7 @@ func startServerTransport(ctx context.Context, transportType string, cfg *config
 			"address", addr,
 			"description", "Communication via HTTP protocol.")
 		go runTransportLoop(ctx, cancel, logger, "http", func(innerCtx context.Context) error {
+			// Note: ServeHTTP is not implemented, so this path currently does nothing.
 			if err := server.ServeHTTP(innerCtx, addr); !errors.Is(err, errors.New("HTTP transport not implemented")) {
 				return err
 			}

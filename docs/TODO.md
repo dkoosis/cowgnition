@@ -185,6 +185,22 @@ Focuses on ensuring MCP compliance through robust schema validation. Critical is
     - [PENDING] Create exportable metrics (e.g., Prometheus)
 
 ---
+# TODO List for CowGnition RTM Issues
+
+1.  **Fix RTM Task Recurrence (`rrule`) Parsing Error**
+    * **Issue:** The application fails with a JSON parsing error (`json: cannot unmarshal object into Go struct field ... rrule of type string`) when fetching RTM tasks. This occurs because the RTM API sometimes returns the `rrule` field as a JSON object (for complex recurrences) instead of the expected `string`.
+    * **Location:** `internal/rtm/types.go`, specifically within the `rtmTaskSeries` struct definition.
+    * **Action:** Modify the `RRule` field in the `rtmTaskSeries` struct. Change its type from `string` to something more flexible like `json.RawMessage` or `interface{}`. Update the task processing logic (likely within `GetTasks` in `internal/rtm/methods.go` or a helper function) to correctly handle both string and object types for the `rrule` data.
+    * **Goal:** Prevent JSON parsing errors and correctly represent recurrence rules, regardless of their format in the RTM API response.
+
+2.  **Address Potential Large Task Volume ("Firehose") for `rtm://tasks`**
+    * **Issue:** Fetching tasks via the default `rtm://tasks` resource might return a very large number of tasks, potentially overwhelming the client or being inefficient.
+    * **Location:** Primarily affects the `ReadResource` method in `internal/rtm/service.go` when handling the `rtm://tasks` URI.
+    * **Actions (Choose one or more):**
+        * **(Recommended) Promote Filter Usage:** Ensure the existing filter parsing logic (`extractFilterFromURI` in `internal/rtm/service.go`) works correctly and encourage clients (like Claude Desktop) to use filtered URIs (e.g., `rtm://tasks?filter=status:incomplete`) for more targeted requests. This aligns with the RTM API's design.
+        * **(Optional) Implement Server-Side Limiting:** Modify the `readTasksResourceWithFilter` function in `internal/rtm/service.go`. After fetching *all* tasks matching the (potentially empty) filter from RTM, add logic to truncate the list included in the final MCP response to a reasonable maximum (e.g., first 50-100 tasks), perhaps adding a note indicating that more tasks exist.
+        * **(Optional/Advanced) Implement MCP Resource Pagination:** Define a custom pagination mechanism for the `rtm://tasks` resource (e.g., using `?cursor=` parameters). This would require significant changes to `ReadResource` and is not standard MCP.
+    * **Goal:** Provide mechanisms to manage the volume of task data returned, improving performance and usability, primarily by leveraging RTM's filtering capabilities.
 
 ## Deferred Items
 

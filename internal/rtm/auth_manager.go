@@ -1,6 +1,8 @@
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
 package rtm
 
+// file: internal/rtm/auth_manager.go
+
 import (
 	"context"
 	"net/http"
@@ -58,16 +60,6 @@ func DefaultAuthManagerOptions() AuthManagerOptions {
 	}
 }
 
-// AuthResult contains the outcome of an authentication attempt.
-type AuthResult struct {
-	Success     bool
-	Username    string
-	Error       error
-	AuthURL     string
-	Frob        string
-	NeedsManual bool
-}
-
 // AuthManager handles the complete RTM authentication flow.
 type AuthManager struct {
 	service        *Service
@@ -75,10 +67,10 @@ type AuthManager struct {
 	options        AuthManagerOptions
 	logger         logging.Logger
 	callbackServer *http.Server
-	state          string     // CSRF protection token
-	resultChan     chan error // For callback server communication
-	callbackMutex  sync.Mutex // Protect callback server state
-	retryMutex     sync.Mutex // Protect retry counters
+	state          string     // CSRF protection token.
+	resultChan     chan error // For callback server communication.
+	callbackMutex  sync.Mutex // Protect callback server state.
+	retryMutex     sync.Mutex // Protect retry counters.
 	retryCount     map[string]int
 }
 
@@ -88,29 +80,29 @@ func NewAuthManager(service *Service, options AuthManagerOptions, logger logging
 		logger = logging.GetNoopLogger()
 	}
 
+	// Assuming generateStateToken() is defined in auth_manager_helpers.go.
 	return &AuthManager{
 		service:    service,
 		client:     service.client,
 		options:    options,
 		logger:     logger.WithField("component", "rtm_auth_manager"),
 		retryCount: make(map[string]int),
-		state:      generateStateToken(), // generateStateToken is in helpers
+		state:      generateStateToken(),
 	}
 }
 
 // EnsureAuthenticated makes sure the service is authenticated,
 // taking care of the complete flow if needed.
-// Returns (*AuthResult, error).
-func (m *AuthManager) EnsureAuthenticated(ctx context.Context) (*AuthResult, error) {
+// Returns (*EnsureAuthResult, error).
+func (m *AuthManager) EnsureAuthenticated(ctx context.Context) (*EnsureAuthResult, error) {
 	m.logger.Info("Checking authentication status...")
 
-	// First check if already authenticated with retry
 	var authState *AuthState
 	var err error
 
 	for attempt := 0; attempt <= m.options.RetryAttempts; attempt++ {
 		if attempt > 0 {
-			m.logger.Debug("Retrying auth state check", "attempt", attempt)
+			m.logger.Debug("Retrying auth state check.", "attempt", attempt)
 			time.Sleep(m.options.RetryBackoff)
 		}
 
@@ -119,32 +111,39 @@ func (m *AuthManager) EnsureAuthenticated(ctx context.Context) (*AuthResult, err
 			break
 		}
 
-		m.logger.Warn("Error checking auth state", "error", err, "attempt", attempt)
+		m.logger.Warn("Error checking auth state.", "error", err, "attempt", attempt)
 	}
 
-	// If authenticated, return success immediately
 	if authState != nil && authState.IsAuthenticated {
-		m.logger.Info("Already authenticated", "username", authState.Username)
-		return &AuthResult{
+		m.logger.Info("Already authenticated.", "username", authState.Username)
+		return &EnsureAuthResult{ // Return the simpler result type.
 			Success:  true,
 			Username: authState.Username,
 		}, nil
 	}
 
-	// Not authenticated, start flow based on mode
-	m.logger.Info("Authentication required, starting flow")
+	m.logger.Info("Authentication required, starting flow.")
 
+	// Delegate to mode-specific handlers which must now return *EnsureAuthResult.
 	switch m.options.Mode {
 	case AuthModeHeadless:
+		// Assuming handleHeadlessAuth exists and returns *EnsureAuthResult, error.
 		return m.handleHeadlessAuth(ctx)
 	case AuthModeTest:
+		// Assuming handleTestAuth exists and returns *EnsureAuthResult, error.
 		return m.handleTestAuth(ctx)
-	default: // Interactive
+	default: // Interactive.
+		// Assuming handleInteractiveAuth exists and returns *EnsureAuthResult, error.
 		return m.handleInteractiveAuth(ctx)
 	}
 }
 
 // Shutdown performs cleanup of resources (calls helper).
 func (m *AuthManager) Shutdown() {
+	// Assuming stopCallbackServer exists elsewhere in rtm.
 	m.stopCallbackServer()
 }
+
+// Note: Ensure handleHeadlessAuth, handleTestAuth, handleInteractiveAuth (in modes.go)
+// and stopCallbackServer (in callback.go) are updated to align with EnsureAuthResult
+// and other changes if necessary.

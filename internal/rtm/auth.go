@@ -1,7 +1,7 @@
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
-// file: internal/rtm/auth.go
 package rtm
 
+// file: internal/rtm/auth.go
 import (
 	"context"
 	"encoding/json"
@@ -35,7 +35,7 @@ func (c *Client) GetAuthState(ctx context.Context) (*AuthState, error) {
 	}
 
 	// Token is valid, parse user info.
-	var result checkTokenRsp
+	var result rtmAuthCheck // Use the correct type defined in types.go.
 	if err := json.Unmarshal(respBytes, &result); err != nil {
 		return nil, errors.Wrap(err, "failed to parse checkToken response")
 	}
@@ -48,7 +48,7 @@ func (c *Client) GetAuthState(ctx context.Context) (*AuthState, error) {
 	return &AuthState{
 		IsAuthenticated: true,
 		Username:        result.Rsp.Auth.User.Username,
-		FullName:        result.Rsp.Auth.User.Fullname,
+		Fullname:        result.Rsp.Auth.User.Fullname, // Corrected field name case here.
 		UserID:          result.Rsp.Auth.User.ID,
 	}, nil
 }
@@ -61,7 +61,7 @@ func (c *Client) StartAuthFlow(ctx context.Context) (string, string, error) { //
 		return "", "", errors.Wrap(err, "failed to get authentication frob") // Already wrapped by callMethod.
 	}
 
-	var result frobRsp
+	var result FrobResult // Use the correct type defined in types.go.
 	if err := json.Unmarshal(respBytes, &result); err != nil {
 		return "", "", errors.Wrap(err, "failed to parse frob response")
 	}
@@ -129,7 +129,7 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, frob string) (string, err
 		}
 
 		// Got response, try to decode.
-		var result tokenRsp
+		var result AuthResult // Use the correct type defined in types.go.
 		if err := json.Unmarshal(respBytes, &result); err != nil {
 			c.logger.Error("Failed to parse token response.", "error", err)
 			// Return the parsing error immediately, retrying won't help.

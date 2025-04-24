@@ -1,6 +1,7 @@
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
-// file: internal/rtm/client.go
 package rtm
+
+// file: internal/rtm/client.go
 
 import (
 	"context"
@@ -22,12 +23,12 @@ import (
 
 // Client is a Remember The Milk API client.
 type Client struct {
-	config Config
+	config Config // Now uses the Config struct defined in types.go.
 	logger logging.Logger
 }
 
 // NewClient creates a new RTM client with the given configuration.
-func NewClient(config Config, logger logging.Logger) *Client {
+func NewClient(config Config, logger logging.Logger) *Client { // Parameter type matches definition in types.go.
 	if config.APIEndpoint == "" {
 		config.APIEndpoint = defaultAPIEndpoint
 	}
@@ -98,7 +99,7 @@ func (c *Client) callMethod(ctx context.Context, method string, params map[strin
 
 	// --- 5. Check RTM API Status ---.
 	var baseResult struct {
-		Rsp baseRsp `json:"rsp"`
+		Rsp rtmRsp `json:"rsp"` // Use the correct base response type from types.go.
 	}
 	if err := json.Unmarshal(body, &baseResult); err != nil {
 		return nil, errors.Wrap(err, "failed to parse base RTM API response structure")
@@ -162,7 +163,7 @@ func (c *Client) handleHTTPError(statusCode int, status string, body []byte, met
 }
 
 // handleRTMError creates an RTMError or AuthError for RTM API errors (stat != "ok").
-func (c *Client) handleRTMError(rsp baseRsp, method string) error {
+func (c *Client) handleRTMError(rsp rtmRsp, method string) error { // Parameter type changed to rtmRsp.
 	errCtx := map[string]interface{}{
 		"rtm_method": method,
 	}
@@ -177,7 +178,7 @@ func (c *Client) handleRTMError(rsp baseRsp, method string) error {
 		rtmErrCode := 0
 		_, scanErr := fmt.Sscan(rsp.Err.Code, &rtmErrCode)
 		if scanErr != nil {
-			c.logger.Warn("Failed to parse RTM error code", "rawCode", rsp.Err.Code, "scanError", scanErr)
+			c.logger.Warn("Failed to parse RTM error code.", "rawCode", rsp.Err.Code, "scanError", scanErr)
 			errCtx["codeScanError"] = scanErr.Error()
 			return mcperrors.NewRTMError(mcperrors.ErrRTMInvalidResponse,
 				fmt.Sprintf("RTM API Error: %s (failed to parse error code '%s')", rsp.Err.Msg, rsp.Err.Code),
@@ -185,8 +186,8 @@ func (c *Client) handleRTMError(rsp baseRsp, method string) error {
 				errCtx)
 		}
 
+		// Check for specific auth error code.
 		if rtmErrCode == rtmErrCodeInvalidAuthToken {
-			// <<< FIX: Added mcperrors.ErrAuthFailure as the first argument >>>.
 			authErr := mcperrors.NewAuthError(mcperrors.ErrAuthFailure,
 				fmt.Sprintf("RTM API Error: %s (Invalid Auth Token)", rsp.Err.Msg),
 				nil,
@@ -229,30 +230,18 @@ func (c *Client) generateSignature(params map[string]string) string {
 	var builder strings.Builder
 	builder.WriteString(c.config.SharedSecret)
 
-	// sensitiveKeys := map[string]bool{"api_key": true, "auth_token": true}. // Keep track if needed for logging.
-	// loggedParams := []string{}. // Keep track if needed for logging.
-
 	for _, k := range keys {
 		value := params[k]
 		builder.WriteString(k)
 		builder.WriteString(value)
-		// if !sensitiveKeys[k] { // Conditional logging if needed.
-		// 	loggedParams = append(loggedParams, k).
-		// }.
 	}
 	rawString := builder.String()
-
-	// c.logger.Debug("Generating API signature", // Commented out.
-	// 	"rawStringLength", len(rawString),
-	// 	"paramCount", len(params),
-	// 	"nonSensitiveParamKeys", strings.Join(loggedParams, ",")).
 
 	hasher := md5.New() // nolint:gosec
 	hasher.Write([]byte(rawString))
 	hashBytes := hasher.Sum(nil)
 	signature := hex.EncodeToString(hashBytes)
 
-	// Do not log signature itself at debug level.
 	return signature
 }
 
