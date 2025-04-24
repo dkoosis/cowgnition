@@ -4,6 +4,7 @@
 package rtm
 
 // file: internal/rtm/service.go
+// TODO: #2 Set defaults to match https://www.rememberthemilk.com/services/api/methods/rtm.settings.getList.rtm .
 
 import (
 	"context"
@@ -232,6 +233,7 @@ func (s *Service) ReadResource(ctx context.Context, uri string) ([]interface{}, 
 		return s.createJSONResourceContent(uri, tags) // Calls helper in helpers.go.
 
 	case uri == "rtm://tasks":
+		// FIXME: #1 Invoking rtm://tasks resource from MCP Inspector resuts in -32603 error
 		return s.readTasksResourceWithFilter(ctx, "", uri) // Calls internal helper below.
 
 	case strings.HasPrefix(uri, "rtm://tasks?"):

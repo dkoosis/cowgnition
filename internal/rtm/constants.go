@@ -23,6 +23,7 @@ const (
 	methodCompleteTask   = "rtm.tasks.complete"
 	methodGetTags        = "rtm.tags.getList"
 	methodCreateTimeline = "rtm.timelines.create"
+	methodGetSettings    = "rtm.settings.getList" // <--- ADDED
 
 	// New methods - Task updates.
 	methodSetTaskName    = "rtm.tasks.setName"     //nolint:unused

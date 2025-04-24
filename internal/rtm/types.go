@@ -1,11 +1,12 @@
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
 package rtm
 
+// file: internal/rtm/types.go
+
 import (
 	"encoding/json"
-	"errors" // Keep 'errors' package import.
 	"fmt"
-	"net/http" // Needed for Config.HTTPClient.
+	"net/http"
 	"time"
 )
 
@@ -15,49 +16,28 @@ import (
 type rtmTags []string
 
 // UnmarshalJSON implements the json.Unmarshaler interface for rtmTags.
-// It handles the cases where RTM API returns tags as either:
-// 1. An object: {"tag": ["tag1", "tag2"]}.
-// 2. An empty array: [].
-// 3. Null or omitted (which omitempty handles, but we double-check).
 func (rt *rtmTags) UnmarshalJSON(data []byte) error {
-	// Case 1: Try parsing as the object structure {"tag": [...]}.
+	// Handles {"tag": ["tag1", "tag2"]}
 	var tagObj struct {
-		Tag []string `json:"tag"` // Note: omitempty not needed here.
+		Tag []string `json:"tag"`
 	}
-	errObj := json.Unmarshal(data, &tagObj)
-	if errObj == nil {
-		// Successfully parsed as object, assign the inner slice.
+	if err := json.Unmarshal(data, &tagObj); err == nil {
 		*rt = tagObj.Tag
 		return nil
 	}
 
-	var unmarshalTypeError *json.UnmarshalTypeError
-	// Check if the error was specifically a type error (meaning input was not an object).
-	if !errors.As(errObj, &unmarshalTypeError) && errObj != nil {
-		// If it was a different kind of error (e.g., invalid JSON), return it.
-		// It's okay to wrap errObj here as it's the primary error in this branch.
-		return fmt.Errorf("error unmarshalling tags as object: %w", errObj)
-	}
-	// If it *was* an UnmarshalTypeError, we proceed to try parsing as an array.
-
-	// Case 2: Try parsing as a direct string array []string.
+	// Handles ["tag1", "tag2"] or [] or null
 	var tagArr []string
-	errArr := json.Unmarshal(data, &tagArr)
-	if errArr == nil {
-		// Successfully parsed as array (could be empty [] or ["tag1"]).
+	if err := json.Unmarshal(data, &tagArr); err == nil {
 		*rt = tagArr
-		// Handle the case where RTM might send null explicitly for no tags.
 		if data == nil || string(data) == "null" {
-			*rt = []string{} // Ensure it's an empty slice, not nil.
+			*rt = []string{} // Ensure empty slice for null or empty array
 		}
 		return nil
 	}
 
-	// <<< FIX: Simplify final error message when wrapping errArr >>>.
-	// If both attempts failed, return an error wrapping the array parsing error.
-	// We already know object parsing failed (likely due to type mismatch).
-	return fmt.Errorf("failed to unmarshal rtmTags as object or array: %w", errArr)
-	// <<< END FIX >>>.
+	// Return a generic error if neither format matches
+	return fmt.Errorf("failed to unmarshal rtmTags as object or array: %s", string(data))
 }
 
 // --- RTM API Response Structures ---
@@ -68,10 +48,16 @@ type rtmRsp struct {
 	Err  *rtmError `json:"err,omitempty"`
 }
 
+// rtmError represents the error structure returned by the RTM API.
+type rtmError struct {
+	Code string `json:"code"`
+	Msg  string `json:"msg"`
+}
+
 // tasksRsp holds the response structure for rtm.tasks.getList.
 type tasksRsp struct {
-	Rsp struct { // Embedding rtmRsp to handle base fields.
-		Stat  string    `json:"stat"` // ok or fail.
+	Rsp struct {
+		Stat  string    `json:"stat"`
 		Err   *rtmError `json:"err,omitempty"`
 		Tasks struct {
 			Rev  string    `json:"rev"`
@@ -83,37 +69,36 @@ type tasksRsp struct {
 // rtmList represents a single list containing task series within the RTM API response.
 type rtmList struct {
 	ID         string          `json:"id"`
-	Name       string          `json:"name"` // Added Name field.
+	Name       string          `json:"name"`
 	TaskSeries []rtmTaskSeries `json:"taskseries"`
 }
 
 // rtmTaskSeries represents a task series from the RTM API response.
-// A task series groups recurring instances of a task.
 type rtmTaskSeries struct {
 	ID           string           `json:"id"`
-	Created      string           `json:"created"` // Keep as string for safer parsing.
+	Created      string           `json:"created"`
 	Modified     string           `json:"modified"`
 	Name         string           `json:"name"`
 	Source       string           `json:"source"`
 	URL          string           `json:"url,omitempty"`
 	LocationID   string           `json:"location_id,omitempty"`
-	LocationName string           `json:"location,omitempty"` // RTM often uses 'location' instead of 'locationName'.
-	Tags         rtmTags          `json:"tags,omitempty"`     // Use the custom rtmTags type.
+	LocationName string           `json:"location,omitempty"`
+	Tags         rtmTags          `json:"tags,omitempty"` // Custom type
 	Participants []rtmParticipant `json:"participants,omitempty"`
-	Notes        json.RawMessage  `json:"notes,omitempty"` // Use RawMessage for flexible parsing.
-	Task         []rtmTask        `json:"task"`            // Individual task instances within the series.
-	RRule        string           `json:"rrule,omitempty"` // Recurrence rule string.
+	Notes        json.RawMessage  `json:"notes,omitempty"` // Flexible note parsing
+	Task         []rtmTask        `json:"task"`
+	RRule        json.RawMessage  `json:"rrule,omitempty"` // MODIFIED: Handles string or object
 }
 
 // rtmTask represents an individual task instance within a task series.
 type rtmTask struct {
 	ID         string `json:"id"`
-	Due        string `json:"due"` // Keeping as string due to potential "" value.
+	Due        string `json:"due"`
 	HasDueTime string `json:"has_due_time"`
-	Added      string `json:"added"`     // Keep as string for safer parsing.
-	Completed  string `json:"completed"` // Keeping as string due to potential "" value.
-	Deleted    string `json:"deleted"`   // Keeping as string due to potential "" value.
-	Priority   string `json:"priority"`  // Can be "N".
+	Added      string `json:"added"`
+	Completed  string `json:"completed"`
+	Deleted    string `json:"deleted"`
+	Priority   string `json:"priority"`
 	Postponed  string `json:"postponed"`
 	Estimate   string `json:"estimate"`
 }
@@ -121,10 +106,10 @@ type rtmTask struct {
 // rtmNote represents a note associated with a task series during unmarshalling.
 type rtmNote struct {
 	ID       string `json:"id"`
-	Created  string `json:"created"` // Keep as string for safer parsing.
+	Created  string `json:"created"`
 	Modified string `json:"modified"`
 	Title    string `json:"title"`
-	Body     string `json:"$t"` // RTM uses '$t' for the note body.
+	Body     string `json:"$t"`
 }
 
 // Note represents a note associated with a task (publicly exposed type).
@@ -142,28 +127,64 @@ type rtmParticipant struct {
 	Fullname string `json:"fullname"`
 }
 
-// rtmError represents the error structure returned by the RTM API.
-type rtmError struct {
-	Code string `json:"code"`
-	Msg  string `json:"msg"`
+// --- Settings Structures --- START
+
+// settingsRsp holds the raw response structure for rtm.settings.getList.
+type settingsRsp struct {
+	Rsp struct {
+		Stat     string      `json:"stat"`
+		Err      *rtmError   `json:"err,omitempty"`
+		Settings rtmSettings `json:"settings"` // Assuming settings are nested under "settings".
+	} `json:"rsp"`
 }
 
-// --- Authentication Related Structures ---
+// rtmSettings contains the raw settings data from the API.
+type rtmSettings struct {
+	Timezone       string `json:"timezone"`
+	DateFormat     string `json:"dateformat"` // "0" or "1"
+	TimeFormat     string `json:"timeformat"` // "0" or "1"
+	DefaultList    string `json:"defaultlist"`
+	Language       string `json:"language"`
+	DefaultDueDate string `json:"defaultduedate"`
+	Pro            string `json:"pro"` // "0" or "1"
+}
+
+// Settings represents the processed user settings (publicly exposed type).
+type Settings struct {
+	Timezone       string `json:"timezone"`
+	IsAmericanDate bool   `json:"isAmericanDate"` // 0 = European (false), 1 = American (true).
+	Is24HourTime   bool   `json:"is24HourTime"`   // 0 = 12h (false), 1 = 24h (true).
+	DefaultListID  string `json:"defaultListId"`
+	Language       string `json:"language"`
+	DefaultDueDate string `json:"defaultDueDate"` // Keep as string for now.
+	IsProAccount   bool   `json:"isProAccount"`   // 0 = Basic (false), 1 = Pro (true).
+}
+
+// --- Settings Structures --- END
+
+// --- Authentication Related Structures --- START
+// Restored missing structs and fields for auth flow
+
+// rtmAuthUser holds user details within auth responses.
+type rtmAuthUser struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Fullname string `json:"fullname"`
+}
+
+// rtmAuthDetails holds token, permissions, and user info in auth responses.
+type rtmAuthDetails struct {
+	Token string      `json:"token"`
+	Perms string      `json:"perms"`
+	User  rtmAuthUser `json:"user"`
+}
 
 // rtmAuthCheck represents the response structure for rtm.auth.checkToken.
 type rtmAuthCheck struct {
 	Rsp struct {
-		Stat string    `json:"stat"`
-		Err  *rtmError `json:"err,omitempty"`
-		Auth struct {
-			Token string `json:"token"`
-			Perms string `json:"perms"`
-			User  struct {
-				ID       string `json:"id"`
-				Username string `json:"username"`
-				Fullname string `json:"fullname"`
-			} `json:"user"`
-		} `json:"auth"`
+		Stat string         `json:"stat"`
+		Err  *rtmError      `json:"err,omitempty"`
+		Auth rtmAuthDetails `json:"auth"`
 	} `json:"rsp"`
 }
 
@@ -174,26 +195,17 @@ type AuthState struct {
 	Permissions     string    `json:"permissions,omitempty"`
 	UserID          string    `json:"userId,omitempty"`
 	Username        string    `json:"username,omitempty"`
-	Fullname        string    `json:"fullname,omitempty"`    // Correct Go field name (upper 'n').
-	LastChecked     time.Time `json:"lastChecked,omitempty"` // When the state was last verified.
-	CheckError      string    `json:"checkError,omitempty"`  // Error message if verification failed.
+	Fullname        string    `json:"fullname,omitempty"`
+	LastChecked     time.Time `json:"lastChecked,omitempty"`
+	CheckError      string    `json:"checkError,omitempty"`
 }
 
 // AuthResult holds the response from rtm.auth.getToken.
-// This is the canonical definition, replacing the one previously in auth_manager.go.
 type AuthResult struct {
 	Rsp struct {
-		Stat string    `json:"stat"`
-		Err  *rtmError `json:"err,omitempty"`
-		Auth struct {
-			Token string `json:"token"`
-			Perms string `json:"perms"`
-			User  struct {
-				ID       string `json:"id"`
-				Username string `json:"username"`
-				Fullname string `json:"fullname"`
-			} `json:"user"`
-		} `json:"auth"`
+		Stat string         `json:"stat"`
+		Err  *rtmError      `json:"err,omitempty"`
+		Auth rtmAuthDetails `json:"auth"`
 	} `json:"rsp"`
 }
 
@@ -206,16 +218,9 @@ type FrobResult struct {
 	} `json:"rsp"`
 }
 
-// TimelineResult holds the response from rtm.timelines.create.
-type TimelineResult struct {
-	Rsp struct {
-		Stat     string    `json:"stat"`
-		Err      *rtmError `json:"err,omitempty"`
-		Timeline string    `json:"timeline"`
-	} `json:"rsp"`
-}
+// --- Authentication Related Structures --- END
 
-// --- Other API Response Structures ---
+// --- Other API Response Structures --- START
 
 // listsRsp holds the response for rtm.lists.getList.
 type listsRsp struct {
@@ -232,13 +237,13 @@ type listsRsp struct {
 type rtmListMeta struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
-	Deleted    string `json:"deleted"` // "0" or "1".
+	Deleted    string `json:"deleted"`
 	Locked     string `json:"locked"`
 	Archived   string `json:"archived"`
 	Position   string `json:"position"`
 	Smart      string `json:"smart"`
 	SortOrder  string `json:"sort_order"`
-	Filter     string `json:"filter,omitempty"` // Only present for smart lists.
+	Filter     string `json:"filter,omitempty"`
 	TimelineID string `json:"timeline,omitempty"`
 }
 
@@ -249,8 +254,8 @@ type TaskList struct {
 	Deleted   bool   `json:"deleted"`
 	Locked    bool   `json:"locked"`
 	Archived  bool   `json:"archived"`
-	Position  int    `json:"position"`
 	SmartList bool   `json:"smartList"`
+	Position  int    `json:"position"`
 }
 
 // tagsRsp holds the response for rtm.tags.getList.
@@ -288,11 +293,10 @@ type rtmLocation struct {
 	Latitude  string `json:"latitude"`
 	Zoom      string `json:"zoom"`
 	Address   string `json:"address"`
-	Viewable  string `json:"viewable"` // "0" or "1".
+	Viewable  string `json:"viewable"`
 }
 
-// GenericTxnResult holds the common response structure for transactional RTM calls
-// like completing or adding a task.
+// GenericTxnResult holds the common response structure for transactional RTM calls.
 type GenericTxnResult struct {
 	Rsp struct {
 		Stat        string    `json:"stat"`
@@ -300,9 +304,9 @@ type GenericTxnResult struct {
 		Timeline    string    `json:"timeline"`
 		Transaction struct {
 			ID       string `json:"id"`
-			Undoable string `json:"undoable"` // "0" or "1".
+			Undoable string `json:"undoable"`
 		} `json:"transaction"`
-		List struct { // Sometimes RTM includes the list/taskseries/task info.
+		List struct {
 			ID         string          `json:"id"`
 			Taskseries []rtmTaskSeries `json:"taskseries,omitempty"`
 		} `json:"list,omitempty"`
@@ -310,7 +314,6 @@ type GenericTxnResult struct {
 }
 
 // createTaskRsp holds the specific response structure for rtm.tasks.add.
-// RTM includes the task series and task info directly under list for add.
 type createTaskRsp struct {
 	Rsp struct {
 		Stat        string    `json:"stat"`
@@ -318,14 +321,14 @@ type createTaskRsp struct {
 		Timeline    string    `json:"timeline"`
 		Transaction struct {
 			ID       string `json:"id"`
-			Undoable string `json:"undoable"` // "0" or "1".
+			Undoable string `json:"undoable"`
 		} `json:"transaction"`
 		List struct {
-			ID         string   `json:"id"`
-			Taskseries struct { // RTM uses singular 'taskseries' here.
+			ID         string `json:"id"`
+			Taskseries struct {
 				ID   string  `json:"id"`
-				Name string  `json:"name"` // And returns the name here.
-				Task rtmTask `json:"task"` // And singular 'task'.
+				Name string  `json:"name"`
+				Task rtmTask `json:"task"`
 			} `json:"taskseries"`
 		} `json:"list"`
 	} `json:"rsp"`
@@ -333,31 +336,31 @@ type createTaskRsp struct {
 
 // Task represents the simplified structure used for returning data via MCP tools/resources.
 type Task struct {
-	ID            string    `json:"id"` // Combined: seriesID_taskID.
+	ID            string    `json:"id"`
 	Name          string    `json:"name"`
 	URL           string    `json:"url"`
 	ListID        string    `json:"listId"`
-	ListName      string    `json:"listName"` // Added ListName.
+	ListName      string    `json:"listName"`
 	LocationID    string    `json:"locationId,omitempty"`
 	LocationName  string    `json:"locationName,omitempty"`
-	Completed     bool      `json:"completed"` // True if the specific instance is completed.
-	Notes         []Note    `json:"notes"`     // Use exported Note type.
+	Completed     bool      `json:"completed"`
+	Notes         []Note    `json:"notes"`
 	Tags          []string  `json:"tags"`
-	DueDate       time.Time `json:"dueDate,omitempty"` // Zero time if no due date.
+	DueDate       time.Time `json:"dueDate,omitempty"`
 	HasDueTime    bool      `json:"hasDueTime"`
-	Priority      int       `json:"priority"`                // 0 = N, 1, 2, 3.
-	Postponed     int       `json:"postponed"`               // Number of times postponed.
-	Estimate      string    `json:"estimate"`                // Estimate string.
-	StartDate     time.Time `json:"startDate"`               // Added date.
-	CompletedDate time.Time `json:"completedDate,omitempty"` // Completion date.
-	Created       time.Time `json:"created"`                 // Task Series creation time.
-	Modified      time.Time `json:"modified"`                // Task Series modification time.
+	Priority      int       `json:"priority"`
+	Postponed     int       `json:"postponed"`
+	Estimate      string    `json:"estimate"`
+	StartDate     time.Time `json:"startDate"`
+	CompletedDate time.Time `json:"completedDate,omitempty"`
+	Created       time.Time `json:"created"`
+	Modified      time.Time `json:"modified"`
 }
 
-// --- Config Definition ---
+// --- Other API Response Structures --- END
 
+// --- Config Definition --- START
 // Config holds configuration settings specific to the RTM client.
-// This is now the single definition used by client.go.
 type Config struct {
 	APIKey       string
 	SharedSecret string
@@ -366,8 +369,9 @@ type Config struct {
 	HTTPClient   *http.Client // Optional: Defaults if nil.
 }
 
-// --- Helper Types ---
+// --- Config Definition --- END
 
+// --- Helper Types --- START
 // timelineRsp holds the response from rtm.timelines.create (needed by methods.go).
 type timelineRsp struct {
 	Rsp struct {
@@ -378,7 +382,6 @@ type timelineRsp struct {
 }
 
 // EnsureAuthResult defines a simpler result structure for the AuthManager.EnsureAuthenticated method.
-// This avoids confusion with the RTM API's AuthResult struct.
 type EnsureAuthResult struct {
 	Success     bool
 	Username    string
@@ -387,3 +390,14 @@ type EnsureAuthResult struct {
 	Frob        string // Only populated if interactive flow starts.
 	NeedsManual bool   // True if interactive flow requires manual completion.
 }
+
+// TokenData represents the data stored for an authentication token (used by token storage).
+type TokenData struct {
+	Token     string    `json:"token"`
+	UserID    string    `json:"userId,omitempty"`
+	Username  string    `json:"username,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// --- Helper Types --- END

@@ -61,9 +61,7 @@ func (c *Client) GetTags(ctx context.Context) ([]Tag, error) { // Use exported T
 
 	var tags []Tag // Use exported Tag type.
 	for _, t := range result.Rsp.Tags.Tag {
-		// Original file content had t.Name, assuming Tag type has Name field.
-		// If the JSON 'tag' array directly contains strings, this should just be:
-		tags = append(tags, Tag{Name: t}) // If RTM response is {"tag": ["tag1", "tag2"]}
+		tags = append(tags, Tag{Name: t})
 	}
 	return tags, nil
 }
@@ -130,20 +128,15 @@ func (c *Client) CreateTask(ctx context.Context, name string, listID string) (*T
 	task.DueDate, _ = c.parseRTMTime(taskData.Due)
 	task.HasDueTime = taskData.HasDueTime == "1" // Parse HasDueTime.
 
-	// Add other fields if needed (e.g., priority, tags parsed from name).
-	// Note: CreateTask response doesn't usually return full details like notes/tags.
-
 	return task, nil
 }
 
 // CompleteTask marks an existing task as complete.
 func (c *Client) CompleteTask(ctx context.Context, listID, taskID string) error {
-	// Task ID needs to be split into series and task components for the API call.
 	seriesID, actualTaskID, err := c.splitRTMTaskID(taskID)
 	if err != nil {
-		return err // Return parsing error if ID format is invalid.
+		return err
 	}
-	// List ID is mandatory for completing a task.
 	if listID == "" {
 		return mcperrors.NewResourceError(mcperrors.ErrResourceInvalid, "listID is required to complete a task", nil, map[string]interface{}{"taskID": taskID})
 	}
@@ -160,7 +153,6 @@ func (c *Client) CompleteTask(ctx context.Context, listID, taskID string) error 
 		"timeline":      timeline,
 	}
 
-	// Call the API method. We don't need the response body on success.
 	_, err = c.callMethod(ctx, methodCompleteTask, params)
 	if err != nil {
 		return errors.Wrap(err, "failed to call completeTask method")
@@ -169,7 +161,7 @@ func (c *Client) CompleteTask(ctx context.Context, listID, taskID string) error 
 }
 
 // GetTasks retrieves tasks based on an optional filter.
-// Handles inconsistent JSON structures for task notes returned by the RTM API.
+// Handles inconsistent JSON structures for task notes and rrule returned by the RTM API.
 func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) { // Return exported Task type.
 	params := map[string]string{}
 	if filter != "" {
@@ -181,12 +173,10 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) { 
 		return nil, errors.Wrap(err, "failed to call getTasks method")
 	}
 
-	// Log raw response for debugging potential parsing issues.
 	c.logger.Debug("Raw RTM getTasks response received.", "responseBody", string(respBytes))
 
 	var result tasksRsp // Use internal unmarshalling type.
 	if err := json.Unmarshal(respBytes, &result); err != nil {
-		// Log detailed error if parsing the overall structure fails.
 		c.logger.Error("Failed to parse getTasks response JSON.",
 			"error", err,
 			"responseBody", string(respBytes))
@@ -194,15 +184,11 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) { 
 	}
 
 	var tasks []Task // Use exported Task type.
-	// Iterate through lists returned by the API.
 	for _, list := range result.Rsp.Tasks.List {
-		// Iterate through task series within each list.
-		// *** FIX: Use correct case for TaskSeries ***.
-		for _, series := range list.TaskSeries {
-			// --- Robust Note Parsing ---.
-			var taskNotes []Note         // Use exported Note type.
-			var parsedRtmNotes []rtmNote // Intermediate slice after parsing RawMessage.
-
+		for _, series := range list.TaskSeries { // Use correct case TaskSeries
+			// --- Robust Note Parsing --- (No changes here)
+			var taskNotes []Note
+			var parsedRtmNotes []rtmNote
 			if len(series.Notes) > 0 && string(series.Notes) != `""` && string(series.Notes) != `null` {
 				var notesObj struct {
 					Note []rtmNote `json:"note"`
@@ -217,41 +203,59 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) { 
 						parsedRtmNotes = notesArr
 					} else {
 						c.logger.Warn("Failed to parse RTM task notes field (tried object and array).",
-							"rawData", string(series.Notes),
-							"objectError", fmt.Sprintf("%v", errObj),
-							"arrayError", fmt.Sprintf("%v", errArr),
-							"taskId", series.ID)
+							"rawData", string(series.Notes), "taskId", series.ID)
 						parsedRtmNotes = nil
 					}
 				}
 			} else {
 				parsedRtmNotes = nil
 			}
-
 			if parsedRtmNotes != nil {
-				taskNotes = c.parseRTMNotes(parsedRtmNotes) // This helper now returns []Note.
+				taskNotes = c.parseRTMNotes(parsedRtmNotes)
 			} else {
 				taskNotes = nil
 			}
-			// --- End Robust Note Parsing ---.
+			// --- End Robust Note Parsing ---
 
-			// Iterate through individual task instances within the series.
+			// --- Handle Recurrence Rule (RRule) --- START
+			// We don't store the rule in the Task struct, just log it if present
+			if len(series.RRule) > 0 && string(series.RRule) != "null" && string(series.RRule) != `""` {
+				var rruleStr string
+				// Try unmarshalling as string first
+				if errStr := json.Unmarshal(series.RRule, &rruleStr); errStr == nil {
+					c.logger.Debug("Found recurrence rule (string).", "rrule", rruleStr, "taskId", series.ID)
+					// Example: task.RecurrenceInfo = rruleStr // If Task struct had such a field
+				} else {
+					// If not a string, check if it's an object
+					var rruleObj map[string]interface{}
+					if errObj := json.Unmarshal(series.RRule, &rruleObj); errObj == nil {
+						c.logger.Debug("Found complex recurrence rule (object).", "rruleData", rruleObj, "taskId", series.ID)
+						// Example: task.RecurrenceInfo = "Complex Rule" // If Task struct had such a field
+					} else {
+						// Log if it's neither string nor standard object
+						c.logger.Warn("Failed to parse rrule field (not string or object).",
+							"rawData", string(series.RRule), "taskId", series.ID)
+					}
+				}
+			}
+			// --- Handle Recurrence Rule (RRule) --- END
+
 			for _, t := range series.Task {
 				if t.Deleted != "" {
 					continue
 				}
 
-				task := Task{ // Use exported Task type.
+				task := Task{
 					ID:           fmt.Sprintf("%s_%s", series.ID, t.ID),
 					Name:         series.Name,
 					URL:          series.URL,
 					LocationID:   series.LocationID,
 					LocationName: series.LocationName,
 					ListID:       list.ID,
-					ListName:     list.Name, // Populate ListName.
+					ListName:     list.Name,
 					Estimate:     t.Estimate,
-					Notes:        taskNotes,           // Assign the []Note slice.
-					HasDueTime:   t.HasDueTime == "1", // Corrected HasDueTime.
+					Notes:        taskNotes,
+					HasDueTime:   t.HasDueTime == "1",
 				}
 
 				task.Created, _ = c.parseRTMTime(series.Created)
@@ -261,10 +265,8 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) { 
 				task.CompletedDate, _ = c.parseRTMTime(t.Completed)
 				task.Priority = c.parseRTMPriority(t.Priority)
 				task.Postponed = c.parseRTMPostponed(t.Postponed)
-				task.Completed = t.Completed != "" // Set completed flag based on date string presence.
+				task.Completed = t.Completed != ""
 
-				// Check if Tags field is populated before accessing Tag field
-				// Assuming series.Tags is of type rtmTags ([]string).
 				if len(series.Tags) > 0 {
 					task.Tags = series.Tags
 				}
@@ -277,7 +279,7 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) { 
 	return tasks, nil
 }
 
-// --- Helper functions ---.
+// --- Helper functions --- (parseRTMTime, parseRTMPriority, parseRTMPostponed, parseRTMNotes, splitRTMTaskID - no changes needed here)
 
 // parseRTMTime safely parses RTM's ISO 8601 time format (UTC).
 func (c *Client) parseRTMTime(timeStr string) (time.Time, error) {
@@ -326,20 +328,17 @@ func (c *Client) parseRTMNotes(notesData []rtmNote) []Note { // Returns exported
 	notes := make([]Note, 0, len(notesData)) // Use exported Note type.
 	for _, n := range notesData {
 		createdTime, _ := c.parseRTMTime(n.Created) // Safely parse time.
-		// modifiedTime, _ := c.parseRTMTime(n.Modified). // Safely parse time. // Uncomment if needed.
-		notes = append(notes, Note{ // Use exported Note type.
+		notes = append(notes, Note{                 // Use exported Note type.
 			ID:        n.ID,
 			Title:     n.Title,
 			Text:      n.Body, // Map the '$t' field to 'Text'.
 			CreatedAt: createdTime,
-			// ModifiedAt: modifiedTime, // Uncomment if needed.
 		})
 	}
 	return notes
 }
 
 // splitRTMTaskID splits the combined task ID format "seriesID_taskID" into its components.
-// Returns an error if the format is invalid.
 func (c *Client) splitRTMTaskID(combinedID string) (string, string, error) {
 	parts := strings.Split(combinedID, "_")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {

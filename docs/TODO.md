@@ -16,13 +16,6 @@ This implementation will prioritize:
 
 ## 🔥 Critical Issues / Immediate Fixes Needed 🔥
 
-- [PENDING] **Fix MCP Compliance for Error Response IDs:**
-    - **Context:** The MCP spec (rev `2025-03-26`) forbids `null` IDs, deviating from JSON-RPC 2.0. The server currently sends `id: null` for errors where the request ID is unknown (e.g., parse errors, errors responding to notifications), violating the MCP spec and causing client validation failures (ZodError).
-    - **Action:** Modify error handling (`internal/mcp/mcp_server_error_handling.go`) to send `id: 0` instead of `id: null` when the original request ID cannot be determined.
-    - **Reference:** Conversation history, MCP Spec snippet (`2025-03-26`).
-- [PENDING] **Handle `notifications/initialized`:**
-    - **Context:** The server currently doesn't route the standard `notifications/initialized` message received from the client after successful initialization. This causes a "Method not found" error (`mcperrors.ErrMethodNotFound`), triggering the generation of the non-compliant `id: null` error response mentioned above.
-    - **Action:** Add a `case "notifications/initialized":` to the `routeMessage` function's `switch` statement in `internal/mcp/mcp_server.go`. This case should call the existing (but currently unused) `handleNotificationsInitialized` function in `internal/mcp/handlers_notifications.go`.
 
 ---
 
@@ -32,14 +25,14 @@ This implementation will prioritize:
 
 - **Issue**: Client (Claude Desktop) disconnects immediately after server's `initialize` response due to protocol version mismatch (`client=2024-11-05`, `server=2025-03-26`). Root cause traced to `schema.json` lacking a standard version identifier (`$id` or `title`), preventing reliable automatic detection by `internal/schema/validator.go`. See [MCP GitHub Issue #394](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/394).
 - **Interim Solution Implemented**:
-    - `internal/mcp/handlers_core.go`: Modified `handleInitialize` to **force** reporting `protocolVersion: "2024-11-05"` in the response, bypassing schema detection for this field to ensure client compatibility.
-    - Added explicit logging of client requested vs. server forced versions.
-    - `internal/mcp/mcp_server.go`: Ensured `StrictOutgoing: false` is used in non-debug builds for validation middleware, allowing the known outgoing validation warning for the `initialize` response (due to schema/struct mismatch) to be logged without blocking the connection.
+  - `internal/mcp/handlers_core.go`: Modified `handleInitialize` to **force** reporting `protocolVersion: "2024-11-05"` in the response, bypassing schema detection for this field to ensure client compatibility.
+  - Added explicit logging of client requested vs. server forced versions.
+  - `internal/mcp/mcp_server.go`: Ensured `StrictOutgoing: false` is used in non-debug builds for validation middleware, allowing the known outgoing validation warning for the `initialize` response (due to schema/struct mismatch) to be logged without blocking the connection.
 - **Status:** Connection should now establish *once critical fixes above are applied*. Requires testing.
 - **Next Steps (Long Term):**
-    - Advocate for adding version identifiers to the official `schema.json`.
-    - Revert forced versioning in `handlers_core.go` once schema detection is reliable.
-    - Investigate and fix the root cause of the outgoing schema validation warning for `initialize`.
+  - Advocate for adding version identifiers to the official `schema.json`.
+  - Revert forced versioning in `handlers_core.go` once schema detection is reliable.
+  - Investigate and fix the root cause of the outgoing schema validation warning for `initialize`.
 
 ### RTM Authentication Flow [Needs Verification]
 
@@ -58,13 +51,13 @@ This implementation will prioritize:
 **Status:** [PARTIALLY ADDRESSED - NEW ITEM ADDED]
 
 - [NEW] **Store RTM API Key/Secret Securely in OS Keychain:**
-    - **Context:** Currently, `cowgnition setup` stores the RTM API Key/Secret in the `claude_desktop_config.json` `env` block, which is insecure if the host exposes environment variables. ADR 005 recommends using the OS keychain for *all* secrets.
-    - **Action:**
+  - **Context:** Currently, `cowgnition setup` stores the RTM API Key/Secret in the `claude_desktop_config.json` `env` block, which is insecure if the host exposes environment variables. ADR 005 recommends using the OS keychain for *all* secrets.
+  - **Action:**
         1. Modify `cowgnition setup` (`cmd/claude_desktop_registration.go`) to save the Key/Secret to the OS keychain (using `keyring` library) instead of writing them to the `env` block.
         2. Modify server startup (`internal/rtm/service.go` or `cmd/server/server_runner.go`) to load the Key/Secret *from* the OS keychain when initializing the RTM service/client.
         3. Deprecate/remove reliance on `RTM_API_KEY`/`RTM_SHARED_SECRET` environment variables set via `claude_desktop_config.json`.
-    - **Reference:** [ADR 005](docs/adr/005_secret_management.md)
-    - **Status:** `[PENDING]`
+  - **Reference:** [ADR 005](docs/adr/005_secret_management.md)
+  - **Status:** `[PENDING]`
 - [PENDING] Add comprehensive input validation beyond schema validation
 - [PENDING] Implement rate limiting for RTM API calls
 - [COMPLETE] Implement secure token storage for RTM *Auth Token* (using OS keychain/keyring via `internal/rtm/token_storage_secure.go`)
@@ -164,11 +157,11 @@ Focuses on ensuring MCP compliance through robust schema validation. Critical is
 **Status:** [INCOMPLETE]
 
 - [PENDING] Create comprehensive test suite:
-    - [PENDING] Unit tests for components (Some exist, need more coverage)
-    - [PENDING] **Protocol Compliance Tests:** Add specific tests verifying the server correctly handles the *entire* required MCP lifecycle sequence (`initialize`, `initialized`, `shutdown`, `exit`), including required notifications and error conditions, especially focusing on edge cases identified during debugging (e.g., `id: null` handling).
-    - [COMPLETE] Integration tests using in-memory transport (`internal/mcp/mcp_server_test.go`)
-    - [PENDING] Fuzzing tests for robustness
-    - [PENDING] Benchmark tests for performance
+  - [PENDING] Unit tests for components (Some exist, need more coverage)
+  - [PENDING] **Protocol Compliance Tests:** Add specific tests verifying the server correctly handles the *entire* required MCP lifecycle sequence (`initialize`, `initialized`, `shutdown`, `exit`), including required notifications and error conditions, especially focusing on edge cases identified during debugging (e.g., `id: null` handling).
+  - [COMPLETE] Integration tests using in-memory transport (`internal/mcp/mcp_server_test.go`)
+  - [PENDING] Fuzzing tests for robustness
+  - [PENDING] Benchmark tests for performance
 
 ---
 
@@ -178,33 +171,34 @@ Focuses on ensuring MCP compliance through robust schema validation. Critical is
 
 - [PARTIAL] Include connection ID and request ID in logs (Some request IDs logged, not consistently everywhere)
 - [PENDING] Add metrics:
-    - [PENDING] Request counts and latencies
-    - [PENDING] Error rates by type
-    - [PENDING] Active connections
-    - [PENDING] Schema validation failures
-    - [PENDING] Create exportable metrics (e.g., Prometheus)
+  - [PENDING] Request counts and latencies
+  - [PENDING] Error rates by type
+  - [PENDING] Active connections
+  - [PENDING] Schema validation failures
+  - [PENDING] Create exportable metrics (e.g., Prometheus)
 
 ---
+
 # TODO List for CowGnition RTM Issues
 
-1.  **Fix RTM Task Recurrence (`rrule`) Parsing Error**
-    * **Issue:** The application fails with a JSON parsing error (`json: cannot unmarshal object into Go struct field ... rrule of type string`) when fetching RTM tasks. This occurs because the RTM API sometimes returns the `rrule` field as a JSON object (for complex recurrences) instead of the expected `string`.
-    * **Location:** `internal/rtm/types.go`, specifically within the `rtmTaskSeries` struct definition.
-    * **Action:** Modify the `RRule` field in the `rtmTaskSeries` struct. Change its type from `string` to something more flexible like `json.RawMessage` or `interface{}`. Update the task processing logic (likely within `GetTasks` in `internal/rtm/methods.go` or a helper function) to correctly handle both string and object types for the `rrule` data.
-    * **Goal:** Prevent JSON parsing errors and correctly represent recurrence rules, regardless of their format in the RTM API response.
+1. **Fix RTM Task Recurrence (`rrule`) Parsing Error**
+    - **Issue:** The application fails with a JSON parsing error (`json: cannot unmarshal object into Go struct field ... rrule of type string`) when fetching RTM tasks. This occurs because the RTM API sometimes returns the `rrule` field as a JSON object (for complex recurrences) instead of the expected `string`.
+    - **Location:** `internal/rtm/types.go`, specifically within the `rtmTaskSeries` struct definition.
+    - **Action:** Modify the `RRule` field in the `rtmTaskSeries` struct. Change its type from `string` to something more flexible like `json.RawMessage` or `interface{}`. Update the task processing logic (likely within `GetTasks` in `internal/rtm/methods.go` or a helper function) to correctly handle both string and object types for the `rrule` data.
+    - **Goal:** Prevent JSON parsing errors and correctly represent recurrence rules, regardless of their format in the RTM API response.
 
-2.  **Address Potential Large Task Volume ("Firehose") for `rtm://tasks`**
-    * **Issue:** Fetching tasks via the default `rtm://tasks` resource might return a very large number of tasks, potentially overwhelming the client or being inefficient.
-    * **Location:** Primarily affects the `ReadResource` method in `internal/rtm/service.go` when handling the `rtm://tasks` URI.
-    * **Actions (Choose one or more):**
-        * **(Recommended) Promote Filter Usage:** Ensure the existing filter parsing logic (`extractFilterFromURI` in `internal/rtm/service.go`) works correctly and encourage clients (like Claude Desktop) to use filtered URIs (e.g., `rtm://tasks?filter=status:incomplete`) for more targeted requests. This aligns with the RTM API's design.
-        * **(Optional) Implement Server-Side Limiting:** Modify the `readTasksResourceWithFilter` function in `internal/rtm/service.go`. After fetching *all* tasks matching the (potentially empty) filter from RTM, add logic to truncate the list included in the final MCP response to a reasonable maximum (e.g., first 50-100 tasks), perhaps adding a note indicating that more tasks exist.
-        * **(Optional/Advanced) Implement MCP Resource Pagination:** Define a custom pagination mechanism for the `rtm://tasks` resource (e.g., using `?cursor=` parameters). This would require significant changes to `ReadResource` and is not standard MCP.
-    * **Goal:** Provide mechanisms to manage the volume of task data returned, improving performance and usability, primarily by leveraging RTM's filtering capabilities.
+2. **Address Potential Large Task Volume ("Firehose") for `rtm://tasks`**
+    - **Issue:** Fetching tasks via the default `rtm://tasks` resource might return a very large number of tasks, potentially overwhelming the client or being inefficient.
+    - **Location:** Primarily affects the `ReadResource` method in `internal/rtm/service.go` when handling the `rtm://tasks` URI.
+    - **Actions (Choose one or more):**
+        - **(Recommended) Promote Filter Usage:** Ensure the existing filter parsing logic (`extractFilterFromURI` in `internal/rtm/service.go`) works correctly and encourage clients (like Claude Desktop) to use filtered URIs (e.g., `rtm://tasks?filter=status:incomplete`) for more targeted requests. This aligns with the RTM API's design.
+        - **(Optional) Implement Server-Side Limiting:** Modify the `readTasksResourceWithFilter` function in `internal/rtm/service.go`. After fetching *all* tasks matching the (potentially empty) filter from RTM, add logic to truncate the list included in the final MCP response to a reasonable maximum (e.g., first 50-100 tasks), perhaps adding a note indicating that more tasks exist.
+        - **(Optional/Advanced) Implement MCP Resource Pagination:** Define a custom pagination mechanism for the `rtm://tasks` resource (e.g., using `?cursor=` parameters). This would require significant changes to `ReadResource` and is not standard MCP.
+    - **Goal:** Provide mechanisms to manage the volume of task data returned, improving performance and usability, primarily by leveraging RTM's filtering capabilities.
 
 ## Deferred Items
 
-_(These items are important but deferred to focus on core functionality and stability)_
+*(These items are important but deferred to focus on core functionality and stability)*
 
 ### Static Capability Pre-validation (Deferred from Phase 8)
 
@@ -222,7 +216,7 @@ _(These items are important but deferred to focus on core functionality and stab
 
 ## Completed Work
 
-_(Moved from previous phases)_
+*(Moved from previous phases)*
 
 - Basic NDJSON Transport Implementation
 - Initial MCP Handler Structure
