@@ -329,16 +329,43 @@ func (s *Service) IsAuthenticated() bool {
 }
 
 // --- Internal Helper Functions ---.
-// (Only keep helpers directly used by the interface methods above if they weren't moved).
+// file: internal/rtm/service.go
 
 // readTasksResourceWithFilter fetches tasks based on filter. (Internal helper for ReadResource).
 func (s *Service) readTasksResourceWithFilter(ctx context.Context, filter string, resourceURI string) ([]interface{}, error) {
 	if !s.IsAuthenticated() {
 		return s.notAuthenticatedResourceContent(resourceURI), nil // Calls helper in helpers.go.
 	}
-	tasks, err := s.client.GetTasks(ctx, filter)
+
+	// --- START MODIFICATION ---
+	effectiveFilter := filter // Start with the provided filter
+
+	// If the provided filter is empty, try to use the default list filter
+	if filter == "" {
+		s.logger.Debug("No filter provided, attempting to use default list filter.", "resourceURI", resourceURI)
+		// Retrieve user settings to find the default list ID [cite: 1]
+		settings, settingsErr := s.client.GetSettings(ctx)
+		if settingsErr != nil {
+			// Log the error but proceed without a default filter
+			s.logger.Warn("Failed to get user settings to determine default list filter.", "error", settingsErr)
+			// effectiveFilter remains ""
+		} else if settings != nil && settings.DefaultListID != "" { // Check DefaultListID from settings [cite: 2]
+			// Construct the filter for the default list
+			defaultFilter := fmt.Sprintf("list:%s", settings.DefaultListID)
+			s.logger.Info("Using default list filter.", "filter", defaultFilter, "defaultListId", settings.DefaultListID)
+			effectiveFilter = defaultFilter // Use the default list filter
+		} else {
+			s.logger.Debug("No default list ID found in settings, proceeding without filter.")
+			// effectiveFilter remains ""
+		}
+	}
+	// --- END MODIFICATION ---
+
+	// Use the effectiveFilter (which is either the original filter or the default list filter)
+	tasks, err := s.client.GetTasks(ctx, effectiveFilter) // Use effectiveFilter here [cite: 1]
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get tasks for resource (filter: '%s')", filter)
+		// Use effectiveFilter in the error message as well
+		return nil, errors.Wrapf(err, "failed to get tasks for resource (filter: '%s')", effectiveFilter)
 	}
 	return s.createJSONResourceContent(resourceURI, tasks) // Calls helper in helpers.go.
 }
