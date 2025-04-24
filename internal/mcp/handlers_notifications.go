@@ -5,36 +5,9 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"fmt" // Import fmt for formatting.
-
-	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Import the shared types package.
+	// Import fmt for formatting.
+	// Import the shared types package.
 )
-
-// handleNotificationsInitialized handles the notifications/initialized notification.
-// Official definition: This notification is sent from the client to the server after
-// initialization has finished. It signals that the client has successfully processed
-// the server's initialization response and is ready for further communication.
-// nolint:unused,unparam // Keeping function signature as-is, suppressing linter.
-func (h *Handler) handleNotificationsInitialized(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
-	h.logger.Info("Received 'notifications/initialized' from client.")
-
-	// Extract client capabilities if available.
-	var notifParams struct {
-		ClientCapabilities *mcptypes.ClientCapabilities `json:"clientCapabilities,omitempty"` // Use mcptypes.ClientCapabilities.
-	}
-	if err := json.Unmarshal(params, &notifParams); err != nil {
-		// It's okay if we can't unmarshal, the params might be empty.
-		h.logger.Debug("Could not parse notifications/initialized params (might be empty).", "error", err)
-	}
-
-	if notifParams.ClientCapabilities != nil {
-		h.logger.Debug("Client capabilities confirmed during initialized.",
-			"capabilities", fmt.Sprintf("%+v", notifParams.ClientCapabilities))
-	}
-
-	// This is a notification (no response needed).
-	return nil, nil
-}
 
 // handleNotificationsCancelled handles the notifications/cancelled notification.
 // Official definition: This notification can be sent by either side to indicate that it is

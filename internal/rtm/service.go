@@ -1,8 +1,9 @@
 // Package rtm implements the client and service logic for interacting with the Remember The Milk API.
-// file: internal/rtm/service.go
 // This file defines the rtm.Service struct and makes it implement the services.Service interface,
 // coordinating authentication, API calls, and MCP interactions.
 package rtm
+
+// file: internal/rtm/service.go
 
 import (
 	"context"
@@ -602,6 +603,27 @@ func (s *Service) GetTokenStorageInfo() (method string, path string, available b
 	}
 }
 
+// GetPrompt handles requests to retrieve a specific prompt template.
+// Currently, the RTM service does not support prompts.
+func (s *Service) GetPrompt(_ context.Context, name string, _ map[string]string) (*mcptypes.GetPromptResult, error) {
+	// Now s.logger refers to the logger field in your RTM Service struct.
+	s.logger.Warn("GetPrompt called, but RTM service does not support prompts.", "promptName", name)
+
+	// Return an error indicating the feature isn't supported by this service.
+	// Using ErrMethodNotFound or a specific "Not Supported" error is appropriate.
+	// Let's use MethodNotFound for now, aligning with how unsupported actions are handled.
+	return nil, mcperrors.NewMethodNotFoundError( // mcperrors is now correctly imported and used.
+		fmt.Sprintf("Prompt support (prompts/get) is not implemented by the RTM service for prompt '%s'", name),
+		nil, // No underlying Go error cause.
+		map[string]interface{}{"promptName": name},
+	)
+
+	// Alternatively, to return an empty success response (if the spec allows):
+	// return &mcptypes.GetPromptResult{Messages: []mcptypes.PromptMessage{}}, nil.
+}
+
+// Ensure your RTM service struct (e.g., Service) correctly implements.
+// the services.Service interface by having all the required methods, including GetPrompt.
 // NOTE: Tool handler implementations (handleGetTasks, etc.) are expected.
 // to be in mcp_tools.go.
 // NOTE: Helper functions (successToolResult, etc.) are expected.

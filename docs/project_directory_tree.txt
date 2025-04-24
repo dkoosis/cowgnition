@@ -30,7 +30,6 @@
 │   │   │   ├── errors.go
 │   │   │   └── stub_test.go
 │   │   ├── connection_state.go
-│   │   ├── handler.go
 │   │   ├── handlers_core.go
 │   │   ├── handlers_notifications.go
 │   │   ├── handlers_prompts.go
@@ -113,4 +112,4 @@
 ├── go.sum
 └── rtm-authentication.jpg
 
-20 directories, 94 files
+20 directories, 93 files

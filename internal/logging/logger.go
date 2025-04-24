@@ -2,9 +2,9 @@
 // It defines a standard Logger interface and allows for configuring different
 // underlying logging implementations (like slog) through a default logger instance.
 // This promotes consistent logging practices across the CowGnition codebase.
-// file: internal/logging/logger.go.
 package logging
 
+// file: internal/logging/logger.go
 import (
 	"context"
 )
@@ -71,7 +71,6 @@ func GetNoopLogger() Logger {
 
 // defaultLogger holds the application's globally configured logger instance.
 // It defaults to a NoopLogger until explicitly set by SetupDefaultLogger.
-// <<< FIX: Removed redundant 'Logger' type declaration >>>.
 var defaultLogger = GetNoopLogger() // Initialize with noop logger.
 
 // SetDefaultLogger assigns the global logger instance used by the application.

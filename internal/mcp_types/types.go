@@ -205,6 +205,24 @@ type Content interface {
 	GetType() string
 }
 
+// --- JSON-RPC Error Structures ---
+
+// JSONRPCErrorPayload represents the 'error' object in a JSON-RPC error response.
+// Matches the structure defined in the JSON-RPC 2.0 specification.
+type JSONRPCErrorPayload struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"` // Data is optional
+}
+
+// JSONRPCErrorContainer represents the full JSON-RPC error response object.
+// Matches the structure defined in the JSON-RPC 2.0 specification.
+type JSONRPCErrorContainer struct {
+	JSONRPC string              `json:"jsonrpc"` // Should always be "2.0"
+	Error   JSONRPCErrorPayload `json:"error"`
+	ID      json.RawMessage     `json:"id"` // Can be string, number, or null (but MCP spec requires non-null)
+}
+
 // TextContent represents a text content item.
 // Implements the Content interface.
 type TextContent struct {
@@ -212,10 +230,36 @@ type TextContent struct {
 	Text string `json:"text"`
 }
 
+// GetPromptRequest defines the parameters for the prompts/get request.
+type GetPromptRequest struct {
+	Name      string            `json:"name"`
+	Arguments map[string]string `json:"arguments,omitempty"`
+}
+
 // GetType returns the type of content ("text").
 func (t TextContent) GetType() string {
 	return "text"
 }
+
+// --- Add this struct definition to internal/mcp_types/types.go ---
+
+// PromptMessage represents a single message within a prompt response.
+// Matches definition in schema.json: PromptMessage.
+type PromptMessage struct {
+	Role    string    `json:"role"`    // "user" or "assistant"
+	Content []Content `json:"content"` // Can contain TextContent, ImageContent, EmbeddedResource
+}
+
+// GetPromptResult represents the successful result of a 'prompts/get' request.
+// Matches definition in schema.json: GetPromptResult.
+type GetPromptResult struct {
+	Messages    []PromptMessage `json:"messages"`
+	Description string          `json:"description,omitempty"`
+	// _meta field could be added if needed, but often omitted in Go structs unless used.
+}
+
+// --- Ensure Content types (TextContent, etc.) are also defined or imported if needed by PromptMessage ---
+// TextContent is already defined, add others if used in prompts.
 
 // NOTE: Other content types like ImageContent, EmbeddedResource would also go here.
 // if they were directly used by CallToolResult or other shared types. Add them.

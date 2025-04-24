@@ -1,8 +1,9 @@
 // Package errors defines domain-specific error types and codes for the MCP (Model Context Protocol) layer.
-// file: internal/mcp/mcp_errors/errors.go.
 // These errors provide more context than standard Go errors and help in mapping internal issues.
 // to appropriate JSON-RPC error responses or handling them specifically within the application.
 package errors
+
+// file: internal/mcp/mcp_errors/errors.go
 
 import (
 	"fmt"
@@ -33,15 +34,25 @@ const (
 	ErrResourceForbidden
 	ErrResourceInvalid
 
-	// --- Protocol Errors (4000-4999) ---.
-	ErrProtocolInvalid ErrorCode = 4000 + iota
-	ErrProtocolUnsupported
-	ErrMethodNotFound  // NEW: For JSON-RPC -32601 equivalent.
-	ErrInvalidParams   // NEW: For JSON-RPC -32602 equivalent.
-	ErrServiceNotFound // NEW: Specific internal error when routing fails.
-	ErrInternalError   // NEW: Generic internal error.
-	ErrParseError      // NEW: For JSON-RPC -32700.
-	ErrInvalidRequest  // NEW: For JSON-RPC -32600.
+	// --- Protocol Errors (4000-4999 AND JSON-RPC range) ---.
+	// Note: Mixing iota with specific assignments requires restarting iota if needed,
+	// or carefully managing the sequence. Here, we assign specific values
+	// for JSON-RPC equivalents and custom protocol errors.
+	ErrProtocolInvalid     ErrorCode = 4000 + iota // iota = 0 here -> 4000
+	ErrProtocolUnsupported                         // iota = 1 -> 4001
+
+	// Map specific internal errors to JSON-RPC standard codes where applicable.
+	ErrParseError     ErrorCode = -32700 // JSONRPCParseError
+	ErrInvalidRequest ErrorCode = -32600 // JSONRPCInvalidRequest
+	ErrMethodNotFound ErrorCode = -32601 // JSONRPCMethodNotFound
+	ErrInvalidParams  ErrorCode = -32602 // JSONRPCInvalidParams
+	ErrInternalError  ErrorCode = -32603 // JSONRPCInternalError
+
+	// Custom server-defined protocol errors within the recommended range (-32000 to -32099).
+	ErrRequestSequence ErrorCode = -32001 // Invalid message sequence for current state
+	ErrServiceNotFound ErrorCode = -32002 // Specific internal error when routing fails
+
+	// You can add more custom -320xx codes here if needed...
 )
 
 // BaseError is the common base for custom MCP error types.
@@ -361,6 +372,10 @@ func MapMCPErrorToJSONRPC(err error) (code int, message string, data map[string]
 		code = -32031
 		message = "Unsupported operation."
 		data["detail"] = baseErr.Message
+	case ErrRequestSequence: // Added case for ErrRequestSequence
+		code = -32001 // Assigning a specific code
+		message = "Invalid Request Sequence."
+		data["detail"] = baseErr.Message
 
 	// Fallback for any other MCP error codes.
 	default:
@@ -376,7 +391,7 @@ func MapMCPErrorToJSONRPC(err error) (code int, message string, data map[string]
 			// Only include context fields deemed safe for client exposure.
 			// Example: Allow 'uri', 'toolName', 'method' but not internal details.
 			switch k {
-			case "uri", "toolName", "method", "service": // Add more safe keys as needed.
+			case "uri", "toolName", "method", "service", "state": // Add more safe keys as needed.
 				if _, exists := data[k]; !exists { // Avoid overwriting standard fields like 'method'.
 					data[k] = v
 				}

@@ -177,12 +177,12 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 	}
 
 	// Log raw response for debugging potential parsing issues.
-	c.logger.Debug("Raw RTM getTasks response received", "responseBody", string(respBytes))
+	c.logger.Debug("Raw RTM getTasks response received.", "responseBody", string(respBytes))
 
 	var result tasksRsp
 	if err := json.Unmarshal(respBytes, &result); err != nil {
 		// Log detailed error if parsing the overall structure fails.
-		c.logger.Error("Failed to parse getTasks response JSON",
+		c.logger.Error("Failed to parse getTasks response JSON.",
 			"error", err,
 			"responseBody", string(respBytes))
 		return nil, errors.Wrap(err, "failed to parse getTasks response")
@@ -218,7 +218,7 @@ func (c *Client) GetTasks(ctx context.Context, filter string) ([]Task, error) {
 						parsedRtmNotes = notesArr // Store the intermediate result.
 					} else {
 						// Log the error if neither format could be parsed.
-						c.logger.Warn("Failed to parse RTM task notes field (tried object and array)",
+						c.logger.Warn("Failed to parse RTM task notes field (tried object and array).",
 							"rawData", string(series.Notes),
 							"objectError", fmt.Sprintf("%v", errObj), // Use %v for nil-safe error string.
 							"arrayError", fmt.Sprintf("%v", errArr),
@@ -290,7 +290,7 @@ func (c *Client) parseRTMTime(timeStr string) (time.Time, error) {
 	t, err := time.Parse("2006-01-02T15:04:05Z", timeStr)
 	if err != nil {
 		// Log failure but don't necessarily stop processing.
-		c.logger.Warn("Failed to parse RTM date/time", "rawDate", timeStr, "error", err)
+		c.logger.Warn("Failed to parse RTM date/time.", "rawDate", timeStr, "error", err)
 		return time.Time{}, err
 	}
 	return t, nil
@@ -304,7 +304,7 @@ func (c *Client) parseRTMPriority(priorityStr string) int {
 	p, err := strconv.Atoi(priorityStr)
 	if err != nil || p < 1 || p > 3 {
 		// Log invalid priority but return 0.
-		c.logger.Warn("Failed to parse RTM priority", "rawPriority", priorityStr, "error", err)
+		c.logger.Warn("Failed to parse RTM priority.", "rawPriority", priorityStr, "error", err)
 		return 0
 	}
 	return p
@@ -317,7 +317,7 @@ func (c *Client) parseRTMPostponed(postponedStr string) int {
 	}
 	p, err := strconv.Atoi(postponedStr)
 	if err != nil {
-		c.logger.Warn("Failed to parse RTM postponed count", "rawPostponed", postponedStr, "error", err)
+		c.logger.Warn("Failed to parse RTM postponed count.", "rawPostponed", postponedStr, "error", err)
 		return 0
 	}
 	return p

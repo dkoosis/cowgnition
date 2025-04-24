@@ -1,227 +1,163 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-package mcp
-
 // file: internal/mcp/connection_state.go
+// MODIFIED: Added State type, StateInitializing constant, SetInitializing method,
+// ensured setState helper exists and is used by setters.
+package mcp
 
 import (
 	"fmt"
-	"sort"
-	"strings"
 	"sync"
 
-	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Added import
+	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors" // Use alias if needed, or direct path.
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"       // Import mcptypes for shared types.
 )
 
-// ConnectionState tracks the protocol state of an MCP connection.
-// It provides simple state validation to ensure MCP protocol sequence
-// requirements are followed.
+// State represents the MCP connection state as a string type.
+type State string // <<< ADDED TYPE DEFINITION
+
+// Constants for connection states.
+const (
+	StateUninitialized State = "uninitialized"
+	StateInitializing  State = "initializing" // <<< ADDED CONSTANT
+	StateInitialized   State = "initialized"  // Keep this name for consistency
+	StateShuttingDown  State = "shuttingDown"
+	StateShutdown      State = "shutdown"
+)
+
+// ConnectionState manages the lifecycle state of an MCP connection.
+// It ensures state transitions are valid according to the MCP spec.
 type ConnectionState struct {
-	// initialized indicates whether the MCP initialize method has been called.
-	initialized bool
-
-	// currentState represents the current named protocol state.
-	currentState string
-
-	// --- FIX: Add fields to store client info ---
-	clientInfo         *mcptypes.Implementation
-	clientCapabilities *mcptypes.ClientCapabilities
-	// --- END FIX ---
-
-	// allowedMethods contains methods that are valid in the current state.
-	allowedMethods map[string]bool
-
-	// mu protects concurrent access to state fields.
-	mu sync.RWMutex
+	mu           sync.RWMutex
+	currentState State
+	clientInfo   *mcptypes.Implementation     // Use mcptypes.Implementation.
+	clientCaps   *mcptypes.ClientCapabilities // Use mcptypes.ClientCapabilities.
 }
 
-// State constants define the possible connection states.
-const (
-	// StateUninitialized is the initial state before initialize is called.
-	StateUninitialized = "uninitialized"
-
-	// StateReady is the state after successful initialization.
-	StateReady = "ready"
-
-	// StateProcessingRequest is the state during request handling.
-	StateProcessingRequest = "processing_request"
-)
-
-// NewConnectionState creates a new connection state object.
-// The initial state is uninitialized, which only allows the initialize method.
+// NewConnectionState creates a new ConnectionState manager, initialized to Uninitialized.
 func NewConnectionState() *ConnectionState {
 	return &ConnectionState{
-		initialized:  false,
 		currentState: StateUninitialized,
-		allowedMethods: map[string]bool{
-			"initialize": true,
-			// Notifications are always allowed
-			"notifications/initialized": true,
-			"notifications/cancelled":   true,
-			"notifications/progress":    true,
-			"ping":                      true, // Ping is always allowed for heartbeat
-		},
+		// clientInfo and clientCaps start as nil.
 	}
 }
 
-// IsInitialized returns whether the connection has been initialized.
-func (s *ConnectionState) IsInitialized() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.initialized
+// setState safely updates the current state.
+// This is the internal helper used by public Set* methods.
+func (cs *ConnectionState) setState(newState State) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	// TODO: Add logging here if desired to track state changes.
+	// cs.logger.Debug("Connection state changing", "from", cs.currentState, "to", newState).
+	cs.currentState = newState
 }
 
-// CurrentState returns the current state name.
-func (s *ConnectionState) CurrentState() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.currentState
+// CurrentState returns the current connection state safely.
+func (cs *ConnectionState) CurrentState() State {
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+	return cs.currentState
 }
 
-// IsMethodAllowed checks if a method is allowed in the current state.
-func (s *ConnectionState) IsMethodAllowed(method string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	// Check if it's an allowed method
-	return s.allowedMethods[method]
+// SetInitializing sets the state to Initializing.
+// Ensures thread-safety.
+func (cs *ConnectionState) SetInitializing() {
+	cs.setState(StateInitializing) // <<< ADDED METHOD (uses setState)
 }
 
-// SetInitialized marks the connection as initialized and updates allowed methods.
-func (s *ConnectionState) SetInitialized() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// SetInitialized sets the state to Initialized.
+// Ensures thread-safety.
+func (cs *ConnectionState) SetInitialized() {
+	cs.setState(StateInitialized) // <<< UPDATED to use setState
+}
 
-	s.initialized = true
-	s.currentState = StateReady
+// SetShutdown sets the state to ShuttingDown.
+// Ensures thread-safety.
+func (cs *ConnectionState) SetShutdown() {
+	cs.setState(StateShuttingDown) // <<< UPDATED to use setState
+}
 
-	// After initialization, most methods are allowed
-	s.allowedMethods = map[string]bool{
-		// Core methods
-		"ping":     true,
-		"shutdown": true, // Allow shutdown after init
-		"exit":     true, // Allow exit after init
+// SetClientInfo stores the client information received during initialization.
+func (cs *ConnectionState) SetClientInfo(info mcptypes.Implementation) { // Use mcptypes.Implementation.
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	cs.clientInfo = &info
+}
 
-		// Tool methods
-		"tools/list": true,
-		"tools/call": true,
+// GetClientInfo returns the stored client information.
+func (cs *ConnectionState) GetClientInfo() (mcptypes.Implementation, bool) { // Use mcptypes.Implementation.
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+	if cs.clientInfo == nil {
+		return mcptypes.Implementation{}, false
+	}
+	return *cs.clientInfo, true
+}
 
-		// Resource methods
-		"resources/list":        true,
-		"resources/read":        true,
-		"resources/subscribe":   true,
-		"resources/unsubscribe": true,
+// SetClientCapabilities stores the client capabilities received during initialization.
+func (cs *ConnectionState) SetClientCapabilities(caps mcptypes.ClientCapabilities) { // Use mcptypes.ClientCapabilities.
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	cs.clientCaps = &caps
+}
 
-		// Prompt methods
-		"prompts/list": true,
-		"prompts/get":  true,
+// GetClientCapabilities returns the stored client capabilities.
+func (cs *ConnectionState) GetClientCapabilities() (mcptypes.ClientCapabilities, bool) { // Use mcptypes.ClientCapabilities.
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+	if cs.clientCaps == nil {
+		return mcptypes.ClientCapabilities{}, false
+	}
+	return *cs.clientCaps, true
+}
 
-		// Completion methods
-		"completion/complete": true,
+// ValidateMethodSequence checks if a method is allowed in the current connection state.
+// Returns a specific MCP error if the sequence is invalid.
+func (cs *ConnectionState) ValidateMethodSequence(method string) error {
+	cs.mu.RLock()
+	currentState := cs.currentState
+	cs.mu.RUnlock()
 
-		// Logging methods
-		"logging/setLevel": true,
+	// Map methods to the states they are allowed in.
+	//nolint:ineffassign // Required default.
+	allowed := true // Assume allowed by default unless restricted.
 
-		// Notifications (always allowed)
-		"notifications/initialized":            true,
-		"notifications/cancelled":              true,
-		"notifications/progress":               true,
-		"notifications/resources/list_changed": true,
-		"notifications/resources/updated":      true,
-		"notifications/prompts/list_changed":   true,
-		"notifications/tools/list_changed":     true,
-		"notifications/roots/list_changed":     true,
-		"notifications/message":                true,
+	switch method {
+	case "initialize":
+		allowed = (currentState == StateUninitialized)
+	case "shutdown":
+		// Shutdown request should only come when initialized.
+		allowed = (currentState == StateInitialized)
+	case "exit":
+		// Exit notification can come after initialized or during shutdown.
+		allowed = (currentState == StateInitialized || currentState == StateShuttingDown)
+	case "ping", // Assuming ping requires initialization
+		"tools/list", "tools/call",
+		"resources/list", "resources/read", "resources/subscribe", "resources/unsubscribe",
+		"prompts/list", "prompts/get",
+		"completion/complete",
+		"logging/setLevel":
+		// General operational methods require the initialized state.
+		allowed = (currentState == StateInitialized)
+	case "notifications/initialized":
+		// This notification should only arrive when we are initializing.
+		allowed = (currentState == StateInitializing) // <<< UPDATED CHECK
+	case "$/cancelRequest":
+		// Cancellation logically only makes sense when initialized.
+		allowed = (currentState == StateInitialized) // <<< ADDED CHECK (Optional but recommended)
+	default:
+		// Allow unknown methods for now? Or restrict?
+		// If restricted, could use: allowed = false
+		// For now, allow unrecognized methods (validation middleware should catch schema issues).
+		allowed = true
 	}
 
-	// Initialize is no longer allowed after successful initialization
-	delete(s.allowedMethods, "initialize")
-}
-
-// SetUninitialized resets the connection state to uninitialized.
-// Used primarily for the shutdown process or resetting.
-func (s *ConnectionState) SetUninitialized() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.initialized = false
-	s.currentState = StateUninitialized
-	s.allowedMethods = map[string]bool{
-		"initialize":                true,
-		"notifications/initialized": true,
-		"notifications/cancelled":   true,
-		"notifications/progress":    true,
-		"ping":                      true,
-	}
-	// Clear client info on reset
-	s.clientInfo = nil
-	s.clientCapabilities = nil
-}
-
-// ValidateMethodSequence validates if a method is allowed in the current state.
-// Returns an error if the method is not allowed, with detailed context about why and what to do next.
-func (s *ConnectionState) ValidateMethodSequence(method string) error {
-	if !s.IsMethodAllowed(method) {
-		s.mu.RLock()
-		currentState := s.currentState
-		// Create a sorted list of currently allowed methods for better error messages
-		allowedMethodsList := make([]string, 0, len(s.allowedMethods))
-		for m := range s.allowedMethods {
-			allowedMethodsList = append(allowedMethodsList, m)
-		}
-		sort.Strings(allowedMethodsList) // Sort for consistent, readable error messages
-		s.mu.RUnlock()
-
-		if method == "initialize" && s.IsInitialized() {
-			return fmt.Errorf("protocol sequence error: Method '%s' can only be called once. The connection is already in '%s' state. Use methods like 'tools/list' or 'resources/list' to interact with the initialized connection",
-				method, currentState)
-		}
-
-		if !s.IsInitialized() && method != "initialize" && method != "ping" &&
-			!isNotification(method) {
-			return fmt.Errorf("protocol sequence error: Method '%s' cannot be called in '%s' state. You must first call 'initialize' to establish the connection. Allowed methods in current state: %s",
-				method, currentState, formatMethodList(allowedMethodsList))
-		}
-
-		return fmt.Errorf("protocol sequence error: Method '%s' is not allowed in current state '%s'. Allowed methods: %s",
-			method, currentState, formatMethodList(allowedMethodsList))
+	if !allowed {
+		// Use mcperrors constants for specific errors.
+		// Using ErrRequestSequence as a general purpose sequence error.
+		return mcperrors.NewProtocolError(mcperrors.ErrRequestSequence,
+			fmt.Sprintf("Method '%s' not allowed in current state '%s'", method, currentState),
+			nil, map[string]interface{}{"method": method, "state": currentState})
 	}
 
 	return nil
 }
-
-// formatMethodList creates a nicely formatted string of method names.
-func formatMethodList(methods []string) string {
-	if len(methods) == 0 {
-		return "[]"
-	}
-	return "['" + strings.Join(methods, "', '") + "']"
-}
-
-// isNotification checks if a method is an MCP notification.
-func isNotification(method string) bool {
-	return len(method) >= 13 && method[:13] == "notifications/"
-}
-
-// --- FIX: Add missing Set* methods ---
-
-// SetClientInfo stores the client's implementation details.
-func (s *ConnectionState) SetClientInfo(info mcptypes.Implementation) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.clientInfo = &info
-}
-
-// SetClientCapabilities stores the client's declared capabilities.
-func (s *ConnectionState) SetClientCapabilities(caps mcptypes.ClientCapabilities) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.clientCapabilities = &caps
-}
-
-// SetShutdown marks the connection as shutting down (though doesn't change allowed methods currently).
-func (s *ConnectionState) SetShutdown() {
-	// Currently, just marks initialized=false to block further calls, could refine state later.
-	s.SetUninitialized() // Re-use existing method to block further non-init calls
-}
-
-// --- END FIX ---

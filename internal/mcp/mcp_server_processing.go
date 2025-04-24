@@ -1,7 +1,8 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
+// MODIFIED: handleProcessingError updated for MCP compliance (id: 0 instead of null).
 package mcp
 
-// file: internal/mcp/mcp_server_processing.go.
+// file: internal/mcp/mcp_server_processing.go
 
 import (
 	"context"
@@ -12,17 +13,17 @@ import (
 	"github.com/cockroachdb/errors"
 	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"
 	"github.com/dkoosis/cowgnition/internal/transport"
+	// Ensure mcp_server_error_handling types/functions are accessible if needed.
+	// mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors".
 )
 
 // serverProcessing handles the main server loop, reading messages and dispatching them.
 func (s *Server) serverProcessing(ctx context.Context, handlerFunc mcptypes.MessageHandler) error {
 	s.logger.Info("Server processing loop started.")
 	if handlerFunc == nil {
-		// Corrected: lowercase, no period.
 		return errors.New("serve called with nil handler function")
 	}
 	if s.transport == nil {
-		// Corrected: lowercase, no period.
 		return errors.New("serve called but server transport is nil")
 	}
 
@@ -60,7 +61,7 @@ func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.Me
 	}
 
 	// 2. Extract Info for Logging/Context (Best Effort).
-	method, idStr := s.extractMessageInfo(msgBytes)
+	method, idStr := s.extractMessageInfo(msgBytes)                               // Note: idStr here is just for logging
 	ctxWithState := context.WithValue(ctx, connectionStateKey, s.connectionState) // Add connection state.
 
 	// 3. Handle Message via Middleware Chain / Final Handler (which should be s.routeMessage).
@@ -70,10 +71,10 @@ func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.Me
 	if handleErr != nil {
 		// handleProcessingError logs the error and attempts to create/write a JSON-RPC error response.
 		// It returns an error only if writing the error response fails.
+		// Pass method and idStr purely for logging context within handleProcessingError.
 		writeErr := s.handleProcessingError(ctx, msgBytes, method, idStr, handleErr)
 		if writeErr != nil {
 			// If we can't even write the error response, it might be a terminal transport issue.
-			// Corrected: lowercase, no period.
 			return errors.Wrap(writeErr, "failed to write error response after processing error")
 		}
 		// If handleProcessingError succeeded in sending an error response,
@@ -86,22 +87,21 @@ func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.Me
 	// 6. Write Successful Response (if one was generated).
 	//    Notifications will have respBytes == nil here.
 	if respBytes != nil {
+		// Use the idStr extracted earlier for logging write operations.
 		if writeErr := s.writeResponse(ctx, respBytes, method, idStr); writeErr != nil {
 			// If writing the success response fails, return the error.
-			// Corrected: lowercase, no period.
 			return errors.Wrap(writeErr, "failed to write successful response")
 		}
 	} else {
 		// Log if it was a request that resulted in no response bytes (shouldn't happen unless it was a notification).
-		if idStr != "null" && idStr != "unknown" { // De Morgan's Law applied.
+		// Check if idStr indicates it was likely a request (not null or unknown).
+		if idStr != "null" && idStr != "unknown" {
 			s.logger.Warn("Handler returned nil response bytes for a non-notification request.", "method", method, "id", idStr)
 		}
 	}
 	// Successfully processed the message.
 	return nil
 }
-
-// --- handleMessage REMOVED (unused) ---
 
 // handleTransportReadError decides if a read error is terminal.
 func (s *Server) handleTransportReadError(readErr error) error {
@@ -127,14 +127,29 @@ func (s *Server) handleTransportReadError(readErr error) error {
 
 // handleProcessingError logs processing errors and attempts to send a JSON-RPC error response.
 // Returns an error only if writing the error response fails.
-func (s *Server) handleProcessingError(ctx context.Context, msgBytes []byte, method, id string, handleErr error) error {
+// MODIFIED: Now enforces id: 0 for null/missing original IDs, per MCP spec.
+func (s *Server) handleProcessingError(ctx context.Context, msgBytes []byte, method, idForLog string, handleErr error) error {
+	// Log using the potentially unreliable idForLog extracted earlier.
 	s.logger.Warn("Error processing message via handler.",
 		"method", method,
-		"requestID", id,
-		"error", fmt.Sprintf("%+v", handleErr)) // Log original error with stack trace.
+		"requestID_log", idForLog, // Use distinct name for clarity
+		"error", fmt.Sprintf("%+v", handleErr)) // Log original error with stack trace
+
+	// ---> FIX: Determine the ID to use *in the response*, substituting 0 for null <---
+	// Extract the original request ID reliably from the raw message bytes here.
+	reqIDFromMsg := extractRequestID(s.logger, msgBytes) // extractRequestID is in mcp_server_error_handling.go
+
+	// MCP Spec forbids null IDs. Substitute 0 if the ID couldn't be determined or was explicitly null.
+	responseID := reqIDFromMsg
+	if responseID == nil || string(responseID) == "null" {
+		s.logger.Debug("Original request ID was null or undetectable, substituting ID 0 for MCP compliance in error response.")
+		responseID = json.RawMessage("0") // Use "0" (number zero)
+	}
+	// ---> END FIX <---
 
 	// Create the JSON-RPC error response bytes using the error mapping logic.
-	errRespBytes, creationErr := s.createErrorResponse(msgBytes, handleErr) // createErrorResponse is in mcp_server_error_handling.go.
+	// Ensure createErrorResponse uses the 'responseID' determined above.
+	errRespBytes, creationErr := s.createErrorResponse(msgBytes, handleErr, responseID) // Pass the guaranteed non-null responseID
 	if creationErr != nil {
 		// This is critical - failed even to create the error response structure.
 		s.logger.Error("CRITICAL: Failed to create error response.",
@@ -145,12 +160,13 @@ func (s *Server) handleProcessingError(ctx context.Context, msgBytes []byte, met
 	}
 
 	// Attempt to write the created error response.
-	writeErr := s.writeResponse(ctx, errRespBytes, method, id)
+	// Log using the ID that was actually *sent* in the response.
+	writeErr := s.writeResponse(ctx, errRespBytes, method, string(responseID))
 	if writeErr != nil {
 		// Log the failure to write the error response.
 		s.logger.Error("Failed to write error response.",
 			"method", method,
-			"requestID", id,
+			"responseIDUsed", string(responseID),
 			"writeError", fmt.Sprintf("%+v", writeErr),
 			"originalHandlingError", fmt.Sprintf("%+v", handleErr))
 		// Return the write error, as it might indicate a terminal transport issue.
@@ -165,14 +181,13 @@ func (s *Server) handleProcessingError(ctx context.Context, msgBytes []byte, met
 func (s *Server) writeResponse(ctx context.Context, respBytes []byte, method, id string) error {
 	if s.transport == nil {
 		s.logger.Error("Attempted to write response but transport is nil.", "method", method, "requestID", id)
-		// Corrected: lowercase, no period.
 		return errors.New("cannot write response: transport is nil")
 	}
 	if writeErr := s.transport.WriteMessage(ctx, respBytes); writeErr != nil {
 		// Don't log the full response bytes here for brevity/security.
 		s.logger.Error("Failed to write response.",
 			"method", method,
-			"requestID", id,
+			"requestID", id, // Use the general 'id' passed for logging context
 			"responseSize", len(respBytes),
 			"error", fmt.Sprintf("%+v", writeErr))
 		return writeErr // Propagate the error.
@@ -212,6 +227,7 @@ func (s *Server) isTerminalError(err error) bool {
 }
 
 // extractMessageInfo attempts to get method name and ID from raw message bytes for logging/context.
+// Returns id as "unknown" if missing, "null" if json null, or the raw json string otherwise.
 func (s *Server) extractMessageInfo(msgBytes []byte) (method string, id string) {
 	method = ""
 	id = "unknown" // Default ID if parsing fails or not present.
@@ -223,19 +239,27 @@ func (s *Server) extractMessageInfo(msgBytes []byte) (method string, id string) 
 	}
 
 	// Unmarshal partially. Ignore error as this is best-effort for logging.
-	// If JSON is invalid, method remains "" and id remains "unknown".
 	_ = json.Unmarshal(msgBytes, &parsedInfo)
 
 	if parsedInfo.Method != nil {
 		method = *parsedInfo.Method
 	}
-	if parsedInfo.ID != nil && string(parsedInfo.ID) != "null" {
-		// Represent ID as its raw JSON string representation (e.g., "123", "\"req-abc\"").
-		id = string(parsedInfo.ID)
-	} else if parsedInfo.ID != nil && string(parsedInfo.ID) == "null" {
-		id = "null" // Explicitly null ID.
+
+	// Determine ID string representation for logging
+	if parsedInfo.ID != nil {
+		idStr := string(parsedInfo.ID)
+		if idStr == "null" {
+			id = "null" // Explicitly JSON null ID
+		} else {
+			// Use the raw JSON value (e.g., "123", "\"req-abc\"")
+			id = idStr
+		}
 	}
-	// If ID is missing, it remains "unknown".
+	// If parsedInfo.ID was nil (field missing), id remains "unknown".
 
 	return method, id
 }
+
+// Note: Ensure createErrorResponse function in mcp_server_error_handling.go
+// now accepts the determined responseID (json.RawMessage) as an argument
+// and uses that when constructing the JSONRPCErrorContainer.

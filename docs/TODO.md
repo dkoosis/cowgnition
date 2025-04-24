@@ -1,16 +1,28 @@
 # CowGnition MCP Implementation Roadmap: Clean Architecture Approach
 
-**Status:** Active Development (with Interim Fixes Applied)
+**Status:** Active Development (with Interim Fixes Applied & Critical Issues Identified)
 
 ## Project Philosophy
 
 This implementation will prioritize:
 
 - Idiomatic Go code using the standard library where suitable
-- Strict adherence to the MCP specification via schema validation (with known interim exceptions)
+- Strict adherence to the MCP specification via schema validation (with known interim exceptions and required fixes)
 - Clear error handling and robust message processing
 - Testability built into the design from the start
 - Simple but maintainable architecture with clear separation of concerns
+
+---
+
+## 🔥 Critical Issues / Immediate Fixes Needed 🔥
+
+- [PENDING] **Fix MCP Compliance for Error Response IDs:**
+    - **Context:** The MCP spec (rev `2025-03-26`) forbids `null` IDs, deviating from JSON-RPC 2.0. The server currently sends `id: null` for errors where the request ID is unknown (e.g., parse errors, errors responding to notifications), violating the MCP spec and causing client validation failures (ZodError).
+    - **Action:** Modify error handling (`internal/mcp/mcp_server_error_handling.go`) to send `id: 0` instead of `id: null` when the original request ID cannot be determined.
+    - **Reference:** Conversation history, MCP Spec snippet (`2025-03-26`).
+- [PENDING] **Handle `notifications/initialized`:**
+    - **Context:** The server currently doesn't route the standard `notifications/initialized` message received from the client after successful initialization. This causes a "Method not found" error (`mcperrors.ErrMethodNotFound`), triggering the generation of the non-compliant `id: null` error response mentioned above.
+    - **Action:** Add a `case "notifications/initialized":` to the `routeMessage` function's `switch` statement in `internal/mcp/mcp_server.go`. This case should call the existing (but currently unused) `handleNotificationsInitialized` function in `internal/mcp/handlers_notifications.go`.
 
 ---
 
@@ -20,14 +32,14 @@ This implementation will prioritize:
 
 - **Issue**: Client (Claude Desktop) disconnects immediately after server's `initialize` response due to protocol version mismatch (`client=2024-11-05`, `server=2025-03-26`). Root cause traced to `schema.json` lacking a standard version identifier (`$id` or `title`), preventing reliable automatic detection by `internal/schema/validator.go`. See [MCP GitHub Issue #394](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/394).
 - **Interim Solution Implemented**:
-  - `internal/mcp/handlers_core.go`: Modified `handleInitialize` to **force** reporting `protocolVersion: "2024-11-05"` in the response, bypassing schema detection for this field to ensure client compatibility.
-  - Added explicit logging of client requested vs. server forced versions.
-  - `internal/mcp/mcp_server.go`: Ensured `StrictOutgoing: false` is used in non-debug builds for validation middleware, allowing the known outgoing validation warning for the `initialize` response (due to schema/struct mismatch) to be logged without blocking the connection.
-- **Status:** Connection should now establish. Requires testing.
+    - `internal/mcp/handlers_core.go`: Modified `handleInitialize` to **force** reporting `protocolVersion: "2024-11-05"` in the response, bypassing schema detection for this field to ensure client compatibility.
+    - Added explicit logging of client requested vs. server forced versions.
+    - `internal/mcp/mcp_server.go`: Ensured `StrictOutgoing: false` is used in non-debug builds for validation middleware, allowing the known outgoing validation warning for the `initialize` response (due to schema/struct mismatch) to be logged without blocking the connection.
+- **Status:** Connection should now establish *once critical fixes above are applied*. Requires testing.
 - **Next Steps (Long Term):**
-  - Advocate for adding version identifiers to the official `schema.json`.
-  - Revert forced versioning in `handlers_core.go` once schema detection is reliable.
-  - Investigate and fix the root cause of the outgoing schema validation warning for `initialize`.
+    - Advocate for adding version identifiers to the official `schema.json`.
+    - Revert forced versioning in `handlers_core.go` once schema detection is reliable.
+    - Investigate and fix the root cause of the outgoing schema validation warning for `initialize`.
 
 ### RTM Authentication Flow [Needs Verification]
 
@@ -63,15 +75,16 @@ This implementation will prioritize:
 
 ## Phase 8: Schema Validation Improvements
 
-**Status:** [PARTIALLY COMPLETE - INTERIM FIXES APPLIED]
+**Status:** [PARTIALLY COMPLETE - ISSUES IDENTIFIED]
 
 ### Background
 
-Focuses on ensuring MCP compliance through robust schema validation. An interim fix is currently applied for protocol versioning due to limitations in the official schema file.
+Focuses on ensuring MCP compliance through robust schema validation. Critical issues related to MCP spec compliance for error IDs and outgoing validation gaps have been identified.
 
 ### Objectives
 
 - Improve schema validation coverage (incoming/outgoing)
+- Ensure generated messages comply with the MCP specification (including error responses)
 - Optimize schema compilation performance
 - Establish metrics for validation performance
 - Enable configurable validation modes
@@ -88,9 +101,11 @@ Focuses on ensuring MCP compliance through robust schema validation. An interim 
 #### Step 2: Outgoing Message Validation
 
 - [COMPLETE] Add validation for outgoing responses
-- [COMPLETE] Create environment-specific validation modes (`StrictOutgoing`: `false` in normal mode, `true` in debug) - **Note:** Currently necessary to keep `false` in normal mode due to known `initialize` response warning.
+- [COMPLETE] Create environment-specific validation modes (`StrictOutgoing`: `false` in normal mode, `true` in debug) - **Note:** Currently necessary to keep `false` in normal mode due to known outgoing warnings.
 - [COMPLETE] Implement specific schema type selection based on message method (with fallback logic)
 - [COMPLETE] Add detailed logging for validation failures
+- [PENDING] **Validate Internally Generated Error Responses:** Modify the error handling path (`handleProcessingError`) to pass generated error responses through the outgoing validation middleware before sending. This addresses the identified gap where server-generated errors currently bypass validation.
+- [PENDING] **Investigate `list*` / `initialize` Outgoing Validation Warnings:** Determine why outgoing validation fails for `initialize` and `list*` responses even when the structure appears correct in logs/code. This might be a validator library issue or subtle schema mismatch.
 
 #### Step 3: Static Content Pre-validation
 
@@ -149,11 +164,11 @@ Focuses on ensuring MCP compliance through robust schema validation. An interim 
 **Status:** [INCOMPLETE]
 
 - [PENDING] Create comprehensive test suite:
-  - [PENDING] Unit tests for components (Some exist, need more coverage)
-  - [PENDING] Schema compliance tests
-  - [COMPLETE] Integration tests using in-memory transport (`internal/mcp/mcp_server_test.go`)
-  - [PENDING] Fuzzing tests for robustness
-  - [PENDING] Benchmark tests for performance
+    - [PENDING] Unit tests for components (Some exist, need more coverage)
+    - [PENDING] **Protocol Compliance Tests:** Add specific tests verifying the server correctly handles the *entire* required MCP lifecycle sequence (`initialize`, `initialized`, `shutdown`, `exit`), including required notifications and error conditions, especially focusing on edge cases identified during debugging (e.g., `id: null` handling).
+    - [COMPLETE] Integration tests using in-memory transport (`internal/mcp/mcp_server_test.go`)
+    - [PENDING] Fuzzing tests for robustness
+    - [PENDING] Benchmark tests for performance
 
 ---
 
@@ -163,11 +178,11 @@ Focuses on ensuring MCP compliance through robust schema validation. An interim 
 
 - [PARTIAL] Include connection ID and request ID in logs (Some request IDs logged, not consistently everywhere)
 - [PENDING] Add metrics:
-  - [PENDING] Request counts and latencies
-  - [PENDING] Error rates by type
-  - [PENDING] Active connections
-  - [PENDING] Schema validation failures
-  - [PENDING] Create exportable metrics (e.g., Prometheus)
+    - [PENDING] Request counts and latencies
+    - [PENDING] Error rates by type
+    - [PENDING] Active connections
+    - [PENDING] Schema validation failures
+    - [PENDING] Create exportable metrics (e.g., Prometheus)
 
 ---
 
