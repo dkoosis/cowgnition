@@ -338,6 +338,34 @@ func (c *Client) parseRTMNotes(notesData []rtmNote) []Note { // Returns exported
 	return notes
 }
 
+// GetSettings retrieves the user's RTM settings.
+func (c *Client) GetSettings(ctx context.Context) (*Settings, error) {
+	params := map[string]string{}
+	respBytes, err := c.callMethod(ctx, methodGetSettings, params)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to call getSettings method")
+	}
+
+	var result settingsRsp
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return nil, errors.Wrap(err, "failed to parse getSettings response")
+	}
+
+	// Convert raw settings to the more user-friendly format
+	rawSettings := result.Rsp.Settings
+	settings := &Settings{
+		Timezone:       rawSettings.Timezone,
+		IsAmericanDate: rawSettings.DateFormat == "1",
+		Is24HourTime:   rawSettings.TimeFormat == "1",
+		DefaultListID:  rawSettings.DefaultList,
+		Language:       rawSettings.Language,
+		DefaultDueDate: rawSettings.DefaultDueDate,
+		IsProAccount:   rawSettings.Pro == "1",
+	}
+
+	return settings, nil
+}
+
 // splitRTMTaskID splits the combined task ID format "seriesID_taskID" into its components.
 func (c *Client) splitRTMTaskID(combinedID string) (string, string, error) {
 	parts := strings.Split(combinedID, "_")

@@ -264,7 +264,7 @@ type tagsRsp struct {
 		Stat string    `json:"stat"`
 		Err  *rtmError `json:"err,omitempty"`
 		Tags struct {
-			Tag []string `json:"tag"`
+			Tag rtmTags `json:"tag"` // MODIFIED: Use rtmTags custom type instead of []string
 		} `json:"tags"`
 	} `json:"rsp"`
 }
@@ -357,9 +357,6 @@ type Task struct {
 	Modified      time.Time `json:"modified"`
 }
 
-// --- Other API Response Structures --- END
-
-// --- Config Definition --- START
 // Config holds configuration settings specific to the RTM client.
 type Config struct {
 	APIKey       string
@@ -369,9 +366,6 @@ type Config struct {
 	HTTPClient   *http.Client // Optional: Defaults if nil.
 }
 
-// --- Config Definition --- END
-
-// --- Helper Types --- START
 // timelineRsp holds the response from rtm.timelines.create (needed by methods.go).
 type timelineRsp struct {
 	Rsp struct {

@@ -23,15 +23,6 @@ type FileTokenStorage struct {
 	mutex  sync.RWMutex
 }
 
-// TokenData represents the data stored for an authentication token.
-type TokenData struct {
-	Token     string    `json:"token"`
-	UserID    string    `json:"userId,omitempty"`
-	Username  string    `json:"username,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-}
-
 // NewFileTokenStorage creates a new token storage instance.
 func NewFileTokenStorage(path string, logger logging.Logger) (*FileTokenStorage, error) {
 	// Use no-op logger if not provided.

@@ -165,9 +165,8 @@ func (s *Service) GetTools() []mcptypes.Tool { // <--- CORRECTED: Added mcptypes
 }
 
 // GetResources returns the MCP resources provided by this service.
-func (s *Service) GetResources() []mcptypes.Resource { // <--- CORRECTED: Added mcptypes. prefix.
-	// Resource definitions moved here from mcp_resources.go GetResources.
-	return []mcptypes.Resource{ // <--- CORRECTED: Added mcptypes. prefix.
+func (s *Service) GetResources() []mcptypes.Resource {
+	return []mcptypes.Resource{
 		{
 			Name:        "RTM Authentication Status",
 			URI:         "rtm://auth",
@@ -192,56 +191,69 @@ func (s *Service) GetResources() []mcptypes.Resource { // <--- CORRECTED: Added 
 			Description: "Tasks in your Remember The Milk account (default view). Use rtm://tasks?filter=... for specific filters.",
 			MimeType:    "application/json",
 		},
+		{
+			Name:        "RTM Settings",
+			URI:         "rtm://settings",
+			Description: "User settings from your Remember The Milk account including timezone, date format preferences, and default list.",
+			MimeType:    "application/json",
+		},
 	}
 }
 
 // ReadResource handles requests to read data from an RTM resource.
-// It routes based on the URI and fetches dynamic data.
 func (s *Service) ReadResource(ctx context.Context, uri string) ([]interface{}, error) {
 	if !s.initialized {
 		return nil, errors.New("RTM service is not initialized")
 	}
 	s.logger.Info("Handling ReadResource request.", "uri", uri)
 
-	// Logic moved here from mcp_resources.go ReadResource.
 	switch {
 	case uri == "rtm://auth":
 		authState, err := s.GetAuthState(ctx)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get auth state for resource")
 		}
-		return s.createJSONResourceContent(uri, authState) // Calls helper in helpers.go.
+		return s.createJSONResourceContent(uri, authState)
 
 	case uri == "rtm://lists":
 		if !s.IsAuthenticated() {
-			return s.notAuthenticatedResourceContent(uri), nil // Calls helper in helpers.go.
+			return s.notAuthenticatedResourceContent(uri), nil
 		}
 		lists, err := s.client.GetLists(ctx)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get lists for resource")
 		}
-		return s.createJSONResourceContent(uri, lists) // Calls helper in helpers.go.
+		return s.createJSONResourceContent(uri, lists)
 
 	case uri == "rtm://tags":
 		if !s.IsAuthenticated() {
-			return s.notAuthenticatedResourceContent(uri), nil // Calls helper in helpers.go.
+			return s.notAuthenticatedResourceContent(uri), nil
 		}
 		tags, err := s.client.GetTags(ctx)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get tags for resource")
 		}
-		return s.createJSONResourceContent(uri, tags) // Calls helper in helpers.go.
+		return s.createJSONResourceContent(uri, tags)
+
+	case uri == "rtm://settings":
+		if !s.IsAuthenticated() {
+			return s.notAuthenticatedResourceContent(uri), nil
+		}
+		settings, err := s.client.GetSettings(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get settings for resource")
+		}
+		return s.createJSONResourceContent(uri, settings)
 
 	case uri == "rtm://tasks":
-		// FIXME: #1 Invoking rtm://tasks resource from MCP Inspector resuts in -32603 error
-		return s.readTasksResourceWithFilter(ctx, "", uri) // Calls internal helper below.
+		return s.readTasksResourceWithFilter(ctx, "", uri)
 
 	case strings.HasPrefix(uri, "rtm://tasks?"):
-		filter, err := extractFilterFromURI(uri) // Calls internal helper below.
+		filter, err := extractFilterFromURI(uri)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse filter from tasks URI: %s", uri)
 		}
-		return s.readTasksResourceWithFilter(ctx, filter, uri) // Calls internal helper below.
+		return s.readTasksResourceWithFilter(ctx, filter, uri)
 
 	default:
 		return nil, mcperrors.NewResourceError(mcperrors.ErrResourceNotFound,
