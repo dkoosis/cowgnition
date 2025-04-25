@@ -21,6 +21,9 @@
 │   ├── config/
 │   │   ├── config.go
 │   │   └── stub_test.go
+│   ├── fsm/
+│   │   ├── fsm.go
+│   │   └── fsm_test.go
 │   ├── logging/
 │   │   ├── logger.go
 │   │   ├── slog.go
@@ -29,6 +32,14 @@
 │   │   ├── mcp_errors/
 │   │   │   ├── errors.go
 │   │   │   └── stub_test.go
+│   │   ├── router/
+│   │   │   ├── router.go
+│   │   │   └── router_test.go
+│   │   ├── state/
+│   │   │   ├── events.go
+│   │   │   ├── machine.go
+│   │   │   ├── machine_test.go
+│   │   │   └── states.go
 │   │   ├── connection_state.go
 │   │   ├── handlers_core.go
 │   │   ├── handlers_notifications.go
@@ -112,4 +123,4 @@
 ├── go.sum
 └── rtm-authentication.jpg
 
-20 directories, 93 files
+23 directories, 101 files
