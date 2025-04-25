@@ -6,7 +6,8 @@ import (
 	"context"
 	"testing"
 
-	// Use alias to avoid conflict with mcperrors.
+	"errors" // Use standard errors package for errors.As
+
 	"github.com/dkoosis/cowgnition/internal/logging"
 	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors" // Import MCP errors.
 	"github.com/stretchr/testify/assert"
@@ -39,8 +40,6 @@ func TestMCPStateMachine_ValidTransitions_Succeeds(t *testing.T) {
 	require.NoError(t, err, "Transition on EventInitializeRequest should succeed.")
 	assert.Equal(t, StateInitializing, m.CurrentState(), "State should be Initializing.")
 
-	// <<< REMOVED TriggerEvent for EventInitializeResponseSent >>>
-
 	// Initializing -> Initialized (on client initialized notification)
 	err = m.Transition(ctx, EventClientInitialized, nil)
 	require.NoError(t, err, "Transition on EventClientInitialized should succeed.")
@@ -59,8 +58,6 @@ func TestMCPStateMachine_ValidTransitions_Succeeds(t *testing.T) {
 	require.NoError(t, err, "Transition on EventShutdownRequest should succeed.")
 	assert.Equal(t, StateShuttingDown, m.CurrentState(), "State should be ShuttingDown.")
 
-	// <<< REMOVED TriggerEvent for EventShutdownResponseSent >>>
-
 	// ShuttingDown -> Shutdown (on exit notification)
 	err = m.Transition(ctx, EventExitNotification, nil)
 	require.NoError(t, err, "Transition on EventExitNotification should succeed.")
@@ -70,7 +67,7 @@ func TestMCPStateMachine_ValidTransitions_Succeeds(t *testing.T) {
 // TestMCPStateMachine_ValidateMethod_AllowsCorrectSequence tests allowed method calls per state.
 func TestMCPStateMachine_ValidateMethod_AllowsCorrectSequence(t *testing.T) {
 	m := setupTestMCPStateMachine(t)
-	ctx := context.Background() // Needed for SetState if not embedding FSM directly.
+	ctx := context.Background() // Needed for state transitions
 
 	// State: Uninitialized
 	assert.NoError(t, m.ValidateMethod("initialize"), "Initialize should be allowed in Uninitialized state.")
@@ -110,7 +107,7 @@ func TestMCPStateMachine_ValidateMethod_AllowsCorrectSequence(t *testing.T) {
 // TestMCPStateMachine_ValidateMethod_RejectsIncorrectSequence tests disallowed method calls.
 func TestMCPStateMachine_ValidateMethod_RejectsIncorrectSequence(t *testing.T) {
 	m := setupTestMCPStateMachine(t)
-	ctx := context.Background() // Needed for SetState if not embedding FSM directly.
+	ctx := context.Background() // Needed for state transitions
 
 	// State: Uninitialized
 	err := m.ValidateMethod("tools/list")
@@ -198,13 +195,32 @@ func TestMCPStateMachine_Reset_ReturnsToUninitialized(t *testing.T) {
 }
 
 // assertErrorCode checks if the error can be asserted as the target type *mcperrors.BaseError and has the expected code.
-// nolint:unparam // Parameter expectedCode is needed for flexibility, even if current tests only use one value.
+// nolint: unparam // Keep nolint.
+// --- MODIFICATION START ---
+// Updated to directly check for specific expected error types.
 func assertErrorCode(t *testing.T, expectedCode mcperrors.ErrorCode, err error) {
 	t.Helper()
 	require.Error(t, err, "Expected an error but got nil.")
-	var mcpErr *mcperrors.BaseError
-	// <<< MODIFIED: Using require.ErrorAs for combined check and assignment >>>
-	require.ErrorAs(t, err, &mcpErr, "Error should be assertable as *mcperrors.BaseError. Got: %T", err)
-	// If require.ErrorAs passes, mcpErr is guaranteed to be non-nil.
-	assert.Equal(t, expectedCode, mcpErr.Code, "MCP error code mismatch.")
+
+	// Check for the specific expected error types based on the test case.
+	var protocolErr *mcperrors.ProtocolError
+	if errors.As(err, &protocolErr) {
+		assert.Equal(t, expectedCode, protocolErr.Code, "MCP error code mismatch for ProtocolError.")
+		return // Found the expected type and checked the code.
+	}
+
+	// Add checks for other specific MCP error types if needed by other tests using this helper.
+	// var authErr *mcperrors.AuthError
+	// if errors.As(err, &authErr) {
+	// 	assert.Equal(t, expectedCode, authErr.Code, "MCP error code mismatch for AuthError.")
+	//  return
+	// }
+
+	// Fallback if no specific type matched (though ideally tests should expect specific types).
+	var baseErr *mcperrors.BaseError
+	isMCPError := errors.As(err, &baseErr)
+	require.True(t, isMCPError, "Error should be an MCP error. Got: %T", err)
+	assert.Equal(t, expectedCode, baseErr.Code, "MCP error code mismatch (checked base type as fallback).")
 }
+
+// --- MODIFICATION END ---

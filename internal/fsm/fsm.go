@@ -344,7 +344,15 @@ func (l *loopFSM) Transition(ctx context.Context, event Event, data interface{})
 	fsmInstance := l.fsm
 	l.mu.RUnlock() // Unlock before potentially long-running Event call
 
-	l.logger.Debug("Attempting transition.", "event", event, "from_state", l.CurrentState())
+	// --- MODIFICATION START: Added Debug Logging ---
+	currentState := l.CurrentState()
+	canTransition := fsmInstance.Can(string(event))
+	l.logger.Debug("FSM Transition Attempt",
+		"event", event,
+		"from_state", currentState,
+		"can_transition_check", canTransition)
+	// --- MODIFICATION END ---
+
 	var err error
 	// Pass data as the first element in Args slice for callbacks
 	args := []interface{}{}
@@ -359,24 +367,29 @@ func (l *loopFSM) Transition(ctx context.Context, event Event, data interface{})
 	if err != nil {
 		// Use errors.As for type checking if needed, or string contains for simplicity here.
 		errMsg := err.Error()
-		if errors.Is(err, &lfsm.NoTransitionError{}) || errors.Is(err, &lfsm.InvalidEventError{}) || errors.Is(err, &lfsm.UnknownEventError{}) {
-			l.logger.Warn("Transition failed: Event/Transition not applicable for current state.", "event", event, "from_state", l.CurrentState(), "error", errMsg)
+		// Check specific looplab errors more robustly
+		var noTransitionErr *lfsm.NoTransitionError
+		var invalidEventErr *lfsm.InvalidEventError
+		var unknownEventErr *lfsm.UnknownEventError
+		var canceledErr *lfsm.CanceledError
+		var inTransitionErr *lfsm.InTransitionError
+
+		if errors.As(err, &noTransitionErr) || errors.As(err, &invalidEventErr) || errors.As(err, &unknownEventErr) {
+			l.logger.Warn("Transition failed: Event/Transition not applicable for current state.", "event", event, "from_state", currentState, "error", errMsg)
 			// Return a more specific error type if needed by caller?
 			return errors.Wrap(err, "transition not possible")
-		} else if errors.Is(err, &lfsm.CanceledError{}) || strings.Contains(errMsg, "guard condition") {
-			l.logger.Info("Transition cancelled by guard condition.", "event", event, "from_state", l.CurrentState())
+		} else if errors.As(err, &canceledErr) || strings.Contains(errMsg, "guard condition") {
+			l.logger.Info("Transition cancelled by guard condition.", "event", event, "from_state", currentState)
 			return errors.Wrap(err, "transition cancelled by guard condition")
-			// --- CORRECTED ERROR TYPE HERE ---
-		} else if errors.Is(err, &lfsm.InTransitionError{}) { // Was lfsm.NotTransitioningError
+		} else if errors.As(err, &inTransitionErr) { // Use corrected type
 			l.logger.Error("Concurrency error during transition.", "event", event, "error", errMsg)
 			// This indicates a potential issue with how the FSM is being used concurrently.
 			return errors.Wrap(err, "FSM concurrency error")
 		}
-		// --- END CORRECTION ---
 
 		// General transition failure.
-		l.logger.Error("Transition failed.", "event", event, "from_state", l.CurrentState(), "error", err)
-		return errors.Wrapf(err, "failed to transition on event '%s' from state '%s'", event, l.CurrentState())
+		l.logger.Error("Transition failed.", "event", event, "from_state", currentState, "error", err)
+		return errors.Wrapf(err, "failed to transition on event '%s' from state '%s'", event, currentState)
 	}
 
 	l.logger.Debug("Transition successful.", "event", event, "new_state", l.CurrentState())

@@ -52,14 +52,34 @@ func mockNotificationHandler(method string, shouldError bool, executionCounter *
 }
 
 // Helper to assert specific MCP error codes.
+// --- MODIFICATION START ---
+// Updated to directly check for specific expected error types.
 func assertMCPErrorCode(t *testing.T, expectedCode mcperrors.ErrorCode, err error) {
 	t.Helper()
 	require.Error(t, err, "Expected an error but got nil.")
-	var mcpErr *mcperrors.BaseError
-	isMCPError := errors.As(err, &mcpErr)
-	require.True(t, isMCPError, "Error should be an MCP error (BaseError or specific type). Got: %T", err)
-	assert.Equal(t, expectedCode, mcpErr.Code, "MCP error code mismatch.")
+
+	// Check for the specific expected error types based on the test case.
+	var methodNotFoundErr *mcperrors.MethodNotFoundError
+	if errors.As(err, &methodNotFoundErr) {
+		assert.Equal(t, expectedCode, methodNotFoundErr.Code, "MCP error code mismatch for MethodNotFoundError.")
+		return // Found the expected type and checked the code.
+	}
+
+	// Add checks for other specific MCP error types if needed by other tests using this helper.
+	// var invalidRequestErr *mcperrors.InvalidRequestError
+	// if errors.As(err, &invalidRequestErr) {
+	// 	assert.Equal(t, expectedCode, invalidRequestErr.Code, "MCP error code mismatch for InvalidRequestError.")
+	//  return
+	// }
+
+	// Fallback if no specific type matched (though ideally tests should expect specific types).
+	var baseErr *mcperrors.BaseError
+	isMCPError := errors.As(err, &baseErr)
+	require.True(t, isMCPError, "Error should be an MCP error. Got: %T", err)
+	assert.Equal(t, expectedCode, baseErr.Code, "MCP error code mismatch (checked base type as fallback).")
 }
+
+// --- MODIFICATION END ---
 
 // --- Test Cases ---
 
@@ -193,6 +213,7 @@ func TestRouter_Route_Fails_When_RequestMethodNotFound(t *testing.T) {
 
 	require.Error(t, routeErr, "Routing an unknown method should return an error.")
 	assert.Nil(t, resBytes, "Response bytes should be nil on routing error.")
+	// --- MODIFIED: Expect MethodNotFound specific code ---
 	assertMCPErrorCode(t, mcperrors.ErrMethodNotFound, routeErr)
 }
 
@@ -208,6 +229,7 @@ func TestRouter_Route_Fails_When_RequestSentToNotificationHandler(t *testing.T) 
 
 	require.Error(t, routeErr, "Routing request to notification-only handler should return an error.")
 	assert.Nil(t, resBytes, "Response bytes should be nil.")
+	// --- MODIFIED: Expect MethodNotFound specific code ---
 	assertMCPErrorCode(t, mcperrors.ErrMethodNotFound, routeErr) // Expect MethodNotFound as it cannot produce a response.
 }
 

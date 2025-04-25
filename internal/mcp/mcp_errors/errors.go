@@ -39,7 +39,7 @@ const (
 	// or carefully managing the sequence. Here, we assign specific values
 	// for JSON-RPC equivalents and custom protocol errors.
 	ErrProtocolInvalid     ErrorCode = 4000 + iota // iota = 0 here -> 4000
-	ErrProtocolUnsupported                         // iota = 1 -> 4001
+	ErrProtocolUnsupported                         // iota = 1 -> 4001 // <<< THIS VALUE IS LIKELY UNUSED/OBSOLETE
 
 	// Map specific internal errors to JSON-RPC standard codes where applicable.
 	ErrParseError     ErrorCode = -32700 // JSONRPCParseError
@@ -202,14 +202,16 @@ func NewResourceError(code ErrorCode, message string, cause error, context map[s
 }
 
 // NewProtocolError creates a new protocol error.
+// --- MODIFICATION START ---
+// Removed the default code assignment logic that was causing the bug.
 func NewProtocolError(code ErrorCode, message string, cause error, context map[string]interface{}) error {
-	// Default code if needed.
-	if code < 4000 || code > 4999 {
-		code = ErrProtocolInvalid
-	}
+	// Rely on the caller to provide a valid ErrorCode constant.
+	// if code < 4000 || code > 4999 { // <<< REMOVED THIS INCORRECT CHECK
+	// 	code = ErrProtocolInvalid
+	// }
 	err := &ProtocolError{
 		BaseError: BaseError{
-			Code:    code,
+			Code:    code, // Use the provided code directly.
 			Message: message,
 			Cause:   errors.WithStack(cause),
 			Context: context,
@@ -217,6 +219,8 @@ func NewProtocolError(code ErrorCode, message string, cause error, context map[s
 	}
 	return err
 }
+
+// --- MODIFICATION END ---
 
 // NewInvalidParamsError creates an error for invalid parameters (maps to -32602).
 func NewInvalidParamsError(message string, cause error, context map[string]interface{}) error {
@@ -343,12 +347,16 @@ func MapMCPErrorToJSONRPC(err error) (code int, message string, data map[string]
 		code = -32000
 		message = "Service unavailable." // User-friendly message.
 		data["detail"] = baseErr.Message // Internal detail.
+	case ErrRequestSequence: // Added case for ErrRequestSequence
+		code = -32001 // Assigning a specific code
+		message = "Invalid Request Sequence."
+		data["detail"] = baseErr.Message
 	case ErrResourceNotFound:
-		code = -32001
+		code = -32002 // Renumbered slightly
 		message = "Resource not found."
 		data["detail"] = baseErr.Message
 	case ErrResourceInvalid:
-		code = -32002
+		code = -32003 // Renumbered slightly
 		message = "Invalid resource identifier."
 		data["detail"] = baseErr.Message
 	case ErrAuthFailure, ErrAuthInvalid, ErrAuthExpired, ErrAuthMissing:
@@ -364,20 +372,18 @@ func MapMCPErrorToJSONRPC(err error) (code int, message string, data map[string]
 		code = -32021
 		message = "Permission denied by external service (RTM)."
 		data["detail"] = baseErr.Message
-	case ErrProtocolInvalid:
-		code = -32030
-		message = "Protocol error." // Generic protocol error for client.
+	case ErrProtocolInvalid: // Code 4000
+		code = transport.JSONRPCInvalidRequest // Map general protocol issues to -32600 for client
+		message = "Invalid Request (Protocol)."
 		data["detail"] = baseErr.Message
-	case ErrProtocolUnsupported:
-		code = -32031
-		message = "Unsupported operation."
+		data["internalCode"] = baseErr.Code // Include original internal code
+	case ErrProtocolUnsupported: // Code 4001
+		code = transport.JSONRPCMethodNotFound // Map unsupported protocol features to -32601
+		message = "Unsupported Operation (Protocol)."
 		data["detail"] = baseErr.Message
-	case ErrRequestSequence: // Added case for ErrRequestSequence
-		code = -32001 // Assigning a specific code
-		message = "Invalid Request Sequence."
-		data["detail"] = baseErr.Message
+		data["internalCode"] = baseErr.Code // Include original internal code
 
-	// Fallback for any other MCP error codes.
+	// Fallback for any other MCP error codes (e.g., 1xxx, 2xxx, 3xxx).
 	default:
 		code = transport.JSONRPCInternalError // -32603.
 		message = "An unspecified internal error occurred."

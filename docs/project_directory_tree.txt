@@ -41,12 +41,7 @@
 │   │   │   ├── machine_test.go
 │   │   │   └── states.go
 │   │   ├── connection_state.go
-│   │   ├── handlers_core.go
-│   │   ├── handlers_notifications.go
 │   │   ├── handlers_prompts.go
-│   │   ├── handlers_resources.go
-│   │   ├── handlers_roots.go
-│   │   ├── handlers_sampling.go
 │   │   ├── handlers_tools.go
 │   │   ├── helpers.go
 │   │   ├── mcp_server.go
@@ -123,4 +118,4 @@
 ├── go.sum
 └── rtm-authentication.jpg
 
-23 directories, 101 files
+23 directories, 96 files

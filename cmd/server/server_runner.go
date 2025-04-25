@@ -6,8 +6,11 @@
 // server termination and resource cleanup.
 package server
 
+// file: cmd/server/server_runner.go
+
 import (
 	"context"
+	"encoding/json" // Added for core handler response marshaling
 	"fmt"
 	"os"
 	"os/signal"
@@ -15,11 +18,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/config"
-	"github.com/dkoosis/cowgnition/internal/logging"
-	"github.com/dkoosis/cowgnition/internal/mcp"
+	"github.com/dkoosis/cowgnition/internal/config"     // Added
+	"github.com/dkoosis/cowgnition/internal/logging"    // Added
+	"github.com/dkoosis/cowgnition/internal/mcp"        // Added for core handlers
+	"github.com/dkoosis/cowgnition/internal/mcp/router" // Added
+	"github.com/dkoosis/cowgnition/internal/mcp/state"  // Added
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"
 	"github.com/dkoosis/cowgnition/internal/rtm"
 	"github.com/dkoosis/cowgnition/internal/schema"
+	// Added for GetName().
 )
 
 // RunServer starts the MCP server with the specified transport type.
@@ -47,40 +54,56 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		"debug_mode", debug)
 
 	// Service Initialization.
-	// Use blank identifier "_" for rtmService to fix unused variable error.
-	// Corrected: Use ValidatorInterface.
 	validator, rtmService, err := initializeServices(ctx, cfg, logger) // <-- rtmService is returned here
 	if err != nil {
 		return err // Errors already logged within initializeServices.
 	}
 	defer func() {
-		// Ensure validator shutdown runs even if server start fails.
 		if shutdownErr := validator.Shutdown(); shutdownErr != nil {
 			logger.Error("⚠️ Error shutting down schema validator during potential early exit.", "error", shutdownErr)
 		}
 	}()
 
-	// MCP Server Creation.
-	// Corrected: Pass ValidatorInterface.
-	server, err := createMCPServer(cfg, requestTimeout, shutdownTimeout, debug, validator, startTime, logger) // <-- server is created here
+	// --- Create FSM and Router ---
+	mcpFSM, err := state.NewMCPStateMachine(logger.WithField("component", "mcp_fsm"))
 	if err != nil {
-		return err // Error already logged.
+		logger.Error("❌ Failed to create MCP state machine.", "error", err)
+		return errors.Wrap(err, "failed to create MCP state machine")
 	}
+	mcpRouter := router.NewRouter(logger.WithField("component", "mcp_router"))
+	// --- End Create FSM and Router ---
 
-	// ---> ADD THIS BLOCK HERE <---
-	if rtmService != nil { // Check if RTM service initialization succeeded
-		logger.Info("🔧 Registering RTM service with MCP server.") // Add logging
+	// MCP Server Creation.
+	// --- MODIFIED: Call mcp.NewServer directly with FSM and Router ---
+	opts := mcp.ServerOptions{
+		RequestTimeout:  requestTimeout,
+		ShutdownTimeout: shutdownTimeout,
+		Debug:           debug,
+	}
+	server, err := mcp.NewServer(cfg, opts, validator, mcpFSM, mcpRouter, startTime, logger) // Pass FSM and Router
+	if err != nil {
+		logger.Error("❌ Failed to create MCP server.", "error", err.Error())
+		return errors.Wrap(err, "failed to create MCP server")
+	}
+	// --- END MODIFICATION ---
+
+	// Register RTM Service (if available)
+	if rtmService != nil {
+		logger.Info("🔧 Registering RTM service with MCP server.")
 		if err := server.RegisterService(rtmService); err != nil {
-			// Handle registration error appropriately
 			logger.Error("❌ Failed to register RTM service.", "error", err)
-			// Decide if this should be fatal, returning the error might be best:
 			return errors.Wrap(err, "failed to register RTM service")
 		}
 	} else {
-		// This case shouldn't happen if initializeServices succeeded without error, but good practice.
 		logger.Warn("⚠️ RTM Service instance was nil after initialization, cannot register.")
 	}
-	// ---> END BLOCK TO ADD <---
+
+	// --- Register Core MCP Routes AFTER server creation ---
+	if err := registerCoreRoutes(server); err != nil { // Pass the server instance
+		logger.Error("❌ Failed to register core MCP routes.", "error", err)
+		return err
+	}
+	// --- End Register Core MCP Routes ---
 
 	// Start Server Transport.
 	if err := startServerTransport(ctx, transportType, cfg, server, cancel, logger); err != nil {
@@ -94,8 +117,146 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	waitForShutdownSignal(ctx, sigChan, logger)
 
 	// Graceful Shutdown.
-	// Corrected: Use ValidatorInterface.
 	return performGracefulShutdown(shutdownTimeout, server, validator, startTime, logger)
+}
+
+// --- Helper Function to Register Core Routes ---
+// This function encapsulates the registration of core MCP methods with the router.
+func registerCoreRoutes(server *mcp.Server) error {
+	coreRouter := server.GetRouter() // Use the new getter method
+	if coreRouter == nil {
+		return errors.New("cannot register core routes: server router is nil")
+	}
+	logger := server.GetLogger().WithField("subcomponent", "core_routes") // Use the new getter method
+
+	// --- Ping ---
+	err := coreRouter.AddRoute(router.Route{
+		Method: "ping",
+		// --- MODIFIED: Rename unused ctx to _ ---
+		Handler: func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
+			logger.Debug("Handling ping request.")
+			return json.RawMessage(`{}`), nil
+		},
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to register ping route")
+	}
+
+	// --- Initialize ---
+	err = coreRouter.AddRoute(router.Route{
+		Method: "initialize",
+		// --- MODIFIED: Rename unused ctx to _ ---
+		Handler: func(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
+			logger.Info("Handling initialize request via router.")
+			var req mcptypes.InitializeRequest
+			if err := json.Unmarshal(params, &req); err != nil {
+				return nil, errors.Wrap(err, "failed to unmarshal initialize request parameters")
+			}
+
+			// Log Client Info using the new method on server
+			server.LogClientInfo(&req.ClientInfo, &req.Capabilities)
+
+			serverProtocolVersion := "2024-11-05" // Forced version
+			logger.Warn("Forcing server protocol version.", "serverVersion", serverProtocolVersion)
+
+			// Aggregate capabilities using the new method on server
+			caps := server.AggregateServerCapabilities()
+
+			// Get server info using the new method on server
+			appVersion := "0.1.0-dev" // TODO: Get from build flags
+			serverInfo := mcptypes.Implementation{Name: server.GetConfig().Server.Name, Version: appVersion}
+
+			res := mcptypes.InitializeResult{
+				ProtocolVersion: serverProtocolVersion,
+				ServerInfo:      &serverInfo,
+				Capabilities:    caps,
+			}
+
+			resBytes, err := json.Marshal(res)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to marshal initialize result")
+			}
+
+			logger.Info("Initialize successful, returning server capabilities.")
+			return resBytes, nil
+		},
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to register initialize route")
+	}
+
+	// --- Shutdown ---
+	err = coreRouter.AddRoute(router.Route{
+		Method: "shutdown",
+		// --- MODIFIED: Rename unused ctx to _ ---
+		Handler: func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
+			logger.Info("Handling shutdown request via router.")
+			logger.Info("Server state transition to ShuttingDown acknowledged.")
+			return json.RawMessage(`null`), nil
+		},
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to register shutdown route")
+	}
+
+	// --- Exit ---
+	err = coreRouter.AddRoute(router.Route{
+		Method: "exit",
+		// --- MODIFIED: Rename unused ctx to _ ---
+		NotificationHandler: func(_ context.Context, _ json.RawMessage) error {
+			logger.Info("Handling exit notification via router.")
+			logger.Warn("Exit notification received. Server should terminate process.")
+			// Actual cancellation handled by server loop exit
+			return nil
+		},
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to register exit route")
+	}
+
+	// --- notifications/initialized ---
+	err = coreRouter.AddRoute(router.Route{
+		Method: "notifications/initialized",
+		// --- MODIFIED: Rename unused ctx to _ ---
+		NotificationHandler: func(_ context.Context, params json.RawMessage) error {
+			logger.Info("Handling notifications/initialized notification via router.")
+			var notifParams map[string]interface{} // Generic map
+			if err := json.Unmarshal(params, &notifParams); err != nil {
+				logger.Debug("Could not parse notifications/initialized params.", "error", err)
+			} else {
+				logger.Debug("Parsed notifications/initialized params.", "params", fmt.Sprintf("%+v", notifParams))
+			}
+			logger.Info("Client initialization acknowledged. State is now Initialized.")
+			return nil
+		},
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to register notifications/initialized route")
+	}
+
+	// --- $/cancelRequest ---
+	err = coreRouter.AddRoute(router.Route{
+		Method: "$/cancelRequest",
+		// --- MODIFIED: Rename unused ctx to _ ---
+		NotificationHandler: func(_ context.Context, params json.RawMessage) error {
+			var reqParams struct {
+				ID json.RawMessage `json:"id"`
+			}
+			if err := json.Unmarshal(params, &reqParams); err != nil {
+				logger.Warn("Failed to unmarshal $/cancelRequest params.", "error", err)
+				return nil
+			}
+			logger.Info("Received cancellation request notification.", "requestId", string(reqParams.ID))
+			// TODO: Implement actual request cancellation logic
+			return nil
+		},
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to register $/cancelRequest route")
+	}
+
+	logger.Info("✅ Core MCP routes registered.")
+	return nil
 }
 
 // setupLoggingAndConfig initializes the logger and loads configuration.
@@ -126,11 +287,10 @@ func setupLoggingAndConfig(configPath string, debug bool) (logging.Logger, *conf
 }
 
 // initializeServices sets up the schema validator and RTM service.
-// Corrected: Returns schema.ValidatorInterface.
 func initializeServices(ctx context.Context, cfg *config.Config, logger logging.Logger) (schema.ValidatorInterface, *rtm.Service, error) {
 	validator, err := initializeSchemaValidator(ctx, cfg.Schema, logger)
 	if err != nil {
-		return nil, nil, err // Error logged within initializeSchemaValidator.
+		return nil, nil, err
 	}
 
 	rtmService, err := initializeRTMService(ctx, cfg, logger)
@@ -138,17 +298,15 @@ func initializeServices(ctx context.Context, cfg *config.Config, logger logging.
 		if shutdownErr := validator.Shutdown(); shutdownErr != nil {
 			logger.Error("⚠️ Error shutting down schema validator during RTM init failure.", "error", shutdownErr)
 		}
-		return nil, nil, err // Error logged within initializeRTMService.
+		return nil, nil, err
 	}
 
 	return validator, rtmService, nil
 }
 
 // initializeSchemaValidator sets up the schema validator.
-// Corrected: Returns schema.ValidatorInterface.
 func initializeSchemaValidator(ctx context.Context, schemaCfg config.SchemaConfig, logger logging.Logger) (schema.ValidatorInterface, error) {
 	logger.Info("📋 Initializing schema validator.")
-	// Corrected: Use NewValidator.
 	schemaLogger := logger.WithField("component", "schema_validator")
 	validator := schema.NewValidator(schemaCfg, schemaLogger)
 
@@ -168,7 +326,6 @@ func initializeSchemaValidator(ctx context.Context, schemaCfg config.SchemaConfi
 }
 
 // initializeRTMService creates and initializes the RTM service, performing diagnostics.
-// (No changes needed in this function's logic related to validator rename).
 func initializeRTMService(ctx context.Context, cfg *config.Config, logger logging.Logger) (*rtm.Service, error) {
 	logger.Info("🔄 Creating and initializing RTM service.")
 	rtmFactory := rtm.NewServiceFactory(cfg, logging.GetLogger("rtm_factory"))
@@ -212,25 +369,7 @@ func initializeRTMService(ctx context.Context, cfg *config.Config, logger loggin
 	return rtmService, nil
 }
 
-// createMCPServer creates the MCP server instance.
-// Corrected: Accepts schema.ValidatorInterface.
-func createMCPServer(cfg *config.Config, requestTimeout, shutdownTimeout time.Duration, debug bool, validator schema.ValidatorInterface, startTime time.Time, logger logging.Logger) (*mcp.Server, error) {
-	logger.Info("🔄 Creating MCP server instance.")
-	opts := mcp.ServerOptions{
-		RequestTimeout:  requestTimeout,
-		ShutdownTimeout: shutdownTimeout,
-		Debug:           debug,
-	}
-	server, err := mcp.NewServer(cfg, opts, validator, startTime, logger)
-	if err != nil {
-		logger.Error("❌ Failed to create MCP server.", "error", err.Error())
-		return nil, errors.Wrap(err, "failed to create MCP server")
-	}
-	return server, nil
-}
-
 // startServerTransport selects and starts the appropriate server transport.
-// (No changes needed in this function's logic related to validator rename).
 func startServerTransport(ctx context.Context, transportType string, cfg *config.Config, server *mcp.Server, cancel context.CancelFunc, logger logging.Logger) error {
 	switch transportType {
 	case "stdio":
@@ -246,7 +385,6 @@ func startServerTransport(ctx context.Context, transportType string, cfg *config
 			"address", addr,
 			"description", "Communication via HTTP protocol.")
 		go runTransportLoop(ctx, cancel, logger, "http", func(innerCtx context.Context) error {
-			// Note: ServeHTTP is not implemented, so this path currently does nothing.
 			if err := server.ServeHTTP(innerCtx, addr); !errors.Is(err, errors.New("HTTP transport not implemented")) {
 				return err
 			}
@@ -263,7 +401,6 @@ func startServerTransport(ctx context.Context, transportType string, cfg *config
 }
 
 // runTransportLoop runs the server's serve function in a goroutine and handles its exit.
-// (No changes needed in this function's logic).
 func runTransportLoop(ctx context.Context, cancel context.CancelFunc, logger logging.Logger, transportName string, serveFunc func(context.Context) error) {
 	if err := serveFunc(ctx); err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
@@ -274,11 +411,10 @@ func runTransportLoop(ctx context.Context, cancel context.CancelFunc, logger log
 	} else {
 		logger.Info(fmt.Sprintf("🛑 Server stopped normally (%s).", transportName))
 	}
-	cancel() // Ensure context is canceled on any server error or normal stop.
+	cancel()
 }
 
 // waitForShutdownSignal blocks until a shutdown signal is received or the context is cancelled.
-// (No changes needed in this function's logic).
 func waitForShutdownSignal(ctx context.Context, sigChan <-chan os.Signal, logger logging.Logger) {
 	select {
 	case sig := <-sigChan:
@@ -289,7 +425,6 @@ func waitForShutdownSignal(ctx context.Context, sigChan <-chan os.Signal, logger
 }
 
 // performGracefulShutdown handles the shutdown sequence for the server and validator.
-// Corrected: Accepts schema.ValidatorInterface.
 func performGracefulShutdown(shutdownTimeout time.Duration, server *mcp.Server, validator schema.ValidatorInterface, startTime time.Time, logger logging.Logger) error {
 	logger.Info("🔄 Shutting down server gracefully.",
 		"timeout", shutdownTimeout.String())

@@ -61,11 +61,12 @@ func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.Me
 	}
 
 	// 2. Extract Info for Logging/Context (Best Effort).
-	method, idStr := s.extractMessageInfo(msgBytes)                               // Note: idStr here is just for logging
-	ctxWithState := context.WithValue(ctx, connectionStateKey, s.connectionState) // Add connection state.
+	method, idStr := s.extractMessageInfo(msgBytes) // Note: idStr here is just for logging
+	// --- REMOVED ctxWithState line ---
 
-	// 3. Handle Message via Middleware Chain / Final Handler (which should be s.routeMessage).
-	respBytes, handleErr := handlerFunc(ctxWithState, msgBytes)
+	// 3. Handle Message via Middleware Chain / Final Handler (which should be s.handleMessage).
+	// --- MODIFIED: Pass original ctx instead of ctxWithState ---
+	respBytes, handleErr := handlerFunc(ctx, msgBytes)
 
 	// 4. Handle Processing Error (if any).
 	if handleErr != nil {
@@ -82,7 +83,7 @@ func (s *Server) processNextMessage(ctx context.Context, handlerFunc mcptypes.Me
 		return nil
 	}
 
-	// 5. State Update for Initialize Success is handled within routeMessage now.
+	// 5. State Update for Initialize Success is handled within handleMessage now.
 
 	// 6. Write Successful Response (if one was generated).
 	//    Notifications will have respBytes == nil here.
