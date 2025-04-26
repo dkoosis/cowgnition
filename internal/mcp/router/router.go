@@ -103,8 +103,8 @@ func (r *router) Route(ctx context.Context, method string, params json.RawMessag
 			// For notifications, we return nil bytes and only propagate errors from the handler.
 			return nil, err
 		}
-		// If it's a notification but only a request Handler is registered, log a warning?
-		// MCP spec allows sending notifications to methods that might normally expect responses,
+		// If it's a notification but only a request Handler is registered, log a warning?.
+		// MCP spec allows sending notifications to methods that might normally expect responses,.
 		// the server just doesn't send a response back. Let's log this case.
 		if route.Handler != nil {
 			r.logger.Warn("Received notification for method with only a request handler registered, executing handler but discarding result.", "method", method)

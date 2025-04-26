@@ -17,7 +17,7 @@ const (
 	EventTransportErrorOccurred fsm.Event = "transport_error"               // An underlying transport error happened.
 
 	// Server -> Client Events (or internal triggers).
-	// Note: While the FSM primarily tracks state based on *received* messages,
+	// Note: While the FSM primarily tracks state based on *received* messages,.
 	// internal events can be useful for more complex flows if needed later.
 	EventInitializeResponseSent fsm.Event = "sent_initialize_response" // Server successfully sent 'initialize' result.
 	EventShutdownResponseSent   fsm.Event = "sent_shutdown_response"   // Server successfully sent 'shutdown' result.
@@ -38,18 +38,18 @@ func EventForMethod(method string) fsm.Event {
 	case "notifications/initialized":
 		return EventClientInitialized
 	// Add other specific methods if they trigger unique state transitions.
-	// e.g., case "$/cancelRequest": return EventCancelRequest
+	// e.g., case "$/cancelRequest": return EventCancelRequest.
 	default:
 		// Return a generic event or empty if the method doesn't directly cause a standard lifecycle transition.
 		// The router will handle dispatching methods allowed in the 'Initialized' state.
-		// We could return EventMCPRequest/EventMCPNotification here if we wanted the FSM
+		// We could return EventMCPRequest/EventMCPNotification here if we wanted the FSM.
 		// to explicitly handle *all* message types, but the plan seems to focus on lifecycle.
 		// Let's return empty for now, relying on ValidateMethod in the FSM implementation.
 		return ""
 	}
 }
 
-// NOTE: The plan [cite: 21] showed `mcp_state.NewEvent(...)`, but similar to states,
+// NOTE: The plan [cite: 21] showed `mcp_state.NewEvent(...)`, but similar to states,.
 // we are defining events within this package using the base `fsm.Event` type (string).
-// We directly assign string constants. The `EventForMethod` helper maps method strings
+// We directly assign string constants. The `EventForMethod` helper maps method strings.
 // to these constants.

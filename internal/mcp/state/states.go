@@ -14,12 +14,12 @@ const (
 	StateShutdown      fsm.State = "shutdown"      // Exit notification received, connection effectively closed.
 )
 
-// IsTerminal returns true if the state represents a terminal state from which
+// IsTerminal returns true if the state represents a terminal state from which.
 // no further transitions should normally occur (excluding potential resets).
 func IsTerminal(s fsm.State) bool {
 	return s == StateShutdown
 }
 
-// NOTE: The plan [cite: 21] showed `mcp_state.NewState(...)`, but since we are defining
-// states *within* this package and using the base `fsm.State` type (which is just a string),
+// NOTE: The plan [cite: 21] showed `mcp_state.NewState(...)`, but since we are defining.
+// states *within* this package and using the base `fsm.State` type (which is just a string),.
 // we directly assign the string constants here. This avoids needing a local `NewState` helper.

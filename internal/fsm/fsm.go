@@ -1,6 +1,6 @@
-package fsm
-
+// Package fsm provides a generic Finite State Machine implementation.
 // file: internal/fsm/fsm.go
+package fsm
 
 import (
 	"context" // Keep fmt for errors.Newf.
@@ -140,7 +140,7 @@ func (l *loopFSM) Build() error {
 		if !exists {
 			desc = lfsm.EventDesc{Name: eventName, Dst: toStateStr}
 		} else if desc.Dst != toStateStr {
-			// Allow multiple 'From' states for the same event->destination pair,
+			// Allow multiple 'From' states for the same event->destination pair,.
 			// but disallow the same event going to different destinations.
 			err := errors.Newf("conflicting destinations ('%s' and '%s') for the same event ('%s'). Define separate events or use guards.", desc.Dst, toStateStr, eventName)
 			l.logger.Error("Invalid FSM configuration.", "error", err)
@@ -150,7 +150,7 @@ func (l *loopFSM) Build() error {
 		desc.Src = append(desc.Src, fromStatesStr...)
 		l.eventDescMap[eventName] = desc
 
-		// Register callbacks only once per unique event/state combination if needed,
+		// Register callbacks only once per unique event/state combination if needed,.
 		// or structure based on looplab's callback registration logic.
 		// Here, we register based on event name for 'before' and target state for 'enter'.
 		if _, alreadyProcessed := processedEvents[t.Event]; !alreadyProcessed {
@@ -158,7 +158,7 @@ func (l *loopFSM) Build() error {
 			if t.Condition != nil {
 				callbackName := "before_" + eventName
 				if _, cbExists := l.callbackMap[callbackName]; cbExists {
-					// This should ideally not happen if event names are unique triggers to destinations,
+					// This should ideally not happen if event names are unique triggers to destinations,.
 					// but log a warning if overwritten.
 					l.logger.Warn("Overwriting existing 'before' callback (guard).", "event", eventName)
 				}
@@ -169,7 +169,7 @@ func (l *loopFSM) Build() error {
 
 		// Register 'enter' state callback (action) if defined.
 		// This attaches the action to entering the 'To' state.
-		// If multiple transitions lead to the same 'To' state, actions might need
+		// If multiple transitions lead to the same 'To' state, actions might need.
 		// internal logic to know which event triggered them if behaviour differs.
 		// Our current createActionCallback uses the transition index to differentiate.
 		if t.Action != nil {
@@ -191,7 +191,7 @@ func (l *loopFSM) Build() error {
 			}
 		}
 		desc.Src = dedupedSrc
-		l.logger.Debug("Building event description", "event", desc.Name, "src", desc.Src, "dst", desc.Dst)
+		l.logger.Debug("Building event description.", "event", desc.Name, "src", desc.Src, "dst", desc.Dst)
 		finalEvents = append(finalEvents, desc)
 	}
 
@@ -286,7 +286,7 @@ func (l *loopFSM) createActionCallback(transitionIndex int, nextCallback lfsm.Ca
 		} else if matchedTransition != nil && matchedTransition.Action == nil {
 			l.logger.Debug("Entered state via transition with no action.", "event", e.Event, "from_state", e.Src, "to_state", e.Dst)
 		} else {
-			// This might happen if multiple transitions enter the same state, and this callback
+			// This might happen if multiple transitions enter the same state, and this callback.
 			// instance wasn't the one matching the specific triggering transition index.
 			l.logger.Debug("Entered state, but triggering transition did not match this specific action callback's index.",
 				"event", e.Event, "from_state", e.Src, "to_state", e.Dst, "transitionIndexChecked", transitionIndex)
@@ -335,7 +335,7 @@ func (l *loopFSM) Transition(ctx context.Context, event Event, data interface{})
 	l.mu.RUnlock()
 
 	canTransitionCheck := fsmInstance.Can(string(event))
-	l.logger.Debug("FSM Transition Attempt", "event", event, "from_state", currentState, "can_transition_check", canTransitionCheck)
+	l.logger.Debug("FSM Transition Attempt.", "event", event, "from_state", currentState, "can_transition_check", canTransitionCheck)
 
 	var err error
 	args := []interface{}{}
@@ -347,7 +347,6 @@ func (l *loopFSM) Transition(ctx context.Context, event Event, data interface{})
 	err = fsmInstance.Event(ctx, string(event), args...)
 
 	if err != nil {
-		// <<< --- TEMPORARY PRINTF LOGGING --- >>>
 		// Use fmt.Fprintf to standard error, which is reliably captured by `go test -v`.
 		fmt.Fprintf(os.Stderr, "\n>>> DEBUG: Entered Transition error block. Error: %v (%T)\n", err, err) // Print error and its type.
 
@@ -383,14 +382,9 @@ func (l *loopFSM) Transition(ctx context.Context, event Event, data interface{})
 		isCanceledVal := errors.As(err, &canceledErrVal)
 		fmt.Fprintf(os.Stderr, ">>> DEBUG: errors.As(err, lfsm.CanceledError): %t\n\n", isCanceledVal)
 
-		// <<< --- END TEMPORARY PRINTF LOGGING --- >>>
+		// Temporarily just return to see logs.
+		return err
 
-		// For now, just return the error after logging to see the debug output.
-		return err // Temporarily just return to see logs.
-
-		/* // Original/Previous Handling Logic (commented out for now).
-		// ... (complex error handling code was here) ...
-		*/
 	}
 
 	// Log success if no error occurred.

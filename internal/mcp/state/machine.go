@@ -30,17 +30,17 @@ func NewMCPStateMachine(logger logging.Logger) (*MCPStateMachine, error) {
 	fsmBuilder := fsm.NewFSM(StateUninitialized, log)
 
 	// Define MCP State Transitions based on the protocol specification.
-	// Use the States (StateUninitialized, etc.) and Events (EventInitializeRequest, etc.)
+	// Use the States (StateUninitialized, etc.) and Events (EventInitializeRequest, etc.).
 	// defined in states.go and events.go.
 
-	// --- Initialization Flow ---
+	// --- Initialization Flow ---.
 	fsmBuilder.AddTransition(fsm.Transition{
 		From:  []fsm.State{StateUninitialized},
 		Event: EventInitializeRequest,
 		To:    StateInitializing,
 		// Action: Optional action on receiving initialize request.
 	})
-	// <<< REMOVED Transition for EventInitializeResponseSent >>>
+	// <<< REMOVED Transition for EventInitializeResponseSent >>>.
 	fsmBuilder.AddTransition(fsm.Transition{
 		From:  []fsm.State{StateInitializing},
 		Event: EventClientInitialized, // Triggered by notifications/initialized from client.
@@ -48,7 +48,7 @@ func NewMCPStateMachine(logger logging.Logger) (*MCPStateMachine, error) {
 		// Action: Optional action when client confirms initialization.
 	})
 
-	// --- Operational Flow (In Initialized State) ---
+	// --- Operational Flow (In Initialized State) ---.
 	fsmBuilder.AddTransition(fsm.Transition{
 		From:  []fsm.State{StateInitialized},
 		Event: EventMCPRequest,  // Generic event for most requests in Initialized state.
@@ -62,14 +62,14 @@ func NewMCPStateMachine(logger logging.Logger) (*MCPStateMachine, error) {
 		// Action: Handled by the Router/Notification Handlers.
 	})
 
-	// --- Shutdown Flow ---
+	// --- Shutdown Flow ---.
 	fsmBuilder.AddTransition(fsm.Transition{
 		From:  []fsm.State{StateInitialized}, // Can only shut down if initialized.
 		Event: EventShutdownRequest,
 		To:    StateShuttingDown,
 		// Action: Optional action on receiving shutdown request.
 	})
-	// <<< REMOVED Transition for EventShutdownResponseSent >>>
+	// <<< REMOVED Transition for EventShutdownResponseSent >>>.
 	fsmBuilder.AddTransition(fsm.Transition{
 		From:  []fsm.State{StateInitialized, StateShuttingDown}, // Client can send exit in either state.
 		Event: EventExitNotification,
@@ -77,7 +77,7 @@ func NewMCPStateMachine(logger logging.Logger) (*MCPStateMachine, error) {
 		// Action: Optional action on receiving exit notification (e.g., trigger connection close).
 	})
 
-	// --- Error Handling / Reset ---
+	// --- Error Handling / Reset ---.
 	// Allow resetting from any state back to uninitialized (e.g., on transport error).
 	// We can use a generic "ErrorOccurred" event or handle this externally by calling Reset().
 	// Let's add a transition for transport errors for explicitness.
@@ -104,7 +104,7 @@ func NewMCPStateMachine(logger logging.Logger) (*MCPStateMachine, error) {
 }
 
 // ValidateMethod checks if receiving a specific MCP method is valid in the current state.
-// It maps the method name to a corresponding lifecycle event and checks if that event
+// It maps the method name to a corresponding lifecycle event and checks if that event.
 // can trigger a transition from the current state.
 // Returns an ErrRequestSequence protocol error if the method is not allowed.
 func (m *MCPStateMachine) ValidateMethod(method string) error {
@@ -113,7 +113,7 @@ func (m *MCPStateMachine) ValidateMethod(method string) error {
 	// Map the method string to a potential lifecycle event.
 	event := EventForMethod(method)
 
-	// If the method doesn't correspond to a specific lifecycle event,
+	// If the method doesn't correspond to a specific lifecycle event,.
 	// assume it's a standard operational request/notification.
 	// These are only allowed in the Initialized state.
 	if event == "" {
@@ -135,7 +135,7 @@ func (m *MCPStateMachine) ValidateMethod(method string) error {
 
 	// If it's a specific lifecycle event, check if the FSM allows it from the current state.
 	// Note: CanTransition only checks if the event *exists* for the state, not if guards pass.
-	// The actual Transition call will handle guards. This check prevents trying
+	// The actual Transition call will handle guards. This check prevents trying.
 	// to fire completely undefined events for a state.
 	if !m.CanTransition(event) {
 		m.logger.Warn("Received out-of-sequence MCP lifecycle method.",
@@ -152,7 +152,7 @@ func (m *MCPStateMachine) ValidateMethod(method string) error {
 	return nil
 }
 
-// TriggerEvent attempts to transition the state machine based on an internal event,
+// TriggerEvent attempts to transition the state machine based on an internal event,.
 // such as successfully sending a response.
 // NOTE: This function remains but might be unused if internal FSM events are removed.
 func (m *MCPStateMachine) TriggerEvent(ctx context.Context, event fsm.Event, data interface{}) error {
