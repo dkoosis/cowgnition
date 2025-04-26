@@ -1,6 +1,7 @@
 // Package fsm_test tests the generic FSM implementation.
-// file: internal/fsm/fsm_test.go
 package fsm
+
+// file: internal/fsm/fsm_test.go
 
 import (
 	"context"

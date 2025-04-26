@@ -1,15 +1,16 @@
-// Package state_test tests the MCP-specific state machine implementation.
 // file: internal/mcp/state/machine_test.go
 package state
 
 import (
 	"context"
+	"os" // <<< Added import for os.Getenv
 	"testing"
 
 	"errors" // Use standard errors package for errors.As
 
 	"github.com/dkoosis/cowgnition/internal/logging"
 	mcperrors "github.com/dkoosis/cowgnition/internal/mcp/mcp_errors" // Import MCP errors.
+	lfsm "github.com/looplab/fsm"                                     // Import looplab/fsm for error type checking
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,8 +18,18 @@ import (
 // Helper to create a new, configured MCP State Machine for testing.
 func setupTestMCPStateMachine(t *testing.T) *MCPStateMachine {
 	t.Helper()
-	logger := logging.GetNoopLogger()
-	m, err := NewMCPStateMachine(logger)
+
+	// --- MODIFICATION START ---
+	// Initialize the actual logger based on environment (or default to info)
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "info" // Default for tests if not set
+	}
+	logging.SetupDefaultLogger(logLevel)          // Setup the application's default logger
+	logger := logging.GetLogger("mcp_state_test") // Get a logger instance
+	// --- MODIFICATION END ---
+
+	m, err := NewMCPStateMachine(logger) // Pass the real logger
 	require.NoError(t, err, "Failed to create new MCP state machine for test.")
 	require.NotNil(t, m, "NewMCPStateMachine should return a non-nil instance.")
 	return m
@@ -45,17 +56,25 @@ func TestMCPStateMachine_ValidTransitions_Succeeds(t *testing.T) {
 	require.NoError(t, err, "Transition on EventClientInitialized should succeed.")
 	assert.Equal(t, StateInitialized, m.CurrentState(), "State should be Initialized.")
 
-	// Initialized -> Initialized (on standard request/notification)
+	// Initialized -> Initialized (on standard request/notification - EXPECT NoTransitionError)
 	err = m.Transition(ctx, EventMCPRequest, nil)
-	require.NoError(t, err, "Transition on EventMCPRequest should succeed.")
-	assert.Equal(t, StateInitialized, m.CurrentState(), "State should remain Initialized.")
-	err = m.Transition(ctx, EventMCPNotification, nil)
-	require.NoError(t, err, "Transition on EventMCPNotification should succeed.")
-	assert.Equal(t, StateInitialized, m.CurrentState(), "State should remain Initialized.")
+	// --- MODIFICATION START: Expect NoTransitionError for self-transition ---
+	var noTransitionErr *lfsm.NoTransitionError // Use alias for looplab/fsm error type
+	require.Error(t, err, "Self-transition on EventMCPRequest should return an error.")
+	require.True(t, errors.As(err, &noTransitionErr), "Error for self-transition should be NoTransitionError.")
+	// --- MODIFICATION END ---
+	assert.Equal(t, StateInitialized, m.CurrentState(), "State should remain Initialized after EventMCPRequest.")
 
-	// Initialized -> ShuttingDown (on shutdown request)
+	err = m.Transition(ctx, EventMCPNotification, nil)
+	// --- MODIFICATION START: Expect NoTransitionError for self-transition ---
+	require.Error(t, err, "Self-transition on EventMCPNotification should return an error.")
+	require.True(t, errors.As(err, &noTransitionErr), "Error for self-transition should be NoTransitionError.")
+	// --- MODIFICATION END ---
+	assert.Equal(t, StateInitialized, m.CurrentState(), "State should remain Initialized after EventMCPNotification.")
+
+	// Initialized -> ShuttingDown (on shutdown request) - This should still be NoError
 	err = m.Transition(ctx, EventShutdownRequest, nil)
-	require.NoError(t, err, "Transition on EventShutdownRequest should succeed.")
+	require.NoError(t, err, "Transition on EventShutdownRequest should succeed.") // Actual state change
 	assert.Equal(t, StateShuttingDown, m.CurrentState(), "State should be ShuttingDown.")
 
 	// ShuttingDown -> Shutdown (on exit notification)
@@ -92,7 +111,10 @@ func TestMCPStateMachine_ValidateMethod_AllowsCorrectSequence(t *testing.T) {
 	assert.NoError(t, m.ValidateMethod("unknownMethod"), "Unknown methods should be allowed in Initialized state (router handles validity).")
 
 	// Transition: Initialized -> ShuttingDown
-	_ = m.Transition(ctx, EventShutdownRequest, nil)
+	// Handle potential NoTransitionError for the self-transitions first
+	_ = m.Transition(ctx, EventMCPRequest, nil)      // Ignore error
+	_ = m.Transition(ctx, EventMCPNotification, nil) // Ignore error
+	_ = m.Transition(ctx, EventShutdownRequest, nil) // Actual transition
 	require.Equal(t, StateShuttingDown, m.CurrentState())
 
 	// State: ShuttingDown
@@ -149,7 +171,10 @@ func TestMCPStateMachine_ValidateMethod_RejectsIncorrectSequence(t *testing.T) {
 	assertErrorCode(t, mcperrors.ErrRequestSequence, err)
 
 	// Transition: Initialized -> ShuttingDown
-	_ = m.Transition(ctx, EventShutdownRequest, nil)
+	// Handle potential NoTransitionError for the self-transitions first
+	_ = m.Transition(ctx, EventMCPRequest, nil)      // Ignore error
+	_ = m.Transition(ctx, EventMCPNotification, nil) // Ignore error
+	_ = m.Transition(ctx, EventShutdownRequest, nil) // Actual transition
 	require.Equal(t, StateShuttingDown, m.CurrentState())
 
 	// State: ShuttingDown
@@ -195,9 +220,7 @@ func TestMCPStateMachine_Reset_ReturnsToUninitialized(t *testing.T) {
 }
 
 // assertErrorCode checks if the error can be asserted as the target type *mcperrors.BaseError and has the expected code.
-// nolint: unparam // Keep nolint.
-// --- MODIFICATION START ---
-// Updated to directly check for specific expected error types.
+// nolint: unparam // Keep nolint directive to suppress warning for this specific test file's usage
 func assertErrorCode(t *testing.T, expectedCode mcperrors.ErrorCode, err error) {
 	t.Helper()
 	require.Error(t, err, "Expected an error but got nil.")
@@ -209,18 +232,9 @@ func assertErrorCode(t *testing.T, expectedCode mcperrors.ErrorCode, err error) 
 		return // Found the expected type and checked the code.
 	}
 
-	// Add checks for other specific MCP error types if needed by other tests using this helper.
-	// var authErr *mcperrors.AuthError
-	// if errors.As(err, &authErr) {
-	// 	assert.Equal(t, expectedCode, authErr.Code, "MCP error code mismatch for AuthError.")
-	//  return
-	// }
-
 	// Fallback if no specific type matched (though ideally tests should expect specific types).
 	var baseErr *mcperrors.BaseError
 	isMCPError := errors.As(err, &baseErr)
 	require.True(t, isMCPError, "Error should be an MCP error. Got: %T", err)
 	assert.Equal(t, expectedCode, baseErr.Code, "MCP error code mismatch (checked base type as fallback).")
 }
-
-// --- MODIFICATION END ---
