@@ -58,17 +58,18 @@ func TestMCPStateMachine_ValidTransitions_Succeeds(t *testing.T) {
 
 	// Initialized -> Initialized (on standard request/notification - EXPECT NoTransitionError)
 	err = m.Transition(ctx, EventMCPRequest, nil)
-	// --- MODIFICATION START: Expect NoTransitionError for self-transition ---
-	var noTransitionErr *lfsm.NoTransitionError // Use alias for looplab/fsm error type
+	// --- MODIFICATION START: Adjust type check ---
+	var noTransitionErr lfsm.NoTransitionError // <<< Change: Use value type, not pointer
 	require.Error(t, err, "Self-transition on EventMCPRequest should return an error.")
-	require.True(t, errors.As(err, &noTransitionErr), "Error for self-transition should be NoTransitionError.")
+	require.True(t, errors.As(err, &noTransitionErr), "Error for self-transition should be NoTransitionError.") // <<< errors.As now correctly checks for value type
 	// --- MODIFICATION END ---
 	assert.Equal(t, StateInitialized, m.CurrentState(), "State should remain Initialized after EventMCPRequest.")
 
 	err = m.Transition(ctx, EventMCPNotification, nil)
-	// --- MODIFICATION START: Expect NoTransitionError for self-transition ---
+	// --- MODIFICATION START: Adjust type check ---
+	// var noTransitionErr lfsm.NoTransitionError // <<< Re-use or redeclare if needed, variable scope applies
 	require.Error(t, err, "Self-transition on EventMCPNotification should return an error.")
-	require.True(t, errors.As(err, &noTransitionErr), "Error for self-transition should be NoTransitionError.")
+	require.True(t, errors.As(err, &noTransitionErr), "Error for self-transition should be NoTransitionError.") // <<< errors.As now correctly checks for value type
 	// --- MODIFICATION END ---
 	assert.Equal(t, StateInitialized, m.CurrentState(), "State should remain Initialized after EventMCPNotification.")
 

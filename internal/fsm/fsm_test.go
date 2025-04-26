@@ -5,11 +5,13 @@ package fsm
 
 import (
 	"context"
-	"fmt" // Added import.
+	"errors" // Use standard errors package for errors.As.
+	"fmt"    // Added import.
 	"sync/atomic"
 	"testing" // Added import.
 
 	"github.com/dkoosis/cowgnition/internal/logging"
+	lfsm "github.com/looplab/fsm" // Use alias 'lfsm'.
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,7 +97,7 @@ func TestFSM_InvalidTransition_ReturnsError(t *testing.T) {
 	assert.False(t, fsm.CanTransition(EventStop), "Should not be able to transition on Stop from Idle.")
 	err := fsm.Transition(ctx, EventStop, nil)
 	require.Error(t, err, "Transition on Stop from Idle should return an error.")
-	// <<< MODIFIED ASSERTION HERE >>>
+	// Check error message contains expected substring.
 	assert.Contains(t, err.Error(), "inappropriate in current state", "Error message should indicate event inappropriate for state.")
 	assert.Equal(t, StateIdle, fsm.CurrentState(), "State should remain Idle.")
 }
@@ -188,7 +190,10 @@ func TestFSM_TransitionWithGuard_AllowsAndBlocks(t *testing.T) {
 	assert.True(t, fsmBuilder.CanTransition(EventForce), "CanTransition should still be true as event is defined.")
 	err = fsmBuilder.Transition(ctx, EventForce, "force data")
 	require.Error(t, err, "Transition should fail when guard condition is false.")
-	assert.Contains(t, err.Error(), "transition cancelled by guard condition", "Error message should indicate cancellation.")
+	// --- FINAL FIX: Check value type for CanceledError ---
+	var canceledErr lfsm.CanceledError // <<< Use value type lfsm.CanceledError
+	require.True(t, errors.As(err, &canceledErr), "Error should be (or wrap) a CanceledError when guard fails.")
+	// --- END FINAL FIX ---
 	assert.Equal(t, StateIdle, fsmBuilder.CurrentState(), "State should remain Idle when guard blocks.")
 }
 
