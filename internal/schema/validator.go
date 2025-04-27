@@ -1,9 +1,5 @@
-// Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
-// It provides a Validator that can load an MCP schema (either embedded or from an external source),
-// compile its definitions, and validate incoming/outgoing messages against those definitions.
-package schema
-
 // file: internal/schema/validator.go
+package schema
 
 import (
 	"bytes"
@@ -77,7 +73,7 @@ var schemaMappings = map[string][]string{
 	"tools/list_response":            {"ListToolsResult"},
 	"tools/call_response":            {"CallToolResult"},
 	"resources/list_response":        {"ListResourcesResult"},
-	"resources/read_response":        {"ReadResourceResult"},             // <<< THE FIX
+	"resources/read_response":        {"ReadResourceResult"},
 	"resources/subscribe_response":   {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response
 	"resources/unsubscribe_response": {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response
 	"prompts/list_response":          {"ListPromptsResult"},
@@ -88,13 +84,13 @@ var schemaMappings = map[string][]string{
 // ValidatorInterface defines the methods required for schema validation operations.
 // This interface allows for mocking or replacing the schema validation implementation.
 type ValidatorInterface interface {
-	// Validate checks if the provided JSON data conforms to the schema definition
+	// Validate checks if the provided JSON data conforms to the schema definition.
 	// associated with the given messageType (e.g., MCP method name or a generic type).
 	Validate(ctx context.Context, messageType string, data []byte) error
-	// HasSchema checks if a compiled schema definition exists for the given name
+	// HasSchema checks if a compiled schema definition exists for the given name.
 	// (e.g., a definition name like "InitializeRequest" or a mapped generic name like "request").
 	HasSchema(name string) bool
-	// IsInitialized returns true if the validator has successfully loaded and
+	// IsInitialized returns true if the validator has successfully loaded and.
 	// compiled the necessary schema definitions. Validation cannot proceed otherwise.
 	IsInitialized() bool
 	// Initialize loads and compiles the schema from the configured source (override URI or embedded).
@@ -108,10 +104,9 @@ type ValidatorInterface interface {
 	GetSchemaVersion() string
 	// Shutdown cleans up resources used by the validator, like closing idle HTTP connections.
 	Shutdown() error
-	// --- NEW: Add verify method to interface ---
-	// VerifyMappingsAgainstSchema checks the internal mappings against compiled schemas. <<< CORRECTED: Exported Method Name >>>
+	// VerifyMappingsAgainstSchema checks the internal mappings against compiled schemas.
 	// Note: This is primarily for testing/internal verification, not core validation path.
-	VerifyMappingsAgainstSchema() []string // <<< CORRECTED: Exported Method Name >>>
+	VerifyMappingsAgainstSchema() []string
 }
 
 // Validator handles loading, compiling, and validating data against JSON schemas.
@@ -129,16 +124,15 @@ type Validator struct {
 	lastLoadDuration    time.Duration                 // Performance metric: time spent loading schema source.
 	lastCompileDuration time.Duration                 // Performance metric: time spent compiling schema definitions.
 	schemaVersion       string                        // Detected version string of the loaded schema.
-	validatorInterface  mcptypes.ValidatorInterface   // <<< ADDED: Store the interface
 }
 
 // Ensure Validator implements the mcptypes.ValidatorInterface.
-var _ mcptypes.ValidatorInterface = (*Validator)(nil) // <<< CORRECTED: Use mcptypes
+var _ mcptypes.ValidatorInterface = (*Validator)(nil)
 
 // NewValidator creates a new Validator instance.
 // It initializes the schema compiler and HTTP client based on the provided configuration and logger.
 // The validator is not ready for use until Initialize() is called successfully.
-func NewValidator(cfg config.SchemaConfig, logger logging.Logger) *Validator { // Return concrete type
+func NewValidator(cfg config.SchemaConfig, logger logging.Logger) *Validator {
 	if logger == nil {
 		logger = logging.GetNoopLogger() // Ensure logger is never nil.
 	}
@@ -149,7 +143,7 @@ func NewValidator(cfg config.SchemaConfig, logger logging.Logger) *Validator { /
 	compiler.AssertFormat = true          // Enable format assertion (e.g., "date-time", "uri").
 	compiler.AssertContent = true         // Enable content assertion (e.g., "contentEncoding", "contentMediaType").
 
-	v := &Validator{ // Assign to v first
+	v := &Validator{
 		schemaConfig: cfg,
 		compiler:     compiler,
 		schemas:      make(map[string]*jsonschema.Schema),     // Initialize map.
@@ -158,7 +152,6 @@ func NewValidator(cfg config.SchemaConfig, logger logging.Logger) *Validator { /
 		logger:       logger.WithField("component", "schema_validator"),
 		initialized:  false, // Not initialized yet.
 	}
-	v.validatorInterface = v // Store self as the interface implementation.
 	return v
 }
 
@@ -312,7 +305,6 @@ func (v *Validator) Initialize(ctx context.Context) error {
 		"schemaSource", sourceInfo)
 
 	// --- Verify mappings after initialization ---
-	// <<< CORRECTED: Call VerifyMappingsAgainstSchema explicitly >>>
 	unmappedSchemas := v.VerifyMappingsAgainstSchema()
 	if len(unmappedSchemas) > 0 {
 		v.logger.Warn("Detected schema definitions without corresponding entries in schemaMappings variable.",
@@ -405,7 +397,6 @@ func (v *Validator) addGenericMappings(compiledSchemas map[string]*jsonschema.Sc
 // requests or results have corresponding entries in the schemaMappings targets.
 // This helps ensure the mapping list stays synchronized with the schema definitions.
 // Note: This is a heuristic check based on naming conventions (*Request, *Result).
-// <<< RENAMED METHOD TO EXPORTED VERSION >>>
 func (v *Validator) VerifyMappingsAgainstSchema() []string {
 	// --- Use Read Lock as this doesn't modify state ---
 	v.mu.RLock()
@@ -501,7 +492,7 @@ func (v *Validator) IsInitialized() bool {
 // It first ensures the validator is initialized and the data is valid JSON syntax.
 // It then finds the appropriate compiled schema (using fallbacks if necessary) and performs validation.
 // Returns a structured ValidationError if validation fails or prerequisites are not met.
-func (v *Validator) Validate(ctx context.Context, messageType string, data []byte) error { // Renamed _ context.Context to ctx
+func (v *Validator) Validate(ctx context.Context, messageType string, data []byte) error {
 	if !v.IsInitialized() {
 		return NewValidationError(ErrSchemaNotFound, "Schema validator not initialized", nil)
 	}
@@ -730,3 +721,7 @@ func (v *Validator) getVersionFromMCPHeuristics(schemaDoc map[string]interface{}
 	}
 	return "" // No heuristic match found.
 }
+
+// --- END OF validator.go ---
+// Helper functions like calculatePreview, convertValidationError, etc.
+// should NOT be included here if they exist in errors.go or helpers.go

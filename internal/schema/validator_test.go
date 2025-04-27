@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	// Added time import.
-	// <<< ADDED: Ensure time is imported if needed by ValidatorInterface methods
 
 	"github.com/cockroachdb/errors"
 	// Import the config package to use config.SchemaConfig.
@@ -207,15 +206,15 @@ func TestValidator_Initialize_Fails_When_SchemaFileIsInvalidJSON(t *testing.T) {
 	logger := logging.GetNoopLogger()
 	schemaPath := createTempSchemaFile(t, invalidSchemaSyntax)
 	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + schemaPath}
-	// --- FIX: Declare v as the interface type ---
-	var v mcptypes.ValidatorInterface = NewValidator(cfg, logger)
-	// --- END FIX ---
+	// --- REVERTED: Declare v simply ---
+	v := NewValidator(cfg, logger)
+	// --- END REVERTED ---
 	ctx := context.Background()
 
 	err := v.Initialize(ctx)
 
 	require.Error(t, err, "Initialize should fail when schema file content is invalid JSON.")
-	assert.False(t, v.IsInitialized(), "Validator should not be marked as initialized.") // Error occurred at line 157
+	assert.False(t, v.IsInitialized(), "Validator should not be marked as initialized.") // Error occurred at line 159
 
 	var validationErr *ValidationError
 	require.True(t, errors.As(err, &validationErr), "Error should be of type *ValidationError.")
@@ -236,9 +235,9 @@ func TestValidator_Initialize_SucceedsWithFallback_When_SchemaFileNotFound(t *te
 	logger := logging.GetNoopLogger()
 	nonExistentPath := "/non/existent/path/schema.json"
 	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + nonExistentPath}
-	// --- FIX: Declare v as the interface type ---
-	var v mcptypes.ValidatorInterface = NewValidator(cfg, logger)
-	// --- END FIX ---
+	// --- REVERTED: Declare v simply ---
+	v := NewValidator(cfg, logger)
+	// --- END REVERTED ---
 	ctx := context.Background()
 
 	// Assuming embedded schema exists and is valid.
@@ -249,7 +248,7 @@ func TestValidator_Initialize_SucceedsWithFallback_When_SchemaFileNotFound(t *te
 	// NOTE: With the current loader logic, if the override fails, it falls back
 	// to embedded. So, Initialize *should succeed* if the embedded schema is present.
 	require.NoError(t, err, "Initialize should SUCCEED by falling back to embedded schema when override file is not found.")
-	assert.True(t, v.IsInitialized(), "Validator should be marked as initialized via fallback.") // Error occurred at line 191
+	assert.True(t, v.IsInitialized(), "Validator should be marked as initialized via fallback.") // Error occurred at line 193
 	t.Logf("Initialize correctly fell back to embedded schema when override file '%s' was not found.", nonExistentPath)
 }
 
@@ -368,9 +367,9 @@ func TestValidator_Validate_Fails_When_ValidatorNotInitialized(t *testing.T) {
 	t.Log("Testing Validate Failure: Calling Validate before Initialize.")
 	logger := logging.GetNoopLogger()
 	cfg := config.SchemaConfig{SchemaOverrideURI: ""} // Config doesn't matter here.
-	// --- FIX: Declare validator as the interface type ---
-	var validator mcptypes.ValidatorInterface = NewValidator(cfg, logger)
-	// --- END FIX ---
+	// --- REVERTED: Declare validator simply ---
+	validator := NewValidator(cfg, logger)
+	// --- END REVERTED ---
 	// Not initialized.
 	ctx := context.Background()
 
