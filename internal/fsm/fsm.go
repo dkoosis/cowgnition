@@ -138,8 +138,6 @@ func (l *loopFSM) Build() error {
 		if !exists {
 			desc = lfsm.EventDesc{Name: eventName, Dst: toStateStr}
 		} else if desc.Dst != toStateStr {
-			// Allow multiple 'From' states for the same event->destination pair,.
-			// but disallow the same event going to different destinations.
 			err := errors.Newf("conflicting destinations ('%s' and '%s') for the same event ('%s'). Define separate events or use guards.", desc.Dst, toStateStr, eventName)
 			l.logger.Error("Invalid FSM configuration.", "error", err)
 			l.buildErr = err
@@ -148,36 +146,24 @@ func (l *loopFSM) Build() error {
 		desc.Src = append(desc.Src, fromStatesStr...)
 		l.eventDescMap[eventName] = desc
 
-		// Register callbacks only once per unique event/state combination if needed,.
-		// or structure based on looplab's callback registration logic.
-		// Here, we register based on event name for 'before' and target state for 'enter'.
 		if _, alreadyProcessed := processedEvents[t.Event]; !alreadyProcessed {
-			// Register 'before' callback (guard) if defined for this event.
 			if t.Condition != nil {
 				callbackName := "before_" + eventName
 				if _, cbExists := l.callbackMap[callbackName]; cbExists {
-					// This should ideally not happen if event names are unique triggers to destinations,.
-					// but log a warning if overwritten.
 					l.logger.Warn("Overwriting existing 'before' callback (guard).", "event", eventName)
 				}
-				l.callbackMap[callbackName] = l.createGuardCallback(t) // Pass the specific transition t.
+				l.callbackMap[callbackName] = l.createGuardCallback(t)
 			}
-			processedEvents[t.Event] = struct{}{} // Mark event as having its 'before' callback set up.
+			processedEvents[t.Event] = struct{}{}
 		}
 
-		// Register 'enter' state callback (action) if defined.
-		// This attaches the action to entering the 'To' state.
-		// If multiple transitions lead to the same 'To' state, actions might need.
-		// internal logic to know which event triggered them if behaviour differs.
-		// Our current createActionCallback uses the transition index to differentiate.
 		if t.Action != nil {
 			enterCallbackName := "enter_" + toStateStr
-			originalEnterCallback := l.callbackMap[enterCallbackName] // Get potential existing callback for this state.
+			originalEnterCallback := l.callbackMap[enterCallbackName]
 			l.callbackMap[enterCallbackName] = l.createActionCallback(i, originalEnterCallback)
 		}
 	}
 
-	// Finalize Event Descriptions (deduplicate source states).
 	finalEvents := make([]lfsm.EventDesc, 0, len(l.eventDescMap))
 	for _, desc := range l.eventDescMap {
 		uniqueSrc := make(map[string]struct{})
@@ -193,7 +179,6 @@ func (l *loopFSM) Build() error {
 		finalEvents = append(finalEvents, desc)
 	}
 
-	// Create the underlying FSM instance.
 	l.fsm = lfsm.NewFSM(string(l.initialState), finalEvents, l.callbackMap)
 	l.logger.Info("FSM instance built successfully.")
 	return nil
@@ -201,15 +186,11 @@ func (l *loopFSM) Build() error {
 
 // createGuardCallback creates a looplab/fsm callback function for a guard condition.
 func (l *loopFSM) createGuardCallback(t Transition) lfsm.Callback {
-	// This callback runs *before* the event happens.
 	return func(ctx context.Context, e *lfsm.Event) {
-		// Check if the event name matches the transition this callback is for.
-		// NOTE: This check might be redundant if looplab calls the correct 'before_event'.
 		if e.Event != string(t.Event) {
 			return
 		}
 
-		// Check if the source state matches one of the 'From' states for this transition.
 		isRelevantSource := false
 		for _, srcState := range t.From {
 			if e.Src == string(srcState) {
@@ -223,17 +204,14 @@ func (l *loopFSM) createGuardCallback(t Transition) lfsm.Callback {
 			return
 		}
 
-		// Extract data passed to Transition() method.
 		var eventData interface{}
 		if len(e.Args) > 0 {
 			eventData = e.Args[0]
 		}
 
-		// Execute the actual guard condition function.
 		l.logger.Debug("Checking guard condition.", "event", t.Event, "from", e.Src, "to", t.To)
 		if !t.Condition(ctx, t.Event, eventData) {
 			l.logger.Debug("Guard condition failed, cancelling transition.", "event", t.Event, "from", e.Src)
-			// Cancel the transition with a specific error.
 			e.Cancel(errors.Newf("guard condition for event '%s' from state '%s' failed", t.Event, e.Src))
 		} else {
 			l.logger.Debug("Guard condition passed.", "event", t.Event, "from", e.Src)
@@ -242,25 +220,19 @@ func (l *loopFSM) createGuardCallback(t Transition) lfsm.Callback {
 }
 
 // createActionCallback creates a looplab/fsm callback function for a transition action.
-// It chains actions if multiple transitions enter the same state.
 func (l *loopFSM) createActionCallback(transitionIndex int, nextCallback lfsm.Callback) lfsm.Callback {
-	// This callback runs *after* the transition is complete, upon entering the new state.
 	return func(ctx context.Context, e *lfsm.Event) {
 		var matchedTransition *Transition
-		l.mu.RLock() // Lock for reading transitions slice.
-		// Find the specific transition definition that caused entry into this state.
-		// This requires matching the event and source state.
+		l.mu.RLock()
 		for i := range l.transitions {
-			// Check if this is the transition this specific callback was created for.
 			if i == transitionIndex {
 				isRelevantSource := false
 				for _, fromState := range l.transitions[i].From {
-					if string(fromState) == e.Src { // Compare event source with transition's source states.
+					if string(fromState) == e.Src {
 						isRelevantSource = true
 						break
 					}
 				}
-				// Ensure the event name and destination state also match the event that just occurred.
 				if string(l.transitions[i].Event) == e.Event && isRelevantSource && string(l.transitions[i].To) == e.Dst {
 					matchedTransition = &l.transitions[i]
 					break
@@ -269,7 +241,6 @@ func (l *loopFSM) createActionCallback(transitionIndex int, nextCallback lfsm.Ca
 		}
 		l.mu.RUnlock()
 
-		// Execute the action if found and defined.
 		if matchedTransition != nil && matchedTransition.Action != nil {
 			var eventData interface{}
 			if len(e.Args) > 0 {
@@ -278,19 +249,15 @@ func (l *loopFSM) createActionCallback(transitionIndex int, nextCallback lfsm.Ca
 			l.logger.Debug("Executing transition action.", "event", matchedTransition.Event, "to_state", matchedTransition.To, "from_state", e.Src)
 			err := matchedTransition.Action(ctx, matchedTransition.Event, eventData)
 			if err != nil {
-				// Log action errors but don't cancel the state transition (it already happened).
 				l.logger.Error("Error executing transition action.", "event", matchedTransition.Event, "to_state", matchedTransition.To, "error", err)
 			}
 		} else if matchedTransition != nil && matchedTransition.Action == nil {
 			l.logger.Debug("Entered state via transition with no action.", "event", e.Event, "from_state", e.Src, "to_state", e.Dst)
 		} else {
-			// This might happen if multiple transitions enter the same state, and this callback.
-			// instance wasn't the one matching the specific triggering transition index.
 			l.logger.Debug("Entered state, but triggering transition did not match this specific action callback's index.",
 				"event", e.Event, "from_state", e.Src, "to_state", e.Dst, "transitionIndexChecked", transitionIndex)
 		}
 
-		// Call the next chained callback if one exists (for other transitions entering this state).
 		if nextCallback != nil {
 			l.logger.Debug("Calling next chained action callback for state.", "state", e.Dst)
 			nextCallback(ctx, e)
@@ -326,7 +293,7 @@ func (l *loopFSM) Transition(ctx context.Context, event Event, data interface{})
 	if l.fsm == nil {
 		l.mu.RUnlock()
 		l.logger.Error("Transition() called before Build() or after build error.")
-		return l.buildErr // Return potential build error.
+		return l.buildErr
 	}
 	fsmInstance := l.fsm
 	currentState := State(fsmInstance.Current())
@@ -341,11 +308,34 @@ func (l *loopFSM) Transition(ctx context.Context, event Event, data interface{})
 		args = append(args, data)
 	}
 
-	// Call the underlying library's Event method.
 	err = fsmInstance.Event(ctx, string(event), args...)
 
+	// <<<--- DIAGNOSTIC LOGGING (Corrected - Removed type assertion) --- >>>
 	if err != nil {
-		// Check for specific error types from looplab/fsm and handle accordingly
+		errorType := "nil"
+		if err != nil {
+			errorType = reflect.TypeOf(err).String()
+		}
+		isNoTransitionErr := false
+		if err != nil {
+			var noTransitionZero lfsm.NoTransitionError
+			// Check using errors.As first, as it handles wrapping
+			if errors.As(err, &noTransitionZero) {
+				isNoTransitionErr = true
+			}
+			// REMOVED the fallback direct type assertion that caused lint error
+		}
+		l.logger.Debug(">>> FSM WRAPPER: looplab/fsm returned error",
+			"event", event,
+			"state", currentState,
+			"error_type", errorType,
+			"error_string", err.Error(),
+			"is_NoTransitionError", isNoTransitionErr, // Log result of errors.As check
+		)
+	}
+	// <<<--- END DIAGNOSTIC LOGGING --- >>>
+
+	if err != nil {
 		var canceledErrVal lfsm.CanceledError
 		isCanceledVal := errors.As(err, &canceledErrVal)
 
@@ -364,7 +354,6 @@ func (l *loopFSM) Transition(ctx context.Context, event Event, data interface{})
 		return err
 	}
 
-	// Log success if no error occurred.
 	newState := State(fsmInstance.Current())
 	l.logger.Debug("Transition successful.", "event", event, "old_state", currentState, "new_state", newState)
 	return nil
@@ -376,7 +365,7 @@ func (l *loopFSM) SetState(state State) error {
 	defer l.mu.Unlock()
 	if l.fsm == nil {
 		l.logger.Error("SetState() called before Build() or after build error.")
-		return l.buildErr // Return potential build error.
+		return l.buildErr
 	}
 	l.logger.Warn("Manually setting FSM state.", "target_state", state)
 	l.fsm.SetState(string(state))
