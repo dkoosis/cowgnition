@@ -22,6 +22,7 @@ import (
 	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"
 	"github.com/dkoosis/cowgnition/internal/rtm"
 	"github.com/dkoosis/cowgnition/internal/schema"
+	"github.com/dkoosis/cowgnition/internal/transport"
 )
 
 // RunServer starts the MCP server with the specified transport type.
@@ -91,15 +92,21 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	}
 
 	// Register Core MCP Routes.
+	logger.Debug(">>> Runner: About to register core routes...") // <<< ADDED LOG
 	if err := registerCoreRoutes(server); err != nil {
 		logger.Error("❌ Failed to register core MCP routes.", "error", err)
 		return err
 	}
+	logger.Debug(">>> Runner: Finished registering core routes.") // <<< ADDED LOG
 
 	// Start Server Transport.
+	logger.Debug(">>> Runner: About to start server transport...") // <<< ADDED LOG
 	if err := startServerTransport(ctx, transportType, cfg, server, cancel, logger); err != nil {
-		return err // Error already logged.
+		// <<< ADDED LOGGING FOR ERROR CASE >>>
+		logger.Error(">>> Runner: startServerTransport returned an error.", "error", err)
+		return err // Error already logged within startServerTransport potentially.
 	}
+	logger.Debug(">>> Runner: startServerTransport finished.") // <<< ADDED LOG
 
 	logger.Info("✅ Server startup complete and ready to process requests.",
 		"startup_time_ms", time.Since(startTime).Milliseconds())
@@ -118,8 +125,10 @@ func registerCoreRoutes(server *mcp.Server) error {
 		return errors.New("cannot register core routes: server router is nil")
 	}
 	logger := server.GetLogger().WithField("subcomponent", "core_routes")
+	logger.Debug(">>> registerCoreRoutes: Starting...") // <<< ADDED LOG
 
 	// --- Ping ---.
+	logger.Debug(">>> registerCoreRoutes: Registering 'ping'...") // <<< ADDED LOG
 	err := coreRouter.AddRoute(router.Route{
 		Method: "ping",
 		Handler: func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
@@ -132,6 +141,7 @@ func registerCoreRoutes(server *mcp.Server) error {
 	}
 
 	// --- Initialize ---.
+	logger.Debug(">>> registerCoreRoutes: Registering 'initialize'...") // <<< ADDED LOG
 	err = coreRouter.AddRoute(router.Route{
 		Method: "initialize",
 		Handler: func(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
@@ -174,6 +184,7 @@ func registerCoreRoutes(server *mcp.Server) error {
 	}
 
 	// --- Shutdown ---.
+	logger.Debug(">>> registerCoreRoutes: Registering 'shutdown'...") // <<< ADDED LOG
 	err = coreRouter.AddRoute(router.Route{
 		Method: "shutdown",
 		Handler: func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
@@ -187,6 +198,7 @@ func registerCoreRoutes(server *mcp.Server) error {
 	}
 
 	// --- Exit ---.
+	logger.Debug(">>> registerCoreRoutes: Registering 'exit'...") // <<< ADDED LOG
 	err = coreRouter.AddRoute(router.Route{
 		Method: "exit",
 		NotificationHandler: func(_ context.Context, _ json.RawMessage) error {
@@ -200,6 +212,7 @@ func registerCoreRoutes(server *mcp.Server) error {
 	}
 
 	// --- notifications/initialized ---.
+	logger.Debug(">>> registerCoreRoutes: Registering 'notifications/initialized'...") // <<< ADDED LOG
 	err = coreRouter.AddRoute(router.Route{
 		Method: "notifications/initialized",
 		NotificationHandler: func(_ context.Context, params json.RawMessage) error {
@@ -219,6 +232,7 @@ func registerCoreRoutes(server *mcp.Server) error {
 	}
 
 	// --- $/cancelRequest ---.
+	logger.Debug(">>> registerCoreRoutes: Registering '$/cancelRequest'...") // <<< ADDED LOG
 	err = coreRouter.AddRoute(router.Route{
 		Method: "$/cancelRequest",
 		NotificationHandler: func(_ context.Context, params json.RawMessage) error {
@@ -239,6 +253,7 @@ func registerCoreRoutes(server *mcp.Server) error {
 	}
 
 	// --- tools/list ---.
+	logger.Debug(">>> registerCoreRoutes: Registering 'tools/list'...") // <<< ADDED LOG
 	err = coreRouter.AddRoute(router.Route{
 		Method: "tools/list",
 		Handler: func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) { // FIX: Renamed params to _
@@ -273,6 +288,7 @@ func registerCoreRoutes(server *mcp.Server) error {
 	}
 
 	// --- resources/list ---.
+	logger.Debug(">>> registerCoreRoutes: Registering 'resources/list'...") // <<< ADDED LOG
 	err = coreRouter.AddRoute(router.Route{
 		Method: "resources/list",
 		Handler: func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) { // FIX: Renamed params to _
@@ -318,6 +334,7 @@ func registerCoreRoutes(server *mcp.Server) error {
 	}
 
 	// --- resources/read ---.
+	logger.Debug(">>> registerCoreRoutes: Registering 'resources/read'...") // <<< ADDED LOG
 	err = coreRouter.AddRoute(router.Route{
 		Method: "resources/read",
 		Handler: func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
@@ -392,6 +409,7 @@ func registerCoreRoutes(server *mcp.Server) error {
 	}
 
 	logger.Info("✅ Core MCP routes registered.")
+	logger.Debug(">>> registerCoreRoutes: Finished.") // <<< ADDED LOG
 	return nil
 }
 
@@ -507,57 +525,83 @@ func initializeRTMService(ctx context.Context, cfg *config.Config, logger loggin
 
 // startServerTransport selects and starts the appropriate server transport.
 func startServerTransport(ctx context.Context, transportType string, cfg *config.Config, server *mcp.Server, cancel context.CancelFunc, logger logging.Logger) error {
+	logger.Debug(">>> startServerTransport: Entering function.", "transportType", transportType) // <<< ADDED LOG
 	switch transportType {
 	case "stdio":
 		logger.Info("📡 Starting server with stdio transport.",
 			"description", "Communication via standard input/output.")
+		logger.Debug(">>> startServerTransport: Launching runTransportLoop goroutine for stdio.") // <<< ADDED LOG
 		go runTransportLoop(ctx, cancel, logger, "stdio", func(innerCtx context.Context) error {
-			return server.ServeSTDIO(innerCtx)
+			logger.Debug(">>> startServerTransport (goroutine): Calling server.ServeSTDIO...") // <<< ADDED LOG
+			err := server.ServeSTDIO(innerCtx)
+			logger.Debug(">>> startServerTransport (goroutine): server.ServeSTDIO returned.", "error", err) // <<< ADDED LOG
+			return err
 		})
+		logger.Debug(">>> startServerTransport: Returning nil (stdio goroutine launched).") // <<< ADDED LOG
 		return nil
 	case "http":
 		addr := fmt.Sprintf(":%d", cfg.Server.Port)
 		logger.Info("📡 Starting server with HTTP transport.",
 			"address", addr,
 			"description", "Communication via HTTP protocol.")
+		logger.Debug(">>> startServerTransport: Launching runTransportLoop goroutine for http.") // <<< ADDED LOG
 		go runTransportLoop(ctx, cancel, logger, "http", func(innerCtx context.Context) error {
-			if err := server.ServeHTTP(innerCtx, addr); !errors.Is(err, errors.New("HTTP transport not implemented")) {
+			logger.Debug(">>> startServerTransport (goroutine): Calling server.ServeHTTP...") // <<< ADDED LOG
+			err := server.ServeHTTP(innerCtx, addr)
+			// <<< ADJUSTED LOGIC TO CHECK FOR SPECIFIC ERROR >>>
+			if err != nil && !errors.Is(err, errors.New("HTTP transport not implemented")) {
+				logger.Debug(">>> startServerTransport (goroutine): server.ServeHTTP returned error.", "error", err) // <<< ADDED LOG
 				return err
 			}
-			return nil
+			logger.Debug(">>> startServerTransport (goroutine): server.ServeHTTP finished (or not implemented).") // <<< ADDED LOG
+			return nil                                                                                            // Return nil if it's the "not implemented" error
 		})
+		logger.Debug(">>> startServerTransport: Returning nil (http goroutine launched).") // <<< ADDED LOG
 		return nil
 	default:
 		logger.Error("❌ Unsupported transport type.",
 			"transport", transportType,
 			"supported", "stdio, http",
 			"advice", "Use --transport stdio or --transport http.")
-		return errors.Newf("unsupported transport type: %s", transportType)
+		err := errors.Newf("unsupported transport type: %s", transportType)
+		logger.Debug(">>> startServerTransport: Returning error for unsupported type.", "error", err) // <<< ADDED LOG
+		return err
 	}
 }
 
 // runTransportLoop runs the server's serve function in a goroutine and handles its exit.
 func runTransportLoop(ctx context.Context, cancel context.CancelFunc, logger logging.Logger, transportName string, serveFunc func(context.Context) error) {
+	logger.Debug(">>> runTransportLoop: Goroutine started.", "transport", transportName) // <<< ADDED LOG
 	if err := serveFunc(ctx); err != nil {
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			logger.Error(fmt.Sprintf("❌ Server error (%s).", transportName), "error", fmt.Sprintf("%+v", err))
-		} else {
+		// Check if the error is context cancellation or deadline exceeded
+		isContextError := errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+		// Check if the error indicates the transport was closed (using transport helper)
+		isClosedError := transport.IsClosedError(err)
+
+		if isContextError || isClosedError {
 			logger.Info(fmt.Sprintf("🛑 Server stopped gracefully (%s).", transportName), "reason", err)
+		} else {
+			// Log other errors more prominently
+			logger.Error(fmt.Sprintf("❌ Server error (%s).", transportName), "error", fmt.Sprintf("%+v", err))
 		}
 	} else {
 		logger.Info(fmt.Sprintf("🛑 Server stopped normally (%s).", transportName))
 	}
-	cancel()
+	logger.Debug(">>> runTransportLoop: Calling cancel().", "transport", transportName)   // <<< ADDED LOG
+	cancel()                                                                              // Ensure context is canceled to potentially unblock main thread
+	logger.Debug(">>> runTransportLoop: Goroutine finished.", "transport", transportName) // <<< ADDED LOG
 }
 
 // waitForShutdownSignal blocks until a shutdown signal is received or the context is cancelled.
 func waitForShutdownSignal(ctx context.Context, sigChan <-chan os.Signal, logger logging.Logger) {
+	logger.Debug(">>> waitForShutdownSignal: Waiting for signal or context cancellation...") // <<< ADDED LOG
 	select {
 	case sig := <-sigChan:
 		logger.Info("⏹️ Received termination signal.", "signal", sig)
 	case <-ctx.Done():
 		logger.Info("⏹️ Context cancelled, initiating shutdown.", "reason", ctx.Err())
 	}
+	logger.Debug(">>> waitForShutdownSignal: Finished waiting.") // <<< ADDED LOG
 }
 
 // performGracefulShutdown handles the shutdown sequence for the server and validator.

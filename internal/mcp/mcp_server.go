@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"time"
+	"time" // Keep time import
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config"
@@ -215,8 +215,10 @@ func (s *Server) GetAllServices() []services.Service {
 
 // ServeSTDIO configures and starts the server using stdio transport.
 func (s *Server) ServeSTDIO(ctx context.Context) error {
+	s.logger.Debug(">>> ServeSTDIO: Entering function...") // <<< ADDED LOG
 	s.logger.Info("Starting server with stdio transport.")
 	s.transport = transport.NewNDJSONTransport(os.Stdin, os.Stdout, os.Stdin, s.logger) // Stdin used as closer.
+	s.logger.Debug(">>> ServeSTDIO: NDJSONTransport created.")                          // <<< ADDED LOG
 
 	// Set up validation middleware
 	validationOpts := middleware.DefaultValidationOptions()
@@ -236,13 +238,16 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 		"exit": true, // Skip schema validation for exit notification.
 	}
 
+	s.logger.Debug(">>> ServeSTDIO: Creating validation middleware...") // <<< ADDED LOG
 	validationMiddleware := middleware.NewValidationMiddleware(
 		s.validator,
 		validationOpts,
 		s.logger.WithField("subcomponent", "validation_mw"),
 	)
+	s.logger.Debug(">>> ServeSTDIO: Validation middleware created.") // <<< ADDED LOG
 
 	// Set up middleware chain
+	s.logger.Debug(">>> ServeSTDIO: Creating middleware chain...") // <<< ADDED LOG
 	chain := middleware.NewChain(s.handleMessageWithFSM)
 	chain.Use(validationMiddleware)
 
@@ -253,9 +258,13 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 	}
 
 	serveHandler := chain.Handler()
+	s.logger.Debug(">>> ServeSTDIO: Middleware chain handler finalized.") // <<< ADDED LOG
 
 	// Run processing loop
-	return s.serverProcessing(ctx, serveHandler)
+	s.logger.Debug(">>> ServeSTDIO: Calling serverProcessing...") // <<< ADDED LOG
+	err := s.serverProcessing(ctx, serveHandler)
+	s.logger.Debug(">>> ServeSTDIO: serverProcessing returned.", "error", err) // <<< ADDED LOG
+	return err
 }
 
 // createLoggingMiddleware creates a middleware that logs incoming and outgoing messages.
@@ -264,7 +273,7 @@ func createLoggingMiddleware(logger logging.Logger) mcptypes.MiddlewareFunc {
 
 	return func(next mcptypes.MessageHandler) mcptypes.MessageHandler {
 		return func(ctx context.Context, message []byte) ([]byte, error) {
-			// Log incoming message (truncate if too large)
+			// Log incoming message (truncate if too large).
 			maxLogSize := 1024
 			msgPreview := string(message)
 			if len(msgPreview) > maxLogSize {
@@ -272,12 +281,12 @@ func createLoggingMiddleware(logger logging.Logger) mcptypes.MiddlewareFunc {
 			}
 			middlewareLogger.Debug("Incoming message", "message", msgPreview)
 
-			// Call next handler
+			// Call next handler.
 			start := time.Now()
 			result, err := next(ctx, message)
 			duration := time.Since(start)
 
-			// Log result or error
+			// Log result or error.
 			if err != nil {
 				middlewareLogger.Debug("Handler error",
 					"error", err,
@@ -362,8 +371,9 @@ func (s *Server) Shutdown(_ context.Context) error {
 // handleMessageWithFSM is the core message processing function called after middleware.
 // It uses the FSM for state validation and the Router for dispatching.
 // REFACTORED: Incorporates FSM transition and Router dispatch.
+// CORRECTED: Properly handles fsm.NoTransitionError.
 func (s *Server) handleMessageWithFSM(ctx context.Context, msgBytes []byte) ([]byte, error) {
-	s.logger.Warn(">>> DEBUG: ENTERING handleMessageWithFSM", "messagePreview", string(msgBytes[:minInt(len(msgBytes), 60)]))
+	s.logger.Debug(">>> DEBUG: ENTERING handleMessageWithFSM", "messagePreview", string(msgBytes[:minInt(len(msgBytes), 60)]))
 	// 1. Parse basic structure to get method and ID.
 	var request struct {
 		JSONRPC string          `json:"jsonrpc"`
@@ -371,13 +381,11 @@ func (s *Server) handleMessageWithFSM(ctx context.Context, msgBytes []byte) ([]b
 		Method  string          `json:"method"`
 		Params  json.RawMessage `json:"params,omitempty"`
 	}
-	// Validation middleware should ensure msgBytes is valid JSON.
 	if err := json.Unmarshal(msgBytes, &request); err != nil {
 		s.logger.Error("Internal Error: Failed to unmarshal validated message in core handler.",
 			"error", err, "preview", string(msgBytes[:minInt(len(msgBytes), 100)]))
-		// Can't reliably get ID if unmarshal failed. Create generic internal error response.
-		errRespBytes, _ := s.createErrorResponse(nil, errors.Wrap(err, "internal parse error"), json.RawMessage("null")) // ID is null here
-		return errRespBytes, nil                                                                                         // Return error response bytes.
+		errRespBytes, _ := s.createErrorResponse(nil, errors.Wrap(err, "internal parse error"), json.RawMessage("null"))
+		return errRespBytes, nil
 	}
 
 	isNotification := (request.ID == nil || string(request.ID) == "null")
@@ -386,12 +394,10 @@ func (s *Server) handleMessageWithFSM(ctx context.Context, msgBytes []byte) ([]b
 
 	// 2. Determine FSM Event corresponding to the MCP method.
 	event := state.EventForMethod(request.Method)
-	if event == "" { // Not a specific lifecycle method.
-		// Check current state BEFORE deciding generic event type.
+	if event == "" {
 		currentState := s.fsm.CurrentState()
-		logFields = append(logFields, "state", currentState) // Add current state to logs.
+		logFields = append(logFields, "state", currentState)
 		if currentState == state.StateInitialized {
-			// Treat as generic request/notification IF in initialized state.
 			if isNotification {
 				event = state.EventMCPNotification
 			} else {
@@ -400,79 +406,72 @@ func (s *Server) handleMessageWithFSM(ctx context.Context, msgBytes []byte) ([]b
 			logFields = append(logFields, "mappedEvent", event)
 			s.logger.Debug("Mapping to generic FSM event.", logFields...)
 		} else {
-			// If not initialized, any non-lifecycle method is a sequence error.
-			// Triggering with a generic event will let the FSM return the appropriate error.
-			event = state.EventMCPRequest // Triggering with this will fail if not in Initialized state.
+			event = state.EventMCPRequest
 			logFields = append(logFields, "mappedEvent", event, "note", "Expecting FSM sequence error")
 			s.logger.Warn("Received non-lifecycle method in non-initialized state.", logFields...)
 		}
 	} else {
-		logFields = append(logFields, "mappedEvent", event) // Log the specific lifecycle event found.
+		logFields = append(logFields, "mappedEvent", event)
 	}
 
 	// 3. Attempt FSM Transition - This is now the primary sequence validation.
-	transitionErr := s.fsm.Transition(ctx, event, msgBytes) // Pass msgBytes as data if needed by actions/guards.
+	transitionErr := s.fsm.Transition(ctx, event, msgBytes)
 
-	// *** ADDED DIAGNOSTIC LOGGING ***
+	// *** CORRECTED ERROR HANDLING LOGIC ***
 	if transitionErr != nil {
-		// Check if the error is one of the specific FSM error types using errors.As
 		var noTransitionErr lfsm.NoTransitionError
-		var canceledErr lfsm.CanceledError
-
-		isNoTransition := errors.As(transitionErr, &noTransitionErr)
-		isCanceled := errors.As(transitionErr, &canceledErr)
-
-		s.logger.Error(">>> DEBUG: FSM transition returned error",
-			"event", event,
-			"currentState", s.fsm.CurrentState(), // State *after* failed attempt (should be unchanged)
-			"errorType", fmt.Sprintf("%T", transitionErr),
-			"errorValue", transitionErr,
-			"errorIsNoTransition", isNoTransition, // Log the result of the check
-			"errorIsCanceled", isCanceled, // Log the result of the check
-		)
-	}
-	// *** END DIAGNOSTIC LOGGING ***
-
-	if transitionErr != nil {
-		// Log the FSM error and map it to a JSON-RPC error response.
-		s.logger.Warn("FSM transition failed.", append(logFields, "error", transitionErr)...)
-		// createErrorResponse should handle mapping FSM errors (NoTransitionError, CanceledError etc.).
-		// to appropriate JSON-RPC codes (e.g., InvalidRequest -32600 for sequence errors).
-		errRespBytes, creationErr := s.createErrorResponse(request.ID, transitionErr, request.ID)
-		if creationErr != nil {
-			return nil, creationErr // Propagate critical error creating the response.
+		// Check if the error is specifically NoTransitionError
+		if errors.As(transitionErr, &noTransitionErr) {
+			// This is expected for self-transitions (e.g., ping in initialized state).
+			// Log it as debug but DO NOT treat it as a fatal error for response generation.
+			s.logger.Debug("FSM NoTransitionError encountered (expected for self-transitions).", append(logFields, "error", transitionErr)...)
+			// IMPORTANT: Do *not* return an error response here. Proceed to routing.
+		} else {
+			// It's a different, *actual* FSM transition error (InvalidEvent, Canceled, etc.)
+			s.logger.Warn("FSM transition failed.", append(logFields, "error", transitionErr)...)
+			// Generate and return the appropriate JSON-RPC error response.
+			errRespBytes, creationErr := s.createErrorResponse(msgBytes, transitionErr, request.ID) // Pass msgBytes here
+			if creationErr != nil {
+				return nil, creationErr // Propagate critical error creating the response.
+			}
+			return errRespBytes, nil // Return the formatted JSON-RPC error bytes.
 		}
-		return errRespBytes, nil // Return the formatted JSON-RPC error bytes.
+	} else {
+		// Log successful transition and new state if no error occurred.
+		newState := s.fsm.CurrentState()
+		logFields = append(logFields, "newState", newState)
+		s.logger.Debug("FSM transition successful.", logFields...)
 	}
-	// Log successful transition and new state.
-	newState := s.fsm.CurrentState()
-	logFields = append(logFields, "newState", newState)
-	s.logger.Debug("FSM transition successful.", logFields...)
+	// *** END CORRECTED ERROR HANDLING LOGIC ***
 
-	// --- Handle special states after successful transition ---.
-	// If the state is now terminal (Shutdown), stop processing.
+	// --- Handle special states after successful transition (or NoTransitionError) ---.
+	newState := s.fsm.CurrentState() // Check state *after* transition attempt
 	if newState == state.StateShutdown {
-		// This typically happens on 'exit' notification.
 		s.logger.Info("FSM reached terminal state (Shutdown), stopping processing for this message.")
-		// The serverProcessing loop should detect this state and terminate the connection.
-		return nil, nil // No response for the message that triggered shutdown state.
+		return nil, nil
 	}
-	// If state is ShuttingDown (due to 'shutdown' request), process the request via router to send null response.
 	// --- End handle special states ---.
 
-	// 4. Route to Handler via Router (if FSM transition succeeded and state is not terminal).
+	// 4. Route to Handler via Router (Only if transition didn't fail with a *real* error).
 	s.logger.Debug("Dispatching to router.", logFields...)
 	resultBytes, handlerErr := s.router.Route(ctx, request.Method, request.Params, isNotification)
+
+	// +++ Keep Debug Logging +++
+	if request.Method == "ping" && !isNotification {
+		s.logger.Debug(">>> DEBUG: Post-router call for 'ping'",
+			"resultBytesFromRouter", string(resultBytes),
+			"handlerError", handlerErr)
+	}
+	// +++ End Debug Logging +++
 
 	// 5. Handle Router/Handler Errors.
 	if handlerErr != nil {
 		s.logger.Warn("Error returned from router/handler.", append(logFields, "error", fmt.Sprintf("%+v", handlerErr))...)
-		// Map handler error to JSON-RPC error response.
-		errRespBytes, creationErr := s.createErrorResponse(request.ID, handlerErr, request.ID) // Use original request ID.
+		errRespBytes, creationErr := s.createErrorResponse(msgBytes, handlerErr, request.ID)
 		if creationErr != nil {
-			return nil, creationErr // Failed to create error response.
+			return nil, creationErr
 		}
-		return errRespBytes, nil // Return formatted error bytes.
+		return errRespBytes, nil
 	}
 
 	// 6. Handle Successful Notifications (No Response).
@@ -486,7 +485,6 @@ func (s *Server) handleMessageWithFSM(ctx context.Context, msgBytes []byte) ([]b
 
 	// 7. Format Successful Response for Requests.
 	if resultBytes == nil {
-		// If handler returns nil bytes for a request, use JSON null as the result.
 		s.logger.Debug("Handler returned nil result bytes for request, using JSON null.", logFields...)
 		resultBytes = json.RawMessage("null")
 	}
@@ -497,15 +495,23 @@ func (s *Server) handleMessageWithFSM(ctx context.Context, msgBytes []byte) ([]b
 		Result  json.RawMessage `json:"result"`
 	}{
 		JSONRPC: "2.0",
-		ID:      request.ID, // Use the original request ID.
+		ID:      request.ID,
 		Result:  resultBytes,
 	}
+
+	// +++ Keep Debug Logging +++
+	if request.Method == "ping" {
+		marshalledResponseObjForLog, _ := json.Marshal(responseObj)
+		s.logger.Debug(">>> DEBUG: Preparing to marshal 'ping' response",
+			"responseObject", string(marshalledResponseObjForLog),
+			"resultFieldContent", string(responseObj.Result))
+	}
+	// +++ End Debug Logging +++
 
 	respBytes, marshalErr := json.Marshal(responseObj)
 	if marshalErr != nil {
 		s.logger.Error("Internal error: Failed to marshal successful response.", append(logFields, "error", marshalErr)...)
-		// If marshalling fails, create and return an internal error response.
-		errRespBytes, _ := s.createErrorResponse(request.ID, errors.Wrap(marshalErr, "internal error: failed to marshal success response"), request.ID)
+		errRespBytes, _ := s.createErrorResponse(nil, errors.Wrap(marshalErr, "internal error: failed to marshal success response"), request.ID)
 		return errRespBytes, nil
 	}
 
