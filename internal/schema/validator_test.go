@@ -65,29 +65,36 @@ const invalidJSONSyntaxMessage = `{"jsonrpc": "2.0", "method": "ping"` // Missin
 
 // --- Helper Function to Get Schema Path ---.
 // Attempts to find the schema relative to the test file. Adjust if needed.
+// file: internal/schema/validator_test.go
+
+// Modify the getFullSchemaPath function to look for the schema.json file in the current directory.
 func getFullSchemaPath(t *testing.T) string {
 	t.Helper()
-	// Assumes schema.json is in the 'internal/schema' directory relative to project root.
-	path := "../schema/schema.json" // Path relative to the test file's new location conceptually.
+	// First look directly in the schema package directory
+	path := "schema.json" // Look in the current directory first
 
-	// ---> ADD LOGGING <---
+	// Log for debugging
 	cwd, _ := os.Getwd()
-	t.Logf("Attempting to find schema. CWD: %s, Relative Path: %s", cwd, path)
-	// ---> END LOGGING <---
+	t.Logf("Attempting to find schema. CWD: %s, Looking for schema at: %s", cwd, path)
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		t.Fatalf("Could not find schema.json at expected path '%s'. CWD: %s.", path, getwd(t))
+		// Fall back to the original relative path
+		path = "../schema/schema.json"
+		t.Logf("Schema not found in current directory, trying: %s", path)
+
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			t.Fatalf("Could not find schema.json in either current directory or at %s. CWD: %s", path, cwd)
+		}
 	}
 
 	absPath, err := filepath.Abs(path)
 	require.NoError(t, err, "Failed to get absolute path for schema.json.")
 
-	// ---> ADD LOGGING <---
 	t.Logf("Resolved absolute path: %s", absPath)
-	// ---> END LOGGING <---
 	return absPath
 }
 
+/*
 func getwd(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()
@@ -97,7 +104,7 @@ func getwd(t *testing.T) string {
 	}
 	return wd
 }
-
+*/
 // --- Test Setup Helper ---
 // setupTestValidator creates and initializes a validator using the embedded schema for testing.
 // Returns mcptypes.ValidatorInterface to match usage in tests.

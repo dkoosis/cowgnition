@@ -133,17 +133,16 @@ func NewValidator(cfg config.SchemaConfig, logger logging.Logger) *Validator {
 // compiles the base schema and all its definitions, caches them, performs mapping verification,
 // and marks the validator as ready.
 // It returns an error if loading or compilation fails critically.
+// MODIFIED: Uses explicit lock management as proposed by user.
 func (v *Validator) Initialize(_ context.Context) error {
 	initStart := time.Now()
 	v.mu.Lock() // Lock for modifying validator state.
 
-	// --- START: Moved Unlock to earlier to prevent deadlock ---
-	// The lock is now released *before* VerifyMappingsAgainstSchema is called.
-	defer v.mu.Unlock()
-	// --- END: Moved Unlock ---
+	// Remove the defer v.mu.Unlock() to manage the lock explicitly
 
 	if v.initialized {
 		v.logger.Warn("Schema validator already initialized, skipping.")
+		v.mu.Unlock() // Release lock before returning
 		return nil
 	}
 	v.logger.Info("Initializing schema validator...")
@@ -159,7 +158,10 @@ func (v *Validator) Initialize(_ context.Context) error {
 	if v.schemaConfig.SchemaOverrideURI != "" {
 		v.logger.Info("SchemaOverrideURI is set, attempting to load external schema.", "uri", v.schemaConfig.SchemaOverrideURI)
 		// Pass background context to loader as Initialize context might be short-lived
+		// Need to unlock before potentially blocking call
+		v.mu.Unlock()
 		loadedData, loadErr := loadSchemaFromURI(context.Background(), v.schemaConfig.SchemaOverrideURI, v.logger, v.httpClient)
+		v.mu.Lock() // Re-acquire lock after call
 
 		if loadErr != nil {
 			// Check if the error is specifically a "not found" type.
@@ -177,7 +179,9 @@ func (v *Validator) Initialize(_ context.Context) error {
 				v.logger.Error("CRITICAL: Failed to load schema from configured SchemaOverrideURI. Initialization aborted.",
 					"uri", v.schemaConfig.SchemaOverrideURI, "error", fmt.Sprintf("%+v", loadErr))
 				// Wrap the specific load error.
-				return errors.Wrapf(loadErr, "failed to load schema from configured override URI '%s'", v.schemaConfig.SchemaOverrideURI)
+				errToReturn := errors.Wrapf(loadErr, "failed to load schema from configured override URI '%s'", v.schemaConfig.SchemaOverrideURI)
+				v.mu.Unlock() // Unlock before returning error
+				return errToReturn
 			}
 		} else {
 			// Override loaded successfully.
@@ -197,7 +201,9 @@ func (v *Validator) Initialize(_ context.Context) error {
 			// This is a critical build/embed issue.
 			err := errors.New("embedded schema content is empty and no valid override was loaded")
 			v.logger.Error("CRITICAL: Embedded schema is empty. Initialization aborted.", "error", err)
-			return NewValidationError(ErrSchemaLoadFailed, "Embedded schema content is empty", err)
+			errToReturn := NewValidationError(ErrSchemaLoadFailed, "Embedded schema content is empty", err)
+			v.mu.Unlock() // Unlock before returning error
+			return errToReturn
 		}
 		schemaData = embeddedSchemaContent
 		sourceInfo = "embedded"
@@ -209,7 +215,9 @@ func (v *Validator) Initialize(_ context.Context) error {
 	if len(schemaData) == 0 {
 		err := errors.New("schema data is unexpectedly empty after load/fallback logic")
 		v.logger.Error("Schema loading resulted in empty data. Initialization aborted.", "source", sourceInfo, "error", err)
-		return NewValidationError(ErrSchemaLoadFailed, "Loaded schema data is empty", err)
+		errToReturn := NewValidationError(ErrSchemaLoadFailed, "Loaded schema data is empty", err)
+		v.mu.Unlock() // Unlock before returning error
+		return errToReturn
 	}
 
 	v.logger.Info("Schema content prepared.",
@@ -224,8 +232,10 @@ func (v *Validator) Initialize(_ context.Context) error {
 	var parsedDoc map[string]interface{}
 	if err := json.Unmarshal(schemaData, &parsedDoc); err != nil {
 		v.logger.Error("Failed to parse loaded schema JSON.", "error", err, "source", sourceInfo)
-		return NewValidationError(ErrSchemaLoadFailed, "Failed to parse schema JSON", errors.Wrap(err, "json.Unmarshal failed")).
+		errToReturn := NewValidationError(ErrSchemaLoadFailed, "Failed to parse schema JSON", errors.Wrap(err, "json.Unmarshal failed")).
 			WithContext("source", sourceInfo)
+		v.mu.Unlock() // Unlock before returning error
+		return errToReturn
 	}
 
 	// Attempt to detect schema version from content.
@@ -250,23 +260,30 @@ func (v *Validator) Initialize(_ context.Context) error {
 			"resourceID", resourceID,
 			"source", sourceInfo,
 			"error", err)
-		return NewValidationError(
+		errToReturn := NewValidationError(
 			ErrSchemaLoadFailed,
 			"Failed to add schema resource",
 			errors.Wrap(err, "compiler.AddResource failed"),
 		).WithContext("source", sourceInfo).WithContext("schemaSize", len(schemaData))
+		v.mu.Unlock() // Unlock before returning error
+		return errToReturn
 	}
 	v.logger.Info("Schema resource added.", "duration", time.Since(addStart), "resourceID", resourceID)
 
 	// Compile the base schema and all definitions found within it.
 	compileStart := time.Now()
+	// Need to unlock before potentially long compile, re-lock after
+	v.mu.Unlock()
 	compiledSchemas, compileErr := v.compileAllDefinitions(resourceID, parsedDoc)
+	v.mu.Lock() // Re-acquire lock
 	v.lastCompileDuration = time.Since(compileStart)
 
 	if compileErr != nil {
 		// If compilation failed, initialization fails.
 		v.logger.Error("Schema compilation finished with errors. Initialization aborted.", "duration", v.lastCompileDuration, "firstError", compileErr)
-		return compileErr // Return the structured compilation error.
+		// compileErr is already structured
+		v.mu.Unlock() // Unlock before returning error
+		return compileErr
 	}
 
 	// Store compiled schemas and parsed doc, mark as initialized.
@@ -275,35 +292,30 @@ func (v *Validator) Initialize(_ context.Context) error {
 	v.initialized = true
 	initDuration := time.Since(initStart)
 
-	// --- RELEASE LOCK before logging/verification ---
-	// v.mu.Unlock() // <<< MOVED TO DEFER AT TOP <<<
+	// IMPORTANT: Release the lock before calling VerifyMappingsAgainstSchema
+	v.mu.Unlock() // <<< USER'S PROPOSED FIX LOCATION
 
-	// --- Log success and Verify mappings *after* releasing the write lock ---
+	// Log success and Verify mappings *after* releasing the write lock
 	v.logger.Info("✅ Schema validator initialized successfully.",
 		"totalDuration", initDuration.String(),
 		"loadDuration", v.lastLoadDuration.String(),
 		"compileDuration", v.lastCompileDuration.String(),
 		"schemaVersion", finalSchemaVersion,
-		"schemasCompiled", len(compiledSchemas), // Use local var before map is potentially cleared
+		"schemasCompiled", len(compiledSchemas),
 		"schemaSource", sourceInfo)
 
-	// --- START: Moved Verification Outside Lock ---
-	// This call now happens after the write lock is released.
-	// Verify mappings requires a read lock, which it acquires itself.
+	// Now verify mappings after the lock is released
+	// Note: VerifyMappingsAgainstSchema acquires its own read lock
 	unmappedSchemas := v.VerifyMappingsAgainstSchema()
 	if len(unmappedSchemas) > 0 {
 		v.logger.Warn("Detected schema definitions without corresponding entries in schemaMappings variable.",
 			"unmappedDefinitions", unmappedSchemas,
 			"action", "Update schemaMappings variable in internal/schema/validator.go")
 	}
-	// --- END: Moved Verification Outside Lock ---
 
 	return nil
 }
 
-// File: cowgnition/internal/schema/validator.go
-
-// --- BEGIN COMPLETE compileAllDefinitions FUNCTION (with detailed loop logging) ---
 // compileAllDefinitions compiles the base schema and all definitions found under the "definitions" key.
 // Returns the map of compiled schemas and the first compilation error encountered, if any.
 func (v *Validator) compileAllDefinitions(baseResourceID string, schemaDoc map[string]interface{}) (map[string]*jsonschema.Schema, error) {
@@ -364,14 +376,13 @@ func (v *Validator) compileAllDefinitions(baseResourceID string, schemaDoc map[s
 	}
 
 	// Add convenient aliases based on the package-level schemaMappings variable.
-	v.addGenericMappings(compiled) // Assuming this function is relatively fast
+	v.addGenericMappings(compiled)
 
 	// Return the map and the first error encountered (if any).
 	// The caller decides if this error is fatal.
 	return compiled, firstCompileError
 }
 
-// --- END COMPLETE compileAllDefinitions FUNCTION ---
 // addGenericMappings uses the package-level schemaMappings variable to create aliases
 // in the compiledSchemas map.
 func (v *Validator) addGenericMappings(compiledSchemas map[string]*jsonschema.Schema) {
@@ -702,9 +713,9 @@ func (v *Validator) getVersionFromInfoBlock(schemaDoc map[string]interface{}) st
 }
 
 // getVersionFromMCPHeuristics checks for MCP-specific date patterns in "$id" or "title".
-// Assumes MCP schema versions might be indicated by YYYY-MM-DD dates.
+// Assumes MCP schema versions might be indicated by<y_bin_46>-MM-DD dates.
 func (v *Validator) getVersionFromMCPHeuristics(schemaDoc map[string]interface{}) string {
-	// Regex to find YYYY-MM-DD pattern.
+	// Regex to find<y_bin_46>-MM-DD pattern.
 	idRegex := regexp.MustCompile(`(\d{4}-\d{2}-\d{2})`)
 
 	// Check $id field.
