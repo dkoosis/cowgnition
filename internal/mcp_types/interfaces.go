@@ -1,14 +1,9 @@
-// Package mcptypes defines shared types and interfaces for the MCP (Model Context Protocol)
-// server and middleware components. It acts as a neutral package that can be imported by
-// both mcp and middleware packages, preventing circular dependencies between them.
-// This file focuses solely on INTERFACE definitions needed by multiple MCP-related packages.
-// Core data STRUCTURES are defined in types.go within this package.
 // file: internal/mcp_types/interfaces.go
 package mcptypes
 
 import (
 	"context"
-	// Removed encoding/json as it's not needed for interfaces only.
+	"time"
 )
 
 // MessageHandler defines the function signature for processing a single MCP message.
@@ -68,7 +63,18 @@ type ValidatorInterface interface {
 	// IsInitialized returns true if the validator has successfully loaded and.
 	// compiled the necessary schema definitions.
 	IsInitialized() bool
+	// Initialize loads and compiles the schema from the configured source (override URI or embedded).
+	// This must be called successfully before Validate can be used.
+	Initialize(ctx context.Context) error
+	// GetLoadDuration returns the time taken during the last schema loading phase (reading from source).
+	GetLoadDuration() time.Duration
+	// GetCompileDuration returns the time taken during the last schema compilation phase.
+	GetCompileDuration() time.Duration
+	// GetSchemaVersion returns the detected version string of the loaded schema, if identifiable.
+	GetSchemaVersion() string
+	// Shutdown cleans up resources used by the validator, like closing idle HTTP connections.
+	Shutdown() error
+	// VerifyMappingsAgainstSchema checks the internal mappings against compiled schemas. <<< CORRECTED: Exported Method Name >>>
+	// Note: This is primarily for testing/internal verification, not core validation path.
+	VerifyMappingsAgainstSchema() []string // <<< CORRECTED: Exported Method Name >>>
 }
-
-// --- Type definitions like Tool, Resource, CallToolResult etc. have been REMOVED ---.
-// --- They now reside solely in internal/mcp_types/types.go ---.

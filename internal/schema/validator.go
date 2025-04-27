@@ -22,7 +22,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config"
 	"github.com/dkoosis/cowgnition/internal/logging"
-	"github.com/santhosh-tekuri/jsonschema/v5" // External library for JSON Schema validation.
+	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Import mcptypes package.
+	"github.com/santhosh-tekuri/jsonschema/v5"                  // External library for JSON Schema validation.
 )
 
 //go:embed schema.json
@@ -43,18 +44,18 @@ var schemaMappings = map[string][]string{
 	"notification": {"JSONRPCNotification", "Notification"},
 	// Specific requests (map method name to request schema definition)
 	"initialize":            {"InitializeRequest"},
-	"ping":                  {"PingRequest", "JSONRPCRequest"}, // Ping might use specific or generic request.
-	"shutdown":              {"JSONRPCRequest"},                // Simple request, often empty params.
+	"ping":                  {"PingRequest", "JSONRPCRequest"}, // Ping might use specific or generic request
+	"shutdown":              {"JSONRPCRequest"},                // Simple request, often empty params
 	"tools/list":            {"ListToolsRequest", "JSONRPCRequest"},
 	"tools/call":            {"CallToolRequest"},
 	"resources/list":        {"ListResourcesRequest", "JSONRPCRequest"},
 	"resources/read":        {"ReadResourceRequest"},
-	"resources/subscribe":   {"SubscribeRequest"},
-	"resources/unsubscribe": {"UnsubscribeRequest"},
+	"resources/subscribe":   {"SubscribeRequest"},   // Consistent naming
+	"resources/unsubscribe": {"UnsubscribeRequest"}, // Consistent naming
 	"prompts/list":          {"ListPromptsRequest", "JSONRPCRequest"},
 	"prompts/get":           {"GetPromptRequest"},
-	"logging/setLevel":      {"SetLevelRequest"},
-	"$/cancelRequest":       {"CancelledNotification"},
+	"logging/setLevel":      {"SetLevelRequest"},       // Consistent naming
+	"$/cancelRequest":       {"CancelledNotification"}, // Consistent naming
 
 	// Specific notifications (map method name to notification schema definition)
 	"exit":                                 {"JSONRPCNotification"}, // Simple notification
@@ -108,9 +109,9 @@ type ValidatorInterface interface {
 	// Shutdown cleans up resources used by the validator, like closing idle HTTP connections.
 	Shutdown() error
 	// --- NEW: Add verify method to interface ---
-	// verifyMappingsAgainstSchema checks the internal mappings against compiled schemas.
+	// VerifyMappingsAgainstSchema checks the internal mappings against compiled schemas. <<< CORRECTED: Exported Method Name >>>
 	// Note: This is primarily for testing/internal verification, not core validation path.
-	verifyMappingsAgainstSchema() []string
+	VerifyMappingsAgainstSchema() []string // <<< CORRECTED: Exported Method Name >>>
 }
 
 // Validator handles loading, compiling, and validating data against JSON schemas.
@@ -128,15 +129,16 @@ type Validator struct {
 	lastLoadDuration    time.Duration                 // Performance metric: time spent loading schema source.
 	lastCompileDuration time.Duration                 // Performance metric: time spent compiling schema definitions.
 	schemaVersion       string                        // Detected version string of the loaded schema.
+	validatorInterface  mcptypes.ValidatorInterface   // <<< ADDED: Store the interface
 }
 
-// Ensure Validator implements the interface.
-var _ ValidatorInterface = (*Validator)(nil)
+// Ensure Validator implements the mcptypes.ValidatorInterface.
+var _ mcptypes.ValidatorInterface = (*Validator)(nil) // <<< CORRECTED: Use mcptypes
 
 // NewValidator creates a new Validator instance.
 // It initializes the schema compiler and HTTP client based on the provided configuration and logger.
 // The validator is not ready for use until Initialize() is called successfully.
-func NewValidator(cfg config.SchemaConfig, logger logging.Logger) *Validator {
+func NewValidator(cfg config.SchemaConfig, logger logging.Logger) *Validator { // Return concrete type
 	if logger == nil {
 		logger = logging.GetNoopLogger() // Ensure logger is never nil.
 	}
@@ -147,7 +149,7 @@ func NewValidator(cfg config.SchemaConfig, logger logging.Logger) *Validator {
 	compiler.AssertFormat = true          // Enable format assertion (e.g., "date-time", "uri").
 	compiler.AssertContent = true         // Enable content assertion (e.g., "contentEncoding", "contentMediaType").
 
-	return &Validator{
+	v := &Validator{ // Assign to v first
 		schemaConfig: cfg,
 		compiler:     compiler,
 		schemas:      make(map[string]*jsonschema.Schema),     // Initialize map.
@@ -156,6 +158,8 @@ func NewValidator(cfg config.SchemaConfig, logger logging.Logger) *Validator {
 		logger:       logger.WithField("component", "schema_validator"),
 		initialized:  false, // Not initialized yet.
 	}
+	v.validatorInterface = v // Store self as the interface implementation.
+	return v
 }
 
 // Initialize loads the schema content from the configured source (URI override or embedded),
@@ -308,7 +312,8 @@ func (v *Validator) Initialize(ctx context.Context) error {
 		"schemaSource", sourceInfo)
 
 	// --- Verify mappings after initialization ---
-	unmappedSchemas := v.verifyMappingsAgainstSchema()
+	// <<< CORRECTED: Call VerifyMappingsAgainstSchema explicitly >>>
+	unmappedSchemas := v.VerifyMappingsAgainstSchema()
 	if len(unmappedSchemas) > 0 {
 		v.logger.Warn("Detected schema definitions without corresponding entries in schemaMappings variable.",
 			"unmappedDefinitions", unmappedSchemas,
@@ -396,14 +401,19 @@ func (v *Validator) addGenericMappings(compiledSchemas map[string]*jsonschema.Sc
 	}
 }
 
-// verifyMappingsAgainstSchema checks if all compiled schema definitions that appear to be
+// VerifyMappingsAgainstSchema checks if all compiled schema definitions that appear to be
 // requests or results have corresponding entries in the schemaMappings targets.
 // This helps ensure the mapping list stays synchronized with the schema definitions.
 // Note: This is a heuristic check based on naming conventions (*Request, *Result).
-func (v *Validator) verifyMappingsAgainstSchema() []string {
-	// Assumes write lock is held (called within Initialize).
+// <<< RENAMED METHOD TO EXPORTED VERSION >>>
+func (v *Validator) VerifyMappingsAgainstSchema() []string {
+	// --- Use Read Lock as this doesn't modify state ---
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	// --- END ---
+
 	if v.schemas == nil {
-		v.logger.Error("verifyMappingsAgainstSchema called but schemas map is nil.")
+		v.logger.Error("VerifyMappingsAgainstSchema called but schemas map is nil.")
 		return nil // Should not happen if called after successful compilation.
 	}
 
@@ -491,7 +501,7 @@ func (v *Validator) IsInitialized() bool {
 // It first ensures the validator is initialized and the data is valid JSON syntax.
 // It then finds the appropriate compiled schema (using fallbacks if necessary) and performs validation.
 // Returns a structured ValidationError if validation fails or prerequisites are not met.
-func (v *Validator) Validate(_ context.Context, messageType string, data []byte) error {
+func (v *Validator) Validate(ctx context.Context, messageType string, data []byte) error { // Renamed _ context.Context to ctx
 	if !v.IsInitialized() {
 		return NewValidationError(ErrSchemaNotFound, "Schema validator not initialized", nil)
 	}
@@ -697,9 +707,9 @@ func (v *Validator) getVersionFromInfoBlock(schemaDoc map[string]interface{}) st
 }
 
 // getVersionFromMCPHeuristics checks for MCP-specific date patterns in "$id" or "title".
-// Assumes MCP schema versions might be indicated by<y_bin_46>-MM-DD dates.
+// Assumes MCP schema versions might be indicated by YYYY-MM-DD dates.
 func (v *Validator) getVersionFromMCPHeuristics(schemaDoc map[string]interface{}) string {
-	// Regex to find<y_bin_46>-MM-DD pattern.
+	// Regex to find YYYY-MM-DD pattern.
 	idRegex := regexp.MustCompile(`(\d{4}-\d{2}-\d{2})`)
 
 	// Check $id field.

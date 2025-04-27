@@ -21,7 +21,8 @@ import (
 	"github.com/dkoosis/cowgnition/internal/mcp/router"               // Added import for Router.
 	"github.com/dkoosis/cowgnition/internal/mcp/state"                // Added import for FSM Events.
 	"github.com/dkoosis/cowgnition/internal/middleware"
-	"github.com/dkoosis/cowgnition/internal/schema"
+
+	// "github.com/dkoosis/cowgnition/internal/schema" // No longer need schema for the interface type here
 	"github.com/dkoosis/cowgnition/internal/services"
 	"github.com/dkoosis/cowgnition/internal/transport"
 	lfsm "github.com/looplab/fsm" // <<< IMPORT ADDED FOR ERROR CHECKING >>>
@@ -41,7 +42,8 @@ type Server struct {
 	transport transport.Transport
 	logger    logging.Logger
 	startTime time.Time
-	validator schema.ValidatorInterface // Use interface from schema package.
+	// <<< CHANGED TYPE to mcptypes.ValidatorInterface >>>
+	validator mcptypes.ValidatorInterface
 
 	// --- MODIFIED: FSM and Router Dependencies ---.
 	fsm    fsm.FSM       // State machine for connection lifecycle.
@@ -55,10 +57,11 @@ type Server struct {
 
 // NewServer creates a new MCP server instance.
 // MODIFIED: Accepts FSM and Router, removes ConnectionState init.
+// <<< CHANGED PARAMETER TYPE to mcptypes.ValidatorInterface >>>
 func NewServer(
 	cfg *config.Config,
 	opts ServerOptions,
-	validator schema.ValidatorInterface,
+	validator mcptypes.ValidatorInterface,
 	fsm fsm.FSM, // Inject FSM.
 	router router.Router, // Inject Router.
 	startTime time.Time,
@@ -83,9 +86,9 @@ func NewServer(
 		config:    cfg,
 		options:   opts,
 		logger:    logger.WithField("component", "mcp_server"),
-		validator: validator,
-		fsm:       fsm,    // Store injected FSM.
-		router:    router, // Store injected Router.
+		validator: validator, // Assign the provided interface
+		fsm:       fsm,       // Store injected FSM.
+		router:    router,    // Store injected Router.
 		startTime: startTime,
 		services:  make(map[string]services.Service), // Initialize the service registry.
 		// --- connectionState: NewConnectionState(), // REMOVED ---.
@@ -221,12 +224,15 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 	s.logger.Debug(">>> ServeSTDIO: NDJSONTransport created.")                          // <<< ADDED LOG
 
 	// Set up validation middleware
+	// <<< CORRECTED: Use middleware package for DefaultValidationOptions >>>
 	validationOpts := middleware.DefaultValidationOptions()
 	validationOpts.StrictMode = true
-	validationOpts.ValidateOutgoing = true
+	// <<< ADJUSTED: ValidateOutgoing often false in production, true in debug maybe >>>
+	// Let's keep it true only if debug is enabled for stricter checking during dev
+	validationOpts.ValidateOutgoing = s.options.Debug
 
 	if s.options.Debug {
-		validationOpts.StrictOutgoing = true
+		validationOpts.StrictOutgoing = true // Make outgoing strict only in debug
 		validationOpts.MeasurePerformance = true
 		s.logger.Info("Debug mode enabled: outgoing validation is STRICT.")
 	} else {
@@ -239,8 +245,9 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 	}
 
 	s.logger.Debug(">>> ServeSTDIO: Creating validation middleware...") // <<< ADDED LOG
+	// <<< This call should now work because s.validator is mcptypes.ValidatorInterface >>>
 	validationMiddleware := middleware.NewValidationMiddleware(
-		s.validator,
+		s.validator, // s.validator now holds the correct interface type
 		validationOpts,
 		s.logger.WithField("subcomponent", "validation_mw"),
 	)
