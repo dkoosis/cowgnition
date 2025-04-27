@@ -1,15 +1,12 @@
 // Package server provides the runner and setup logic for the main CowGnition MCP server process.
-// It handles server lifecycle management including initialization, runtime operation,.
-// and graceful shutdown. The package integrates various components such as configuration.
-// loading, schema validation, RTM service connectivity diagnostics, and transport-specific.
-// server implementations (stdio, http). It also manages signal handling for proper.
-// server termination and resource cleanup.
+// It handles server lifecycle management including initialization, runtime operation,
+// and graceful shutdown.
 // file: cmd/server/server_runner.go
 package server
 
 import (
 	"context"
-	"encoding/json" // Added for core handler response marshaling.
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -17,15 +14,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dkoosis/cowgnition/internal/config"     // Added.
-	"github.com/dkoosis/cowgnition/internal/logging"    // Added.
-	"github.com/dkoosis/cowgnition/internal/mcp"        // Added for core handlers.
-	"github.com/dkoosis/cowgnition/internal/mcp/router" // Added.
-	"github.com/dkoosis/cowgnition/internal/mcp/state"  // Added.
+	"github.com/dkoosis/cowgnition/internal/config"
+	"github.com/dkoosis/cowgnition/internal/logging"
+	"github.com/dkoosis/cowgnition/internal/mcp"
+	"github.com/dkoosis/cowgnition/internal/mcp/router"
+	"github.com/dkoosis/cowgnition/internal/mcp/state"
 	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types"
 	"github.com/dkoosis/cowgnition/internal/rtm"
 	"github.com/dkoosis/cowgnition/internal/schema"
-	// Added for GetName().
 )
 
 // RunServer starts the MCP server with the specified transport type.
@@ -53,7 +49,7 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		"debug_mode", debug)
 
 	// Service Initialization.
-	validator, rtmService, err := initializeServices(ctx, cfg, logger) // <-- rtmService is returned here.
+	validator, rtmService, err := initializeServices(ctx, cfg, logger)
 	if err != nil {
 		return err // Errors already logged within initializeServices.
 	}
@@ -63,28 +59,25 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		}
 	}()
 
-	// --- Create FSM and Router ---.
+	// Create FSM and Router.
 	mcpFSM, err := state.NewMCPStateMachine(logger.WithField("component", "mcp_fsm"))
 	if err != nil {
 		logger.Error("❌ Failed to create MCP state machine.", "error", err)
 		return errors.Wrap(err, "failed to create MCP state machine")
 	}
 	mcpRouter := router.NewRouter(logger.WithField("component", "mcp_router"))
-	// --- End Create FSM and Router ---.
 
 	// MCP Server Creation.
-	// --- MODIFIED: Call mcp.NewServer directly with FSM and Router ---.
 	opts := mcp.ServerOptions{
 		RequestTimeout:  requestTimeout,
 		ShutdownTimeout: shutdownTimeout,
 		Debug:           debug,
 	}
-	server, err := mcp.NewServer(cfg, opts, validator, mcpFSM, mcpRouter, startTime, logger) // Pass FSM and Router.
+	server, err := mcp.NewServer(cfg, opts, validator, mcpFSM, mcpRouter, startTime, logger)
 	if err != nil {
 		logger.Error("❌ Failed to create MCP server.", "error", err.Error())
 		return errors.Wrap(err, "failed to create MCP server")
 	}
-	// --- END MODIFICATION ---.
 
 	// Register RTM Service (if available).
 	if rtmService != nil {
@@ -97,12 +90,11 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 		logger.Warn("⚠️ RTM Service instance was nil after initialization, cannot register.")
 	}
 
-	// --- Register Core MCP Routes AFTER server creation ---.
-	if err := registerCoreRoutes(server); err != nil { // Pass the server instance.
+	// Register Core MCP Routes.
+	if err := registerCoreRoutes(server); err != nil {
 		logger.Error("❌ Failed to register core MCP routes.", "error", err)
 		return err
 	}
-	// --- End Register Core MCP Routes ---.
 
 	// Start Server Transport.
 	if err := startServerTransport(ctx, transportType, cfg, server, cancel, logger); err != nil {
@@ -119,19 +111,17 @@ func RunServer(transportType, configPath string, requestTimeout, shutdownTimeout
 	return performGracefulShutdown(shutdownTimeout, server, validator, startTime, logger)
 }
 
-// --- Helper Function to Register Core Routes ---.
-// This function encapsulates the registration of core MCP methods with the router.
+// registerCoreRoutes encapsulates the registration of core MCP methods with the router.
 func registerCoreRoutes(server *mcp.Server) error {
-	coreRouter := server.GetRouter() // Use the new getter method.
+	coreRouter := server.GetRouter()
 	if coreRouter == nil {
 		return errors.New("cannot register core routes: server router is nil")
 	}
-	logger := server.GetLogger().WithField("subcomponent", "core_routes") // Use the new getter method.
+	logger := server.GetLogger().WithField("subcomponent", "core_routes")
 
 	// --- Ping ---.
 	err := coreRouter.AddRoute(router.Route{
 		Method: "ping",
-		// --- MODIFIED: Rename unused ctx to _ ---.
 		Handler: func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 			logger.Debug("Handling ping request.")
 			return json.RawMessage(`{}`), nil
@@ -144,7 +134,6 @@ func registerCoreRoutes(server *mcp.Server) error {
 	// --- Initialize ---.
 	err = coreRouter.AddRoute(router.Route{
 		Method: "initialize",
-		// --- MODIFIED: Rename unused ctx to _ ---.
 		Handler: func(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 			logger.Info("Handling initialize request via router.")
 			var req mcptypes.InitializeRequest
@@ -152,16 +141,16 @@ func registerCoreRoutes(server *mcp.Server) error {
 				return nil, errors.Wrap(err, "failed to unmarshal initialize request parameters")
 			}
 
-			// Log Client Info using the new method on server.
+			// Log Client Info
 			server.LogClientInfo(&req.ClientInfo, &req.Capabilities)
 
 			serverProtocolVersion := "2024-11-05" // Forced version.
 			logger.Warn("Forcing server protocol version.", "serverVersion", serverProtocolVersion)
 
-			// Aggregate capabilities using the new method on server.
+			// Aggregate capabilities
 			caps := server.AggregateServerCapabilities()
 
-			// Get server info using the new method on server.
+			// Get server info
 			appVersion := "0.1.0-dev" // TODO: Get from build flags.
 			serverInfo := mcptypes.Implementation{Name: server.GetConfig().Server.Name, Version: appVersion}
 
@@ -187,7 +176,6 @@ func registerCoreRoutes(server *mcp.Server) error {
 	// --- Shutdown ---.
 	err = coreRouter.AddRoute(router.Route{
 		Method: "shutdown",
-		// --- MODIFIED: Rename unused ctx to _ ---.
 		Handler: func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
 			logger.Info("Handling shutdown request via router.")
 			logger.Info("Server state transition to ShuttingDown acknowledged.")
@@ -201,11 +189,9 @@ func registerCoreRoutes(server *mcp.Server) error {
 	// --- Exit ---.
 	err = coreRouter.AddRoute(router.Route{
 		Method: "exit",
-		// --- MODIFIED: Rename unused ctx to _ ---.
 		NotificationHandler: func(_ context.Context, _ json.RawMessage) error {
 			logger.Info("Handling exit notification via router.")
 			logger.Warn("Exit notification received. Server should terminate process.")
-			// Actual cancellation handled by server loop exit.
 			return nil
 		},
 	})
@@ -216,10 +202,9 @@ func registerCoreRoutes(server *mcp.Server) error {
 	// --- notifications/initialized ---.
 	err = coreRouter.AddRoute(router.Route{
 		Method: "notifications/initialized",
-		// --- MODIFIED: Rename unused ctx to _ ---.
 		NotificationHandler: func(_ context.Context, params json.RawMessage) error {
 			logger.Info("Handling notifications/initialized notification via router.")
-			var notifParams map[string]interface{} // Generic map.
+			var notifParams map[string]interface{}
 			if err := json.Unmarshal(params, &notifParams); err != nil {
 				logger.Debug("Could not parse notifications/initialized params.", "error", err)
 			} else {
@@ -236,7 +221,6 @@ func registerCoreRoutes(server *mcp.Server) error {
 	// --- $/cancelRequest ---.
 	err = coreRouter.AddRoute(router.Route{
 		Method: "$/cancelRequest",
-		// --- MODIFIED: Rename unused ctx to _ ---.
 		NotificationHandler: func(_ context.Context, params json.RawMessage) error {
 			var reqParams struct {
 				ID json.RawMessage `json:"id"`
@@ -252,6 +236,159 @@ func registerCoreRoutes(server *mcp.Server) error {
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to register $/cancelRequest route")
+	}
+
+	// --- tools/list ---.
+	err = coreRouter.AddRoute(router.Route{
+		Method: "tools/list",
+		Handler: func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) { // FIX: Renamed params to _
+			logger.Info("Handling tools/list request via router.")
+			// Get all services
+			allServices := server.GetAllServices()
+			allTools := []mcptypes.Tool{}
+
+			// Collect tools from all services
+			for _, svc := range allServices {
+				tools := svc.GetTools()
+				allTools = append(allTools, tools...)
+			}
+
+			// Build response
+			result := mcptypes.ListToolsResult{
+				Tools: allTools,
+				// NextCursor is only needed for pagination
+			}
+
+			resBytes, err := json.Marshal(result)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to marshal tools/list result")
+			}
+
+			logger.Info("Successfully listed tools", "count", len(allTools))
+			return resBytes, nil
+		},
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to register tools/list route")
+	}
+
+	// --- resources/list ---.
+	err = coreRouter.AddRoute(router.Route{
+		Method: "resources/list",
+		Handler: func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) { // FIX: Renamed params to _
+			logger.Info("Handling resources/list request via router.")
+			// Get all services
+			allServices := server.GetAllServices()
+			allResources := []mcptypes.Resource{}
+
+			// Collect resources from all services
+			for _, svc := range allServices {
+				resources := svc.GetResources()
+				allResources = append(allResources, resources...)
+			}
+
+			// Add system resources
+			systemResources := []mcptypes.Resource{
+				{
+					Name:        "Server Health",
+					URI:         "cowgnition://health",
+					Description: "Server health and diagnostic information",
+					MimeType:    "application/json",
+				},
+			}
+			allResources = append(allResources, systemResources...)
+
+			// Build response
+			result := mcptypes.ListResourcesResult{
+				Resources: allResources,
+				// NextCursor is only needed for pagination
+			}
+
+			resBytes, err := json.Marshal(result)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to marshal resources/list result")
+			}
+
+			logger.Info("Successfully listed resources", "count", len(allResources))
+			return resBytes, nil
+		},
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to register resources/list route")
+	}
+
+	// --- resources/read ---.
+	err = coreRouter.AddRoute(router.Route{
+		Method: "resources/read",
+		Handler: func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+			logger.Info("Handling resources/read request via router.")
+
+			var req mcptypes.ReadResourceRequest
+			if err := json.Unmarshal(params, &req); err != nil {
+				return nil, errors.Wrap(err, "failed to unmarshal resources/read parameters")
+			}
+
+			uri := req.URI
+			logger.Debug("Resource read request", "uri", uri)
+
+			// Special handling for system resources
+			if uri == "cowgnition://health" {
+				contents, err := server.ReadServerHealthMetrics(ctx)
+				if err != nil {
+					return nil, errors.Wrap(err, "failed to read server health metrics")
+				}
+
+				result := mcptypes.ReadResourceResult{
+					Contents: contents,
+				}
+
+				resBytes, err := json.Marshal(result)
+				if err != nil {
+					return nil, errors.Wrap(err, "failed to marshal resources/read result")
+				}
+
+				return resBytes, nil
+			}
+
+			// Delegate to appropriate service based on URI scheme
+			var serviceResources []interface{}
+			var serviceErr error
+
+			for _, svc := range server.GetAllServices() {
+				resources := svc.GetResources()
+				for _, res := range resources {
+					if res.URI == uri {
+						serviceResources, serviceErr = svc.ReadResource(ctx, uri)
+						if serviceErr != nil {
+							return nil, errors.Wrapf(serviceErr, "service %s failed to read resource %s",
+								svc.GetName(), uri)
+						}
+						break
+					}
+				}
+				if serviceResources != nil {
+					break
+				}
+			}
+
+			if serviceResources == nil {
+				return nil, errors.Newf("resource not found: %s", uri)
+			}
+
+			result := mcptypes.ReadResourceResult{
+				Contents: serviceResources,
+			}
+
+			resBytes, err := json.Marshal(result)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to marshal resources/read result")
+			}
+
+			return resBytes, nil
+		},
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to register resources/read route")
 	}
 
 	logger.Info("✅ Core MCP routes registered.")
@@ -377,7 +514,7 @@ func startServerTransport(ctx context.Context, transportType string, cfg *config
 		go runTransportLoop(ctx, cancel, logger, "stdio", func(innerCtx context.Context) error {
 			return server.ServeSTDIO(innerCtx)
 		})
-		return nil // Return nil as the loop runs in a goroutine.
+		return nil
 	case "http":
 		addr := fmt.Sprintf(":%d", cfg.Server.Port)
 		logger.Info("📡 Starting server with HTTP transport.",
@@ -389,7 +526,7 @@ func startServerTransport(ctx context.Context, transportType string, cfg *config
 			}
 			return nil
 		})
-		return nil // Return nil as the loop runs in a goroutine.
+		return nil
 	default:
 		logger.Error("❌ Unsupported transport type.",
 			"transport", transportType,

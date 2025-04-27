@@ -44,6 +44,7 @@
 │   │   ├── handlers_prompts.go
 │   │   ├── handlers_tools.go
 │   │   ├── helpers.go
+│   │   ├── integration_test.go
 │   │   ├── mcp_server.go
 │   │   ├── mcp_server_error_handling.go
 │   │   ├── mcp_server_metrics.go
@@ -117,4 +118,4 @@
 ├── go.mod
 └── go.sum
 
-23 directories, 95 files
+23 directories, 96 files

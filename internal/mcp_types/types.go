@@ -1,6 +1,26 @@
 // Package mcptypes defines shared types and interfaces for the MCP
-// server and middleware components. This file contains core data structures
-// used across different packages to prevent import cycles.
+// (Model Context Protocol) server and client communication.
+//
+// The Model Context Protocol is a structured communication protocol that enables
+// interaction between an AI assistant and external services. This package defines
+// the core data structures and message formats used in this communication, including:
+//
+// - Implementation and capability definitions for both client and server
+// - Message structures for requests, responses, and notifications
+// - Tool and resource models that encapsulate external service functionality
+// - Content types for exchanging different kinds of data
+// - Error handling structures for JSON-RPC compatible error reporting
+//
+// By centralizing these types in a shared package, we avoid circular dependencies
+// between the MCP server, middleware, and service implementations.
+//
+// Message Flow Summary:
+// 1. Initialize: Client sends capabilities, server responds with supported features
+// 2. Tools/Resources: Client can discover and use available tools and resources
+// 3. Requests/Responses: Standard JSON-RPC 2.0 message pattern for commands
+// 4. Notifications: One-way messages that don't expect responses
+// 5. Shutdown/Exit: Graceful termination of the connection
+//
 // file: internal/mcp_types/types.go
 package mcptypes
 
@@ -241,8 +261,6 @@ func (t TextContent) GetType() string {
 	return "text"
 }
 
-// --- Add this struct definition to internal/mcp_types/types.go ---
-
 // PromptMessage represents a single message within a prompt response.
 // Matches definition in schema.json: PromptMessage.
 type PromptMessage struct {
@@ -255,40 +273,4 @@ type PromptMessage struct {
 type GetPromptResult struct {
 	Messages    []PromptMessage `json:"messages"`
 	Description string          `json:"description,omitempty"`
-	// _meta field could be added if needed, but often omitted in Go structs unless used.
 }
-
-// --- Ensure Content types (TextContent, etc.) are also defined or imported if needed by PromptMessage ---
-// TextContent is already defined, add others if used in prompts.
-
-// NOTE: Other content types like ImageContent, EmbeddedResource would also go here.
-// if they were directly used by CallToolResult or other shared types. Add them.
-// as needed based on schema requirements and usage. Example:
-
-/*
-// ImageContent represents an image content item.
-// Implements the Content interface.
-type ImageContent struct {
-	Type     string `json:"type"` // Should always be "image".
-	MimeType string `json:"mimeType"`
-	Data     string `json:"data"` // Base64 encoded image data.
-}
-
-// GetType returns the type of content ("image").
-func (i ImageContent) GetType() string {
-	return "image"
-}
-
-// EmbeddedResource represents embedded resource content.
-// Implements the Content interface.
-type EmbeddedResource struct {
-    Type     string      `json:"type"` // Should always be "resource".
-    Resource interface{} `json:"resource"` // Contains TextResourceContents or BlobResourceContents.
-    // Annotations can be added here if needed.
-}
-
-// GetType returns the type of content ("resource").
-func (e EmbeddedResource) GetType() string {
-    return "resource"
-}
-*/

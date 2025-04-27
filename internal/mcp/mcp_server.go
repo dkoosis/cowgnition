@@ -212,31 +212,26 @@ func (s *Server) GetAllServices() []services.Service {
 }
 
 // ServeSTDIO configures and starts the server using stdio transport.
-// MODIFIED: Uses handleMessageWithFSM as the final handler.
 func (s *Server) ServeSTDIO(ctx context.Context) error {
 	s.logger.Info("Starting server with stdio transport.")
 	s.transport = transport.NewNDJSONTransport(os.Stdin, os.Stdout, os.Stdin, s.logger) // Stdin used as closer.
 
-	// --- Validation Middleware Setup (Unchanged) ---.
+	// Set up validation middleware
 	validationOpts := middleware.DefaultValidationOptions()
 	validationOpts.StrictMode = true
-	validationOpts.ValidateOutgoing = true // Keep true.
+	validationOpts.ValidateOutgoing = true
 
 	if s.options.Debug {
-		validationOpts.StrictOutgoing = true // Be strict in debug.
+		validationOpts.StrictOutgoing = true
 		validationOpts.MeasurePerformance = true
 		s.logger.Info("Debug mode enabled: outgoing validation is STRICT.")
 	} else {
-		validationOpts.StrictOutgoing = false // Allow known warnings in normal mode.
+		validationOpts.StrictOutgoing = false
 		s.logger.Info("Non-debug mode: outgoing validation is NON-STRICT (logs warnings).")
 	}
 
 	validationOpts.SkipTypes = map[string]bool{
-		// Add types to skip *schema* validation for, if needed.
-		// Note: Sequence validation via FSM still applies.
 		"exit": true, // Skip schema validation for exit notification.
-		// "$/cancelRequest": true, // Example if schema causes issues.
-		// "notifications/initialized": true, // Example.
 	}
 
 	validationMiddleware := middleware.NewValidationMiddleware(
@@ -244,19 +239,63 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 		validationOpts,
 		s.logger.WithField("subcomponent", "validation_mw"),
 	)
-	// --- End Validation Middleware Setup ---.
 
-	// --- Middleware Chain ---.
-	// The final handler is now the FSM/Router based message handler.
-	chain := middleware.NewChain(s.handleMessageWithFSM) // <<< USE NEW HANDLER.
-	chain.Use(validationMiddleware)                      // Validation middleware runs first.
-	// Add other middleware here if needed (e.g., logging, metrics).
+	// Set up middleware chain
+	chain := middleware.NewChain(s.handleMessageWithFSM)
+	chain.Use(validationMiddleware)
+
+	// Add logging middleware if desired
+	if s.options.Debug {
+		loggingMiddleware := createLoggingMiddleware(s.logger)
+		chain.Use(loggingMiddleware)
+	}
+
 	serveHandler := chain.Handler()
-	// --- End Middleware Chain ---.
 
-	// --- Run Processing Loop ---.
-	// serverProcessing itself doesn't need changes, it just calls the final handler.
+	// Run processing loop
 	return s.serverProcessing(ctx, serveHandler)
+}
+
+// createLoggingMiddleware creates a middleware that logs incoming and outgoing messages.
+func createLoggingMiddleware(logger logging.Logger) mcptypes.MiddlewareFunc {
+	middlewareLogger := logger.WithField("component", "logging_middleware")
+
+	return func(next mcptypes.MessageHandler) mcptypes.MessageHandler {
+		return func(ctx context.Context, message []byte) ([]byte, error) {
+			// Log incoming message (truncate if too large)
+			maxLogSize := 1024
+			msgPreview := string(message)
+			if len(msgPreview) > maxLogSize {
+				msgPreview = msgPreview[:maxLogSize] + "... [truncated]"
+			}
+			middlewareLogger.Debug("Incoming message", "message", msgPreview)
+
+			// Call next handler
+			start := time.Now()
+			result, err := next(ctx, message)
+			duration := time.Since(start)
+
+			// Log result or error
+			if err != nil {
+				middlewareLogger.Debug("Handler error",
+					"error", err,
+					"duration_ms", duration.Milliseconds())
+			} else if result != nil {
+				resultPreview := string(result)
+				if len(resultPreview) > maxLogSize {
+					resultPreview = resultPreview[:maxLogSize] + "... [truncated]"
+				}
+				middlewareLogger.Debug("Outgoing message",
+					"message", resultPreview,
+					"duration_ms", duration.Milliseconds())
+			} else {
+				middlewareLogger.Debug("No response from handler (notification)",
+					"duration_ms", duration.Milliseconds())
+			}
+
+			return result, err
+		}
+	}
 }
 
 // ServeHTTP starts the server with an HTTP transport (Placeholder).

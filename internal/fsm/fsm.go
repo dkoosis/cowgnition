@@ -3,9 +3,7 @@
 package fsm
 
 import (
-	"context" // Keep fmt for errors.Newf.
-	"fmt"
-	"os" // <<< ADD os import for Printf to stderr.
+	"context"
 	"reflect"
 	"sync"
 
@@ -347,44 +345,23 @@ func (l *loopFSM) Transition(ctx context.Context, event Event, data interface{})
 	err = fsmInstance.Event(ctx, string(event), args...)
 
 	if err != nil {
-		// Use fmt.Fprintf to standard error, which is reliably captured by `go test -v`.
-		fmt.Fprintf(os.Stderr, "\n>>> DEBUG: Entered Transition error block. Error: %v (%T)\n", err, err) // Print error and its type.
-
-		errType := reflect.TypeOf(err)
-		errKind := errType.Kind()
-		errPkgPath := ""
-
-		// Use Elem() if it's a pointer to get underlying type info.
-		if errKind == reflect.Ptr {
-			errElemType := errType.Elem()
-			errPkgPath = errElemType.PkgPath()
-			fmt.Fprintf(os.Stderr, ">>> DEBUG: Actual error type (Pointer): %s, Kind: %s, PkgPath: %s\n", errType.String(), errKind.String(), errPkgPath)
-		} else {
-			errPkgPath = errType.PkgPath()
-			fmt.Fprintf(os.Stderr, ">>> DEBUG: Actual error type (Value): %s, Kind: %s, PkgPath: %s\n", errType.String(), errKind.String(), errPkgPath)
-		}
-
-		// Check against expected type *lfsm.CanceledError using reflection.
-		expectedPtrType := reflect.TypeOf(&lfsm.CanceledError{})
-		fmt.Fprintf(os.Stderr, ">>> DEBUG: Reflection type comparison (Pointer): actual=%s, expected=%s, match=%t\n", errType.String(), expectedPtrType.String(), expectedPtrType == errType)
-
-		// Check against expected type lfsm.CanceledError using reflection.
-		expectedValueType := reflect.TypeOf(lfsm.CanceledError{})
-		fmt.Fprintf(os.Stderr, ">>> DEBUG: Reflection type comparison (Value): actual=%s, expected=%s, match=%t\n\n", errType.String(), expectedValueType.String(), expectedValueType == errType)
-
-		// Check using errors.As for *lfsm.CanceledError.
-		var canceledErrPtr *lfsm.CanceledError
-		isCanceledPtr := errors.As(err, &canceledErrPtr)
-		fmt.Fprintf(os.Stderr, ">>> DEBUG: errors.As(err, *lfsm.CanceledError): %t\n", isCanceledPtr)
-
-		// Check using errors.As for lfsm.CanceledError (value type).
+		// Check for specific error types from looplab/fsm and handle accordingly
 		var canceledErrVal lfsm.CanceledError
 		isCanceledVal := errors.As(err, &canceledErrVal)
-		fmt.Fprintf(os.Stderr, ">>> DEBUG: errors.As(err, lfsm.CanceledError): %t\n\n", isCanceledVal)
 
-		// Temporarily just return to see logs.
+		if isCanceledVal {
+			l.logger.Debug("FSM transition canceled by guard condition",
+				"event", event,
+				"from_state", currentState,
+				"error", err)
+		} else {
+			l.logger.Debug("FSM transition failed",
+				"event", event,
+				"from_state", currentState,
+				"error_type", reflect.TypeOf(err).String(),
+				"error", err)
+		}
 		return err
-
 	}
 
 	// Log success if no error occurred.
