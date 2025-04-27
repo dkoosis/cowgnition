@@ -25,13 +25,15 @@ func TestValidationMiddleware_CallsNextHandler_When_IncomingValidationSucceeds(t
 
 	testMsg := []byte(`{"jsonrpc": "2.0", "method": "test_method", "id": 1, "params": {}}`)
 	expectedResp := []byte(`{"jsonrpc": "2.0", "id": 1, "result": "passed"}`)
+	// --- FIX: Define the expected *result* bytes separately ---
+	expectedResultBytes := []byte(`"passed"`) // This is what validateOutgoingResponse will extract.
 
 	// Expect incoming validation to be called and succeed.
 	mockValidator.On("Validate", mock.Anything, "test_method", testMsg).Return(nil).Once()
 	// Expect next handler to be called after successful validation.
 	mockNextHandler.On("Handle", mock.Anything, testMsg).Return(expectedResp, nil).Once()
-	// Expect outgoing validation to be called (and succeed implicitly by default mock).
-	mockValidator.On("Validate", mock.Anything, "test_method_response", expectedResp).Return(nil).Once()
+	// --- FIX: Expect outgoing validation to be called with the *extracted result* bytes ---
+	mockValidator.On("Validate", mock.Anything, "test_method_response", expectedResultBytes).Return(nil).Once()
 
 	// CORRECTED: Call the middleware function mw directly.
 	resp, err := mw(mockNextHandler.Handle)(context.Background(), testMsg)
@@ -100,13 +102,15 @@ func TestValidationMiddleware_CallsNextHandler_When_IncomingValidationFailsInNon
 	validationErr := schema.NewValidationError(schema.ErrValidationFailed, "Still invalid", nil)
 	validationErr.InstancePath = "/params"
 	expectedResp := []byte(`{"jsonrpc":"2.0","id":2,"result":"passed_anyway"}`)
+	// --- FIX: Define expected result bytes for outgoing validation ---
+	expectedResultBytes := []byte(`"passed_anyway"`)
 
 	// Expect validation to be called and fail.
 	mockValidator.On("Validate", mock.Anything, "fail_method_nonstrict", testMsg).Return(validationErr).Once()
 	// Expect next handler to be called *despite* validation failure.
 	mockNextHandler.On("Handle", mock.Anything, testMsg).Return(expectedResp, nil).Once()
-	// Expect outgoing validation.
-	mockValidator.On("Validate", mock.Anything, "fail_method_nonstrict_response", expectedResp).Return(nil).Once()
+	// --- FIX: Expect outgoing validation with extracted result bytes ---
+	mockValidator.On("Validate", mock.Anything, "fail_method_nonstrict_response", expectedResultBytes).Return(nil).Once()
 
 	// CORRECTED: Call the middleware function mw directly.
 	resp, err := mw(mockNextHandler.Handle)(context.Background(), testMsg)

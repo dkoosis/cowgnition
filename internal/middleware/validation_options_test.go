@@ -1,14 +1,14 @@
 // Package middleware_test tests the middleware components.
 package middleware_test
 
-// file: internal/middleware/validation_options_test.go.
+// file: internal/middleware/validation_options_test.go
 
 import (
-	"context"
+	"context" // Added import for json.RawMessage definition needed below.
 	"testing"
 
 	"github.com/dkoosis/cowgnition/internal/logging"
-	"github.com/dkoosis/cowgnition/internal/middleware"
+	"github.com/dkoosis/cowgnition/internal/middleware" // Added import for mcptypes.ValidationOptions.
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -84,19 +84,20 @@ func TestValidationMiddleware_SkipsIncomingValidation_When_MessageTypeIsSkipped(
 	t.Log("Testing ValidationMiddleware: Skips incoming validation when message type is in SkipTypes map.")
 	// Corrected: Use DefaultValidationOptions from middleware package.
 	options := middleware.DefaultValidationOptions()
-	options.SkipTypes["ping"] = true // Ensure ping is skipped for incoming.
-	options.ValidateOutgoing = true  // Keep outgoing validation enabled for this test.
+	options.SkipTypes = map[string]bool{"ping": true} // Corrected: Initialize map properly.
+	options.ValidateOutgoing = true                   // Keep outgoing validation enabled for this test.
 	mw, mockValidator, mockNextHandler := setupTestMiddleware(t, options)
 
 	testMsg := []byte(`{"jsonrpc": "2.0", "method": "ping", "id": "ping-1"}`)
 	expectedResp := []byte(`{"jsonrpc":"2.0","id":"ping-1","result":"pong"}`)
+	expectedResultBytes := []byte(`"pong"`)
 
 	// Expect next handler to be called.
 	mockNextHandler.On("Handle", mock.Anything, testMsg).Return(expectedResp, nil).Once()
 
-	// Expect outgoing validation to use the fallback schema for ping response.
+	// --- FIX: Expect outgoing validation with extracted result bytes ---
 	// Assuming 'ping_response' schema doesn't exist, it will likely fall back to "JSONRPCResponse".
-	mockValidator.On("Validate", mock.Anything, "JSONRPCResponse", expectedResp).Return(nil).Once()
+	mockValidator.On("Validate", mock.Anything, "JSONRPCResponse", expectedResultBytes).Return(nil).Once()
 
 	// Corrected: Call the middleware function directly, passing the next handler.
 	resp, err := mw(mockNextHandler.Handle)(context.Background(), testMsg)
@@ -118,7 +119,7 @@ func TestValidationMiddleware_SkipsIncomingValidation_When_MessageTypeIsSkipped(
 	}
 	assert.False(t, incomingValidateCalled, "Validate should not have been called for incoming message type 'ping'.")
 
-	// Assert Validate *was* called for the *outgoing* response validation.
-	mockValidator.AssertCalled(t, "Validate", mock.Anything, "JSONRPCResponse", expectedResp)
+	// Assert Validate *was* called for the *outgoing* response validation with the correct schema and data.
+	mockValidator.AssertCalled(t, "Validate", mock.Anything, "JSONRPCResponse", expectedResultBytes)
 	mockNextHandler.AssertExpectations(t)
 }
