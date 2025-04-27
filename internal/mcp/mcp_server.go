@@ -1,6 +1,7 @@
 // Package mcp implements the Model Context Protocol server logic, including handlers and types.
-// file: internal/mcp/mcp_server.go
 package mcp
+
+// file: internal/mcp/mcp_server.go
 
 import (
 	"context"
@@ -23,6 +24,7 @@ import (
 	"github.com/dkoosis/cowgnition/internal/schema"
 	"github.com/dkoosis/cowgnition/internal/services"
 	"github.com/dkoosis/cowgnition/internal/transport"
+	lfsm "github.com/looplab/fsm" // <<< IMPORT ADDED FOR ERROR CHECKING >>>
 )
 
 // ServerOptions contains configurable options for the MCP server.
@@ -361,6 +363,7 @@ func (s *Server) Shutdown(_ context.Context) error {
 // It uses the FSM for state validation and the Router for dispatching.
 // REFACTORED: Incorporates FSM transition and Router dispatch.
 func (s *Server) handleMessageWithFSM(ctx context.Context, msgBytes []byte) ([]byte, error) {
+	s.logger.Warn(">>> DEBUG: ENTERING handleMessageWithFSM", "messagePreview", string(msgBytes[:minInt(len(msgBytes), 60)]))
 	// 1. Parse basic structure to get method and ID.
 	var request struct {
 		JSONRPC string          `json:"jsonrpc"`
@@ -371,10 +374,10 @@ func (s *Server) handleMessageWithFSM(ctx context.Context, msgBytes []byte) ([]b
 	// Validation middleware should ensure msgBytes is valid JSON.
 	if err := json.Unmarshal(msgBytes, &request); err != nil {
 		s.logger.Error("Internal Error: Failed to unmarshal validated message in core handler.",
-			"error", err, "preview", string(msgBytes[:minInt(len(msgBytes), 100)])) // <<< UPDATE CALL SITE.
+			"error", err, "preview", string(msgBytes[:minInt(len(msgBytes), 100)]))
 		// Can't reliably get ID if unmarshal failed. Create generic internal error response.
-		errRespBytes, _ := s.createErrorResponse(nil, errors.Wrap(err, "internal parse error"), json.RawMessage("null"))
-		return errRespBytes, nil // Return error response bytes.
+		errRespBytes, _ := s.createErrorResponse(nil, errors.Wrap(err, "internal parse error"), json.RawMessage("null")) // ID is null here
+		return errRespBytes, nil                                                                                         // Return error response bytes.
 	}
 
 	isNotification := (request.ID == nil || string(request.ID) == "null")
@@ -409,6 +412,27 @@ func (s *Server) handleMessageWithFSM(ctx context.Context, msgBytes []byte) ([]b
 
 	// 3. Attempt FSM Transition - This is now the primary sequence validation.
 	transitionErr := s.fsm.Transition(ctx, event, msgBytes) // Pass msgBytes as data if needed by actions/guards.
+
+	// *** ADDED DIAGNOSTIC LOGGING ***
+	if transitionErr != nil {
+		// Check if the error is one of the specific FSM error types using errors.As
+		var noTransitionErr lfsm.NoTransitionError
+		var canceledErr lfsm.CanceledError
+
+		isNoTransition := errors.As(transitionErr, &noTransitionErr)
+		isCanceled := errors.As(transitionErr, &canceledErr)
+
+		s.logger.Error(">>> DEBUG: FSM transition returned error",
+			"event", event,
+			"currentState", s.fsm.CurrentState(), // State *after* failed attempt (should be unchanged)
+			"errorType", fmt.Sprintf("%T", transitionErr),
+			"errorValue", transitionErr,
+			"errorIsNoTransition", isNoTransition, // Log the result of the check
+			"errorIsCanceled", isCanceled, // Log the result of the check
+		)
+	}
+	// *** END DIAGNOSTIC LOGGING ***
+
 	if transitionErr != nil {
 		// Log the FSM error and map it to a JSON-RPC error response.
 		s.logger.Warn("FSM transition failed.", append(logFields, "error", transitionErr)...)
