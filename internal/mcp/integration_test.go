@@ -15,7 +15,7 @@ import (
 	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Import mcptypes package.
 	"github.com/dkoosis/cowgnition/internal/middleware"
 
-	// Use mcptypes for ValidatorInterface reference
+	// Use mcptypes for ValidatorInterface reference.
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -28,7 +28,7 @@ type MockValidator struct {
 }
 
 // Ensure MockValidator implements the mcptypes.ValidatorInterface.
-var _ mcptypes.ValidatorInterface = (*MockValidator)(nil) // <<< Reference mcptypes
+var _ mcptypes.ValidatorInterface = (*MockValidator)(nil) // <<< Reference mcptypes.
 
 func (m *MockValidator) Initialize(ctx context.Context) error {
 	args := m.Called(ctx)
@@ -67,7 +67,7 @@ func (m *MockValidator) GetCompileDuration() time.Duration {
 			return duration
 		}
 	}
-	return time.Millisecond * 1 // Default mock duration
+	return time.Millisecond * 1 // Default mock duration.
 }
 
 func (m *MockValidator) GetLoadDuration() time.Duration {
@@ -77,7 +77,7 @@ func (m *MockValidator) GetLoadDuration() time.Duration {
 			return duration
 		}
 	}
-	return time.Millisecond * 1 // Default mock duration
+	return time.Millisecond * 1 // Default mock duration.
 }
 
 // --- CORRECTED: Implementation for the interface method ---
@@ -91,7 +91,7 @@ func (m *MockValidator) VerifyMappingsAgainstSchema() []string {
 			return val
 		}
 	}
-	return nil // Default return for a mock often nil or zero value
+	return nil // Default return for a mock often nil or zero value.
 }
 
 // --- END CORRECTED ---
@@ -113,14 +113,14 @@ func TestServer_IntegrationFlow(t *testing.T) {
 	// --- Setup mock expectations ---
 	mockValidator.On("IsInitialized").Return(true).Maybe()
 	mockValidator.On("Validate", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(nil).Maybe()
-	mockValidator.On("HasSchema", mock.AnythingOfType("string")).Return(true).Maybe() // Be flexible
+	mockValidator.On("HasSchema", mock.AnythingOfType("string")).Return(true).Maybe() // Be flexible.
 	mockValidator.On("GetCompileDuration").Return(time.Millisecond * 10).Maybe()
 	mockValidator.On("GetLoadDuration").Return(time.Millisecond * 5).Maybe()
 	mockValidator.On("Shutdown").Return(nil).Maybe()
 	mockValidator.On("Initialize", mock.Anything).Return(nil).Maybe()
 	mockValidator.On("GetSchemaVersion").Return("mock-test-v1").Maybe()
 	// <<< CORRECTED: Use Exported Name >>>
-	mockValidator.On("VerifyMappingsAgainstSchema").Return(nil).Maybe() // Expect the corrected method
+	mockValidator.On("VerifyMappingsAgainstSchema").Return(nil).Maybe() // Expect the corrected method.
 	// --- End mock setup ---
 
 	// Create FSM and Router
@@ -192,13 +192,13 @@ func TestServer_IntegrationFlow(t *testing.T) {
 	// <<< CORRECTED: Use middleware package for DefaultValidationOptions >>>
 	validationOpts := middleware.DefaultValidationOptions()
 	validationOpts.StrictMode = true
-	validationOpts.ValidateOutgoing = false // Adjust as needed for specific tests
+	validationOpts.ValidateOutgoing = false // Adjust as needed for specific tests.
 	validationOpts.SkipTypes = map[string]bool{
 		"exit": true,
 	}
 	// <<< CORRECTED: Pass mockValidator >>>
 	validationMiddleware := middleware.NewValidationMiddleware(
-		mockValidator, // This mock now satisfies the interface
+		mockValidator, // This mock now satisfies the interface.
 		validationOpts,
 		logger.WithField("subcomponent", "validation_mw"),
 	)
@@ -217,8 +217,8 @@ func TestServer_IntegrationFlow(t *testing.T) {
 		require.Equal(t, state.StateUninitialized, mcpFSM.CurrentState())
 
 		// --- Clear expectations and set specific ones ---
-		mockValidator.Mock.ExpectedCalls = nil
-		mockValidator.Mock.Calls = nil
+		mockValidator.ExpectedCalls = nil // Use direct access.
+		mockValidator.Calls = nil         // Use direct access.
 		mockValidator.On("IsInitialized").Return(true).Maybe()
 		mockValidator.On("HasSchema", "ping").Return(true).Maybe()
 		pingMsgBytes := []byte(`{"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}}`)
@@ -256,8 +256,8 @@ func TestServer_IntegrationFlow(t *testing.T) {
 		require.Equal(t, state.StateUninitialized, mcpFSM.CurrentState())
 
 		// --- Clear expectations and set specific ones ---
-		mockValidator.Mock.ExpectedCalls = nil
-		mockValidator.Mock.Calls = nil
+		mockValidator.ExpectedCalls = nil // Use direct access.
+		mockValidator.Calls = nil         // Use direct access.
 		mockValidator.On("IsInitialized").Return(true).Maybe()
 		mockValidator.On("HasSchema", "initialize").Return(true).Maybe()
 		mockValidator.On("HasSchema", "notifications/initialized").Return(true).Maybe()
@@ -338,8 +338,8 @@ func TestServer_IntegrationFlow(t *testing.T) {
 		require.Equal(t, state.StateInitialized, mcpFSM.CurrentState())
 
 		// --- Clear expectations and set specific ones ---
-		mockValidator.Mock.ExpectedCalls = nil
-		mockValidator.Mock.Calls = nil
+		mockValidator.ExpectedCalls = nil // Use direct access.
+		mockValidator.Calls = nil         // Use direct access.
 		mockValidator.On("IsInitialized").Return(true).Maybe()
 		mockValidator.On("HasSchema", "shutdown").Return(true).Maybe()
 		shutdownMsgBytes := []byte(`{"jsonrpc": "2.0", "id": 4, "method": "shutdown", "params": {}}`)

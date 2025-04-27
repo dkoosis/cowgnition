@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"time" // Keep time import
+	"time" // Keep time import.
 
 	"github.com/cockroachdb/errors"
 	"github.com/dkoosis/cowgnition/internal/config"
@@ -22,7 +22,7 @@ import (
 	"github.com/dkoosis/cowgnition/internal/mcp/state"                // Added import for FSM Events.
 	"github.com/dkoosis/cowgnition/internal/middleware"
 
-	// "github.com/dkoosis/cowgnition/internal/schema" // No longer need schema for the interface type here
+	// "github.com/dkoosis/cowgnition/internal/schema" // No longer need schema for the interface type here.
 	"github.com/dkoosis/cowgnition/internal/services"
 	"github.com/dkoosis/cowgnition/internal/transport"
 	lfsm "github.com/looplab/fsm" // <<< IMPORT ADDED FOR ERROR CHECKING >>>
@@ -42,7 +42,7 @@ type Server struct {
 	transport transport.Transport
 	logger    logging.Logger
 	startTime time.Time
-	// <<< CHANGED TYPE to mcptypes.ValidatorInterface >>>
+	// <<< CHANGED TYPE to mcptypes.ValidatorInterface >>>.
 	validator mcptypes.ValidatorInterface
 
 	// --- MODIFIED: FSM and Router Dependencies ---.
@@ -57,7 +57,7 @@ type Server struct {
 
 // NewServer creates a new MCP server instance.
 // MODIFIED: Accepts FSM and Router, removes ConnectionState init.
-// <<< CHANGED PARAMETER TYPE to mcptypes.ValidatorInterface >>>
+// <<< CHANGED PARAMETER TYPE to mcptypes.ValidatorInterface >>>.
 func NewServer(
 	cfg *config.Config,
 	opts ServerOptions,
@@ -86,7 +86,7 @@ func NewServer(
 		config:    cfg,
 		options:   opts,
 		logger:    logger.WithField("component", "mcp_server"),
-		validator: validator, // Assign the provided interface
+		validator: validator, // Assign the provided interface.
 		fsm:       fsm,       // Store injected FSM.
 		router:    router,    // Store injected Router.
 		startTime: startTime,
@@ -218,21 +218,21 @@ func (s *Server) GetAllServices() []services.Service {
 
 // ServeSTDIO configures and starts the server using stdio transport.
 func (s *Server) ServeSTDIO(ctx context.Context) error {
-	s.logger.Debug(">>> ServeSTDIO: Entering function...") // <<< ADDED LOG
+	s.logger.Debug(">>> ServeSTDIO: Entering function...") // <<< ADDED LOG.
 	s.logger.Info("Starting server with stdio transport.")
 	s.transport = transport.NewNDJSONTransport(os.Stdin, os.Stdout, os.Stdin, s.logger) // Stdin used as closer.
-	s.logger.Debug(">>> ServeSTDIO: NDJSONTransport created.")                          // <<< ADDED LOG
+	s.logger.Debug(">>> ServeSTDIO: NDJSONTransport created.")                          // <<< ADDED LOG.
 
-	// Set up validation middleware
-	// <<< CORRECTED: Use middleware package for DefaultValidationOptions >>>
+	// Set up validation middleware.
+	// <<< CORRECTED: Use middleware package for DefaultValidationOptions >>>.
 	validationOpts := middleware.DefaultValidationOptions()
 	validationOpts.StrictMode = true
-	// <<< ADJUSTED: ValidateOutgoing often false in production, true in debug maybe >>>
-	// Let's keep it true only if debug is enabled for stricter checking during dev
+	// <<< ADJUSTED: ValidateOutgoing often false in production, true in debug maybe >>>.
+	// Let's keep it true only if debug is enabled for stricter checking during dev.
 	validationOpts.ValidateOutgoing = s.options.Debug
 
 	if s.options.Debug {
-		validationOpts.StrictOutgoing = true // Make outgoing strict only in debug
+		validationOpts.StrictOutgoing = true // Make outgoing strict only in debug.
 		validationOpts.MeasurePerformance = true
 		s.logger.Info("Debug mode enabled: outgoing validation is STRICT.")
 	} else {
@@ -244,33 +244,33 @@ func (s *Server) ServeSTDIO(ctx context.Context) error {
 		"exit": true, // Skip schema validation for exit notification.
 	}
 
-	s.logger.Debug(">>> ServeSTDIO: Creating validation middleware...") // <<< ADDED LOG
-	// <<< This call should now work because s.validator is mcptypes.ValidatorInterface >>>
+	s.logger.Debug(">>> ServeSTDIO: Creating validation middleware...") // <<< ADDED LOG.
+	// <<< This call should now work because s.validator is mcptypes.ValidatorInterface >>>.
 	validationMiddleware := middleware.NewValidationMiddleware(
-		s.validator, // s.validator now holds the correct interface type
+		s.validator, // s.validator now holds the correct interface type.
 		validationOpts,
 		s.logger.WithField("subcomponent", "validation_mw"),
 	)
-	s.logger.Debug(">>> ServeSTDIO: Validation middleware created.") // <<< ADDED LOG
+	s.logger.Debug(">>> ServeSTDIO: Validation middleware created.") // <<< ADDED LOG.
 
-	// Set up middleware chain
-	s.logger.Debug(">>> ServeSTDIO: Creating middleware chain...") // <<< ADDED LOG
+	// Set up middleware chain.
+	s.logger.Debug(">>> ServeSTDIO: Creating middleware chain...") // <<< ADDED LOG.
 	chain := middleware.NewChain(s.handleMessageWithFSM)
 	chain.Use(validationMiddleware)
 
-	// Add logging middleware if desired
+	// Add logging middleware if desired.
 	if s.options.Debug {
 		loggingMiddleware := createLoggingMiddleware(s.logger)
 		chain.Use(loggingMiddleware)
 	}
 
 	serveHandler := chain.Handler()
-	s.logger.Debug(">>> ServeSTDIO: Middleware chain handler finalized.") // <<< ADDED LOG
+	s.logger.Debug(">>> ServeSTDIO: Middleware chain handler finalized.") // <<< ADDED LOG.
 
-	// Run processing loop
-	s.logger.Debug(">>> ServeSTDIO: Calling serverProcessing...") // <<< ADDED LOG
+	// Run processing loop.
+	s.logger.Debug(">>> ServeSTDIO: Calling serverProcessing...") // <<< ADDED LOG.
 	err := s.serverProcessing(ctx, serveHandler)
-	s.logger.Debug(">>> ServeSTDIO: serverProcessing returned.", "error", err) // <<< ADDED LOG
+	s.logger.Debug(">>> ServeSTDIO: serverProcessing returned.", "error", err) // <<< ADDED LOG.
 	return err
 }
 
@@ -286,7 +286,7 @@ func createLoggingMiddleware(logger logging.Logger) mcptypes.MiddlewareFunc {
 			if len(msgPreview) > maxLogSize {
 				msgPreview = msgPreview[:maxLogSize] + "... [truncated]"
 			}
-			middlewareLogger.Debug("Incoming message", "message", msgPreview)
+			middlewareLogger.Debug("Incoming message.", "message", msgPreview)
 
 			// Call next handler.
 			start := time.Now()
@@ -295,7 +295,7 @@ func createLoggingMiddleware(logger logging.Logger) mcptypes.MiddlewareFunc {
 
 			// Log result or error.
 			if err != nil {
-				middlewareLogger.Debug("Handler error",
+				middlewareLogger.Debug("Handler error.",
 					"error", err,
 					"duration_ms", duration.Milliseconds())
 			} else if result != nil {
@@ -303,11 +303,11 @@ func createLoggingMiddleware(logger logging.Logger) mcptypes.MiddlewareFunc {
 				if len(resultPreview) > maxLogSize {
 					resultPreview = resultPreview[:maxLogSize] + "... [truncated]"
 				}
-				middlewareLogger.Debug("Outgoing message",
+				middlewareLogger.Debug("Outgoing message.",
 					"message", resultPreview,
 					"duration_ms", duration.Milliseconds())
 			} else {
-				middlewareLogger.Debug("No response from handler (notification)",
+				middlewareLogger.Debug("No response from handler (notification).",
 					"duration_ms", duration.Milliseconds())
 			}
 
@@ -380,7 +380,7 @@ func (s *Server) Shutdown(_ context.Context) error {
 // REFACTORED: Incorporates FSM transition and Router dispatch.
 // CORRECTED: Properly handles fsm.NoTransitionError.
 func (s *Server) handleMessageWithFSM(ctx context.Context, msgBytes []byte) ([]byte, error) {
-	s.logger.Debug(">>> DEBUG: ENTERING handleMessageWithFSM", "messagePreview", string(msgBytes[:minInt(len(msgBytes), 60)]))
+	s.logger.Debug(">>> DEBUG: ENTERING handleMessageWithFSM.", "messagePreview", string(msgBytes[:minInt(len(msgBytes), 60)]))
 	// 1. Parse basic structure to get method and ID.
 	var request struct {
 		JSONRPC string          `json:"jsonrpc"`
@@ -465,7 +465,7 @@ func (s *Server) handleMessageWithFSM(ctx context.Context, msgBytes []byte) ([]b
 
 	// +++ Keep Debug Logging +++
 	if request.Method == "ping" && !isNotification {
-		s.logger.Debug(">>> DEBUG: Post-router call for 'ping'",
+		s.logger.Debug(">>> DEBUG: Post-router call for 'ping'.",
 			"resultBytesFromRouter", string(resultBytes),
 			"handlerError", handlerErr)
 	}
@@ -509,7 +509,7 @@ func (s *Server) handleMessageWithFSM(ctx context.Context, msgBytes []byte) ([]b
 	// +++ Keep Debug Logging +++
 	if request.Method == "ping" {
 		marshalledResponseObjForLog, _ := json.Marshal(responseObj)
-		s.logger.Debug(">>> DEBUG: Preparing to marshal 'ping' response",
+		s.logger.Debug(">>> DEBUG: Preparing to marshal 'ping' response.",
 			"responseObject", string(marshalledResponseObjForLog),
 			"resultFieldContent", string(responseObj.Result))
 	}

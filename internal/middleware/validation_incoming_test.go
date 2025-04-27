@@ -1,7 +1,5 @@
-// Package middleware_test tests the middleware components.
-package middleware_test
-
 // file: internal/middleware/validation_incoming_test.go
+package middleware_test
 
 import (
 	"context"
@@ -25,17 +23,19 @@ func TestValidationMiddleware_CallsNextHandler_When_IncomingValidationSucceeds(t
 
 	testMsg := []byte(`{"jsonrpc": "2.0", "method": "test_method", "id": 1, "params": {}}`)
 	expectedResp := []byte(`{"jsonrpc": "2.0", "id": 1, "result": "passed"}`)
-	// --- FIX: Define the expected *result* bytes separately ---
-	expectedResultBytes := []byte(`"passed"`) // This is what validateOutgoingResponse will extract.
+	// REMOVED: Unused variable declaration.
+	// expectedResultBytes := []byte(`"passed"`)
 
-	// Expect incoming validation to be called and succeed.
-	mockValidator.On("Validate", mock.Anything, "test_method", testMsg).Return(nil).Once()
+	// Expect incoming validation to be called and succeed (using fallback schema).
+	mockValidator.On("Validate", context.Background(), "JSONRPCRequest", mock.AnythingOfType("[]uint8")).Return(nil).Once()
+
 	// Expect next handler to be called after successful validation.
 	mockNextHandler.On("Handle", mock.Anything, testMsg).Return(expectedResp, nil).Once()
-	// --- FIX: Expect outgoing validation to be called with the *extracted result* bytes ---
-	mockValidator.On("Validate", mock.Anything, "test_method_response", expectedResultBytes).Return(nil).Once()
 
-	// CORRECTED: Call the middleware function mw directly.
+	// Expect outgoing validation to be called with the *extracted result* bytes.
+	mockValidator.On("Validate", mock.AnythingOfType("*context.valueCtx"), "JSONRPCResponse", mock.AnythingOfType("[]uint8")).Return(nil).Once()
+
+	// Call the middleware function mw directly.
 	resp, err := mw(mockNextHandler.Handle)(context.Background(), testMsg)
 
 	assert.NoError(t, err)
@@ -55,10 +55,10 @@ func TestValidationMiddleware_ReturnsErrorResponse_When_IncomingValidationFailsI
 	validationErr.InstancePath = "/params"
 	validationErr.SchemaPath = "#/properties/params/type"
 
-	// Expect validation to be called and fail.
-	mockValidator.On("Validate", mock.Anything, "fail_method", testMsg).Return(validationErr).Once()
+	// Expect validation to be called and fail (using fallback schema).
+	mockValidator.On("Validate", context.Background(), "JSONRPCRequest", mock.AnythingOfType("[]uint8")).Return(validationErr).Once()
 
-	// CORRECTED: Call the middleware function mw directly.
+	// Call the middleware function mw directly.
 	resp, err := mw(mockNextHandler.Handle)(context.Background(), testMsg)
 
 	// Should not return an error from HandleMessage itself, but response bytes should contain the error.
@@ -102,17 +102,17 @@ func TestValidationMiddleware_CallsNextHandler_When_IncomingValidationFailsInNon
 	validationErr := schema.NewValidationError(schema.ErrValidationFailed, "Still invalid", nil)
 	validationErr.InstancePath = "/params"
 	expectedResp := []byte(`{"jsonrpc":"2.0","id":2,"result":"passed_anyway"}`)
-	// --- FIX: Define expected result bytes for outgoing validation ---
-	expectedResultBytes := []byte(`"passed_anyway"`)
+	// REMOVED: Unused variable declaration.
+	// expectedResultBytes := []byte(`"passed_anyway"`)
 
-	// Expect validation to be called and fail.
-	mockValidator.On("Validate", mock.Anything, "fail_method_nonstrict", testMsg).Return(validationErr).Once()
+	// Expect validation to be called and fail (using fallback schema).
+	mockValidator.On("Validate", context.Background(), "JSONRPCRequest", mock.AnythingOfType("[]uint8")).Return(validationErr).Once()
 	// Expect next handler to be called *despite* validation failure.
 	mockNextHandler.On("Handle", mock.Anything, testMsg).Return(expectedResp, nil).Once()
-	// --- FIX: Expect outgoing validation with extracted result bytes ---
-	mockValidator.On("Validate", mock.Anything, "fail_method_nonstrict_response", expectedResultBytes).Return(nil).Once()
+	// Expect outgoing validation with extracted result bytes (using fallback schema).
+	mockValidator.On("Validate", mock.AnythingOfType("*context.valueCtx"), "JSONRPCResponse", mock.AnythingOfType("[]uint8")).Return(nil).Once()
 
-	// CORRECTED: Call the middleware function mw directly.
+	// Call the middleware function mw directly.
 	resp, err := mw(mockNextHandler.Handle)(context.Background(), testMsg)
 
 	// Should proceed normally, returning the response from the next handler.

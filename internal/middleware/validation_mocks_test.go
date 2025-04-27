@@ -10,7 +10,7 @@ import (
 	mcptypes "github.com/dkoosis/cowgnition/internal/mcp_types" // Import mcptypes package.
 	"github.com/dkoosis/cowgnition/internal/middleware"
 
-	// Use mcptypes for ValidatorInterface reference
+	// Use mcptypes for ValidatorInterface reference.
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +27,7 @@ type MockValidator struct {
 }
 
 // Ensure mock implements the interface (using the imported mcptypes).
-var _ mcptypes.ValidatorInterface = (*MockValidator)(nil) // <<< Reference mcptypes
+var _ mcptypes.ValidatorInterface = (*MockValidator)(nil) // <<< Reference mcptypes.
 
 func NewMockValidator() *MockValidator {
 	return &MockValidator{
@@ -47,7 +47,7 @@ func (m *MockValidator) Initialize(ctx context.Context) error {
 		m.initialized = true
 	}
 	if m.initialized {
-		// Add expected schemas... (same as before)
+		// Add expected schemas... (same as before).
 		m.schemas["base"] = true
 		m.schemas["JSONRPCRequest"] = true
 		m.schemas["JSONRPCResponse"] = true
@@ -119,8 +119,8 @@ func (m *MockValidator) Shutdown() error {
 	return args.Error(0)
 }
 
-// VerifyMappingsAgainstSchema is the mock implementation for the interface method. <<< CORRECTED: Exported Name >>>
-// <<< RENAMED METHOD TO EXPORTED VERSION >>>
+// VerifyMappingsAgainstSchema is the mock implementation for the interface method. <<< CORRECTED: Exported Name >>>.
+// <<< RENAMED METHOD TO EXPORTED VERSION >>>.
 func (m *MockValidator) VerifyMappingsAgainstSchema() []string {
 	args := m.Called()
 	if ret := args.Get(0); ret != nil {
@@ -161,7 +161,7 @@ func setupTestMiddleware(t *testing.T, options mcptypes.ValidationOptions) (mcpt
 	mockValidator := NewMockValidator()
 	mockNextHandler := new(MockMessageHandler)
 
-	// Basic mock setup... (same as before, ensure VerifyMappingsAgainstSchema is included)
+	// Basic mock setup... (same as before, ensure VerifyMappingsAgainstSchema is included).
 	mockValidator.On("Initialize", mock.Anything).Return(nil).Maybe()
 	mockValidator.On("HasSchema", mock.AnythingOfType("string")).Maybe().Return(func(name string) bool {
 		_, exists := mockValidator.schemas[name]
@@ -171,7 +171,7 @@ func setupTestMiddleware(t *testing.T, options mcptypes.ValidationOptions) (mcpt
 	mockValidator.On("GetLoadDuration").Return(1 * time.Millisecond).Maybe()
 	mockValidator.On("GetCompileDuration").Return(1 * time.Millisecond).Maybe()
 	mockValidator.On("Shutdown").Return(nil).Maybe()
-	// <<< CORRECTED: Use Exported Name in Expectation >>>
+	// <<< CORRECTED: Use Exported Name in Expectation >>>.
 	mockValidator.On("VerifyMappingsAgainstSchema").Return(nil).Maybe()
 
 	err := mockValidator.Initialize(context.Background())

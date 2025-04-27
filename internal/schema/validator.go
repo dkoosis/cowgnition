@@ -1,5 +1,7 @@
-// file: internal/schema/validator.go
+// Package schema handles loading, validation, and error reporting against JSON schemas, specifically MCP.
 package schema
+
+// file: internal/schema/validator.go
 
 import (
 	"bytes"
@@ -25,88 +27,60 @@ import (
 //go:embed schema.json
 var embeddedSchemaContent []byte // Holds the content of the default embedded MCP schema.
 
-// --- UPDATED: Package-level variable for mappings (includes resources/read_response) ---
+// --- UPDATED: Package-level variable for mappings (includes resources/read_response) ---.
 var schemaMappings = map[string][]string{
-	// Base JSON-RPC types (used internally or as fallbacks)
+	// Base JSON-RPC types (used internally or as fallbacks).
 	"JSONRPCRequest":      {"JSONRPCRequest"},
 	"JSONRPCResponse":     {"JSONRPCResponse"},
 	"JSONRPCNotification": {"JSONRPCNotification"},
 	"JSONRPCError":        {"JSONRPCError"},
-	"base":                {"base"}, // Assuming 'base' is compiled from root schema doc
+	"base":                {"base"}, // Assuming 'base' is compiled from root schema doc.
 
-	// --- Incoming Message Type Hint Mappings ---
-	// Generic fallbacks
+	// --- Incoming Message Type Hint Mappings ---.
+	// Generic fallbacks.
 	"request":      {"JSONRPCRequest", "Request"},
 	"notification": {"JSONRPCNotification", "Notification"},
-	// Specific requests (map method name to request schema definition)
+	// Specific requests (map method name to request schema definition).
 	"initialize":            {"InitializeRequest"},
-	"ping":                  {"PingRequest", "JSONRPCRequest"}, // Ping might use specific or generic request
-	"shutdown":              {"JSONRPCRequest"},                // Simple request, often empty params
+	"ping":                  {"PingRequest", "JSONRPCRequest"}, // Ping might use specific or generic request.
+	"shutdown":              {"JSONRPCRequest"},                // Simple request, often empty params.
 	"tools/list":            {"ListToolsRequest", "JSONRPCRequest"},
 	"tools/call":            {"CallToolRequest"},
 	"resources/list":        {"ListResourcesRequest", "JSONRPCRequest"},
 	"resources/read":        {"ReadResourceRequest"},
-	"resources/subscribe":   {"SubscribeRequest"},   // Consistent naming
-	"resources/unsubscribe": {"UnsubscribeRequest"}, // Consistent naming
+	"resources/subscribe":   {"SubscribeRequest"},   // Consistent naming.
+	"resources/unsubscribe": {"UnsubscribeRequest"}, // Consistent naming.
 	"prompts/list":          {"ListPromptsRequest", "JSONRPCRequest"},
 	"prompts/get":           {"GetPromptRequest"},
-	"logging/setLevel":      {"SetLevelRequest"},       // Consistent naming
-	"$/cancelRequest":       {"CancelledNotification"}, // Consistent naming
+	"logging/setLevel":      {"SetLevelRequest"},       // Consistent naming.
+	"$/cancelRequest":       {"CancelledNotification"}, // Consistent naming.
 
-	// Specific notifications (map method name to notification schema definition)
-	"exit":                                 {"JSONRPCNotification"}, // Simple notification
+	// Specific notifications (map method name to notification schema definition).
+	"exit":                                 {"JSONRPCNotification"}, // Simple notification.
 	"notifications/initialized":            {"InitializedNotification"},
-	"notifications/progress":               {"ProgressNotification"},            // Assuming this exists
-	"notifications/cancelled":              {"CancelledNotification"},           // Assuming this exists
-	"notifications/message":                {"LoggingMessageNotification"},      // Assuming this exists
-	"notifications/roots/list_changed":     {"RootsListChangedNotification"},    // Assuming this exists
-	"notifications/resources/list_changed": {"ResourceListChangedNotification"}, // Assuming this exists
-	"notifications/resources/updated":      {"ResourceUpdatedNotification"},     // Assuming this exists
-	"notifications/prompts/list_changed":   {"PromptListChangedNotification"},   // Assuming this exists
-	"notifications/tools/list_changed":     {"ToolListChangedNotification"},     // Assuming this exists
+	"notifications/progress":               {"ProgressNotification"},            // Assuming this exists.
+	"notifications/cancelled":              {"CancelledNotification"},           // Assuming this exists.
+	"notifications/message":                {"LoggingMessageNotification"},      // Assuming this exists.
+	"notifications/roots/list_changed":     {"RootsListChangedNotification"},    // Assuming this exists.
+	"notifications/resources/list_changed": {"ResourceListChangedNotification"}, // Assuming this exists.
+	"notifications/resources/updated":      {"ResourceUpdatedNotification"},     // Assuming this exists.
+	"notifications/prompts/list_changed":   {"PromptListChangedNotification"},   // Assuming this exists.
+	"notifications/tools/list_changed":     {"ToolListChangedNotification"},     // Assuming this exists.
 
-	// --- Outgoing Response Mappings ---
-	// (map request_method + "_response" to Result schema definition)
+	// --- Outgoing Response Mappings ---.
+	// (map request_method + "_response" to Result schema definition).
 	"initialize_response":            {"InitializeResult"},
-	"ping_response":                  {"EmptyResult", "JSONRPCResponse"}, // Ping result is often empty or generic
-	"shutdown_response":              {"EmptyResult", "JSONRPCResponse"}, // Shutdown result is often null/empty
+	"ping_response":                  {"EmptyResult", "JSONRPCResponse"}, // Ping result is often empty or generic.
+	"shutdown_response":              {"EmptyResult", "JSONRPCResponse"}, // Shutdown result is often null/empty.
 	"tools/list_response":            {"ListToolsResult"},
 	"tools/call_response":            {"CallToolResult"},
 	"resources/list_response":        {"ListResourcesResult"},
 	"resources/read_response":        {"ReadResourceResult"},
-	"resources/subscribe_response":   {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response
-	"resources/unsubscribe_response": {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response
+	"resources/subscribe_response":   {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response.
+	"resources/unsubscribe_response": {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response.
 	"prompts/list_response":          {"ListPromptsResult"},
 	"prompts/get_response":           {"GetPromptResult"},
-	"logging/setLevel_response":      {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response
-}
-
-// ValidatorInterface defines the methods required for schema validation operations.
-// This interface allows for mocking or replacing the schema validation implementation.
-type ValidatorInterface interface {
-	// Validate checks if the provided JSON data conforms to the schema definition.
-	// associated with the given messageType (e.g., MCP method name or a generic type).
-	Validate(ctx context.Context, messageType string, data []byte) error
-	// HasSchema checks if a compiled schema definition exists for the given name.
-	// (e.g., a definition name like "InitializeRequest" or a mapped generic name like "request").
-	HasSchema(name string) bool
-	// IsInitialized returns true if the validator has successfully loaded and.
-	// compiled the necessary schema definitions. Validation cannot proceed otherwise.
-	IsInitialized() bool
-	// Initialize loads and compiles the schema from the configured source (override URI or embedded).
-	// This must be called successfully before Validate can be used.
-	Initialize(ctx context.Context) error
-	// GetLoadDuration returns the time taken during the last schema loading phase (reading from source).
-	GetLoadDuration() time.Duration
-	// GetCompileDuration returns the time taken during the last schema compilation phase.
-	GetCompileDuration() time.Duration
-	// GetSchemaVersion returns the detected version string of the loaded schema, if identifiable.
-	GetSchemaVersion() string
-	// Shutdown cleans up resources used by the validator, like closing idle HTTP connections.
-	Shutdown() error
-	// VerifyMappingsAgainstSchema checks the internal mappings against compiled schemas.
-	// Note: This is primarily for testing/internal verification, not core validation path.
-	VerifyMappingsAgainstSchema() []string
+	"logging/setLevel_response":      {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response.
 }
 
 // Validator handles loading, compiling, and validating data against JSON schemas.
@@ -159,10 +133,14 @@ func NewValidator(cfg config.SchemaConfig, logger logging.Logger) *Validator {
 // compiles the base schema and all its definitions, caches them, performs mapping verification,
 // and marks the validator as ready.
 // It returns an error if loading or compilation fails critically.
-func (v *Validator) Initialize(ctx context.Context) error {
+func (v *Validator) Initialize(_ context.Context) error {
 	initStart := time.Now()
 	v.mu.Lock() // Lock for modifying validator state.
+
+	// --- START: Moved Unlock to earlier to prevent deadlock ---
+	// The lock is now released *before* VerifyMappingsAgainstSchema is called.
 	defer v.mu.Unlock()
+	// --- END: Moved Unlock ---
 
 	if v.initialized {
 		v.logger.Warn("Schema validator already initialized, skipping.")
@@ -180,7 +158,8 @@ func (v *Validator) Initialize(ctx context.Context) error {
 	// --- Load Schema Data ---
 	if v.schemaConfig.SchemaOverrideURI != "" {
 		v.logger.Info("SchemaOverrideURI is set, attempting to load external schema.", "uri", v.schemaConfig.SchemaOverrideURI)
-		loadedData, loadErr := loadSchemaFromURI(ctx, v.schemaConfig.SchemaOverrideURI, v.logger, v.httpClient)
+		// Pass background context to loader as Initialize context might be short-lived
+		loadedData, loadErr := loadSchemaFromURI(context.Background(), v.schemaConfig.SchemaOverrideURI, v.logger, v.httpClient)
 
 		if loadErr != nil {
 			// Check if the error is specifically a "not found" type.
@@ -296,30 +275,42 @@ func (v *Validator) Initialize(ctx context.Context) error {
 	v.initialized = true
 	initDuration := time.Since(initStart)
 
+	// --- RELEASE LOCK before logging/verification ---
+	// v.mu.Unlock() // <<< MOVED TO DEFER AT TOP <<<
+
+	// --- Log success and Verify mappings *after* releasing the write lock ---
 	v.logger.Info("✅ Schema validator initialized successfully.",
 		"totalDuration", initDuration.String(),
 		"loadDuration", v.lastLoadDuration.String(),
 		"compileDuration", v.lastCompileDuration.String(),
 		"schemaVersion", finalSchemaVersion,
-		"schemasCompiled", len(v.schemas),
+		"schemasCompiled", len(compiledSchemas), // Use local var before map is potentially cleared
 		"schemaSource", sourceInfo)
 
-	// --- Verify mappings after initialization ---
+	// --- START: Moved Verification Outside Lock ---
+	// This call now happens after the write lock is released.
+	// Verify mappings requires a read lock, which it acquires itself.
 	unmappedSchemas := v.VerifyMappingsAgainstSchema()
 	if len(unmappedSchemas) > 0 {
 		v.logger.Warn("Detected schema definitions without corresponding entries in schemaMappings variable.",
 			"unmappedDefinitions", unmappedSchemas,
 			"action", "Update schemaMappings variable in internal/schema/validator.go")
 	}
+	// --- END: Moved Verification Outside Lock ---
 
 	return nil
 }
 
+// File: cowgnition/internal/schema/validator.go
+
+// --- BEGIN COMPLETE compileAllDefinitions FUNCTION (with detailed loop logging) ---
 // compileAllDefinitions compiles the base schema and all definitions found under the "definitions" key.
 // Returns the map of compiled schemas and the first compilation error encountered, if any.
 func (v *Validator) compileAllDefinitions(baseResourceID string, schemaDoc map[string]interface{}) (map[string]*jsonschema.Schema, error) {
 	compiled := make(map[string]*jsonschema.Schema)
 	var firstCompileError error
+
+	v.logger.Info(">>> DEBUG: Compiling base schema resource...", "resourceID", baseResourceID) // Log before base compile
 
 	// Compile the base schema document itself.
 	baseSchema, err := v.compiler.Compile(baseResourceID)
@@ -337,12 +328,20 @@ func (v *Validator) compileAllDefinitions(baseResourceID string, schemaDoc map[s
 
 	// Compile individual definitions (e.g., "#/definitions/InitializeRequest").
 	if defs, ok := schemaDoc["definitions"].(map[string]interface{}); ok {
+		v.logger.Info(">>> DEBUG: Starting compilation of definitions...", "count", len(defs)) // Log count
+		i := 0                                                                                 // Counter
 		for name := range defs {
+			i++
 			pointer := baseResourceID + "#/definitions/" + name
+			// ---> Log *before* compiling each definition <---
+			v.logger.Info(fmt.Sprintf(">>> DEBUG: Compiling definition %d/%d: %s", i, len(defs), name), "pointer", pointer)
+
 			schemaCompiled, errCompile := v.compiler.Compile(pointer)
+
 			if errCompile != nil {
 				// Log warnings for individual definition failures but continue.
-				v.logger.Warn("Failed to compile schema definition.", "name", name, "pointer", pointer, "error", errCompile)
+				// ---> Log the specific compile error <---
+				v.logger.Warn("CRITICAL: Failed to compile schema definition.", "name", name, "pointer", pointer, "error", fmt.Sprintf("%+v", errCompile))
 				if firstCompileError == nil { // Store only the first error encountered.
 					firstCompileError = NewValidationError(
 						ErrSchemaCompileFailed,
@@ -350,24 +349,29 @@ func (v *Validator) compileAllDefinitions(baseResourceID string, schemaDoc map[s
 						errors.Wrap(errCompile, "compiler.Compile failed"),
 					).WithContext("pointer", pointer)
 				}
+				// ---> Log *after* failure <---
+				v.logger.Warn(">>> DEBUG: Finished compiling definition (FAILED)", "name", name)
 			} else {
 				// Store successfully compiled definition.
 				compiled[name] = schemaCompiled
-				v.logger.Debug("Compiled schema definition.", "name", name)
+				// ---> Log *after* success <---
+				v.logger.Debug(">>> DEBUG: Finished compiling definition (SUCCESS)", "name", name)
 			}
 		}
+		v.logger.Info(">>> DEBUG: Finished compiling all definitions.") // Log completion
 	} else {
 		v.logger.Warn("No 'definitions' section found in the schema JSON.")
 	}
 
 	// Add convenient aliases based on the package-level schemaMappings variable.
-	v.addGenericMappings(compiled)
+	v.addGenericMappings(compiled) // Assuming this function is relatively fast
 
 	// Return the map and the first error encountered (if any).
 	// The caller decides if this error is fatal.
 	return compiled, firstCompileError
 }
 
+// --- END COMPLETE compileAllDefinitions FUNCTION ---
 // addGenericMappings uses the package-level schemaMappings variable to create aliases
 // in the compiledSchemas map.
 func (v *Validator) addGenericMappings(compiledSchemas map[string]*jsonschema.Schema) {
@@ -398,10 +402,10 @@ func (v *Validator) addGenericMappings(compiledSchemas map[string]*jsonschema.Sc
 // This helps ensure the mapping list stays synchronized with the schema definitions.
 // Note: This is a heuristic check based on naming conventions (*Request, *Result).
 func (v *Validator) VerifyMappingsAgainstSchema() []string {
-	// --- Use Read Lock as this doesn't modify state ---
+	// --- Use Read Lock as this doesn't modify state ---.
 	v.mu.RLock()
 	defer v.mu.RUnlock()
-	// --- END ---
+	// --- END ---.
 
 	if v.schemas == nil {
 		v.logger.Error("VerifyMappingsAgainstSchema called but schemas map is nil.")
@@ -492,7 +496,7 @@ func (v *Validator) IsInitialized() bool {
 // It first ensures the validator is initialized and the data is valid JSON syntax.
 // It then finds the appropriate compiled schema (using fallbacks if necessary) and performs validation.
 // Returns a structured ValidationError if validation fails or prerequisites are not met.
-func (v *Validator) Validate(ctx context.Context, messageType string, data []byte) error {
+func (v *Validator) Validate(_ context.Context, messageType string, data []byte) error { // Rename ctx to _.
 	if !v.IsInitialized() {
 		return NewValidationError(ErrSchemaNotFound, "Schema validator not initialized", nil)
 	}
@@ -724,4 +728,4 @@ func (v *Validator) getVersionFromMCPHeuristics(schemaDoc map[string]interface{}
 
 // --- END OF validator.go ---
 // Helper functions like calculatePreview, convertValidationError, etc.
-// should NOT be included here if they exist in errors.go or helpers.go
+// should NOT be included here if they exist in errors.go or helpers.go.

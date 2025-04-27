@@ -1,6 +1,6 @@
-// file: internal/mcp_types/interfaces.go
 package mcptypes
 
+// file: internal/mcp_types/interfaces.go
 import (
 	"context"
 	"time"
