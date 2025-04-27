@@ -22,8 +22,8 @@
 │   │   ├── config.go
 │   │   └── stub_test.go
 │   ├── fsm/
-│   │   ├── fsm.go
-│   │   └── fsm_test.go
+│   │   ├── fsm_test.go
+│   │   └── fsm.go
 │   ├── logging/
 │   │   ├── logger.go
 │   │   ├── slog.go
@@ -33,22 +33,22 @@
 │   │   │   ├── errors.go
 │   │   │   └── stub_test.go
 │   │   ├── router/
-│   │   │   ├── router.go
-│   │   │   └── router_test.go
+│   │   │   ├── router_test.go
+│   │   │   └── router.go
 │   │   ├── state/
 │   │   │   ├── events.go
-│   │   │   ├── machine.go
 │   │   │   ├── machine_test.go
+│   │   │   ├── machine.go
 │   │   │   └── states.go
 │   │   ├── connection_state.go
 │   │   ├── handlers_prompts.go
 │   │   ├── handlers_tools.go
 │   │   ├── helpers.go
 │   │   ├── integration_test.go
-│   │   ├── mcp_server.go
 │   │   ├── mcp_server_error_handling.go
 │   │   ├── mcp_server_metrics.go
 │   │   ├── mcp_server_processing.go
+│   │   ├── mcp_server.go
 │   │   └── types.go
 │   ├── mcp_types/
 │   │   ├── interfaces.go
@@ -57,25 +57,25 @@
 │   │   └── server_metrics.go
 │   ├── middleware/
 │   │   ├── chain.go
-│   │   ├── validation.go
 │   │   ├── validation_errors.go
 │   │   ├── validation_helpers.go
-│   │   ├── validation_identify.go
 │   │   ├── validation_identify_test.go
+│   │   ├── validation_identify.go
 │   │   ├── validation_incoming_test.go
 │   │   ├── validation_mocks_test.go
 │   │   ├── validation_options_test.go
 │   │   ├── validation_outgoing_test.go
 │   │   ├── validation_process.go
-│   │   └── validation_schema.go
+│   │   ├── validation_schema.go
+│   │   └── validation.go
 │   ├── rtm/
-│   │   ├── auth.go
-│   │   ├── auth_manager.go
 │   │   ├── auth_manager_callback.go
 │   │   ├── auth_manager_helpers.go
 │   │   ├── auth_manager_modes.go
-│   │   ├── client.go
+│   │   ├── auth_manager.go
+│   │   ├── auth.go
 │   │   ├── client_test.go
+│   │   ├── client.go
 │   │   ├── constants.go
 │   │   ├── diagnostics.go
 │   │   ├── factory.go
@@ -86,36 +86,36 @@
 │   │   ├── methods.go
 │   │   ├── rtm_client_metrics.go
 │   │   ├── service.go
-│   │   ├── token_storage.go
 │   │   ├── token_storage_interface.go
 │   │   ├── token_storage_secure.go
+│   │   ├── token_storage.go
 │   │   └── types.go
 │   ├── schema/
 │   │   ├── errors.go
 │   │   ├── helpers.go
 │   │   ├── loader.go
-│   │   ├── name_rules.go
 │   │   ├── name_rules_test.go
+│   │   ├── name_rules.go
 │   │   ├── schema.json
-│   │   ├── validator.go
 │   │   ├── validator_test.go
+│   │   ├── validator.go
 │   │   └── version.go
 │   ├── services/
 │   │   └── service.go
 │   └── transport/
 │       ├── in_memory_transport.go
 │       ├── stub_test.go
-│       ├── transport.go
-│       └── transport_errors.go
+│       ├── transport_errors.go
+│       └── transport.go
 ├── scripts/
 │   ├── check_file_length.sh*
 │   ├── check_go_bin_path.sh*
 │   ├── check_go_mod_path.sh*
 │   ├── graph.d2
 │   └── pkgdep.sh*
-├── Makefile
-├── README.md
 ├── go.mod
-└── go.sum
+├── go.sum
+├── Makefile
+└── README.md
 
 23 directories, 96 files

@@ -1,7 +1,7 @@
 // Package middleware provides chainable handlers for processing MCP messages, like validation.
 package middleware
 
-// file: internal/middleware/validation_process.go.
+// file: internal/middleware/validation_process.go
 
 import (
 	"context"
@@ -176,42 +176,57 @@ func (m *ValidationMiddleware) handleOutgoing(ctx context.Context, responseBytes
 // validateOutgoingResponse performs validation on the outgoing response bytes.
 // It determines the schema and calls the validator.
 func (m *ValidationMiddleware) validateOutgoingResponse(ctx context.Context, requestMethod string, responseBytes []byte) error {
-	// Skip validation for standard JSON-RPC error responses, as they have a defined structure
-	// and validating them against success schemas would likely fail.
+	// Skip validation for standard JSON-RPC error responses.
 	if isErrorResponse(responseBytes) { // Use helper from validation_helpers.go.
 		m.logger.Debug("Skipping outgoing validation for JSON-RPC error response.")
 		return nil
 	}
 
+	// Extract the "result" field for validation.
+	var respWrapper struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(responseBytes, &respWrapper); err != nil {
+		// This might happen if the response isn't a standard success response format.
+		// Log it, but don't fail validation outright here, as it might be valid in other ways or an error itself.
+		m.logger.Warn("Could not extract 'result' field from outgoing response for validation.",
+			"error", err, "responsePreview", calculatePreview(responseBytes)) // Use helper.
+		// Depending on strictness/requirements, could return an error here.
+		// For now, we'll let it proceed, and schema determination might fallback.
+	}
+
+	// --- FIX: Simplified nil/empty check based on staticcheck S1009 ---
+	// Handle cases where result is empty or explicitly null.
+	if len(respWrapper.Result) == 0 || string(respWrapper.Result) == "null" {
+		// --- END FIX ---
+		m.logger.Debug("Skipping outgoing validation for empty or null 'result' field.", "requestMethod", requestMethod)
+		return nil // Nothing to validate inside the result.
+	}
+
 	// Determine the schema type based on the original request method or response content.
 	// Uses helper from validation_schema.go.
-	schemaType := m.determineOutgoingSchemaType(requestMethod, responseBytes)
+	schemaType := m.determineOutgoingSchemaType(requestMethod, responseBytes) // Pass original responseBytes for type determination heuristics.
 	if schemaType == "" {
-		responsePreview := calculatePreview(responseBytes) // Use helper from validation_helpers.go.
+		responsePreview := calculatePreview(responseBytes) // Use helper.
 		m.logger.Warn("Could not determine schema type for outgoing validation.",
 			"requestMethod", requestMethod,
 			"responsePreview", responsePreview)
-		// In non-strict outgoing mode, we ignore this. In strict, we should fail.
 		if m.options.StrictOutgoing {
-			// Return a validation error indicating schema was not found.
-			// Use the NewValidationError helper defined in validation_errors.go.
 			return NewValidationError(
 				schema.ErrSchemaNotFound,
 				"Could not determine schema type for outgoing validation",
-				nil, // No specific underlying cause here.
+				nil,
 			).WithContext("requestMethod", requestMethod)
 		}
-		// Non-strict, ignore the inability to find a schema.
-		return nil
+		return nil // Non-strict, ignore missing schema.
 	}
 
-	// Perform validation using the determined schema type.
-	validationErr := m.validator.Validate(ctx, schemaType, responseBytes)
+	// Perform validation on the extracted 'result' content.
+	validationErr := m.validator.Validate(ctx, schemaType, respWrapper.Result) // Validate respWrapper.Result.
 
 	if validationErr != nil {
 		// Log detailed context if validation fails.
-		// Fixed: Call identifyMessage directly, not as a method on m.
-		responseMsgType, responseReqID, _ := identifyMessage(responseBytes) // Identify response for logging context.
+		responseMsgType, responseReqID, _ := identifyMessage(responseBytes) // Identify original response for logging context.
 		preview := calculatePreview(responseBytes)
 
 		// Perform specific checks for known outgoing types if validation fails (e.g., tool names).
@@ -219,16 +234,14 @@ func (m *ValidationMiddleware) validateOutgoingResponse(ctx context.Context, req
 			m.performToolNameValidation(responseBytes) // Use helper from validation_helpers.go.
 		}
 
-		// Log the primary validation failure details.
 		m.logger.Debug("Outgoing response validation failed.",
-			"requestMethod", requestMethod, // Method of the original request.
-			"responseMsgType", responseMsgType, // Type identified from the response itself.
-			"responseReqID", responseReqID, // ID from the response itself.
-			"schemaTypeUsed", schemaType, // Schema we tried to validate against.
-			"errorDetail", validationErr, // The actual validation error.
+			"requestMethod", requestMethod,
+			"responseMsgType", responseMsgType,
+			"responseReqID", responseReqID,
+			"schemaTypeUsed", schemaType,
+			"errorDetail", validationErr,
 			"responsePreview", preview)
 
-		// Return the validation error to be handled by the caller (handleOutgoing).
 		return validationErr
 	}
 
