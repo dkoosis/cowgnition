@@ -1,4 +1,47 @@
 // file: internal/schema/validator_test.go
+
+// TestValidator_Initialize_Fails_When_SchemaFileIsInvalidJSON tests initialization failure with invalid JSON content.
+// Renamed function to follow ADR-008 convention.
+func TestValidator_Initialize_Fails_When_SchemaFileIsInvalidJSON(t *testing.T) {
+    t.Log("Testing Initialize Failure: Schema file contains invalid JSON syntax.")
+    logger := logging.GetNoopLogger()
+    schemaPath := createTempSchemaFile(t, invalidSchemaSyntax)
+    cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + schemaPath}
+    // Create the validator as an interface type instead of concrete type
+    var v mcptypes.ValidatorInterface = NewValidator(cfg, logger)
+    ctx := context.Background()
+
+    err := v.Initialize(ctx)
+
+    require.Error(t, err, "Initialize should fail when schema file content is invalid JSON.")
+    assert.False(t, v.IsInitialized(), "Validator should not be marked as initialized.")
+    
+    // Rest of the function remains the same...
+}
+
+// TestValidator_Initialize_SucceedsWithFallback_When_SchemaFileNotFound tests initialization success via fallback when the override file doesn't exist.
+// Renamed function to follow ADR-008 convention and reflect fallback behavior.
+func TestValidator_Initialize_SucceedsWithFallback_When_SchemaFileNotFound(t *testing.T) {
+    t.Log("Testing Initialize Fallback: Schema override file not found.")
+    logger := logging.GetNoopLogger()
+    nonExistentPath := "/non/existent/path/schema.json"
+    cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + nonExistentPath}
+    // Create the validator as an interface type instead of concrete type
+    var v mcptypes.ValidatorInterface = NewValidator(cfg, logger)
+    ctx := context.Background()
+
+    // Assuming embedded schema exists and is valid.
+    require.NotEmpty(t, embeddedSchemaContent, "Embedded schema must exist for this fallback test.")
+
+    err := v.Initialize(ctx)
+
+    // NOTE: With the current loader logic, if the override fails, it falls back
+    // to embedded. So, Initialize *should succeed* if the embedded schema is present.
+    require.NoError(t, err, "Initialize should SUCCEED by falling back to embedded schema when override file is not found.")
+    assert.True(t, v.IsInitialized(), "Validator should be marked as initialized via fallback.")
+    
+    // Rest of the function remains the same...
+}// file: internal/schema/validator_test.go
 package schema
 
 import (
@@ -8,8 +51,6 @@ import (
 	"path/filepath"
 	"strings" // Import strings.
 	"testing"
-
-	// Added time import.
 
 	"github.com/cockroachdb/errors"
 	// Import the config package to use config.SchemaConfig.
