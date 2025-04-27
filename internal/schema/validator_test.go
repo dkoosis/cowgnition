@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	// Added time import.
-	// Needed by setupTestMiddleware indirectly.
+
 	"github.com/cockroachdb/errors"
 	// Import the config package to use config.SchemaConfig.
 	"github.com/dkoosis/cowgnition/internal/config"
@@ -81,6 +81,26 @@ func getwd(t *testing.T) string {
 	return wd
 }
 
+// --- Test Setup Helper ---
+// setupTestValidator creates and initializes a validator using the embedded schema for testing.
+// Returns ValidatorInterface to match usage in tests.
+func setupTestValidator(t *testing.T) ValidatorInterface { // Return interface type
+	t.Helper()
+	logger := logging.GetNoopLogger()
+	// Use embedded schema for consistency in tests unless specific file content is needed.
+	cfg := config.SchemaConfig{SchemaOverrideURI: ""}
+	validator := NewValidator(cfg, logger) // Returns *Validator
+	require.NotNil(t, validator)
+
+	ctx := context.Background()
+	err := validator.Initialize(ctx)
+	require.NoError(t, err, "Test setup failed: Could not initialize validator with embedded schema.")
+	require.True(t, validator.IsInitialized(), "Test setup failed: Validator not initialized.")
+	return validator // Return the concrete type which satisfies the interface
+}
+
+// --- END NEW HELPER ---
+
 // --- Test Cases ---.
 
 // TestValidator_NewValidator_ReturnsInstance_When_ConfigIsValid tests NewValidator creation.
@@ -92,9 +112,10 @@ func TestValidator_NewValidator_ReturnsInstance_When_ConfigIsValid(t *testing.T)
 	cfg := config.SchemaConfig{
 		SchemaOverrideURI: "file://" + schemaPath,
 	}
-	validator := NewValidator(cfg, logger)
+	validator := NewValidator(cfg, logger) // Returns *Validator
 
 	assert.NotNil(t, validator, "Validator instance should not be nil.")
+	// Assert internal fields for the concrete type *Validator.
 	assert.NotNil(t, validator.compiler, "Compiler should be initialized.")
 	assert.NotNil(t, validator.schemas, "Schemas map should be initialized (empty).")
 	assert.NotNil(t, validator.httpClient, "HTTP client should be initialized.")
@@ -118,14 +139,21 @@ func TestValidator_Initialize_Succeeds_When_UsingValidSchemaFile(t *testing.T) {
 	assert.NotZero(t, validator.GetLoadDuration(), "Load duration should be recorded.")
 	assert.NotZero(t, validator.GetCompileDuration(), "Compile duration should be recorded.")
 
-	validator.mu.RLock()
-	schemaCount := len(validator.schemas)
+	// Check internal state via interface methods where possible.
 	hasBase := validator.HasSchema("base")
 	hasRequest := validator.HasSchema("JSONRPCRequest") // Check for a known definition.
-	validator.mu.RUnlock()
 
 	assert.True(t, hasBase, "Base schema should be compiled and stored.")
 	assert.True(t, hasRequest, "Known definition 'JSONRPCRequest' should be compiled.")
+
+	// Cast to concrete type to check internal count (for logging).
+	concreteValidator, ok := validator.(*Validator)
+	schemaCount := 0
+	if ok {
+		concreteValidator.mu.RLock()
+		schemaCount = len(concreteValidator.schemas)
+		concreteValidator.mu.RUnlock()
+	}
 	t.Logf("Successfully initialized from file: %s (%d schemas compiled).", schemaPath, schemaCount)
 }
 
@@ -146,14 +174,20 @@ func TestValidator_Initialize_Succeeds_When_UsingEmbeddedSchema(t *testing.T) {
 	assert.True(t, validator.IsInitialized(), "Validator should be marked as initialized.")
 	assert.NotZero(t, validator.GetCompileDuration(), "Compile duration should be recorded.")
 
-	validator.mu.RLock()
-	schemaCount := len(validator.schemas)
 	hasBase := validator.HasSchema("base")
 	hasRequest := validator.HasSchema("JSONRPCRequest")
-	validator.mu.RUnlock()
 
 	assert.True(t, hasBase, "Base schema should be compiled and stored from embedded content.")
 	assert.True(t, hasRequest, "JSONRPCRequest definition should be compiled from embedded content.")
+
+	// Cast to concrete type to check internal count (for logging).
+	concreteValidator, ok := validator.(*Validator)
+	schemaCount := 0
+	if ok {
+		concreteValidator.mu.RLock()
+		schemaCount = len(concreteValidator.schemas)
+		concreteValidator.mu.RUnlock()
+	}
 	t.Logf("Successfully initialized with embedded schema (%d schemas compiled).", schemaCount)
 }
 
@@ -210,30 +244,25 @@ func TestValidator_Initialize_SucceedsWithFallback_When_SchemaFileNotFound(t *te
 // Renamed function to follow ADR-008 convention.
 func TestValidator_Validate_Succeeds_When_MessageIsValid(t *testing.T) {
 	t.Log("Testing Validate Success: Message conforms to JSONRPCRequest schema.")
-	logger := logging.GetNoopLogger()
-	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + getFullSchemaPath(t)}
-	validator := NewValidator(cfg, logger)
+	// Use setup helper for initialized validator with embedded schema.
+	validator := setupTestValidator(t)
 	ctx := context.Background()
-	err := validator.Initialize(ctx)
-	require.NoError(t, err, "Initialization failed, cannot proceed with validation test.")
 
-	err = validator.Validate(ctx, "JSONRPCRequest", []byte(validMessage))
+	// Use generic request schema name from mapping.
+	err := validator.Validate(ctx, "request", []byte(validMessage))
 
-	assert.NoError(t, err, "Validation should succeed for a valid message against JSONRPCRequest.")
+	assert.NoError(t, err, "Validation should succeed for a valid message against 'request' (mapped to JSONRPCRequest).")
 }
 
 // TestValidator_Validate_Fails_When_RequiredFieldMissing tests validation failure due to missing required field.
 // Renamed function to follow ADR-008 convention.
 func TestValidator_Validate_Fails_When_RequiredFieldMissing(t *testing.T) {
 	t.Log("Testing Validate Failure: Message is missing required 'method' field for JSONRPCRequest.")
-	logger := logging.GetNoopLogger()
-	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + getFullSchemaPath(t)}
-	validator := NewValidator(cfg, logger)
+	validator := setupTestValidator(t)
 	ctx := context.Background()
-	err := validator.Initialize(ctx)
-	require.NoError(t, err, "Initialization failed, cannot proceed with validation test.")
 
-	err = validator.Validate(ctx, "JSONRPCRequest", []byte(invalidMessageMissingMethod))
+	// Use generic request schema name from mapping.
+	err := validator.Validate(ctx, "request", []byte(invalidMessageMissingMethod))
 
 	require.Error(t, err, "Validation should fail when a required field ('method') is missing.")
 
@@ -263,14 +292,10 @@ func TestValidator_Validate_Fails_When_RequiredFieldMissing(t *testing.T) {
 // Renamed function to follow ADR-008 convention.
 func TestValidator_Validate_Fails_When_FieldHasWrongType(t *testing.T) {
 	t.Log("Testing Validate Failure: Message has incorrect type for 'method' field.")
-	logger := logging.GetNoopLogger()
-	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + getFullSchemaPath(t)}
-	validator := NewValidator(cfg, logger)
+	validator := setupTestValidator(t)
 	ctx := context.Background()
-	err := validator.Initialize(ctx)
-	require.NoError(t, err, "Initialization failed, cannot proceed with validation test.")
 
-	err = validator.Validate(ctx, "JSONRPCRequest", []byte(invalidMessageWrongType))
+	err := validator.Validate(ctx, "request", []byte(invalidMessageWrongType))
 
 	require.Error(t, err, "Validation should fail when 'method' field has wrong type.")
 
@@ -297,21 +322,17 @@ func TestValidator_Validate_Fails_When_FieldHasWrongType(t *testing.T) {
 			}
 		}
 	}
-	assert.True(t, foundTypeMismatch, "Expected validation cause message for type mismatch at instance path '%s'.", expectedLocation)
+	assert.True(t, foundTypeMismatch, "Expected validation cause for type mismatch at instance path '%s'.", expectedLocation)
 }
 
 // TestValidator_Validate_Fails_When_MessageIsInvalidJSON tests validation failure with invalid JSON syntax.
 // Renamed function to follow ADR-008 convention.
 func TestValidator_Validate_Fails_When_MessageIsInvalidJSON(t *testing.T) {
 	t.Log("Testing Validate Failure: Input message has invalid JSON syntax.")
-	logger := logging.GetNoopLogger()
-	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + getFullSchemaPath(t)}
-	validator := NewValidator(cfg, logger)
+	validator := setupTestValidator(t)
 	ctx := context.Background()
-	err := validator.Initialize(ctx)
-	require.NoError(t, err, "Initialization failed, cannot proceed with validation test.")
 
-	err = validator.Validate(ctx, "JSONRPCRequest", []byte(invalidJSONSyntaxMessage))
+	err := validator.Validate(ctx, "request", []byte(invalidJSONSyntaxMessage))
 
 	require.Error(t, err, "Validation should fail when the input message is invalid JSON.")
 
@@ -337,7 +358,7 @@ func TestValidator_Validate_Fails_When_ValidatorNotInitialized(t *testing.T) {
 	validator := NewValidator(cfg, logger)            // Not initialized.
 	ctx := context.Background()
 
-	err := validator.Validate(ctx, "JSONRPCRequest", []byte(validMessage))
+	err := validator.Validate(ctx, "request", []byte(validMessage))
 
 	require.Error(t, err, "Validation should fail if validator is not initialized.")
 
@@ -351,27 +372,49 @@ func TestValidator_Validate_Fails_When_ValidatorNotInitialized(t *testing.T) {
 // Renamed function to follow ADR-008 convention.
 func TestValidator_Shutdown_Succeeds_When_Called(t *testing.T) {
 	t.Log("Testing Shutdown: Ensures validator is marked uninitialized and resources cleared.")
-	logger := logging.GetNoopLogger()
-	cfg := config.SchemaConfig{SchemaOverrideURI: "file://" + getFullSchemaPath(t)}
-	validator := NewValidator(cfg, logger)
-	ctx := context.Background()
-	err := validator.Initialize(ctx)
-	require.NoError(t, err, "Initialization failed, cannot proceed with shutdown test.")
+	validator := setupTestValidator(t) // Use helper.
 	require.True(t, validator.IsInitialized(), "Validator should be initialized before shutdown.")
 
 	// Call Shutdown the first time.
-	err = validator.Shutdown()
+	err := validator.Shutdown()
 	assert.NoError(t, err, "First call to Shutdown should not return an error.")
 	assert.False(t, validator.IsInitialized(), "Validator should be marked as uninitialized after shutdown.")
 
-	// Check internal state (use lock for safety).
-	validator.mu.RLock()
-	assert.Nil(t, validator.schemas, "Schemas map should be nil after shutdown.")
-	assert.Nil(t, validator.schemaDoc, "SchemaDoc map should be nil after shutdown.")
-	validator.mu.RUnlock()
+	// --- Check internal state (requires type assertion) ---
+	concreteValidator, ok := validator.(*Validator)
+	require.True(t, ok, "setupTestValidator should return concrete *Validator for internal checks")
+	concreteValidator.mu.RLock()
+	assert.Nil(t, concreteValidator.schemas, "Schemas map should be nil after shutdown.")
+	assert.Nil(t, concreteValidator.schemaDoc, "SchemaDoc map should be nil after shutdown.")
+	concreteValidator.mu.RUnlock()
+	// --- End Check internal state ---
 
 	// Call Shutdown again (should be idempotent).
 	err = validator.Shutdown()
 	assert.NoError(t, err, "Calling Shutdown again should not return an error.")
 	assert.False(t, validator.IsInitialized(), "Validator should remain uninitialized after second shutdown call.")
 }
+
+// --- NEW TEST: Verify schema mappings ---
+// TestValidator_AllSchemaDefinitionsHaveMappings verifies that all Request/Result
+// definitions found in the compiled schema have corresponding entries in the
+// schemaMappings variable used by addGenericMappings.
+func TestValidator_AllSchemaDefinitionsHaveMappings(t *testing.T) {
+	t.Log("Testing Mapping Completeness: Ensures all *Request/*Result schemas are mapped.")
+	// Setup test validator (which calls Initialize and thus verifyMappingsAgainstSchema internally)
+	validator := setupTestValidator(t) // This helper initializes the validator
+
+	// Call the verification method directly on the initialized validator.
+	// Cast to concrete type *Validator because verifyMappingsAgainstSchema is not on the interface yet.
+	// concreteValidator, ok := validator.(*Validator)
+	// require.True(t, ok, "Validator should be concrete type *Validator to call verifyMappingsAgainstSchema")
+	// unmapped := concreteValidator.verifyMappingsAgainstSchema()
+
+	// --- CORRECTED: Call via interface after adding method to interface ---
+	unmapped := validator.verifyMappingsAgainstSchema()
+
+	// Assert that the list of unmapped schemas (that match *Request/*Result pattern) is empty.
+	assert.Empty(t, unmapped, "Found compiled schema definitions ending in Request/Result without corresponding entries in the validator's schemaMappings variable: %v. Update schemaMappings in internal/schema/validator.go.", unmapped)
+}
+
+// --- END NEW TEST ---

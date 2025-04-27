@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"regexp" // Used for schema version heuristics.
+	"sort"   // Added for sorting unmapped schemas list.
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,62 @@ import (
 
 //go:embed schema.json
 var embeddedSchemaContent []byte // Holds the content of the default embedded MCP schema.
+
+// --- UPDATED: Package-level variable for mappings (includes resources/read_response) ---
+var schemaMappings = map[string][]string{
+	// Base JSON-RPC types (used internally or as fallbacks)
+	"JSONRPCRequest":      {"JSONRPCRequest"},
+	"JSONRPCResponse":     {"JSONRPCResponse"},
+	"JSONRPCNotification": {"JSONRPCNotification"},
+	"JSONRPCError":        {"JSONRPCError"},
+	"base":                {"base"}, // Assuming 'base' is compiled from root schema doc
+
+	// --- Incoming Message Type Hint Mappings ---
+	// Generic fallbacks
+	"request":      {"JSONRPCRequest", "Request"},
+	"notification": {"JSONRPCNotification", "Notification"},
+	// Specific requests (map method name to request schema definition)
+	"initialize":            {"InitializeRequest"},
+	"ping":                  {"PingRequest", "JSONRPCRequest"}, // Ping might use specific or generic request.
+	"shutdown":              {"JSONRPCRequest"},                // Simple request, often empty params.
+	"tools/list":            {"ListToolsRequest", "JSONRPCRequest"},
+	"tools/call":            {"CallToolRequest"},
+	"resources/list":        {"ListResourcesRequest", "JSONRPCRequest"},
+	"resources/read":        {"ReadResourceRequest"},
+	"resources/subscribe":   {"SubscribeRequest"},
+	"resources/unsubscribe": {"UnsubscribeRequest"},
+	"prompts/list":          {"ListPromptsRequest", "JSONRPCRequest"},
+	"prompts/get":           {"GetPromptRequest"},
+	"logging/setLevel":      {"SetLevelRequest"},
+	"$/cancelRequest":       {"CancelledNotification"},
+
+	// Specific notifications (map method name to notification schema definition)
+	"exit":                                 {"JSONRPCNotification"}, // Simple notification
+	"notifications/initialized":            {"InitializedNotification"},
+	"notifications/progress":               {"ProgressNotification"},            // Assuming this exists
+	"notifications/cancelled":              {"CancelledNotification"},           // Assuming this exists
+	"notifications/message":                {"LoggingMessageNotification"},      // Assuming this exists
+	"notifications/roots/list_changed":     {"RootsListChangedNotification"},    // Assuming this exists
+	"notifications/resources/list_changed": {"ResourceListChangedNotification"}, // Assuming this exists
+	"notifications/resources/updated":      {"ResourceUpdatedNotification"},     // Assuming this exists
+	"notifications/prompts/list_changed":   {"PromptListChangedNotification"},   // Assuming this exists
+	"notifications/tools/list_changed":     {"ToolListChangedNotification"},     // Assuming this exists
+
+	// --- Outgoing Response Mappings ---
+	// (map request_method + "_response" to Result schema definition)
+	"initialize_response":            {"InitializeResult"},
+	"ping_response":                  {"EmptyResult", "JSONRPCResponse"}, // Ping result is often empty or generic
+	"shutdown_response":              {"EmptyResult", "JSONRPCResponse"}, // Shutdown result is often null/empty
+	"tools/list_response":            {"ListToolsResult"},
+	"tools/call_response":            {"CallToolResult"},
+	"resources/list_response":        {"ListResourcesResult"},
+	"resources/read_response":        {"ReadResourceResult"},             // <<< THE FIX
+	"resources/subscribe_response":   {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response
+	"resources/unsubscribe_response": {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response
+	"prompts/list_response":          {"ListPromptsResult"},
+	"prompts/get_response":           {"GetPromptResult"},
+	"logging/setLevel_response":      {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response
+}
 
 // ValidatorInterface defines the methods required for schema validation operations.
 // This interface allows for mocking or replacing the schema validation implementation.
@@ -50,6 +107,10 @@ type ValidatorInterface interface {
 	GetSchemaVersion() string
 	// Shutdown cleans up resources used by the validator, like closing idle HTTP connections.
 	Shutdown() error
+	// --- NEW: Add verify method to interface ---
+	// verifyMappingsAgainstSchema checks the internal mappings against compiled schemas.
+	// Note: This is primarily for testing/internal verification, not core validation path.
+	verifyMappingsAgainstSchema() []string
 }
 
 // Validator handles loading, compiling, and validating data against JSON schemas.
@@ -58,7 +119,7 @@ type ValidatorInterface interface {
 type Validator struct {
 	schemaConfig        config.SchemaConfig           // Configuration specifying schema source.
 	compiler            *jsonschema.Compiler          // The underlying schema compiler instance.
-	schemas             map[string]*jsonschema.Schema // Cache of compiled schema definitions by name/pointer.
+	schemas             map[string]*jsonschema.Schema // Cache of compiled schema definitions by name/pointer AND alias.
 	schemaDoc           map[string]interface{}        // Parsed raw schema document (for inspection/heuristics).
 	mu                  sync.RWMutex                  // Protects access to schemas, schemaDoc, and initialized status.
 	httpClient          *http.Client                  // Used for fetching schemas from HTTP(S) URIs.
@@ -98,7 +159,8 @@ func NewValidator(cfg config.SchemaConfig, logger logging.Logger) *Validator {
 }
 
 // Initialize loads the schema content from the configured source (URI override or embedded),
-// compiles the base schema and all its definitions, caches them, and marks the validator as ready.
+// compiles the base schema and all its definitions, caches them, performs mapping verification,
+// and marks the validator as ready.
 // It returns an error if loading or compilation fails critically.
 func (v *Validator) Initialize(ctx context.Context) error {
 	initStart := time.Now()
@@ -245,6 +307,14 @@ func (v *Validator) Initialize(ctx context.Context) error {
 		"schemasCompiled", len(v.schemas),
 		"schemaSource", sourceInfo)
 
+	// --- Verify mappings after initialization ---
+	unmappedSchemas := v.verifyMappingsAgainstSchema()
+	if len(unmappedSchemas) > 0 {
+		v.logger.Warn("Detected schema definitions without corresponding entries in schemaMappings variable.",
+			"unmappedDefinitions", unmappedSchemas,
+			"action", "Update schemaMappings variable in internal/schema/validator.go")
+	}
+
 	return nil
 }
 
@@ -293,7 +363,7 @@ func (v *Validator) compileAllDefinitions(baseResourceID string, schemaDoc map[s
 		v.logger.Warn("No 'definitions' section found in the schema JSON.")
 	}
 
-	// Add convenient aliases for common generic types (e.g., "request" -> "JSONRPCRequest").
+	// Add convenient aliases based on the package-level schemaMappings variable.
 	v.addGenericMappings(compiled)
 
 	// Return the map and the first error encountered (if any).
@@ -301,43 +371,70 @@ func (v *Validator) compileAllDefinitions(baseResourceID string, schemaDoc map[s
 	return compiled, firstCompileError
 }
 
-// addGenericMappings creates convenient aliases in the compiled schema map.
-// For example, maps "request" to the compiled "JSONRPCRequest" schema if it exists.
+// addGenericMappings uses the package-level schemaMappings variable to create aliases
+// in the compiledSchemas map.
 func (v *Validator) addGenericMappings(compiledSchemas map[string]*jsonschema.Schema) {
-	// Defines mappings from generic names (key) to potential specific definition names (value slice, ordered by preference).
-	mappings := map[string][]string{
-		"success_response":        {"JSONRPCResponse", "Response"},                            // Generic success response.
-		"error_response":          {"JSONRPCError", "Error"},                                  // Generic error response.
-		"ping_notification":       {"PingRequest", "PingNotification", "JSONRPCNotification"}, // Ping might be request or notification schema.
-		"notification":            {"JSONRPCNotification", "Notification"},                    // Generic notification.
-		"request":                 {"JSONRPCRequest", "Request"},                              // Generic request.
-		"CallToolResult":          {"CallToolResult", "ToolResult"},                           // Tool call result specific name.
-		"initialize_response":     {"InitializeResult"},                                       // Specific response types.
-		"tools/list_response":     {"ListToolsResult"},
-		"resources/list_response": {"ListResourcesResult"},
-		"prompts/list_response":   {"ListPromptsResult"},
-		// Add more mappings as needed for other common patterns.
-	}
 	mapped := make([]string, 0)
-	// Iterate through desired generic names.
-	for genericName, potentialTargets := range mappings {
-		// Skip if the generic name itself was already explicitly defined (unlikely but possible).
+	// Iterate through desired generic names/aliases defined in schemaMappings.
+	for genericName, potentialTargets := range schemaMappings {
+		// Skip if the alias name itself was already explicitly defined/compiled (unlikely).
 		if _, exists := compiledSchemas[genericName]; exists {
 			continue
 		}
 		// Check potential target definitions in order of preference.
-		for _, targetDef := range potentialTargets {
-			if targetSchema, ok := compiledSchemas[targetDef]; ok {
-				// If a target exists, map the generic name to the compiled target schema.
+		for _, targetDefName := range potentialTargets {
+			if targetSchema, ok := compiledSchemas[targetDefName]; ok {
+				// If a target definition was compiled, map the alias name to the compiled target schema.
 				compiledSchemas[genericName] = targetSchema
-				mapped = append(mapped, fmt.Sprintf("%s->%s", genericName, targetDef))
-				break // Stop checking targets for this generic name once a match is found.
+				mapped = append(mapped, fmt.Sprintf("%s->%s", genericName, targetDefName))
+				break // Stop checking targets for this alias once a match is found.
 			}
 		}
 	}
 	if len(mapped) > 0 {
-		v.logger.Debug("Added generic schema mappings for convenience.", "mappings", mapped)
+		v.logger.Debug("Added schema mappings/aliases.", "mappings", mapped)
 	}
+}
+
+// verifyMappingsAgainstSchema checks if all compiled schema definitions that appear to be
+// requests or results have corresponding entries in the schemaMappings targets.
+// This helps ensure the mapping list stays synchronized with the schema definitions.
+// Note: This is a heuristic check based on naming conventions (*Request, *Result).
+func (v *Validator) verifyMappingsAgainstSchema() []string {
+	// Assumes write lock is held (called within Initialize).
+	if v.schemas == nil {
+		v.logger.Error("verifyMappingsAgainstSchema called but schemas map is nil.")
+		return nil // Should not happen if called after successful compilation.
+	}
+
+	mappedTargets := make(map[string]bool)
+	for _, targetList := range schemaMappings {
+		for _, targetName := range targetList {
+			mappedTargets[targetName] = true
+		}
+	}
+
+	missingMappings := []string{}
+
+	// Iterate through all compiled schema definition names (keys of v.schemas).
+	for defName := range v.schemas {
+		// Apply heuristic: Check if definition name looks like a request or result.
+		// And ignore the base JSON-RPC types themselves as they are mapped *from*, not *to*.
+		isRequestOrResult := (strings.HasSuffix(defName, "Request") || strings.HasSuffix(defName, "Result"))
+		isBaseType := (defName == "JSONRPCRequest" || defName == "JSONRPCResponse" ||
+			defName == "JSONRPCNotification" || defName == "JSONRPCError" || defName == "base")
+
+		if isRequestOrResult && !isBaseType {
+			// Check if this definition name exists as a target in our schemaMappings variable.
+			if _, isMapped := mappedTargets[defName]; !isMapped {
+				missingMappings = append(missingMappings, defName)
+			}
+		}
+	}
+
+	// Sort for consistent output in logs/tests.
+	sort.Strings(missingMappings)
+	return missingMappings
 }
 
 // GetLoadDuration returns the duration of the last schema loading operation (reading from source).
@@ -468,63 +565,32 @@ func (v *Validator) Validate(_ context.Context, messageType string, data []byte)
 }
 
 // getSchemaForMessageType finds the appropriate compiled schema based on the message type hint.
-// It uses a fallback strategy: exact match -> common JSON-RPC types -> base schema.
+// It uses the package-level schemaMappings variable to look up aliases.
 // Returns the schema, the key used to find it (for logging), and true if found.
 func (v *Validator) getSchemaForMessageType(messageType string) (*jsonschema.Schema, string, bool) {
 	v.mu.RLock() // Read lock for accessing the schemas map.
 	defer v.mu.RUnlock()
 
-	// 1. Exact Match: Check if a definition directly matches the messageType.
-	if schema, ok := v.schemas[messageType]; ok {
-		return schema, messageType, true
-	}
-
-	// 2. Fallback Logic: Determine a likely generic type based on naming conventions.
-	var fallbackKey string
-	// Check common patterns for notifications, responses, and requests.
-	if strings.HasSuffix(messageType, "_notification") || strings.HasPrefix(messageType, "notifications/") {
-		fallbackKey = "JSONRPCNotification" // Default fallback for notifications.
-	} else if strings.Contains(messageType, "Response") || strings.Contains(messageType, "Result") || strings.HasSuffix(messageType, "_response") || strings.HasSuffix(messageType, "_result") {
-		// Determine if it looks like an error or success response.
-		if strings.Contains(messageType, "Error") || strings.HasSuffix(messageType, "_error") {
-			// Prefer JSONRPCError if available, otherwise JSONRPCResponse.
-			if _, errorExists := v.schemas["JSONRPCError"]; errorExists {
-				fallbackKey = "JSONRPCError"
-			} else if _, responseExists := v.schemas["JSONRPCResponse"]; responseExists {
-				fallbackKey = "JSONRPCResponse"
-			} else {
-				fallbackKey = "base" // Fallback further if needed.
-			}
-		} else { // Assume success response.
-			// Prefer JSONRPCResponse if available.
-			if _, responseExists := v.schemas["JSONRPCResponse"]; responseExists {
-				fallbackKey = "JSONRPCResponse"
-			} else {
-				fallbackKey = "base" // Fallback further if needed.
+	// Check the schemaMappings first (this covers exact matches and aliases).
+	if potentialTargets, ok := schemaMappings[messageType]; ok {
+		for _, targetDefName := range potentialTargets {
+			if schema, found := v.schemas[targetDefName]; found {
+				// Found a compiled schema for one of the targets.
+				// Return the schema, using the original messageType as the key found (for logging clarity).
+				return schema, messageType, true
 			}
 		}
-	} else { // Assume it's a request if none of the above match.
-		fallbackKey = "JSONRPCRequest" // Default fallback for requests.
+		// If targets were listed but none were compiled, log a warning.
+		v.logger.Warn("Mapping found, but target schema definition not compiled.", "mappingKey", messageType, "targets", potentialTargets)
 	}
 
-	// Try the determined fallback key.
-	if schema, ok := v.schemas[fallbackKey]; ok {
-		v.logger.Debug("Using fallback schema.", "originalType", messageType, "fallbackKey", fallbackKey)
-		return schema, fallbackKey, true
-	}
-
-	// 3. Ultimate Fallback: Try the "base" schema if the primary fallback failed.
-	if schema, ok := v.schemas["base"]; ok {
-		v.logger.Warn("Using 'base' schema as final fallback.", "originalType", messageType, "initialFallbackAttempt", fallbackKey)
-		return schema, "base", true
-	}
-
-	// 4. Schema Not Found: No suitable schema definition could be found.
-	v.logger.Error("Could not find schema definition after fallbacks.", "requestedType", messageType, "fallbackAttempted", fallbackKey)
+	// If not found via mappings, log and return failure.
+	// This replaces the old complex fallback logic.
+	v.logger.Error("Could not find schema definition or alias for message type.", "requestedType", messageType)
 	return nil, "", false
 }
 
-// HasSchema checks if a compiled schema definition exists for the given name.
+// HasSchema checks if a compiled schema definition exists for the given name (could be definition name or alias).
 // Acquires a read lock to safely access the internal schemas map.
 func (v *Validator) HasSchema(name string) bool {
 	v.mu.RLock()
@@ -631,9 +697,9 @@ func (v *Validator) getVersionFromInfoBlock(schemaDoc map[string]interface{}) st
 }
 
 // getVersionFromMCPHeuristics checks for MCP-specific date patterns in "$id" or "title".
-// Assumes MCP schema versions might be indicated by YYYY-MM-DD dates.
+// Assumes MCP schema versions might be indicated by<y_bin_46>-MM-DD dates.
 func (v *Validator) getVersionFromMCPHeuristics(schemaDoc map[string]interface{}) string {
-	// Regex to find YYYY-MM-DD pattern.
+	// Regex to find<y_bin_46>-MM-DD pattern.
 	idRegex := regexp.MustCompile(`(\d{4}-\d{2}-\d{2})`)
 
 	// Check $id field.
