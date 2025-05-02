@@ -27,60 +27,79 @@ import (
 //go:embed schema.json
 var embeddedSchemaContent []byte // Holds the content of the default embedded MCP schema.
 
-// --- UPDATED: Package-level variable for mappings (includes resources/read_response) ---.
+// file: internal/schema/validator.go
+
+// --- UPDATED: Package-level variable for mappings ---.
+// This map connects incoming message type hints (like method names or generic types)
+// or outgoing response hints (like request_method + "_response")
+// to the corresponding schema definition names found within the compiled schema.
+// The validator uses this to select the correct schema for validation.
 var schemaMappings = map[string][]string{
-	// Base JSON-RPC types (used internally or as fallbacks).
+	// --- Base JSON-RPC types (used internally or as fallbacks) ---
 	"JSONRPCRequest":      {"JSONRPCRequest"},
 	"JSONRPCResponse":     {"JSONRPCResponse"},
 	"JSONRPCNotification": {"JSONRPCNotification"},
 	"JSONRPCError":        {"JSONRPCError"},
-	"base":                {"base"}, // Assuming 'base' is compiled from root schema doc.
+	"base":                {"base"},
 
-	// --- Incoming Message Type Hint Mappings ---.
-	// Generic fallbacks.
-	"request":      {"JSONRPCRequest", "Request"},
+	// --- Incoming Message Type Hint Mappings ---
+	// Generic fallbacks (add base request/server types here)
+	"request":      {"JSONRPCRequest", "Request", "ClientRequest", "ServerRequest", "PaginatedRequest"},
 	"notification": {"JSONRPCNotification", "Notification"},
-	// Specific requests (map method name to request schema definition).
-	"initialize":            {"InitializeRequest"},
-	"ping":                  {"PingRequest", "JSONRPCRequest"}, // Ping might use specific or generic request.
-	"shutdown":              {"JSONRPCRequest"},                // Simple request, often empty params.
-	"tools/list":            {"ListToolsRequest", "JSONRPCRequest"},
-	"tools/call":            {"CallToolRequest"},
-	"resources/list":        {"ListResourcesRequest", "JSONRPCRequest"},
-	"resources/read":        {"ReadResourceRequest"},
-	"resources/subscribe":   {"SubscribeRequest"},   // Consistent naming.
-	"resources/unsubscribe": {"UnsubscribeRequest"}, // Consistent naming.
-	"prompts/list":          {"ListPromptsRequest", "JSONRPCRequest"},
-	"prompts/get":           {"GetPromptRequest"},
-	"logging/setLevel":      {"SetLevelRequest"},       // Consistent naming.
-	"$/cancelRequest":       {"CancelledNotification"}, // Consistent naming.
 
-	// Specific notifications (map method name to notification schema definition).
-	"exit":                                 {"JSONRPCNotification"}, // Simple notification.
+	// Specific requests (map method name to request schema definition)
+	"initialize":               {"InitializeRequest"},
+	"ping":                     {"PingRequest", "JSONRPCRequest"},
+	"shutdown":                 {"JSONRPCRequest"},
+	"tools/list":               {"ListToolsRequest", "JSONRPCRequest"},
+	"tools/call":               {"CallToolRequest"},
+	"resources/list":           {"ListResourcesRequest", "JSONRPCRequest"},
+	"resources/read":           {"ReadResourceRequest"},
+	"resources/subscribe":      {"SubscribeRequest"},
+	"resources/unsubscribe":    {"UnsubscribeRequest"},
+	"prompts/list":             {"ListPromptsRequest", "JSONRPCRequest"},
+	"prompts/get":              {"GetPromptRequest"},
+	"logging/setLevel":         {"SetLevelRequest"},
+	"$/cancelRequest":          {"CancelledNotification", "$/cancelRequest"}, // Added explicit self-mapping
+	"completion/complete":      {"CompleteRequest"},                          // Added
+	"sampling/createMessage":   {"CreateMessageRequest"},                     // Added
+	"resources/templates/list": {"ListResourceTemplatesRequest"},             // Added
+	"roots/list":               {"ListRootsRequest"},                         // Added
+
+	// Specific notifications (map method name to notification schema definition)
+	"exit":                                 {"JSONRPCNotification"},
 	"notifications/initialized":            {"InitializedNotification"},
-	"notifications/progress":               {"ProgressNotification"},            // Assuming this exists.
-	"notifications/cancelled":              {"CancelledNotification"},           // Assuming this exists.
-	"notifications/message":                {"LoggingMessageNotification"},      // Assuming this exists.
-	"notifications/roots/list_changed":     {"RootsListChangedNotification"},    // Assuming this exists.
-	"notifications/resources/list_changed": {"ResourceListChangedNotification"}, // Assuming this exists.
-	"notifications/resources/updated":      {"ResourceUpdatedNotification"},     // Assuming this exists.
-	"notifications/prompts/list_changed":   {"PromptListChangedNotification"},   // Assuming this exists.
-	"notifications/tools/list_changed":     {"ToolListChangedNotification"},     // Assuming this exists.
+	"notifications/progress":               {"ProgressNotification"},
+	"notifications/cancelled":              {"CancelledNotification"},
+	"notifications/message":                {"LoggingMessageNotification"},
+	"notifications/roots/list_changed":     {"RootsListChangedNotification"},
+	"notifications/resources/list_changed": {"ResourceListChangedNotification"},
+	"notifications/resources/updated":      {"ResourceUpdatedNotification"},
+	"notifications/prompts/list_changed":   {"PromptListChangedNotification"},
+	"notifications/tools/list_changed":     {"ToolListChangedNotification"},
 
-	// --- Outgoing Response Mappings ---.
-	// (map request_method + "_response" to Result schema definition).
-	"initialize_response":            {"InitializeResult"},
-	"ping_response":                  {"EmptyResult", "JSONRPCResponse"}, // Ping result is often empty or generic.
-	"shutdown_response":              {"EmptyResult", "JSONRPCResponse"}, // Shutdown result is often null/empty.
-	"tools/list_response":            {"ListToolsResult"},
-	"tools/call_response":            {"CallToolResult"},
-	"resources/list_response":        {"ListResourcesResult"},
-	"resources/read_response":        {"ReadResourceResult"},
-	"resources/subscribe_response":   {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response.
-	"resources/unsubscribe_response": {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response.
-	"prompts/list_response":          {"ListPromptsResult"},
-	"prompts/get_response":           {"GetPromptResult"},
-	"logging/setLevel_response":      {"EmptyResult", "JSONRPCResponse"}, // Assuming simple response.
+	// --- Outgoing Response Mappings ---
+	// (map request_method + "_response" or generic "response" to Result schema definition)
+	// Generic response fallback (add base result types here)
+	"response": {"JSONRPCResponse", "Result", "ClientResult", "ServerResult", "PaginatedResult"},
+
+	// Specific responses
+	"initialize_response":               {"InitializeResult"},
+	"ping_response":                     {"EmptyResult", "JSONRPCResponse", "Result"},
+	"shutdown_response":                 {"EmptyResult", "JSONRPCResponse", "Result"},
+	"tools/list_response":               {"ListToolsResult"},
+	"tools/call_response":               {"CallToolResult"},
+	"resources/list_response":           {"ListResourcesResult"},
+	"resources/read_response":           {"ReadResourceResult"},
+	"resources/subscribe_response":      {"EmptyResult", "JSONRPCResponse", "Result"},
+	"resources/unsubscribe_response":    {"EmptyResult", "JSONRPCResponse", "Result"},
+	"prompts/list_response":             {"ListPromptsResult"},
+	"prompts/get_response":              {"GetPromptResult"},
+	"logging/setLevel_response":         {"EmptyResult", "JSONRPCResponse", "Result"},
+	"completion/complete_response":      {"CompleteResult"},
+	"sampling/createMessage_response":   {"CreateMessageResult"},
+	"resources/templates/list_response": {"ListResourceTemplatesResult"},
+	"roots/list_response":               {"ListRootsResult"},
 }
 
 // Validator handles loading, compiling, and validating data against JSON schemas.
