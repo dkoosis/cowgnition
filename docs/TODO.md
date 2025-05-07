@@ -388,7 +388,156 @@ Consider depguard and interfacebloat next: These directly enforce decoupling pri
 Add maintidx later: Use it to track overall trends once you've addressed more specific issues.
 Remember to introduce new linters incrementally to avoid overwhelming feedback. Integrate these checks into your regular workflow (like the all target) to continuously monitor simplification, decoupling, and clarity.
 
-Sources and related content
+## Opportunities & Recommendations
+
+### 🔴 High Priority: Complete Secure Credential Storage
+
+**Issue:**  
+`cmd/claude_desktop_registration.go` currently injects RTM API Key/Secret via environment variables into the Claude Desktop config. [ADR 005](docs/adr/005_secret_management.md) explicitly states these should go into the OS keychain. This is also listed as critical/pending in `TODO.md`.
+
+**Recommendation:**  
+Implement the change outlined in `TODO.md` (Phase 7):
+- Modify `cmd/claude_desktop_registration.go` to use the `keyring` library (likely via `rtm.SecureTokenStorage` or a helper) to store the API Key/Secret.
+- Update server startup (`internal/rtm/service.go` or `cmd/server/server_runner.go`) to load these keys from the keychain instead of relying on environment variables set by Claude Desktop.  
+This aligns with ADR 005 and significantly improves security.
+
+---
+
+### 🟡 Medium Priority: Refine RTM Task Handling
+
+**Issue:**  
+`docs/TODO.md` identifies two issues:
+1. RTM's inconsistent JSON for `rrule` (recurrence).
+2. Potential "firehose" problems with `rtm://tasks` returning too many tasks.
+
+`internal/rtm/methods.go` includes handling for `rrule` but simply logs it. Task filtering in `internal/rtm/service.go` uses multiple strategies but might still return large lists.
+
+**Recommendation:**  
+- **Recurrence:** While logging is acceptable, consider if the `Task` struct in `internal/rtm/types.go` should have a field to represent recurrence (e.g., a string like `"Complex Rule"` or the parsed string). This might be useful for clients.
+- **Task Volume:** Implement server-side limiting within `WorkspaceAndProcessTasks` in `internal/rtm/service.go` as suggested in the `TODO`. Introduce a constant (e.g., `maxTasksToReturn`) and truncate the `tasks` slice before creating the `responsePayload`. Ensure the truncated flag and message in the payload accurately reflect this. This makes the `rtm://tasks` resource more robust.
+
+---
+
+### 🟡 Medium Priority: Improve Test Coverage
+
+**Issue:**  
+Several packages (`logging`, `mcp/mcp_errors`, `transport`, `config`, etc.) contain `stub_test.go` files, indicating missing unit tests.
+
+**Recommendation:**  
+Implement meaningful unit tests for these packages, focusing on validating core logic:
+- Config loading/overrides.
+- Error creation/mapping.
+- Logger functionality.
+- Transport read/write logic.  
+
+Follow the test naming convention outlined in [ADR 008](docs/adr/008_test_naming.md). Replace or remove the `stub_test.go` files.
+
+---
+
+### 🟢 Low Priority: Naming Convention Consistency
+
+**Issue:**  
+While generally good, ensure strict adherence to Go conventions:
+- **Directory Names:** Use snake_case (e.g., `mcp_errors`, `mcp_types`) - This seems correct.
+- **Package Names:** Should be lowercase without underscores (e.g., `mcperrors` inside `mcp_errors/`, `mcptypes` inside `mcp_types/`). Review package declarations.
+- **File Names:** Use snake_case (e.g., `server_runner.go`) - This seems correct.
+
+**Recommendation:**  
+Perform a quick pass using Q03 Go File Naming Assessment guidelines. Ensure package declarations in files like `internal/mcp_errors/errors.go` and `internal/mcp_types/types.go` use `mcperrors` and `mcptypes` respectively.
+
+---
+
+### 🟢 Low Priority: Consolidate `connection_state.go` and FSM
+
+**Issue:**  
+`internal/mcp/connection_state.go` seems potentially redundant given the explicit FSM implementation in `internal/mcp/state/` ([ADR 003](docs/adr/003_fsm_design.md)). `MCPStateMachine` now seems responsible for state validation.
+
+**Recommendation:**  
+Review if `ConnectionState` is still needed. If its responsibilities (like storing client info) can be managed by the `Server` struct or passed via context, consider removing `connection_state.go` to simplify state management and fully rely on the FSM defined in ADR 003.
+
+---
+
+### 🟢 Low Priority: Refine Generic File Names
+
+**Issue:**  
+Files like `types.go`, `helpers.go` exist in multiple packages (e.g., `rtm`, `mcp`). While idiomatic within a focused package, ensure the content truly belongs only to that package's domain.
+
+**Recommendation:**  
+Briefly review the contents of `helpers.go` and `types.go` in packages like `rtm` and `mcp`. If any functions or types are truly generic and could be used by other packages outside their current domain (e.g., a generic JSON helper), consider moving them to a shared internal utility package (e.g., `internal/util`). Preferably, avoid such a package if possible by keeping logic domain-specific. Currently, `mcp_types` serves this role well for shared MCP structures.
+
+---
+
+## Opportunities to Enhance Developer Experience (DX)
+
+- Improve test coverage and remove stubs as outlined above.
+- Refine error handling and logging for clarity and consistency.
+- Simplify complex areas like `server_runner.go` and state management.
+- Enhance documentation, including ADR statuses and package-level comments.
+- Address TODOs in `docs/TODO.md`, especially high-priority items like secure credential storage.
+- Ensure consistent naming conventions across the codebase.
+- Consolidate or refine generic file names to improve package cohesion.
+- Focus on developer-facing improvements like better error messages, actionable guidance, and enhanced tooling.
+
+
+### 1. Improve Test Coverage & Remove Stubs
+The presence of multiple `stub_test.go` files indicates gaps in test coverage. Filling these gaps improves confidence when refactoring or adding features. A robust test suite is crucial for DX, as it allows developers to make changes without fear of breaking existing functionality.
+
+- **Recommendation**: Prioritize implementing tests in packages with stubs, following the naming conventions outlined in [ADR 008](docs/adr/008_test_naming.md).
+
+---
+
+### 2. Refine Error Handling & Logging
+
+#### Clarity
+While [ADR 001](docs/adr/001_error_handling.md) defines a strategy, ensure error messages (especially those mapped to JSON-RPC) are:
+- Consistently informative.
+- Safe, avoiding leakage of sensitive details.
+- Enhanced with suggestion context for internal errors, as planned in `docs/TODO.md`.
+
+#### Consistency
+Ensure consistent use of the logging package and structured logging fields (e.g., `component`, `requestID`) across the codebase for easier tracing and debugging.
+
+---
+
+### 3. Simplify Complex Areas
+
+#### `server_runner.go`
+The `RunServer` function is complex, as noted in `docs/TODO.md`. Refactoring it into smaller, more focused functions would improve readability and maintainability.
+
+#### State Management
+Clarify the relationship between `internal/mcp/connection_state.go` and the FSM in `internal/mcp/state/`. Consolidating state management fully under the FSM (if feasible) would simplify the mental model for developers. (See Opportunity #5 from the previous review.)
+
+---
+
+### 4. Enhance Documentation
+
+#### Code Comments
+Ensure critical or non-obvious parts of the code have clear comments explaining the **why**, not just the **what**.
+
+#### ADR Status
+Keep ADR statuses updated:
+- Example: ADR 006 is currently marked as "Draft," ADR 005 as "Draft," and ADR 008 as "Proposed." Update these as they are Accepted or Implemented.
+
+#### Package Documentation
+Ensure top-level comments in key packages clearly explain their purpose and responsibility.
+
+---
+
+### 5. Address TODOs
+Actively work through the items in `docs/TODO.md`. Key items include:
+- **"Implement RTM Write Operations"**
+- **"Implement HTTP Transport"**
+
+These directly impact the features developers can build upon or use. Completing "Phase 9: Developer Experience & Extensibility" items would significantly improve DX.
+
+---
+
+### 6. Ensure Consistent Naming
+Minor inconsistencies in naming (e.g., package names vs. directory names, initialisms) can create friction. Applying the Q03 assessment and fixing inconsistencies improves predictability.
+
+- **Example**: Ensure package declarations match directory names (e.g., `mcperrors` for `internal/mcp_errors/`).
+- **Recommendation**: Perform a quick pass using the Q03 Go File Naming Assessment guidelines to ensure consistency.
+
 
 ## Completed Work
 
