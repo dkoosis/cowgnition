@@ -3,7 +3,7 @@
 // to appropriate JSON-RPC error responses or handling them specifically within the application.
 package errors
 
-// file: internal/mcp/mcp_errors/errors.go
+// file: internal/errors.go
 
 import (
 	"fmt"

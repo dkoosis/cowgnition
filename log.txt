@@ -1,0 +1,3290 @@
+commit 029f54d426eb4d53cbe661acbd11820a6d400d91
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed May 7 18:04:53 2025 +0200
+
+    todo
+
+commit 0a5d30942f1dc50013d32cbf21b255e9123a198e
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Thu May 1 21:02:29 2025 -0400
+
+    clean build
+
+commit 4ffafaf1b8d2199001b24b19080b38677bd4fff0
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 27 19:28:15 2025 -0400
+
+    fix(schema): Prevent deadlock in Validator Initialize
+    
+    The Initialize method previously held a write lock (`v.mu.Lock`) using
+    `defer`, but then called `VerifyMappingsAgainstSchema` near the end.
+    `VerifyMappingsAgainstSchema` requires acquiring a read lock (`v.mu.RLock`).
+    Holding the write lock while calling a function that needs a read lock
+    causes a deadlock, leading to the observed test hang.
+    
+    This commit refactors Initialize to use explicit `v.mu.Unlock()` calls
+    before returning early and, crucially, before calling
+    `VerifyMappingsAgainstSchema`, thus resolving the potential deadlock.
+
+commit 069a715f50301e1647048c3a25488f77e2f084fe
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 27 19:15:23 2025 -0400
+
+    json schema hanging
+
+commit 29924b1273968b7cad2037d503173b95b60a1f58
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 27 16:08:50 2025 -0400
+
+    lint
+
+commit 9598baca637645a17a3949121dd90ddba04d638c
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 27 14:38:38 2025 -0400
+
+    lint errs
+
+commit 0ab8b5c2954dcf2a741dff879bee16d029b7fad1
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 27 11:28:25 2025 -0400
+
+    fixing schema
+
+commit fbd393fceb329e0c6d2bc025f084873ce12e6708
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 27 09:22:30 2025 -0400
+
+    update validator
+
+commit 64af068544a68812a613b1df451129e5ad62ad3d
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 27 07:54:43 2025 -0400
+
+    fix(test): Correct mock error InstancePath in outgoing validation test
+    
+    The mock `ValidationError` created in the test setup for
+    `TestValidationMiddleware_ReturnsErrorResponse_When_OutgoingValidationFailsInStrictMode`
+    (in `validation_outgoing_test.go`) had its `InstancePath` set to
+    `"/result/status"`. This reflected the path relative to the full JSON-RPC
+    response, which was correct before the outgoing validation logic was
+    changed to validate only the extracted `result` payload.
+    
+    However, the test assertion correctly expected the `validationPath` in the
+    generated error response data to be relative to the *validated payload*
+    (i.e., `"/status"`).
+    
+    This commit updates the `InstancePath` set on the mock `ValidationError`
+    within the test setup to `"/status"`. This aligns the mock error's path
+    with what the underlying validation library would report when validating
+    only the extracted `result`, resolving the assertion failure.
+
+commit 540568d1692c2a75428f4929de7aaa747103e63b
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 27 07:50:56 2025 -0400
+
+    fix(middleware): Correct outgoing response validation to check payload
+    
+    Previously, the outgoing validation middleware incorrectly validated the
+    entire JSON-RPC response envelope against the schema intended only for the
+    `result` field's payload. This caused incorrect validation failures,
+    especially when strict outgoing validation was enabled, potentially
+    blocking valid responses or generating misleading warnings.
+    
+    This commit refactors the `validateOutgoingResponse` function in
+    `internal/middleware/validation_process.go` to:
+    - Parse the outgoing response and extract the `result` field.
+    - Pass only the extracted `result` content (if present and not null)
+      to the schema validator (`validator.Validate`).
+    - Skip validation for empty or null results.
+    
+    This ensures that outgoing validation correctly checks the structure of
+    the response *payload* against its specific schema definition, aligning
+    with the intended validation scope.
+    
+    Additionally, this commit updates the mock expectations in the following
+    test files to match the corrected validation logic, resolving previous
+    test failures:
+    - internal/middleware/validation_incoming_test.go
+    - internal/middleware/validation_options_test.go
+    - internal/middleware/validation_outgoing_test.go
+    
+    Finally, a redundant nil check identified by staticcheck (S1009) was
+    removed from `internal/middleware/validation_process.go`.
+
+commit 13fe32a82364f66ea548060de50892330fdd9f13
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 27 07:37:21 2025 -0400
+
+    fix(middleware): Correct outgoing validation logic
+    
+    The previous outgoing validation logic incorrectly attempted to validate
+    the entire JSON-RPC response envelope against the schema defined for
+    the message's `result` field. This caused validation failures because
+    the schema expected the result properties directly at the root, not
+    nested under the `result` key.
+    
+    This commit modifies `validateOutgoingResponse` to:
+    1. Unmarshal the response into a temporary struct to extract the `result`
+       field (`json.RawMessage`).
+    2. Pass only the extracted `result` content to the `validator.Validate`
+       method.
+    3. Skip validation if the `result` field is empty or explicitly null.
+    
+    This fixes the outgoing validation errors previously observed (especially
+    for `initialize` responses) and should resolve connection issues caused
+    by the server sending incorrect error responses when strict outgoing
+    validation was enabled.
+    
+    Additionally, removes a redundant nil check identified by staticcheck (S1009)
+    when checking if the `result` field is empty.
+
+commit 4908ab1e46839962b339e8ae71bd54abafb50086
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 27 07:27:12 2025 -0400
+
+    test fix
+
+commit d34501f55142e7f91e5a4f2c26f16ff4be0a659f
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 26 23:10:15 2025 -0400
+
+    use error codes not strings
+
+commit bee94aa217500208ae3a84946621bbacf8363a76
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 26 21:26:10 2025 -0400
+
+    fsm testing
+
+commit 734088bf8753afdbd82ff18e7ee7ccbec68d62bd
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 26 20:24:23 2025 -0400
+
+    fsm
+
+commit 1503fde2f4e78e06670a5397be61b7aa9b2cbc83
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 26 10:46:58 2025 -0400
+
+    fsm
+
+commit 5f00356cbf27440ded9cdce7832b07a1c5049df0
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 26 00:31:33 2025 -0400
+
+    FSM
+
+commit 472583ed570b6054e6e18533003a04e2904de52d
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Fri Apr 25 20:18:22 2025 -0400
+
+    fsm
+
+commit 2b75265081c61be1f92af405d57a5336ad2a7997
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Fri Apr 25 18:17:17 2025 -0400
+
+    fsm
+
+commit 38c889b7fb455a05c200b09798711a552e004f07
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Fri Apr 25 16:44:55 2025 -0400
+
+    integrate FSM library to replace state machine implementation
+
+commit e658aa6dd6e1d7abc39b95e54f7283000df759c9
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Thu Apr 24 22:29:56 2025 -0400
+
+    create
+
+commit 4b954b9bc09dcd465af1bdd35cb49c56a87a1f6b
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Thu Apr 24 19:38:32 2025 -0400
+
+    rtm
+
+commit 0c8e5b93e174907f32337328260f6506b81a46ed
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Thu Apr 24 17:26:32 2025 -0400
+
+    fix rtm resources
+
+commit 14ed490aeaf3fcae603990fc7ca778bdebc0517e
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Thu Apr 24 13:25:09 2025 -0400
+
+    add RTM settings as resource
+
+commit c8d854b6e4121e08e076581c8985e364ef2c10c2
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Thu Apr 24 13:06:55 2025 -0400
+
+    fixin
+
+commit bf5fe5516f26c25100f91625b3dfd765fbf266b1
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Thu Apr 24 09:25:13 2025 -0400
+
+    cleanup message parsing
+
+commit fbcc39e87323617cdd3ebbc8536b2c24fcc876f5
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 23 22:20:49 2025 -0400
+
+    refactor
+
+commit 1c4c1aa168e865074036c7fd8ea9c99b76a14847
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 23 19:01:09 2025 -0400
+
+    lint
+
+commit 133be1a6df34b1849a8b627701b86c8688023547
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 23 18:45:59 2025 -0400
+
+    lint
+
+commit 8014a6676f66c8caf833d6cd931cb4d46fcf00e4
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 23 14:29:31 2025 -0400
+
+    deconflict
+
+commit 89cebd840d64e801f2805647a07604f7835f0bfa
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 23 11:41:48 2025 -0400
+
+    lint
+
+commit 1114dc1122a4e86335bfd5c54854c4cbcde63edd
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 23 11:01:05 2025 -0400
+
+    refactor for resource creation
+
+commit e175f980e682ac5b906d09f8615a459419443e12
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 23 10:44:58 2025 -0400
+
+    resource
+
+commit d7a7d2adfc2220d3c13b8c558c039d85f9d0ebc9
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 23 10:28:37 2025 -0400
+
+    update health diagnostics
+
+commit 9c77f05ba10d90399adb6821569f528aa3e77837
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 23 10:16:20 2025 -0400
+
+    cleanup
+
+commit c77afac59b2b495d91c95e42fd27417fde5eda36
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Tue Apr 22 22:02:33 2025 -0400
+
+    fix schema version management
+
+commit 11b03fbf20eb664494931ef70b0f2edb1270ed14
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Tue Apr 22 20:40:56 2025 -0400
+
+    schema loading cleanup
+
+commit 84f4cf97bc30ca7ba4c2bbf4cc0946c081273ccf
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Tue Apr 22 20:31:34 2025 -0400
+
+    refactor(schema): Improve schema loading and initialization logging
+    
+    Refactors the schema loading logic in `internal/schema/validator.go` and `internal/schema/loader.go` to align strictly with ADR 002:
+    
+    - Prioritizes the embedded schema by default.
+    - Only attempts to load an external schema if `SchemaOverrideURI` is explicitly set in the configuration.
+    - Fails initialization if an override is requested but fails (no fallback to embedded).
+    - Removes brittle lookups for schema files in standard system locations.
+    - Enhances logging during `validator.Initialize` to clearly state the schema source (embedded or override URI) and the detected schema version upon successful initialization.
+    - Adds debug logging to `extractSchemaVersion` for better traceability.
+    
+    Also includes minor fixes:
+    - Removes ineffectual assignment in `internal/rtm/mcp_integration_test.go` to fix `ineffassign` lint error.
+    - Clarifies comment for `SchemaOverrideURI` in `internal/config/config.go`.
+    
+    This makes schema handling more robust, predictable, and easier to debug during server startup.
+
+commit 8f2eb8052af063795f0519f5f2ab9799cb4107d2
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Tue Apr 22 20:28:15 2025 -0400
+
+    refactor(schema): Improve schema loading and initialization logging
+    
+    Refactors the schema loading logic in `internal/schema/validator.go` and `internal/schema/loader.go` to align strictly with ADR 002:
+    
+    - Prioritizes the embedded schema by default.
+    - Only attempts to load an external schema if `SchemaOverrideURI` is explicitly set in the configuration.
+    - Fails initialization if an override is requested but fails (no fallback to embedded).
+    - Removes brittle lookups for schema files in standard system locations.
+    - Enhances logging during `validator.Initialize` to clearly state the schema source (embedded or override URI) and the detected schema version upon successful initialization.
+    - Adds debug logging to `extractSchemaVersion` for better traceability.
+    
+    Also includes minor fixes:
+    - Removes ineffectual assignment in `internal/rtm/mcp_integration_test.go` to fix `ineffassign` lint error.
+    - Clarifies comment for `SchemaOverrideURI` in `internal/config/config.go`.
+    
+    This makes schema handling more robust, predictable, and easier to debug during server startup.
+
+commit 89533a060e0b6e3816098c05c73accf67c524063
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Tue Apr 22 20:07:28 2025 -0400
+
+    rtm authentication improvements
+
+commit d0d530a2383fb9220fb9cc4cae98204cd174872e
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Tue Apr 22 19:31:08 2025 -0400
+
+    fixit
+
+commit 20db5e5b9fae555d083641d4aa0a7623f7310997
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Tue Apr 22 19:30:44 2025 -0400
+
+    fixit
+
+commit 50b9888a3c906c36b7c0f9277b777ff1c5114961
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Tue Apr 22 18:40:17 2025 -0400
+
+    fix(auth): improve RTM token storage security and reliability
+    
+    This commit addresses the authentication flow issues described in docs/TODO.md by:
+    
+    - Removing insecure `saveTokenToAllLocations` function that tried multiple paths
+    - Centralizing all token operations through the TokenStorageInterface
+    - Ensuring invalid tokens are properly detected and removed from storage
+    - Adding proper error handling for token validation failures
+    - Improving user feedback about token storage locations during setup
+    - Enhancing diagnostic output in rtm_connection_test
+    
+    Security improvements:
+    - Prioritize OS keychain over file storage for token persistence
+    - Use a single, well-defined file path if secure storage is unavailable
+    - Clearly communicate to users where their tokens are being stored
+    
+    These changes make the authentication flow more reliable and secure across
+    different usage scenarios (initial setup, ongoing use, and testing).
+
+commit bc9927132c712e9108138e726bd727be41aa9b98
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Tue Apr 22 18:26:30 2025 -0400
+
+    RTM auth
+
+commit ee49ca55163c20660470d2539d1dc31e57ea0881
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Mon Apr 21 22:31:13 2025 -0400
+
+    keychain_diagnostic
+
+commit 2adee2c1d5ee3ca79f93264c501969c3050b17bb
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Mon Apr 21 21:49:37 2025 -0400
+
+    debug failure to save to keychain
+
+commit 301b270658e65040ab647c5658d1e203a5fc7466
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Mon Apr 21 20:34:49 2025 -0400
+
+    eat(rtm_test): use AuthManager and callback for automated auth
+    
+    Removes the need for the manual `--frob` flag by leveraging the
+    rtm.AuthManager's automated callback server flow. Improves UX
+    for interactive authentication testing. Adds --force-auth and
+    --clear-auth flags.
+
+commit 2670449e63aecd2f6f3b8e1891418388e59d856f
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Mon Apr 21 20:02:51 2025 -0400
+
+    auth
+
+commit 80816368ef25df601c73a489521cf13e02313b93
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Mon Apr 21 19:42:04 2025 -0400
+
+    updated end-to-end authentication tests
+
+commit 9795dfab7b0059b723f0d80198449e62b34295d0
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Mon Apr 21 17:36:59 2025 -0400
+
+    rtm authentication improvements
+
+commit 913236496bb9a29e936a42a343bbea3431fea0dc
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Mon Apr 21 17:23:31 2025 -0400
+
+    lint
+
+commit 60ab2f550a61a3056ad83c2b52c310bba2a30429
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Mon Apr 21 17:14:23 2025 -0400
+
+    rtm auth
+
+commit 3308468e11370b219ed806aefbb86e82c17aa8b9
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Mon Apr 21 17:07:07 2025 -0400
+
+    rtm auth_manager
+
+commit 08dd64f017989d113c1c38510bb5ac149104a4a7
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Mon Apr 21 17:00:04 2025 -0400
+
+    auth management for RTM
+
+commit 21ccf7dde84daec71f7a3cdf8da1a5f29bd14654
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 20 19:52:19 2025 -0400
+
+    add check_go_mod_path.sh script to ensure go.mod path is correct
+
+commit 64e35986d07c38fffba6a8b887140f453a6ba468
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 20 17:10:31 2025 -0400
+
+    fixit
+
+commit eedd009e7750fcaeca27c66235d13b782ba03c83
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 20 16:50:53 2025 -0400
+
+    fix
+
+commit 38dc2e5c042e89eea8d14cb46290ac746d17c70e
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 20 16:50:13 2025 -0400
+
+    mcptype
+
+commit 145b43a263df68ea9c661e83a53c0be9ab9e07a4
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 20 16:33:10 2025 -0400
+
+    consistent folder naming
+
+commit ae6aa8550037933e5b9cd6d68a2df05fe30568eb
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 20 16:12:08 2025 -0400
+
+    refactoring of names
+
+commit 79c1336b23fded52f8f43f62aa85a75e6c287c00
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 20 14:53:50 2025 -0400
+
+    tests
+
+commit df7ba0f507faffdb9f0e8474b89f424b28811bd7
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 20 10:46:55 2025 -0400
+
+    clean up dependencies
+
+commit 14091ad97c17c1faaab8a320de0648463cab67ca
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sun Apr 20 08:26:28 2025 -0400
+
+    fix test
+
+commit a5029b086d2795bdbc95bbd463197e0fe892b98b
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 19 22:43:06 2025 -0400
+
+    load
+
+commit 585459dd7ae8d6a78832f9cd700343411471702c
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 19 19:43:26 2025 -0400
+
+    schema load
+
+commit 87788be23fcb3352d1c02c7805a34a5b66e6e6f2
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 19 19:14:54 2025 -0400
+
+    clean build, with schema  embedded in binary
+
+commit c6f49042a30f4b1661e1b408a256d6d2a56fa32f
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 19 15:47:28 2025 -0400
+
+    fix
+
+commit c5d78c2b12091ca2f1b0c4aa028aa9d6cbf2e722
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 19 13:47:53 2025 -0400
+
+    fix
+
+commit e56f67759a352771e2d5229fa7ac1473122ece2d
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 19 09:09:11 2025 -0400
+
+    linter error from hell
+
+commit 7ad2534dad2db83128d05c7312e8acdd8d101f2f
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 19 08:57:22 2025 -0400
+
+    assignment error
+
+commit e0ab989750643fab73c88367adb0930d0b88ccde
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 19 08:45:10 2025 -0400
+
+    url assignment:
+
+commit 1544380f3ba317f505c6e404b2c5c0b82882fba2
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Sat Apr 19 08:27:41 2025 -0400
+
+    clean cache
+
+commit 3e2eda51f6314d37d3c73b017a88e3302a685f68
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Fri Apr 18 23:04:44 2025 -0400
+
+    fix schema loader
+
+commit a00453e6aedcbb06856ddd351502bcb2cc26bfa2
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Thu Apr 17 23:06:20 2025 -0400
+
+    testify
+
+commit 6a7bc101f61b0af7f161ae9248fc7f6fcd09558e
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Thu Apr 17 21:42:16 2025 -0400
+
+    tidy up scripts/check_file_length.sh
+
+commit ee1725e80a9698e52d3e47dac839e9cbc9db9422
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Thu Apr 17 21:01:45 2025 -0400
+
+    formatting build output
+
+commit 97870fd3aea0d456af5eb5ca2b15b854f3f343cd
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Thu Apr 17 01:24:51 2025 -0400
+
+    test output
+
+commit b368bc75002d1f09def47cf559031c8cdf0a116d
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 16 23:30:01 2025 -0400
+
+    robust connection testing
+
+commit a1431683f5d7b37627d4b35aa6d64151703bc92d
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 16 23:15:23 2025 -0400
+
+    testing updates
+
+commit 7bee6c649711d1766a03d8785e6974f4b66b7c56
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 16 21:06:46 2025 -0400
+
+    fix(rtm): fix API signature generation for RTM client
+    
+    The generateSignature function in the RTM client was failing tests due to
+    incorrect MD5 hash generation. This commit:
+    
+    - Refactors the signature generation to use strings.Builder for more
+      efficient string concatenation
+    - Uses the explicit MD5 hashing approach with md5.New(), Write(), and Sum(nil)
+    - Adds debug logging to help diagnose signature generation issues
+    - Ensures compliance with RTM API signature requirements
+    
+    Tests now pass for all signature generation test cases.
+
+commit 2e1c52918a9d2207ab6b472582bde57763d0e1c1
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 16 20:34:55 2025 -0400
+
+    lint fixes
+
+commit 3f23113f33d73866c85248a68d931c11325325bf
+Author: dkoosis <dkoosis@gmail.com>
+Date:   Wed Apr 16 07:39:17 2025 -0400
+
+    lint
+
+commit f2b7f2039de9a7852220e33b6d469b44944b790a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 13 14:42:18 2025 -0400
+
+    fix tests
+
+commit e37761e4850bb443786a532b1da5d909355864ea
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 13 14:32:08 2025 -0400
+
+    test fixes
+
+commit 9c23d6400adca1bdbaa6aaaa4f3f84fb29017ed2
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 13 14:07:07 2025 -0400
+
+    fix
+
+commit 5d00651df999be6fc9d0a7ea819bb0c6a9b5899a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 13 13:46:45 2025 -0400
+
+    fixit
+
+commit 3dbcc332d1182e61631d23a0299e35256c579b1f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 13 13:22:04 2025 -0400
+
+    feat(schema): improve dynamic schema definition discovery and compilation
+    
+    - Add storage of parsed schema document to avoid redundant parsing
+    - Implement dynamic schema definition discovery from the JSON document
+    - Add generic type mappings for improved middleware compatibility
+    - Improve error handling for base schema compilation failures
+    - Add detailed logging of schema compilation success and errors
+    - Optimize memory usage by sharing schema instances for common types
+    - Fix potential memory leaks in Shutdown method
+
+commit 3643110c1bf16dd0af375d19b6c55f79a520b388
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 13 13:07:35 2025 -0400
+
+    fixes
+
+commit 8af5ab761dfb9d291142b7cc586c87450cbf9aea
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 13 12:56:38 2025 -0400
+
+    fixing tests
+
+commit c03ba11e030f31729f35254b73c8d6c688fa7773
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 13 12:49:55 2025 -0400
+
+    fix tests
+
+commit be1bdbb0e8a9e6aa54259cafa6fd356bf8456759
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 13 12:29:29 2025 -0400
+
+    test updates
+
+commit 06bdb3ae71deb8ba3d08249e3fe2d917f7d6b196
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 13 12:19:05 2025 -0400
+
+    cyclo fix
+
+commit 61479874578dd59fd3dc5a2d75abfda981185e33
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 13 11:02:48 2025 -0400
+
+    testing
+
+commit a78d9220f8251747e0c2325de72ac2e5baeced90
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 13 08:50:02 2025 -0400
+
+    optimize (uh oh) schema loading
+
+commit 0a9d8b8db2d35fac5a7580a9131d6753312b0975
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 12 23:06:59 2025 -0400
+
+    DOC
+
+commit cdcaf63d5d67509ef8f03c1f15895f56f4a953a0
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 12 22:25:46 2025 -0400
+
+    test
+
+commit c5fdda76e26b6707e084f945f102480718cf2133
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 12 22:10:51 2025 -0400
+
+    test
+
+commit 25e7d19fa268dab3bd4fe98e9ba2cc888f9827c7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 12 22:10:20 2025 -0400
+
+    fixes
+
+commit 83a4aaf536a7c76b5807d4499154ec8df01fb450
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 12 01:08:53 2025 -0400
+
+    refactor: Improve validation middleware and fix test failures
+    
+    This commit addresses several test failures and lint warnings identified
+    after previous refactoring attempts.
+    
+    Middleware Validation (`internal/middleware`):
+    - Refactored `identifyMessage` by extracting ID parsing/validation logic into `parseAndValidateID`, resolving high cyclomatic complexity and fixing error handling for invalid ID types.
+    - Removed unused `internalErr` parameter from `createInternalErrorResponse`.
+    - Adjusted error checking in `TestIdentifyMessage` to prevent panics.
+    
+    RTM Client (`internal/rtm`):
+    - Corrected the `generateSignature` function to ensure proper alphabetical sorting and concatenation, fixing signature mismatch errors in tests.
+    - Updated the mock server in `client_test.go` to correctly echo all parameters for the `rtm.test.echo` test case.
+    
+    Schema Validation (`internal/schema`):
+    - Modified `validator.Initialize` to explicitly compile and store key schema definitions (e.g., `JSONRPCRequest`) found within the main schema document.
+    - Updated `validator.Validate` to look up and use the specific compiled schema based on the provided `messageType`, falling back appropriately.
+    - Adjusted assertions in `validator_test.go` to align with the corrected schema compilation and validation logic, and fixed minor error message expectation mismatches.
+
+commit 959d87bff86ee53f7dd66d719454ed0582760206
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 12 00:51:22 2025 -0400
+
+    test
+
+commit 18705aeec5364c104bec53a6dd497a92a809cf37
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 12 00:42:08 2025 -0400
+
+    test
+
+commit e9f792c837015c441d225e563c6f12044b3d659d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 12 00:07:28 2025 -0400
+
+    diff
+
+commit 50f79447dd4714eadc4d7a673357ddc40e5b0cdb
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 11 20:58:44 2025 -0400
+
+    test updates
+
+commit 4444b8094f1eb548a4cb377958137f9e3eacf77c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 11 20:12:30 2025 -0400
+
+    test
+
+commit 6b7ef3764c81797ce8cdcfaad192ef0f919c45eb
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 11 15:43:07 2025 -0400
+
+    testing files
+
+commit ca97a4557c5d3b55db067ae0fb9cde8c3ea6d5b4
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 11 00:10:48 2025 -0400
+
+    added unit tests
+
+commit 7d30d2902858d3c35dcf5598be15028b2459ad5b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 10 22:31:25 2025 -0400
+
+    review
+
+commit affc992587d5282864098afd97c80e499f06abac
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 10 21:33:58 2025 -0400
+
+    feat(security): implement secure token storage for RTM authentication
+    
+    - Add OS keyring-based secure token storage using zalando/go-keyring
+    - Create TokenStorageInterface for consistent storage API
+    - Rename existing TokenStorage to FileTokenStorage as fallback option
+    - Implement smart factory for automatic selection of storage mechanism
+    - Update RTM service to use new token storage interface
+    - Use errors.Is() for robust error comparison
+    
+    This implements ADR-005 (Secret Management Strategy) by providing a
+    secure way to store authentication tokens using OS-specific keychain
+    mechanisms (macOS Keychain, Windows Credential Manager, Linux Keyring)
+    while maintaining backward compatibility through a fallback mechanism.
+
+commit ba96e0e71e12fa3672ac78f944fcaf0874693fed
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 10 21:27:43 2025 -0400
+
+    feat(security): implement secure token storage for RTM authentication
+    
+    - Add OS keyring-based secure token storage using zalando/go-keyring
+    - Create TokenStorageInterface for consistent storage API
+    - Rename existing TokenStorage to FileTokenStorage as fallback option
+    - Implement smart factory for automatic selection of storage mechanism
+    - Update RTM service to use new token storage interface
+    
+    This implements ADR-005 (Secret Management Strategy) by providing a
+    secure way to store authentication tokens using OS-specific keychain
+    mechanisms (macOS Keychain, Windows Credential Manager, Linux Keyring)
+    while maintaining backward compatibility through a fallback mechanism.
+
+commit db1aab17bd363a1768847c300b4a95b8308eea3b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 10 21:02:30 2025 -0400
+
+    fixes
+
+commit 92b4289db30c355ed56c87b4653a2f7fb729d6e7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 10 04:44:11 2025 -0400
+
+    splitting up files and functions
+
+commit c0bcf88a7a93823797ff623e4558c79fc3641222
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 10 04:13:34 2025 -0400
+
+    supress md5 warnings
+
+commit a86106cfff8b503213ef44145c4bc9480c1fda28
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 10 01:42:30 2025 -0400
+
+    wip
+
+commit ca8ea81b3fe71c1ccb5f0a766fb32a903088190f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 10 00:58:26 2025 -0400
+
+    test
+
+commit 71bf76741505e554f2d1dab78f45e094b3fbe28f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 23:41:29 2025 -0400
+
+    testing
+
+commit d0958d31e4769c7e971da73f38749e3578442775
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 23:32:33 2025 -0400
+
+    testing
+
+commit 2a239736c360d7dadaf7eb65a4e90ad2eb492ad8
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 23:29:05 2025 -0400
+
+    feat(testing): implement in-memory transport for testing
+    
+    Add InMemoryTransport that implements the Transport interface for testing purposes.
+    This implementation enables comprehensive integration testing of the MCP server
+    without relying on actual I/O or external processes, as proposed in ADR-004.
+    
+    The implementation includes:
+    - InMemoryTransport with linked transport pairs
+    - Basic unit tests for the transport itself
+    - Integration tests that verify MCP protocol compliance
+    - Tests for error conditions like method sequence violations
+    
+    This allows us to test the full server stack from transport handling through
+    middleware to handlers and back, improving test coverage and reliability.
+
+commit 46c66521239f5a38af7def1afdf32e5844c16b03
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 20:56:42 2025 -0400
+
+    feat(mcp): implement health resource and fix dependency injection
+    
+    Adds the cowgnition://health MCP resource to provide server uptime
+    and schema status metrics.
+    
+    Includes necessary fixes to correctly pass dependencies (startTime,
+    validator, connectionState) through server and handler initialization:
+    - Updated Server struct and NewServer function in mcp_server.go
+    - Updated Handler struct and NewHandler function in handler.go
+    - Updated NewServer call site in server_runner.go
+    
+    These changes ensure the health resource handler has access to the
+    required data.
+
+commit 5a48fbcacf5378a4fa0bc7f4c47341c86b2f0109
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 20:37:52 2025 -0400
+
+    feat(validation): implement MCP entity name validation rules
+    
+    Add schema-based validation for MCP entity names, focusing on tool names to address
+    validation failures with Claude Desktop. Create comprehensive name_rules.go with
+    pattern rules, examples and documentation for tools, resources and prompts.
+    Enhance middleware to validate both incoming and outgoing messages with configurable
+    strictness options.
+    
+    This ensures proper validation of entity names according to the observed MCP
+    implementation requirements, even though these aren't explicitly documented in
+    the specification.
+
+commit 3b2c55e5a66513cd561080fd3627768281b2f31a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 19:14:05 2025 -0400
+
+    name validation
+
+commit 8f780bc94b60ccac251bf41c60431d2ada783794
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 09:31:53 2025 -0400
+
+    clean up cyclometric complexity of  serve() loop
+
+commit 8b36d280e6774734ba946135665ebab8a7fb626d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 09:26:54 2025 -0400
+
+    track connection state (no full-blown FSM yet)
+
+commit 76a0702613540a87332f6ce4338a15a491037b9e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 09:00:05 2025 -0400
+
+    lint
+
+commit 4d2275269e2fff9ad7c546a86be7f2df20752b2d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 07:51:14 2025 -0400
+
+    refactor
+
+commit 09010228e309c5b7c57b12d6958b44d71bfcd9e9
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 02:02:33 2025 -0400
+
+    tree
+
+commit dfe10d3a79d8412091b795bcc2be54997756759f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 02:01:11 2025 -0400
+
+    renamed some files for clarity
+
+commit 033e2a70f3aa72e14d6e219950b3eaff5f5189cc
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 01:53:33 2025 -0400
+
+    qa
+
+commit a6d9c1b6df85d2619d007073f6954782aa9674a5
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 9 00:19:59 2025 -0400
+
+    assess moving to stateless
+
+commit b848f1e358976a1757edead5fa83429576161bec
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 23:40:42 2025 -0400
+
+    Feat: Add timing logs to schema initialization
+    
+    Adds detailed timing logs to the `SchemaValidator.Initialize` method in `internal/schema/validator.go`. This helps identify performance bottlenecks during server startup by measuring the duration of key steps:
+    
+    -   Loading schema source data (`loadSchemaData`)
+    -   Adding the schema resource to the compiler (`compiler.AddResource`)
+    -   Compiling the base schema (`compiler.Compile`)
+    -   Total initialization time
+    
+    The load and compile durations are stored in the validator struct and exposed via getter methods (`GetLoadDuration`, `GetCompileDuration`) for potential future use in metrics. Log statements now output these durations during initialization.
+    
+    This change supports the goal of optimizing startup performance by first identifying where time is being spent.
+
+commit 8ff21acdd9a14f33a7ab5af6441c9d86da2e0c31
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 23:01:26 2025 -0400
+
+    fix max
+
+commit 5d821ab0b9c11fe6c7b80a23c202e38b73761fc8
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 22:58:47 2025 -0400
+
+    Refactor: Address lint errors in validation middleware
+    
+    This commit resolves several lint errors reported by golangci-lint in the validation middleware (`internal/middleware/validation.go`):
+    
+    1.  **Reduce Cyclomatic Complexity (gocyclo):**
+        * Refactored the `HandleMessage` function to reduce its complexity from 18 to below the threshold of 15.
+        * Extracted logic for incoming validation (`handleIncomingValidation`) and outgoing validation (`handleOutgoingValidation`) into separate helper functions.
+    
+    2.  **Fix Ineffectual Assignment (ineffassign):**
+        * Removed the initial `schemaType := "base"` assignment in the `determineSchemaType` function, as the variable was always reassigned before being used.
+    
+    3.  **Fix Unused Parameter (unparam):**
+        * Removed the `min(x, y int)` helper function, as the `y` parameter was always passed the constant value `100`.
+        * Replaced calls to `min(len(data), 100)` with calls to a new helper `calculatePreview(data, 100)` or inline logic for clarity and to eliminate the unused parameter warning.
+    
+    These changes improve code readability, maintainability, and adherence to project linting standards without altering the core validation logic.
+
+commit be9ea1c51ddda704f9e434738dfdecdb2b1aa35b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 22:42:48 2025 -0400
+
+    schema validation architecture
+
+commit a08464ff2e70a1b244acd5fca1eb62874bdc6bd7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 22:25:37 2025 -0400
+
+    start improving schema validation
+
+commit dd096e3dbb5877c9e2ae874995f6db42934c4beb
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 21:49:39 2025 -0400
+
+    lint
+
+commit 7779e6fa1d8ae1fecd5d6ca7a90d96cd005d757a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 21:48:04 2025 -0400
+
+    feat(mcp): add handlers for prompts operations
+    
+    Implements MCP handlers for prompts/list and prompts/get operations to
+    complete the protocol dialog with Claude Desktop. Currently returns an
+    empty list of prompts, as no prompts are defined yet, but provides the
+    complete infrastructure for adding prompts in the future.
+    
+    Includes comprehensive logging, error handling, and input validation
+    for robust protocol compliance.
+
+commit 037c15ae945fe6d276c7b6f90223365390b26a5a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 21:25:56 2025 -0400
+
+    fix(mcp): register missing notification and prompts handlers
+    
+    Add missing MCP handlers for notifications/initialized and prompts operations
+    to ensure complete protocol handshake with Claude Desktop. This fixes errors
+    seen in the server logs during the initial connection sequence.
+
+commit 431286052ba7410ed94ebf119095b8196a882b61
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 21:17:52 2025 -0400
+
+    update todo
+
+commit c7c47c631be101c929932287c0134ef4f94b0a80
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 21:06:43 2025 -0400
+
+    adding handlers
+
+commit 7f24d3630607c5ed51f9d7049fd562b043789eba
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 20:51:39 2025 -0400
+
+    refactor mcp_handlers into multiple files
+
+commit 596aa02d8a578e5fac56c3fe76dfccf62827ee0a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 00:50:46 2025 -0400
+
+    fix unused param
+
+commit e3198414c4ab826c76f34d39776969ab6913bf1c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 00:36:04 2025 -0400
+
+    fix(schema): improve schema file resolution with multiple path options
+    
+    - Add multiple path resolution strategy for finding schema.json
+    - Include min_schema.json as a local fallback option
+    - Use official MCP schema URL as reliable fallback source
+    - Improve logging for schema file discovery process
+    - Ensure proper validator cleanup during server shutdown
+
+commit 9418e917823d8a414fd088707c101a56c37b5bd6
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 00:25:53 2025 -0400
+
+    makefile
+
+commit d3b4513f7baf7728d1942c3c10c0ad84c7491502
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 8 00:02:57 2025 -0400
+
+    lint fix
+
+commit d5609225c709810757394949b325d6d5f6644cd9
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 23:49:49 2025 -0400
+
+    build errs
+
+commit 6f2f74bffd9ec3697228ca2c80267c9514c0d81b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 23:37:37 2025 -0400
+
+    fix(mcp/server): Resolve golangci-lint errors in error mapping
+    
+    Removes ineffectual default assignments for 'code' and 'message'
+    variables in mapErrorToJSONRPCComponents, addressing 'ineffassign'
+    warnings. The values are always determined by subsequent logic based
+    on the specific error type.
+    
+    Updates the mapMCPError function signature to remove the unused 'data'
+    return parameter, resolving an 'unparam' warning. The corresponding call
+    site in mapErrorToJSONRPCComponents is updated to reflect this change.
+    
+    Sources and related content
+
+commit 223cce053b07d2bd26d4b6c233f8909fa4517607
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 23:20:30 2025 -0400
+
+    doc
+
+commit 00b5e388f8c46333b69943909d3ff44fcb0bd3f9
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 22:30:17 2025 -0400
+
+    style(mcp): Resolve lint errors in mcp_handlers.go
+    
+    - Rename MCPHandler to Handler and NewMCPHandler to NewHandler to avoid repetitive naming, following `revive` suggestion.
+    - Mark unused `ctx` parameter as `_` in `executeEchoTool` signature to fix `unparam` lint error.
+    - Ensure comments end with periods.
+
+commit 457fb9cbf741cf56c7b8a9de0a43fb2095765954
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 22:28:33 2025 -0400
+
+    refactor(mcp): Reduce complexity and fix assignment in createErrorResponse
+    
+    - Refactor `createErrorResponse` in `mcp_server.go` to reduce cyclomatic complexity by extracting error mapping logic into helper functions (`mapErrorToJSONRPCComponents`, `mapValidationError`, `mapMCPError`, `mapGenericGoError`).
+    - Fix ineffectual assignment lint error for the `message` variable within `createErrorResponse`.
+    - Improve structured error logging in `logErrorDetails` helper to include more context based on error type, aligning better with ADR 001.
+    - Ensure comments end with periods.
+
+commit 0f7fbc479042e29a96bd17f39f2e5fa04eed4112
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 22:22:29 2025 -0400
+
+    fix(middleware): Correct handling of multi-value returns in validation middleware
+    
+    - Modify calls to `createParseErrorResponse` and `createValidationErrorResponse` within `validation.go`'s `HandleMessage` function.
+    - Ensure the `([]byte, error)` return values from these helper functions are handled correctly, returning the generated response bytes and nil error when appropriate, or propagating marshaling errors.
+    - Improve identification of notifications vs requests in `identifyMessage`.
+    - Add periods to comments.
+
+commit db34d548ca12d68aac4489cbf39775ee7c924395
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 22:20:19 2025 -0400
+
+    fix(mcp): Resolve build errors in mcp_server.go
+    
+    - Correct `errors.Is` usage for transport errors by checking error type and code field, resolving "ErrorCode does not implement error".
+    - Replace remaining `mcperrors.NewError` calls in `handleMessage` with standard error wrapping (`errors.New` or `errors.Wrapf`), resolving "undefined: mcperrors.NewError".
+    - Improve error mapping logic in `createErrorResponse` to better handle generic errors and map to standard JSON-RPC codes based on error messages.
+    - Ensure comments end with periods.
+
+commit 377c29957c8bc123dd854d39d3ab2f8de7f53e89
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 22:17:24 2025 -0400
+
+    fix(mcp): Resolve redeclarations and undefined errors in mcp_handlers
+    
+    - Remove duplicate type definitions (e.g., InitializeRequest, ListToolsResult) that belong in types.go.
+    - Replace calls to undefined `mcperrors.NewError` with standard Go error wrapping (`errors.Wrapf`). Central error mapping in mcp_server.go will handle JSON-RPC conversion.
+    - Replace undefined `Version` variable in handleInitialize with a placeholder string.
+    - Ensure comments end with periods.
+
+commit 4b8f6aa437820acb05371aedbd9983d996a7c60e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 22:06:20 2025 -0400
+
+    refactor(mcp): Update mcp_server.go for consistency and ADR alignment
+    
+    - Rename handler calls in `registerMethods` to use lowercase convention for unexported methods (e.g., `handleInitialize`).
+    - Ensure all single-line comments end with a period for linting.
+    - Improve error logging in `createErrorResponse` to include full stack traces (`fmt.Sprintf("%+v", err)`) as recommended by ADR 001.
+    - Refine error mapping logic in `createErrorResponse` to handle `null` request IDs and potentially map more specific internal errors.
+    - Clarify error handling responsibilities between `handleMessage` and `createErrorResponse`.
+    - Add TODOs for middleware integration and further ADR alignment improvements.
+    - Remove helper types/stubs that belong in other files.
+
+commit de041fc21ac4720e796827007479913ee82b6d12
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 21:19:50 2025 -0400
+
+    tree
+
+commit 2b0bdf2bf41eafde398e8e452fc2eafc23e3a3a5
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 21:03:55 2025 -0400
+
+    feat(mcp): implement core MCP protocol handlers
+    
+    - Implement initialize handler for MCP protocol initialization
+    - Add tools/list and tools/call handlers with a hello world tool
+    - Add resources/list and resources/read handlers with a sample resource
+    - Improve error handling and logging throughout the server
+    - Update middleware chain to correctly handle message validation
+    - Make server respond properly to all standard MCP methods
+    
+    This implementation focuses on the core MCP protocol conversation flow
+    without RTM-specific functionality, allowing Claude Desktop to
+    successfully connect and interact with CowGnition.
+
+commit 7468445679f47f997ca885e99a4e50b5ab561f1c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 21:03:46 2025 -0400
+
+    feat(mcp): implement core MCP protocol handlers
+    
+    - Implement initialize handler for MCP protocol initialization
+    - Add tools/list and tools/call handlers with a hello world tool
+    - Add resources/list and resources/read handlers with a sample resource
+    - Improve error handling and logging throughout the server
+    - Update middleware chain to correctly handle message validation
+    - Make server respond properly to all standard MCP methods
+    
+    This implementation focuses on the core MCP protocol conversation flow
+    without RTM-specific functionality, allowing Claude Desktop to
+    successfully connect and interact with CowGnition.
+
+commit 3a31f05edc47ab60a4ffdb539b57ead6b7eae68d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 20:42:13 2025 -0400
+
+    lint fix
+
+commit c5346a11026a5ab0002f8728370bf5aec544a497
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 13:59:31 2025 -0400
+
+    refactor(schema): fix linter issues in validator implementation
+    
+    - Rename SchemaSource to Source and SchemaValidator to Validator to avoid repetitive naming
+    - Add nolint directives for compileSubSchema (unused) and min (unparam)
+    - Explicitly handle WithContext return values
+    - Ensure all comments end with periods for godot linter
+    
+    This commit improves code quality and consistency while maintaining the existing
+    functionality of the schema validation system.
+
+commit dc2d6dbb76e8bc29ec57e0190632d5ba3a63e6bd
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 13:54:36 2025 -0400
+
+    fix(middleware): resolve type assertion error in middleware chain
+    
+    This commit introduces a proper MiddlewareWithNext interface to handle stateful
+    middleware components. The middleware chain implementation has been refactored
+    to correctly handle both interface-based and function-based middleware types,
+    resolving the invalid type assertion error that was occurring during compilation.
+    
+    Additionally, all comments have been updated to end with periods to satisfy the
+    golint requirements.
+
+commit bbf76c456a27f62b8cfbc63ebdbded8bd85d347b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 13:48:40 2025 -0400
+
+    update
+
+commit 119997d3b1b95d3b725510be96a5f4014b4f02e3
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 13:40:24 2025 -0400
+
+    rename files for findability
+
+commit 78cb7b290b025bbe0f38b6af15e793d3e1dbfd33
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 13:31:00 2025 -0400
+
+    typo
+
+commit 454f4ec10bbd59d451942db89219e29f375675b7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 13:22:25 2025 -0400
+
+    cleanup
+
+commit 0ca0cfddea2089b98d05dce2c9fbeddf3acc8aae
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 12:22:25 2025 -0400
+
+    cleaning up
+
+commit 4e1c06227eb8c5cb3b391f5a5f90bdad14560b61
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 06:46:39 2025 -0400
+
+    error handling
+
+commit bf2e9d9e64578a2679179c14e2e2d0c3b40843fd
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 06:40:19 2025 -0400
+
+    fix: resolve compilation errors in transport and middleware packages
+    
+    - Fix message slicing in transport package by correcting parameter types
+    - Fix unused variable in middleware chain implementation
+    - Implement missing runServer function in server package
+    - Add proper middleware chaining with correct handler forwarding
+    - Create stub implementations for dependency packages
+    
+    This resolves all compile-time errors and allows the build to succeed.
+
+commit 71dc607fbe3da28f88324c771168c6aba2dc54fd
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 06:30:42 2025 -0400
+
+    enhance logging
+
+commit 35296dc14b612e318f3ba1664f7a5f2ce3ad7d0a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 06:05:28 2025 -0400
+
+    middleware validtor
+
+commit daaad243a0b48d1f06de0c2d58436d48d8db7617
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Apr 7 05:44:32 2025 -0400
+
+    schema validation
+
+commit a777d6416bedd4ce8418527474d8ac4c018cc75c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 6 21:55:48 2025 -0400
+
+    validation
+
+commit 05e7e92087b080a58445534808e368a9b7060bf0
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 6 20:38:23 2025 -0400
+
+    doc
+
+commit 317915ccba603a1db3bca305786c8e1d709a6a69
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 6 17:48:43 2025 -0400
+
+    fresh
+
+commit 2b641bef54e379cff4bc22b6ee0aeb9fda1be975
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 6 16:25:08 2025 -0400
+
+    include schema
+
+commit b83e0eb577596528dc9bb60bc25d0216de4ea5c4
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Apr 6 16:20:31 2025 -0400
+
+    fresh start, focused on using go stdlib
+
+commit 9a32b3d6631aae106d81d01ba91a038a0ecec0c7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 5 22:07:49 2025 -0400
+
+    notification/initialized
+
+commit 51bb76b71c66f59b0151d64b50a449a521e977d0
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 5 20:38:45 2025 -0400
+
+    update
+
+commit 830a1ce28a322f5690e9091f65c74b510013511c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 5 20:07:57 2025 -0400
+
+    conforming to protocol
+
+commit b4c19eee22d042ad7560de2e5e8449bc331c3a39
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 5 17:48:44 2025 -0400
+
+    fsm
+
+commit d0cc7a99c0078636426b7200f8c08e688d285838
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 5 17:34:43 2025 -0400
+
+    begin testing framework
+
+commit 84530de8a27c84bb0f8ed9f2b0fe30dc7a088140
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 5 16:58:20 2025 -0400
+
+    add testing
+
+commit 4e799ee36216d97b3d75c67a09701ce7a8d979f1
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 5 15:48:25 2025 -0400
+
+    todo
+
+commit 6d04bb479625721e497e259cf49a616a5d63c970
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 5 15:44:24 2025 -0400
+
+    fix
+
+commit 72ebfc23d7eff1a7bdec51fc7db3d98e946979a9
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 5 08:15:16 2025 -0400
+
+    update
+
+commit e871195f9807fcf9e49eaff93b29403d81d485f9
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 5 08:11:22 2025 -0400
+
+    build err
+
+commit d450ec0f79137c3f1a757750be19d265d23a7cb7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 5 08:07:18 2025 -0400
+
+    decruft
+
+commit 18466b30d3f220a79db90c3f06a6fbb206c74fd6
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 5 08:00:06 2025 -0400
+
+    remove homebrew jsonrpc2 and use library
+
+commit f2f3300f5b7bd82d1e0f4db621c14961b5bc6077
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Apr 5 07:38:32 2025 -0400
+
+    cleanup
+
+commit 12c939588388d7886e02f318fe7f6fccec1196d4
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 23:49:41 2025 -0400
+
+    testing
+
+commit 8605adfbf03f88d2074af95acaca9697b8c29de2
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 23:40:07 2025 -0400
+
+    comments
+
+commit 2f21416d047e2572cdc3a7d1a9b0ae3a0b4d28e6
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 23:05:36 2025 -0400
+
+    clean build
+
+commit 44681cb4ee6b811352a3802828d2749851fb425d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 22:10:43 2025 -0400
+
+    err
+
+commit 5d2394d14f3a1e823ffc6475b4be7c0a026dfbda
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 21:39:14 2025 -0400
+
+    logger
+
+commit 1be0f9df094eb4d3da50b4a78884c4afbd49f2a1
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 21:33:28 2025 -0400
+
+    fsm
+
+commit a204dec414a094ecd30f8406155e01a5dd427c9d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 21:18:57 2025 -0400
+
+    redeclared logger
+
+commit 683dcde95584e732b6b572cbe14acda6341f1ae8
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 21:06:41 2025 -0400
+
+    pkg cleanup
+
+commit ec7ed2e74e3be302e40af97dd7657ebc9ba82155
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 20:49:59 2025 -0400
+
+    get tree first
+
+commit 32cf319ca910aba5e69006ee1782a4e7e29917d2
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 20:23:26 2025 -0400
+
+    enhanced error logging
+
+commit d07fdd3f5930e19ddafbd9d50bbe36582978114f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 19:48:09 2025 -0400
+
+    renamed files
+
+commit 016ddb59c6f36c089320cd61e168f88aa7ebdba5
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 17:33:21 2025 -0400
+
+    fsm
+
+commit f0f420b2d1de64f71a0c35efc67433539d4a4cc0
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 17:25:23 2025 -0400
+
+    clean build
+
+commit 553bb052a95a09f2d322b16e35c6a100c877ee24
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Apr 4 12:50:59 2025 -0400
+
+    build out FSM
+
+commit 2b69692dae8fed755e92065565e3ad41ccbc1c90
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 23:16:35 2025 -0400
+
+    clean build
+
+commit ca721e2951df3a7355e56b917cb3a9e83c4fde11
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 21:26:16 2025 -0400
+
+    fix
+
+commit 05f175a757768be88c04fba900ebafeb9a680aab
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 20:58:29 2025 -0400
+
+    fix
+
+commit 0de61c9fa9964e657b97a15caa4dfeff90faca6e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 20:39:15 2025 -0400
+
+    cycle
+
+commit aaa4b47207130928a30565334b98d7d520baf2b7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 19:17:37 2025 -0400
+
+    fix
+
+commit f434a088bf63c658a0420dd97f9557fc6c3f78d8
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 18:02:55 2025 -0400
+
+    fix
+
+commit acc997a229d0d53d8411429586c44728e3ace389
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 17:54:59 2025 -0400
+
+    fix
+
+commit 41f8ae697ed4388c622b61b6fceb3803b7ca8f70
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 17:50:23 2025 -0400
+
+    cleanup
+
+commit 8b8332000bb5b89fbe9e9dfa2d2f0359732e61f2
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 16:01:26 2025 -0400
+
+    fsm
+
+commit db759c238e74464d6e5e9edb692b9bbcf6a9cc0e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 14:00:10 2025 -0400
+
+    fsm
+
+commit d03fd4aaf4d422d89f8fc5be4865c6e022cbb90d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 13:21:52 2025 -0400
+
+    fsm
+
+commit 5664f20062d05fe628c44ccd1c81069748246c31
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 11:50:24 2025 -0400
+
+    cleanup vesitigial protocol handling code
+
+commit b21fd1139ee7389590af17e9300db6cf60ffa7b4
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 11:34:51 2025 -0400
+
+    cleaning up
+
+commit b0532644a45832000a20ca566e3908b991e23783
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Apr 3 11:18:27 2025 -0400
+
+    typo
+
+commit 5f2697d78cd4c3a1192a9eb8159423f8e519198a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 2 22:10:19 2025 -0400
+
+    fix
+
+commit 72c96303ca6df0170f7bb802cff053652c875911
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 2 21:37:50 2025 -0400
+
+    interfaces
+
+commit 91d4537dfe53b86e8a7477c618b96adc59693158
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 2 21:27:50 2025 -0400
+
+    cleanup
+
+commit e781c8c728cfb46f2a43b567667ecc2bac29c226
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 2 21:12:48 2025 -0400
+
+    cleanup
+
+commit ae94febdeb32c0a4a86a2c9d73bc6626bad89236
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 2 21:03:33 2025 -0400
+
+    circuit
+
+commit a55df9aa0e9ce9c3734144eb8fe224c79bd6d883
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 2 19:41:49 2025 -0400
+
+    type cycle
+
+commit 31bb74caa00c109fc89af79192732686ea2b95dd
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 2 17:25:12 2025 -0400
+
+    cleanup
+
+commit db016e2d9318681c67e859c5e9249d36c9b94aaa
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 2 16:48:48 2025 -0400
+
+    implementing state machine
+
+commit ec570190503f5dbdff5c3ffe3bf683e846fd3cc0
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 2 16:35:52 2025 -0400
+
+    setup state machine for mcp connection
+
+commit 0f00c9215460a748bc0e197bd4aef4f5b4e849ad
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Apr 2 15:35:34 2025 -0400
+
+    use a state machine for protocol parsing
+
+commit 565994b7b376b9fc4fdbaec84eaca5c269895bb8
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 1 22:58:12 2025 -0400
+
+    update todo
+
+commit bacb633d9ddd7f3340eee9450186dd3007503b07
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 1 22:55:02 2025 -0400
+
+    huh
+
+commit 6721d58973868b7fb810804cb66ee435cb54efa2
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Apr 1 22:53:47 2025 -0400
+
+    plain old json
+
+commit 9c50ef8d93857e5bcf13ad0e204ae73c844a39f0
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 29 20:30:58 2025 -0400
+
+    debug transport
+
+commit f359546d103e0abdf81fbac2669686cebce844c8
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 29 14:17:45 2025 -0400
+
+    config
+
+commit ad40b65b5500903832a58f40f8c3109de71e7ddc
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 29 13:32:09 2025 -0400
+
+    fixing
+
+commit e2dc0035f55e9a8ca815c7af73fc159b61906a0a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 29 01:54:28 2025 -0400
+
+    content-length header issues
+
+commit 952548c34d4c3cb3bcda339b23a75374ed9e816f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 29 00:32:38 2025 -0400
+
+    readobject unused
+
+commit 7acc33a4ea38e729b29d7a54f4159d4cd0085861
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 29 00:16:04 2025 -0400
+
+    godot
+
+commit 3535121e57201518749af4710e31ebd284efb618
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 29 00:12:23 2025 -0400
+
+    rpc initialization
+
+commit ebbaf38c7066c78af9e3981e5b6c1aaad44050bc
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 28 23:35:21 2025 -0400
+
+    build err
+
+commit 49742fdba85c5b3531efad4f988e8652ada812a8
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 28 23:21:01 2025 -0400
+
+    err
+
+commit dc6f2ee5d93b0f3ceb744d62a3db8e50ee7c3543
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 28 00:39:01 2025 -0400
+
+    playing w MCP protocol
+
+commit ffe47305029e191ebda4c8ace167d551b2ab931a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 28 00:30:09 2025 -0400
+
+    respond properly to MCP client initialization requests
+
+commit 564160b2ea5d4d94f09c74727659d89f07762d78
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 28 00:20:12 2025 -0400
+
+    fix(config): add YAML struct tags to resolve credentials loading issue
+    
+    - Added YAML struct tags to map config file keys to struct fields
+    - Added debug logging to verify config loading process
+    - Fixed issue where RTM credentials couldn't be loaded from config file
+    - Sanitized credential logging to prevent sensitive data exposure
+    
+    This resolves the top priority issue from TODO.md
+
+commit feec012bce3a2fd833f89d91a57ee1f38a58a27d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 28 00:09:13 2025 -0400
+
+    config
+
+commit 5100b733665d98852a4fdbcc6a098b5bbb7c7ec2
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 23:40:25 2025 -0400
+
+    load config file
+
+commit a7994ce551793eaae50dd8fb9d4bc995db4b8291
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 23:32:16 2025 -0400
+
+    rtm
+
+commit 9616b9818bb0f1b97858052793d1a68d92e9b593
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 23:19:09 2025 -0400
+
+    test
+
+commit 1bef11c46a7efe2fc937c21c556e3b70131c571a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 22:59:52 2025 -0400
+
+    mvp
+
+commit 62a21cdd3822ccac54e7ec5ac8fe96feb83279cb
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 19:28:12 2025 -0400
+
+    todo
+
+commit af1744ec44c60782cb6ba00d8ef586f0b3540280
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 19:24:31 2025 -0400
+
+    cockroachdb/errors
+
+commit 7f1ad21036ee41d2a6082b09e429d6678642d6a9
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 17:54:22 2025 -0400
+
+    fix(error-handling): implement consistent error handling with cockroachdb/errors
+    
+    - Add alias import "cgerr" for internal/mcp/errors package across codebase
+    - Replace all "mcp / errors" references with proper "cgerr" import
+    - Enhance error creation with structured properties for better debugging
+    - Implement proper error wrapping using cockroachdb/errors
+    - Ensure consistent error propagation through call stack
+    - Add error categorization for better JSON-RPC error mapping
+    - Improve error messages and context data for diagnostics
+    - Maintain backward compatibility with existing error interfaces
+    
+    This commit improves the error handling across the codebase,
+    with stack traces, structured error data, and a consistent
+    approach.
+
+commit a7580256a0363e1d943a06bfb40444d448654260
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 17:40:54 2025 -0400
+
+    fix imports
+
+commit 7d51b3d0be00f0e47c52d076396d71c21999f39c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 17:28:39 2025 -0400
+
+    reorganized tree from mcperr to mcp/errors
+
+commit f3633b2c6467a8ab4b578274b1f3b7a0604a8049
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 11:19:24 2025 -0400
+
+    fix makefile
+
+commit f965831d8d302ad3dbfbfd149adbfd75b368758c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 10:46:54 2025 -0400
+
+    update error handling
+
+commit 918f13c3ed6edd365af6d5081a522edfa69f2dd7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 10:31:19 2025 -0400
+
+    enhance error architecture
+
+commit 5f7a46d72e1b47c4269aee2b5016709c087e4858
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 10:27:13 2025 -0400
+
+    pretty Makefile
+
+commit ee96ac5ff441e69d2e427a1d932bb80c4c2a92d5
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 10:23:43 2025 -0400
+
+    rearchitect MCP error handling
+
+commit dc62d0d8d91bf4e80bddb24960e86078f4be56e4
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 10:08:09 2025 -0400
+
+    cockroachdb/errors
+
+commit 06f76be4b2da4d3843cd70b8ae3cf0c703b67f0f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 01:33:41 2025 -0400
+
+    plan logging
+
+commit 32baafd34df0d8ebcc8a381534cfc69cf5e04d98
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 01:24:23 2025 -0400
+
+    clean build
+
+commit 184a2cbfb537eaeb244a03bdc3c18c6086774f14
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 01:19:08 2025 -0400
+
+    fixes
+
+commit 7e60965a108c8788ee0b632234bf0d1778cc5a97
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 01:13:20 2025 -0400
+
+    cockroachdb/errors
+
+commit c3ee458c676ef45ee56439dc87e4b57173890b93
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 00:59:50 2025 -0400
+
+    migrate to cockroach
+
+commit 4e48adff4c7fb4864408602573ebb4c2254dfcf2
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 00:45:32 2025 -0400
+
+    nodot
+
+commit 99788a2e404484effe172d6c268270b4b0cafb47
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 00:34:24 2025 -0400
+
+    redeclarations
+
+commit 641d5ea080fa550b0971cf78c3d0beb19b60c752
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 27 00:27:53 2025 -0400
+
+    add linecount to flag big files
+
+commit 8e5751645bfe436ceac749686d36e54d46a50d17
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 23:59:06 2025 -0400
+
+    todo
+
+commit 4bff88030332f2b15361358717f293ef0bd7e09c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 23:53:42 2025 -0400
+
+    stdio_transport
+
+commit 32b3d412600f5112749a3494d17dc8e696aae705
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 23:33:02 2025 -0400
+
+    errors
+
+commit 12cc871975343c56bd6c76255e42525a6c87e8e6
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 23:31:53 2025 -0400
+
+    cockroachdb/errors
+
+commit 0cf5afcaf83cc8485596da517cf4abf949060934
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 22:55:48 2025 -0400
+
+    error handling
+
+commit f683fdbb19881bdae3c385c7397f544c8cb8a75c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 21:58:26 2025 -0400
+
+    stdio transport: add stdio transport for JSON-RPC
+
+commit 6ea7b110536360164f9a030d12a38fec1a343793
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 20:57:52 2025 -0400
+
+    clean build
+
+commit 0ba372789d8ea1076e31c6aa63bcdc747119f318
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 20:16:43 2025 -0400
+
+    add jsonrpc
+
+commit f36e0fe605b9f5bb315e4654faac080f223a5218
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 19:16:45 2025 -0400
+
+    enhance error messages
+
+commit 212e617b9df6a7081ff6b6e6d299137031ce2a57
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 09:46:13 2025 -0400
+
+    Update TODO and plan JSON-RPC error handling
+
+commit 3ff5988322fc730e3ead73db6261552bad312012
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 02:47:46 2025 -0400
+
+    doc
+
+commit 748796905edc2290cbb3a6a8630f90977765e6fd
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 02:22:11 2025 -0400
+
+    clean slate
+
+commit 1c0818a913eee40e215d2c761ff1cda08a301a16
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 01:56:40 2025 -0400
+
+    doc
+
+commit 67938dd4260f25ed40f020197602bcc1f7076d9d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 01:32:21 2025 -0400
+
+    set repo
+
+commit 84b1ef5fbbb8dd107cd1b0fbe41c4dc57a3d328a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 01:27:21 2025 -0400
+
+    clean slate
+
+commit b88066cdb4c09aa4bafb1f302e4e9815a4aa2d14
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 00:38:14 2025 -0400
+
+    buld errors
+
+commit ce96d0896311e3dab1964a1f1187945a5b7fa194
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Wed Mar 26 00:37:25 2025 -0400
+
+    cleanup
+
+commit 55e73973b852c7497464a1c77bc74612844dac7a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 23:47:49 2025 -0400
+
+    update repo
+
+commit 7625a30c5a639344e4494ed6ae5008ab85ba7353
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 21:09:18 2025 -0400
+
+    build
+
+commit e0b089ad9ff90a07e2d0b74beb6f1ecd3e44d831
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 21:08:51 2025 -0400
+
+    interface
+
+commit 500a214c2b2b5fb353addcfef22366a8125e5c50
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 20:59:59 2025 -0400
+
+    detangle
+
+commit 7ff2fee2bba3fb189f699db8747257ec908c84b5
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 20:58:40 2025 -0400
+
+    detangling
+
+commit 339498f5a50b58ba8dd9fc3a18bc1e0eea8c9ef3
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 20:49:14 2025 -0400
+
+    build
+
+commit 6e9dcf64c9bb75ecf9340963e4efa0bd7c8dec82
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 20:48:40 2025 -0400
+
+    patching test
+
+commit 906b0cc822028b0f04ce3e4bc22a33851dd2d501
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 20:48:18 2025 -0400
+
+    error
+
+commit 09329b22820c06ec4ef245d6af7920471b6b5849
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 19:59:03 2025 -0400
+
+    comments
+
+commit 94139eea8baca5a933cbb8aa80fe95b44c12b283
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 19:30:11 2025 -0400
+
+    MCPServer -> Server
+
+commit da3a9acc9e211f0383b7f1f199558f0715ac4f4c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 19:18:45 2025 -0400
+
+    deps
+
+commit b5a263212cac158868d16b99da3e981374143358
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 18:41:40 2025 -0400
+
+    cleanup cycle
+
+commit 5a731774a77b9608c62faf713874ad6172aedf9c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 18:05:04 2025 -0400
+
+    cleanup deps
+
+commit 8403c79a11ccc936871695702f9c9b57e0fb0b42
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 18:04:32 2025 -0400
+
+    cleanup deps
+
+commit 287e7ead90305a9c09bf4c8f9648cee687d69baf
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 17:54:03 2025 -0400
+
+    update doc
+
+commit e933f8d1b728f041ea1885365047032079e52605
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 17:51:04 2025 -0400
+
+    update readme
+
+commit 86fc3283ac23e74af15c6a7e26aaa4b05deef1b5
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 17:45:46 2025 -0400
+
+    doc update
+
+commit 7eac0f47440e90f9e3e7a6b413b89a723ccf35d5
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 17:40:10 2025 -0400
+
+    readme
+
+commit 7c003a2808853e9611f5d07e9efb9316bf952d35
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 17:18:08 2025 -0400
+
+    decision_log
+
+commit 65d82cf2499ff0a2e9bf56f534834a7ff7c902ed
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 14:40:09 2025 -0400
+
+    update todo
+
+commit 6df4a403e6627a4303b07f90fb2b26728e35fbb7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 14:34:23 2025 -0400
+
+    refactor middleware
+
+commit 30753b3dabadbb815bec291c8a7869cc7bc1d618
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 14:23:05 2025 -0400
+
+    update build
+
+commit 090fa54ca46540ce48d13c9409a3ece5c3f141e5
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 13:38:57 2025 -0400
+
+    up
+
+commit f9963ee4b7a6fb3598b44d3a1169e653038ee654
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 12:59:48 2025 -0400
+
+    refactor
+
+commit 380654dfe436306f3e45bec0f3b72da33151b5ff
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 11:36:01 2025 -0400
+
+    build process create tree.txt and updates TODO
+
+commit 70c7fb0515db6f51cc8b0d288b5b1a209797143a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 10:48:16 2025 -0400
+
+    build errors
+
+commit 7db309b8627e4fdc3bfe01a353dccd3f4f72db9b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 10:23:53 2025 -0400
+
+    completed validator refactor
+
+commit 6b0b025b2fa4b707b71c8529fc04b49cd6b5fa31
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 10:14:41 2025 -0400
+
+    refactor validators
+
+commit 9e7c26f78e229215c63f60a9a19a846898c4cc05
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 09:53:57 2025 -0400
+
+    refactor validators
+
+commit 83dbb47f4888f58c54e410255ceb5320a3ddf13a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 09:40:13 2025 -0400
+
+    refactor validators
+
+commit cdc2cd88988d5566fc92542db3deb94dc8f37999
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 25 09:00:06 2025 -0400
+
+    build errors
+
+commit 40313c41ac3e822e1dae25018a18601b0b88f727
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 13:48:32 2025 -0700
+
+    Fix TestResources function signature in unit tests
+    
+    - Changed function signature to match Go test requirements
+    - Refactored implementation into a helper function
+    - Maintained all existing test functionality
+
+commit f2a8657295e14eeb77bfc9e06951ef24fb08ee9a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 13:42:47 2025 -0700
+
+    REORG
+
+commit fb3d7769f82412075b84e8a9cd8b0a7cd4aa46e2
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 13:36:01 2025 -0700
+
+    mcp client
+
+commit 14d2eea8060ef0cafd1db8ac1f3eb7534baa8a09
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 13:33:38 2025 -0700
+
+    cleanup validators
+
+commit 434f87054652359ec0a71b6b31b69bf4eab47caa
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 13:22:21 2025 -0700
+
+    reorg
+
+commit fb161966463ad159f13b934c0300ac61b2a7f8ce
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 13:08:38 2025 -0700
+
+    reorg
+
+commit 864ecf0f2965488f4bf4181dd23d4419f8392048
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 13:03:32 2025 -0700
+
+    imports
+
+commit 5b71b5a817dced5207dc24bb4d77137c1ade3f7b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 13:01:03 2025 -0700
+
+    reorg
+
+commit 9c72c4abdb5a6ad1dbbc4371393eb4ef5a264538
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 12:54:15 2025 -0700
+
+    reorg
+
+commit b291598fc2dbbf18669ec7407354ca638f78e261
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 12:50:58 2025 -0700
+
+    reorg
+
+commit 7a381995bc9a368afd93c2ca78e11c790df8e75a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 12:46:54 2025 -0700
+
+    restructure
+
+commit 71efbddbfb6ff672e2638739f79cfd66215ebcf9
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 12:39:28 2025 -0700
+
+    restrcuture
+
+commit 18b5e0cbccbde9c937dd509b6c02a925098afed0
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 12:39:19 2025 -0700
+
+    reorg test
+
+commit 7bce25afea080b9bcdb27cab228b5ec69eac93ac
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 12:14:33 2025 -0700
+
+    test reorg
+
+commit 1f54e3d850be038096a76e013e0eb2706418a3e2
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 12:05:16 2025 -0700
+
+    update todo
+
+commit f5730e4f9a48297a32212f5aa5b2fccdd829f507
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 11:57:11 2025 -0700
+
+    Add MCP test framework for protocol conformance testing
+    
+    - Create MCPTestFramework structure to standardize MCP protocol testing
+    - Include setup for mock RTM server and authentication
+    - Add methods for running standard protocol conformance tests
+    - Support running comprehensive tests or individual test cases
+    - Part of test infrastructure reorganization per TODO.md
+
+commit 5fe13a9a1dc11109e069ee4ee6b50cee830bba8c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 11:44:58 2025 -0700
+
+    fix imports
+
+commit 3f612d16cc722147bd7565cd862f9305fa14618a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 11:40:20 2025 -0700
+
+    refactor test tree
+
+commit f99129eed3188add2624d5a84094ec5153aa780a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 10:35:02 2025 -0700
+
+    update doc
+
+commit 4b2a32bf76da94484177feb2cba27537b44dc240
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 10:16:07 2025 -0700
+
+    package paths
+
+commit e5d595df0524003a65463f1e04acf9eeaeb97628
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 08:41:56 2025 -0700
+
+    package reorg
+
+commit 8b4927e4d704ba670dc85477e274f79a5f343921
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 24 08:28:34 2025 -0700
+
+    complete tree reorg
+
+commit 969a8c14f48ac04afe55f1dcc4a585ab9011c921
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 23 21:57:36 2025 -0700
+
+    lint
+
+commit 9bc84550d6771618db2f79023f2f787ec61080e3
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 23 21:48:16 2025 -0700
+
+    fix
+
+commit 2a30ed5d60fa5dc1cb290d43a27aec0dd1ce1665
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 23 21:33:27 2025 -0700
+
+    REFACTOR
+
+commit 676901db3aafed32b00eb7e7de4c2801a99b2a7e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 23 21:29:10 2025 -0700
+
+    error
+
+commit 40466d147cfca1be19b4ec0e7e5377cbe2fe585b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 23 21:24:25 2025 -0700
+
+    refactor(server): update auth_handlers.go to use JSON-RPC 2.0 error handling
+    
+    Replace deprecated writeErrorResponse with writeStandardErrorResponse to
+    conform with JSON-RPC 2.0 specification. Add detailed context information
+    to error responses for improved debugging and troubleshooting.
+    
+    - Update authentication flow error handling
+    - Add specific error types for common authentication issues
+    - Provide more context in error responses
+    - Maintain backward compatibility with existing clients
+    
+    Part of the error handling standardization effort.
+
+commit 7816a6c58aed25ff0b6f4025a3b8a65d0873f37e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 23 21:15:17 2025 -0700
+
+    refactor
+
+commit 7b1f658b8b60067ceaa1faed92267a392b441efb
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 23 15:23:45 2025 -0700
+
+    Fix lint errors: remove unused client parameters in JSON-RPC error validation tests
+
+commit 63fa6e7ad57a8b4271d613ac9b088ea3b9d8cee3
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 23 14:00:54 2025 -0700
+
+    json-rpc error testing
+
+commit 44aaccbb3200aeacb5334bacf83b41c72ac6e885
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 23 13:50:12 2025 -0700
+
+    Update TODO.md to reflect completed rate limiting and clarify token refresh
+    
+    - Mark rate limiting protection as completed
+    - Clarify that automatic token refresh is not applicable for RTM API
+    - Maintain structure and formatting of the original roadmap
+
+commit 3db50bd51b221f65ed9865bfb9c67a817ae689de
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 23 06:00:08 2025 -0700
+
+    refactor
+
+commit 86727c3aa712b97cd5252feb924e82c815ed81f7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 23 05:52:37 2025 -0700
+
+    Refactor rtm/client.go into smaller, focused files
+    
+    Split monolithic client.go into multiple files with clear responsibilities
+    Create client_auth.go for authentication methods
+    Create client_http.go for HTTP request/response handling
+    Create client_tasks.go for task operations
+    Create client_lists.go for list operations
+    Create client_tags.go for tag operations
+    Add comprehensive documentation to all functions
+    Preserve all existing functionality
+
+commit 0900bbf3b51af8c3320f0400b844c19853c7ddc4
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 23 05:05:37 2025 -0700
+
+    Refactor (*Client).DoWithContext to reduce cyclomatic complexity
+    
+    This commit refactors the DoWithContext method in the RTM client to reduce its
+    cyclomatic complexity by breaking it down into smaller, focused methods with
+    single responsibilities:
+    
+    - prepareRequest: Handles parameter preparation and signature generation
+    - createRequest: Creates the HTTP request based on the client configuration
+    - sendRequest: Sends the request and processes HTTP-level responses
+    - processResponse: Processes the API response and checks for errors
+    
+    The refactoring improves maintainability and testability while preserving the
+    original functionality. Error messages have also been improved with more context.
+
+commit f02fc6e477af7c3100199b2f48761965c2e259a7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 23 05:00:16 2025 -0700
+
+    rate limiting per RTM doc
+
+commit 83ce57a05a6222f5275e2d1f278411deea84855a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 22:58:09 2025 -0700
+
+    Implement JSON-RPC 2.0 compliant error handling
+    
+    - Add structured error response format per JSON-RPC 2.0 specification
+    - Create DetailedError type for internal debugging with stack traces
+    - Add context-aware error formatting and logging
+    - Map HTTP status codes to appropriate JSON-RPC error codes
+    - Transition legacy error handlers to use the new system
+
+commit 8c0bbd2baf553e40f3a1bcb1e9641a68942a4aed
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 22:48:10 2025 -0700
+
+    comments
+
+commit 94fc4277590764aca0b6ff0ca3cc12101458ebce
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 22:12:00 2025 -0700
+
+    conform
+
+commit 085aa2000d34554af0472db4533888e553137349
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 12:52:07 2025 -0700
+
+    comments
+
+commit 99ebf0a2c257be01220b7311aadcfdd45428565e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 12:41:39 2025 -0700
+
+    tree fix
+
+commit 0a59d5f2d978d160ecc6608f2bcda24e4134ad9b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 12:12:47 2025 -0700
+
+    MCP conformance
+
+commit 0b25e4234e0f6daaa0f3b129b15e260506050412
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 00:54:19 2025 -0700
+
+    comments
+
+commit e9c9340c60f143711c0905f9d063b14760bbbb5e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 00:37:30 2025 -0700
+
+    pre-doc
+
+commit 648e5b83a7792e515608ecb053e07a4ad57ec043
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 00:49:36 2025 -0400
+
+    Enhance MCP initialization sequence and capability reporting
+    This commit improves the initialization sequence to fully comply with the MCP specification by:
+    
+    Adding comprehensive capability reporting for all MCP protocol features
+    Including explicit capability flags for optional features
+    Improving error messages for request parsing failures
+    Adding detailed logging for initialization requests and responses
+
+commit f7a7daadb9404a01479c10b4c7f4a9afff3a080d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 00:41:03 2025 -0400
+
+    conform with MCP
+
+commit 8becee11f14e53dad24df51288e4d69122abc15b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 00:36:30 2025 -0400
+
+    Improve MCP resource formatting for tasks and lists
+    This commit enhances the resource formatting to better comply with MCP specifications by improving:
+    
+    Comprehensive function documentation
+    Enhanced markdown formatting for better readability
+    Improved error wrapping and context
+    Better categorization of lists by type
+    Added support for tag-filtered task headers
+
+commit 954db8e6fa0d1be7aa1f6dd507972b21fc5f6b8b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 00:31:20 2025 -0400
+
+    working w Claude
+
+commit 7e8c4f1ce91722392f3893ba27822fed4263d26f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 00:28:15 2025 -0400
+
+    conform to MCP
+
+commit ac46b0b16f20424da8c9d766ca973b9a9cb0a1bf
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 00:13:53 2025 -0400
+
+    prioritize recommendations for working w Claude
+
+commit d8ce2a97933447b74883750105ee931d65200d73
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 22 00:12:45 2025 -0400
+
+    going to work with Claude
+
+commit 9050f94f9c95535e93df0dd54c283e0e9b93cc3b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 21 21:22:01 2025 -0400
+
+    reprioritize todos
+
+commit 9fdf7399f9d63c1da954ac48ddf5d126df15e998
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 21 21:12:21 2025 -0400
+
+    clean build!
+
+commit 1c17a4b051c357b51403616455503c7c83b93cd4
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 21 21:06:38 2025 -0400
+
+    lint
+
+commit 82f0e9bbf63dc7109b1eba718db23727e9cd00cd
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 21 20:56:09 2025 -0400
+
+    suppress md5 warning from gosec; RTM requires it
+
+commit 19d3d900273790c699bc98d41b8a520166e10b31
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 21 20:06:47 2025 -0400
+
+    lint
+
+commit 15a7d64770b2520b690aa07af33fc5fdbb4277f4
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 21 19:53:43 2025 -0400
+
+    cleanup
+
+commit f08e3cbeff72f93bd05afb38497b0a0fb3628646
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 21 19:18:20 2025 -0400
+
+    lint
+
+commit 6b60a03412a6adddd84a48d4b0ea51c4c4382bf6
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 20 23:45:58 2025 -0400
+
+    Add CreateTimeline method to RTM service to fix compile errors
+    
+    Added CreateTimeline method that wraps the client's CreateTimeline method
+    Added caching of timeline ID to reduce unnecessary API calls
+    Added proper error handling with wrapping
+    Used consistent error message formatting
+    Fixed compile errors in tools.go that reference this method
+
+commit a0285469c3ab23189456b3c37818d087a54cf950
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 20 23:35:06 2025 -0400
+
+    fix: correct multipart form handling in RTM client
+    
+    - Replace http.NewWriter with multipart.NewWriter
+    - Add mime/multipart import
+    - Fix static analysis error reported by go vet
+
+commit 53f790a02ffb7b6eea69602562249374e807a3b7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 20 23:29:51 2025 -0400
+
+    Fix rtm client build error by adding missing usePOST field
+    This commit adds the missing usePOST field to the Client struct in the RTM client
+    implementation. The field was referenced in the Do method but wasn't defined in
+    the struct, causing a build failure. The field now defaults to false (using GET),
+    and a SetUsePOST method has been added to allow toggling between GET and POST
+    requests. Also fixed an undefined http.NewWriter by using the proper code for
+    multipart form handling in the Upload method.
+
+commit 2fb012045a9da5901509ba177ed5198a572b55a6
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 20 23:26:23 2025 -0400
+
+    lint
+
+commit c7f0d374ebf9ef285398c33f3fc86fc074e346b0
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 20 23:15:00 2025 -0400
+
+    lint
+
+commit b104fe801e114f361f8c35bbd8a244ba9795a38e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 20 23:13:56 2025 -0400
+
+    lint
+
+commit bc0acc3f414fefc271804c84c46473fc405e710a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 20 23:13:03 2025 -0400
+
+    lint
+
+commit 44ed7cc6a2feafbac64bdff08c8284cac9b6761d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 20 23:07:07 2025 -0400
+
+    lint
+
+commit 2a2c350ea97030707940696b8ec62641edb9060e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 20 23:00:37 2025 -0400
+
+    linting
+
+commit de20603c86a42f18a89eff7579f9e034e13613bf
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 20 22:53:13 2025 -0400
+
+    lint
+
+commit 006b112f2fb429de3d7fa653903e6b60363f97be
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 20 01:51:39 2025 -0400
+
+    lint
+
+commit 64b06539ffb8cfb787d187fdfa434f8a1d33ec68
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 20 01:31:07 2025 -0400
+
+    linting
+
+commit 6e81409f1c745d41f9aaf09e4ff2255b85aa8c55
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 20 00:59:45 2025 -0400
+
+    fix stringutil and validation function sig errors
+
+commit 8d414f7deaec3d574a9764ac5b88aa2ca778e617
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 18 02:33:02 2025 -0400
+
+    ?
+
+commit 92820416e600f8821b216ed0faf5d28e76cc2973
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Tue Mar 18 02:14:51 2025 -0400
+
+    enhance error messages
+
+commit 2d7e7ffd498e2c338ae2c1b834dc11d2964bec1a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 23:51:36 2025 -0400
+
+    fix: improve error messages in cmd/server/commands.go
+
+commit 83e856446504cf70e9a10d9a84e5e3c4102ee25c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 23:22:59 2025 -0400
+
+    blech
+
+commit 203c3f1c09482cbda792b19ad883030891362518
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 23:14:52 2025 -0400
+
+    fixes
+
+commit d5495f9f50108840901f31027f1c6126418255a4
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 22:38:00 2025 -0400
+
+    fixes
+
+commit c759b86f416c19222d9781e4334712f21d80600e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 22:05:35 2025 -0400
+
+    odds and ends
+
+commit 87c24cd71a470e1acaebe1ae3c46ab34c0cbe0d4
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 17:10:45 2025 -0400
+
+    Fix syntax error in RTM service implementation
+    
+    Fixed syntax error in service.go where the CompleteTask function was incorrectly
+    defined inside the AddTask function. Properly structured all service methods with
+    correct function signatures and closing braces.
+
+commit bd13c8f97ff88e00f3e121f41be98e9ab77d725f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 17:03:47 2025 -0400
+
+    fix invalid args
+
+commit b4f7bcef44874f10811b581e4180c1215c1698aa
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 16:52:41 2025 -0400
+
+    refactor and cleanup
+
+commit 4271ff8e5e994325287e50b71c2d279779215442
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 15:59:22 2025 -0400
+
+    removed duplicate function implemenmtations :-(
+
+commit d16f823ced73784114cf06223a7bc48b21d7a939
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 15:31:35 2025 -0400
+
+    fix IsAuthenticated call in rtm_live_test_framework.go
+    
+    - Remove context parameter to match function signature in helpers package
+    - Implement helper functions directly in the file to avoid import cycles
+    - Add URL and frob extraction functionality for auth flows
+    - Improve retry logic for API requests
+
+commit e7558ab27772e958a71a0c3302193739647b9669
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 11:46:19 2025 -0400
+
+    Fix unused ctx parameter in SetAuthTokenOnServer function
+    
+    Removed unused context.Context parameter from the SetAuthTokenOnServer function in test/helpers/rtm_helpers.go to fix the "declared and not used" linting error.
+
+commit 14286c5fa6be9ed02c2e8a436c394f57ae20d5e9
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 11:36:38 2025 -0400
+
+    Update rtm_live_test_framework.go to use helpers.SetAuthTokenOnServer
+
+commit be6b5e26f9dc985ec2e654f06566e2af53cc10a7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 11:33:44 2025 -0400
+
+    test: Add retry logic and fix style in conformance tests.
+
+commit 1a712ca1abe68d80d34e4be6a52e10f9127b2f5f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 10:15:59 2025 -0400
+
+    Fix duplicate function; add missing helper implementation
+
+commit 46d78cb9753666b141558b54dda785d02b07371b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 01:31:49 2025 -0400
+
+    rtm test
+
+commit b803dbf8cb4a46088d6c99a97bcd5dcd4b7a6e53
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 01:04:34 2025 -0400
+
+    fix: add t.Helper() calls to test helper functions
+
+commit 75937b68c5007bf6e562365923a2159de1368b02
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 01:00:15 2025 -0400
+
+    Fix nil pointer in test helpers for non-test contexts
+
+commit e9ecd02d379553991b1bf4c7c688f99f911ec73a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 00:58:43 2025 -0400
+
+    removed duplicate routines
+
+commit f8276f3358c9cdf2d428377600cdd93a0b639a4d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Mon Mar 17 00:51:18 2025 -0400
+
+    testing framework
+
+commit 4fbf74dcf6a44cb7bc59121483167a6f8330d4ec
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 22:56:22 2025 -0400
+
+    rtm test
+
+commit 45a40c42c6cedb19b76724f6fc669d3c63b44b4b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 22:40:09 2025 -0400
+
+    rtm testing
+
+commit c20bd0a107d250d71581469a0b42a76a2e7a724e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 22:32:21 2025 -0400
+
+    connecting to RTM
+
+commit 38615736a10bdd1dbf472feafb638affe66a6180
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 21:47:29 2025 -0400
+
+    test authentication with RTM
+
+commit 9534988df0c3b5cfe8dcd62141ac25afd241c0e3
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 21:01:09 2025 -0400
+
+    linting...
+
+commit ea5d8f4ce8229bf6e09d4b628e5882c7736c77fc
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 20:43:10 2025 -0400
+
+    linting
+
+commit cbf12cd2cf89f344d9c58da4f4c98b2932ea154f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 20:04:04 2025 -0400
+
+    Fix redeclaration of validateMCPResource
+
+commit 5a77f54f4613c35f3e1348d278efca2339686794
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 19:44:05 2025 -0400
+
+    Fix type assertion error in auth test
+
+commit 68152627398a2e95e7754a4ea93c3ab557349c56
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 19:30:38 2025 -0400
+
+    Add comprehensive error handling conformance tests
+
+commit 8dbe088937d30bc93109550740a1fd0d3d5566aa
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 18:52:12 2025 -0400
+
+    mcp conformance test suite...
+
+commit b4a4208328e39306779ea503ac9a176115a1e4c5
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 15:09:28 2025 -0400
+
+    first pass at MCP conformance test suite
+
+commit 352672feeb21121a4407fdc1f5e712b2fbb5a7ee
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 14:11:16 2025 -0400
+
+    replace custom testrunner w gotestsum; update docs
+
+commit b0a1c9a949f2c82c340c0119bd73206ab24a2cab
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 13:40:04 2025 -0400
+
+    test framework
+
+commit 3ffdc82c2c79314538c4696ffd2adc1ba0620299
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 11:36:17 2025 -0400
+
+    gotestsum cleanup
+
+commit cebedcea433e757c1d078089235e0837b85f9de4
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 11:31:19 2025 -0400
+
+    integrate gotestsum into the build process
+
+commit aaf79ded90d0e64c19d77f9423200c030145e249
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 11:14:18 2025 -0400
+
+    test output
+
+commit 7dd912c2b647e11339e370d4f4a3b2b876baf52f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 10:56:39 2025 -0400
+
+    simplify testrunner
+
+commit 33a83cd701fd71bde75be890142c4f5efbe2a690
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 10:49:32 2025 -0400
+
+    format test output
+
+commit 788b4d0d84bc216cb3e564496d8a165764d6fbbd
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 10:44:47 2025 -0400
+
+    lint
+
+commit 029704a8f16918ef101d71018533b95ccc5e866e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 10:37:56 2025 -0400
+
+    testing
+
+commit 07770eef1b1660333687f994e5e748789095810d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 10:17:40 2025 -0400
+
+    parseint fix
+
+commit 9520736b282ef78fc971c7224e429c705bf4a48f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 08:06:10 2025 -0400
+
+    test review
+
+commit dca4a92666402114c197a3fb79aaf159975bb98a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 00:36:12 2025 -0400
+
+    clean lint
+
+commit e8e9616c9d992d0947fe8eab97f58a9e42083db7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 00:32:00 2025 -0400
+
+    lint and test
+
+commit ddba2502e5696cea4debf61d9b975b9c8754159e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 00:26:01 2025 -0400
+
+    lint
+
+commit f51d30151ede8ba9b1f9d5fbb52a0244d2b4407d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sun Mar 16 00:08:20 2025 -0400
+
+    lint
+
+commit c0e992f67d601d9e67d78778f53d1b84e9db47cd
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 23:37:54 2025 -0400
+
+    clean lint
+
+commit 18f0d262391e7d3411b8304cbcf04ba137a55743
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 23:27:26 2025 -0400
+
+    lint
+
+commit 9613a3aa6a6e41ab57a6b342c638232d824a4ab8
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 23:20:55 2025 -0400
+
+    lint
+
+commit 9f457990d891f3b878601a2ba85fe7d9def6e3e5
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 23:00:20 2025 -0400
+
+    lint
+
+commit 25c0e03cc60dfe7e25a01f5c1078e135f4a4874c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 22:39:59 2025 -0400
+
+    lint
+
+commit f9a54959cbf5d3766452a725e6d55638fd264c67
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 18:28:54 2025 -0400
+
+    unfuck
+
+commit a91bcf438241dc9f3c3e7626c491c4c560987bba
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 17:49:50 2025 -0400
+
+    linting
+
+commit 3fb6d9c9bff428b39b7477e166c4b5e57e3e881f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 16:58:28 2025 -0400
+
+    implement to test
+
+commit 7a1087662d0aa8980537382ee527f32f38f85bef
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 15:08:46 2025 -0400
+
+    testing setup
+
+commit e484d264e53819709e76ac3afe8477c639f1d14c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 14:34:10 2025 -0400
+
+    build out tests
+
+commit b190d897d01d3f43cfd5b6cb1efd77cdbe1434c6
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 14:14:31 2025 -0400
+
+    updated Makefile to simplify and tighten
+
+commit 277977d5c45b94ca7f7a61f269e1219981f0df93
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 14:01:57 2025 -0400
+
+    tighten build env
+
+commit 9bd3887ee78594c09c53d44934ba072ee708ee6e
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 13:12:59 2025 -0400
+
+    spiffy makefile output
+
+commit c96ec6201b659c96faacecd98876f925e1193a77
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 12:19:16 2025 -0400
+
+    todo update
+
+commit 1a40588a7cf38ff1d0d2c6754643c5af3c085c45
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 12:17:19 2025 -0400
+
+    linting
+
+commit 795fd644b51967740c162215bd286d40a75f923a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 12:06:53 2025 -0400
+
+    rtm auth
+
+commit 8d5fef4ee25f583d0146765cad7ba891f58a090d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 11:33:49 2025 -0400
+
+    relaxed .golangci.yml
+
+commit 486af9a5cd007081d10452949b6991309a164555
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 02:38:28 2025 -0400
+
+    housekeeping file location
+
+commit a92f23d9c012c22ea41b0b78cdb819f0b4447847
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 02:26:26 2025 -0400
+
+    add go doc
+
+commit 765ef8551e1669a200766f3114a2b24609059ef4
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 01:39:30 2025 -0400
+
+    linty linty lint
+
+commit bccdd2c87838cba9bb80cda20bb4ad5d9db0c23d
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 01:16:08 2025 -0400
+
+    lint
+
+commit e8146d6d6532d092b1c1a53e0abc9ff69eb5b6f5
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 01:02:26 2025 -0400
+
+    fix stuttering
+
+commit 4e56476c65806c673a15261f6c369deec2ddd608
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 00:53:07 2025 -0400
+
+    lint
+
+commit dada8e0df55c912d99a1d0339288b203abe9b9c0
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Sat Mar 15 00:52:42 2025 -0400
+
+    linting
+
+commit f33c714242be318dc1e006de4d84308aaba21c1f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 23:41:06 2025 -0400
+
+    tweak README
+
+commit bc0d5b011db25377b62ca975e924f77105e9562a
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 22:58:53 2025 -0400
+
+    start adding some testing
+
+commit fb0951fd630a5679d12d86d2a88eaef168b90c8b
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 22:50:01 2025 -0400
+
+    mcp
+
+commit 6669ce4d81df73fda61fe881a3c7cb0be346ccea
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 22:25:47 2025 -0400
+
+    build out mcp
+
+commit 65519fbab69f34c9487de4d416f3bb2ee7372eaf
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 21:57:50 2025 -0400
+
+    review and plan
+
+commit bc9c811152cceeca3aeb0d58e6b14394c7bd8535
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 20:50:54 2025 -0400
+
+    shrink logo
+
+commit 45d602897ccca685324e31337660d302d57788f8
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 20:44:05 2025 -0400
+
+    update doc
+
+commit 04fc41ee3916a732c4c1dc8c780143a062ecd6e6
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 20:37:57 2025 -0400
+
+    refactored server to separate files
+
+commit c19f6b38c0780b1dc537b1c9fa7bc97cc66cb651
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 20:29:09 2025 -0400
+
+    building out mcp
+
+commit f7f8faae3854e3d7d3115102f74c9532f3e4e1ed
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 20:04:55 2025 -0400
+
+    building out implementation
+
+commit 95ec2bb799c42301a131fb2b5865c24e8441c86f
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 19:04:34 2025 -0400
+
+    style
+
+commit 18bd9186688fc025b14155491c7e4f06e06b7e6c
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 18:45:35 2025 -0400
+
+    update the short term plan, and README
+
+commit 9bd9a6f1338d845717285690e9fd38002eef17f7
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 18:18:29 2025 -0400
+
+    starting implementation
+
+commit 20f107dfca0b12d84f8fb3b68537e742568424db
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 01:27:45 2025 -0400
+
+    words
+
+commit 259f50d9cb76d019c489cc3857ac589227cf9b08
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Fri Mar 14 01:20:49 2025 -0400
+
+    fix readme
+
+commit 0ec20d83e9001039bbf30e233373425ce13f1324
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 13 14:01:27 2025 -0400
+
+    del
+
+commit b82f8f3de2ed60877ae95dcf028a0db560f1ea46
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 13 13:58:02 2025 -0400
+
+    setting up build env
+
+commit 90a5c0b4f3011bacd86d97c37539860a583739a2
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 13 12:44:48 2025 -0400
+
+    initial
+
+commit f35902dd2eb7549569443896c257a9f1e7d0de68
+Author: David Koosis <dkoosis@gmail.com>
+Date:   Thu Mar 13 01:33:02 2025 -0400
+
+    initial
