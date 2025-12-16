@@ -1,0 +1,167 @@
+.
+├── .claude
+│   └── PROJECT_INSTRUCTIONS.md
+├── .codex
+├── .editorconfig
+├── .github
+│   └── workflows
+│       ├── ci.yml
+│       └── sync-issues.yml
+├── .gitignore
+├── .golangci.yml
+├── .serena
+│   ├── .gitignore
+│   ├── memories
+│   │   ├── code_style_conventions.md
+│   │   ├── project_overview.md
+│   │   ├── project_structure.md
+│   │   ├── suggested_commands.md
+│   │   ├── task_completion_workflow.md
+│   │   └── tech_stack.md
+│   └── project.yml
+├── AGENTS.md
+├── cmd
+│   ├── claude_desktop_registration.go
+│   ├── fix_comments
+│   │   ├── main.go
+│   │   └── stub_test.go
+│   ├── keychain_diagnostic
+│   │   └── main.go
+│   ├── main.go
+│   ├── rtm_connection_test
+│   │   ├── main.go
+│   │   └── stub_test.go
+│   ├── schema_test
+│   │   ├── main.go
+│   │   └── stub_test.go
+│   ├── server
+│   │   ├── server_runner.go
+│   │   └── stub_test.go
+│   └── stub_test.go
+├── dir.txt
+├── docs
+│   ├── adr
+│   │   ├── 001_error_handling_strategy.md
+│   │   ├── 002_schema_validation_strategy.md
+│   │   ├── 003_state_machine.md
+│   │   ├── 004_in_memory_transport.md
+│   │   ├── 005_secret_management.md
+│   │   ├── 006_modular_multi_service_support.md
+│   │   ├── 007_unix_style_pipelining.md
+│   │   └── 008_test_naming_convention.md
+│   ├── assets
+│   │   ├── cowgnition_logo.png
+│   │   └── rtm-authentication.jpg
+│   ├── contributing.md
+│   ├── llm.md
+│   ├── project_directory_tree.txt
+│   ├── prompts
+│   │   └── 001P_error_handling.md
+│   ├── TODO.md
+│   ├── tree.txt
+│   └── USER_GUIDE.md
+├── go.mod
+├── go.sum
+├── internal
+│   ├── config
+│   │   ├── config.go
+│   │   └── stub_test.go
+│   ├── fsm
+│   │   ├── fsm_test.go
+│   │   └── fsm.go
+│   ├── logging
+│   │   ├── logger.go
+│   │   ├── slog.go
+│   │   └── stub_test.go
+│   ├── mcp
+│   │   ├── connection_state.go
+│   │   ├── handlers_prompts.go
+│   │   ├── handlers_tools.go
+│   │   ├── helpers.go
+│   │   ├── integration_test.go
+│   │   ├── mcp_errors
+│   │   │   ├── errors.go
+│   │   │   └── stub_test.go
+│   │   ├── mcp_server_error_handling.go
+│   │   ├── mcp_server_metrics.go
+│   │   ├── mcp_server_processing.go
+│   │   ├── mcp_server.go
+│   │   ├── router
+│   │   │   ├── router_test.go
+│   │   │   └── router.go
+│   │   ├── state
+│   │   │   ├── events.go
+│   │   │   ├── machine_test.go
+│   │   │   ├── machine.go
+│   │   │   └── states.go
+│   │   └── types.go
+│   ├── mcp_types
+│   │   ├── interfaces.go
+│   │   └── types.go
+│   ├── metrics
+│   │   └── server_metrics.go
+│   ├── middleware
+│   │   ├── chain.go
+│   │   ├── validation_errors.go
+│   │   ├── validation_helpers.go
+│   │   ├── validation_identify_test.go
+│   │   ├── validation_identify.go
+│   │   ├── validation_incoming_test.go
+│   │   ├── validation_mocks_test.go
+│   │   ├── validation_options_test.go
+│   │   ├── validation_outgoing_test.go
+│   │   ├── validation_process.go
+│   │   ├── validation_schema.go
+│   │   └── validation.go
+│   ├── rtm
+│   │   ├── auth_manager_callback.go
+│   │   ├── auth_manager_helpers.go
+│   │   ├── auth_manager_modes.go
+│   │   ├── auth_manager.go
+│   │   ├── auth.go
+│   │   ├── client_test.go
+│   │   ├── client.go
+│   │   ├── constants.go
+│   │   ├── diagnostics.go
+│   │   ├── factory.go
+│   │   ├── helpers.go
+│   │   ├── keychain_test_helpers.go
+│   │   ├── mcp_resources.go
+│   │   ├── mcp_tools.go
+│   │   ├── methods.go
+│   │   ├── rtm_client_metrics.go
+│   │   ├── service.go
+│   │   ├── token_storage_interface.go
+│   │   ├── token_storage_secure.go
+│   │   ├── token_storage.go
+│   │   └── types.go
+│   ├── schema
+│   │   ├── errors.go
+│   │   ├── helpers.go
+│   │   ├── loader.go
+│   │   ├── name_rules_test.go
+│   │   ├── name_rules.go
+│   │   ├── schema.json
+│   │   ├── validator_test.go
+│   │   ├── validator.go
+│   │   └── version.go
+│   ├── services
+│   │   └── service.go
+│   └── transport
+│       ├── in_memory_transport.go
+│       ├── stub_test.go
+│       ├── transport_errors.go
+│       └── transport.go
+├── log.txt
+├── Makefile
+├── Makefile.bak
+├── README.md
+└── scripts
+    ├── check_file_length.sh
+    ├── check_go_bin_path.sh
+    ├── check_go_mod_path.sh
+    ├── graph.d2
+    ├── pkgdep.sh
+    └── pre-commit-template
+
+33 directories, 132 files
